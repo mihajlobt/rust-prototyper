@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Prototyper · Variations</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="src/tokens.css"/>
+<link rel="stylesheet" href="src/components.css"/>
+<style>
+  .vf { width: 100%; height: 100%; border: 0; background: var(--n-0); }
+  .vwrap { width: 100%; height: 100%; overflow: hidden; background: var(--n-0); }
+</style>
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#f0eee9"/>
+  <rect x="20" y="25" width="20" height="15" fill="#4ee2c9" rx="2"/>
+  <rect x="45" y="25" width="20" height="15" fill="#a78bfa" rx="2"/>
+  <rect x="70" y="25" width="20" height="15" fill="#f5b151" rx="2"/>
+  <rect x="20" y="50" width="20" height="15" fill="#5cd684" rx="2"/>
+  <rect x="45" y="50" width="20" height="15" fill="#ff7aa2" rx="2"/>
+  <rect x="70" y="50" width="20" height="15" fill="#5dd8ff" rx="2"/>
+</svg>
+</template>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+  const F = ({src, w, h}) => (
+    <div className="vwrap" style={{width: w, height: h}}>
+      <iframe className="vf" src={src} style={{width: w, height: h}} />
+    </div>
+  );
+
+  // Static variation cards (no iframe heaviness) for diverse looks
+  function V_Workflow_Teal() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',color:'#e7ebf4',fontFamily:'Inter,sans-serif',padding:14,display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div style={{width:20,height:20,border:'1px solid #1d2230',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ee2c9" strokeWidth="1.5"><path d="M4 6 L12 2 L20 6 L20 18 L12 22 L4 18 Z"/></svg>
+          </div>
+          <div style={{fontSize:12,fontWeight:600}}>Prototyper</div>
+          <div style={{marginLeft:'auto',fontSize:10,color:'#8891a8'}}>Workflows</div>
+        </div>
+        <div style={{flex:1,background:'#0c0e12',border:'1px solid #161922',borderRadius:8,position:'relative',backgroundImage:'radial-gradient(rgba(255,255,255,.04) 1px, transparent 1px)',backgroundSize:'16px 16px',overflow:'hidden'}}>
+          {[{x:20,y:80,t:'Input',c:'#6fb7ff'},{x:140,y:80,t:'Req',c:'#c185ff'},{x:260,y:80,t:'Design',c:'#4ee2c9',on:true},{x:380,y:40,t:'Arch',c:'#f5b151'},{x:380,y:120,t:'Struct',c:'#4ee2c9'},{x:500,y:80,t:'Output',c:'#6fb7ff'}].map((n,i)=>(
+            <div key={i} style={{position:'absolute',left:n.x,top:n.y,width:90,padding:'8px 10px',background:'#11131a',border:`1px solid ${n.on?'#4ee2c9':'#1d2230'}`,borderRadius:8,fontSize:10,boxShadow:n.on?'0 0 0 1px rgba(78,226,201,.35),0 0 20px -4px rgba(78,226,201,.5)':'none'}}>
+              <div style={{color:n.c,fontSize:9,marginBottom:2,textTransform:'uppercase',letterSpacing:'.05em'}}>● {n.t}</div>
+              <div style={{fontSize:9,color:'#8891a8'}}>{n.t==='Design'?'Apply theme':'step'}</div>
+            </div>
+          ))}
+          <svg width="100%" height="100%" style={{position:'absolute',inset:0,pointerEvents:'none'}}>
+            <path d="M110 92 C 130 92, 130 92, 140 92" stroke="#262c3d" strokeWidth="1.2" fill="none"/>
+            <path d="M230 92 C 250 92, 250 92, 260 92" stroke="#262c3d" strokeWidth="1.2" fill="none"/>
+            <path d="M350 92 C 370 92, 370 52, 380 52" stroke="#4ee2c9" strokeWidth="1.2" fill="none"/>
+            <path d="M350 92 C 370 92, 370 132, 380 132" stroke="#4ee2c9" strokeWidth="1.2" fill="none"/>
+            <path d="M470 52 C 490 52, 490 92, 500 92" stroke="#262c3d" strokeWidth="1.2" fill="none"/>
+            <path d="M470 132 C 490 132, 490 92, 500 92" stroke="#262c3d" strokeWidth="1.2" fill="none"/>
+          </svg>
+        </div>
+      </div>
+    );
+  }
+
+  function V_Workflow_Violet() {
+    return (
+      <div data-accent="violet" style={{width:'100%',height:'100%',background:'#0a0814',color:'#e7ebf4',fontFamily:'Inter,sans-serif',padding:14,display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div style={{fontSize:12,fontWeight:600,color:'#a78bfa'}}>Prototyper</div>
+          <div style={{marginLeft:'auto',fontSize:10,color:'#8891a8'}}>Compact · Pill nodes</div>
+        </div>
+        <div style={{flex:1,background:'#110c20',border:'1px solid #261d3d',borderRadius:8,position:'relative',overflow:'hidden'}}>
+          {[{x:20,y:100,t:'input'},{x:120,y:100,t:'parse'},{x:220,y:60,t:'design-system',on:true},{x:220,y:140,t:'architect'},{x:380,y:100,t:'compose'},{x:490,y:100,t:'emit'}].map((n,i)=>(
+            <div key={i} style={{position:'absolute',left:n.x,top:n.y,padding:'5px 14px',background:n.on?'#a78bfa':'#1a1330',color:n.on?'#120820':'#d0c4ff',border:'1px solid '+(n.on?'#a78bfa':'#3d2d5e'),borderRadius:30,fontSize:10,fontFamily:'JetBrains Mono,monospace'}}>{n.t}</div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function V_Workflow_Terminal() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#000',color:'#5cd684',fontFamily:'JetBrains Mono,monospace',padding:14,fontSize:11}}>
+        <div style={{color:'#5cd684',marginBottom:10}}>▌ prototyper — workflow.run("simple-component")</div>
+        <div style={{color:'#888'}}>&nbsp;├── [●] input          → ok (2ms)</div>
+        <div style={{color:'#888'}}>&nbsp;├── [●] requirements   → ok (34ms)</div>
+        <div style={{color:'#5cd684'}}>&nbsp;├── [◉] design-system  → running...</div>
+        <div style={{color:'#444',marginLeft:8,marginTop:4,padding:8,border:'1px solid #222',borderRadius:4,background:'#0a0a0a',fontSize:10}}>
+          theme: amber-dark · density: comfortable · style: minimal<br/>
+          tokens: 24 · fonts: Inter, JetBrains Mono<br/>
+          <span style={{color:'#5cd684'}}>██████████░░░░ 63%</span>
+        </div>
+        <div style={{color:'#444',marginTop:4}}>&nbsp;├── [ ] architect</div>
+        <div style={{color:'#444'}}>&nbsp;├── [ ] structure</div>
+        <div style={{color:'#444'}}>&nbsp;├── [ ] style</div>
+        <div style={{color:'#444'}}>&nbsp;└── [ ] output</div>
+        <div style={{marginTop:10,color:'#5cd684'}}>▌ <span style={{animation:'blink 1s infinite'}}>_</span></div>
+      </div>
+    );
+  }
+
+  function V_Screens() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',display:'flex',fontFamily:'Inter,sans-serif',color:'#e7ebf4'}}>
+        <div style={{width:180,background:'#0c0e12',borderRight:'1px solid #161922',padding:10}}>
+          <div style={{fontSize:10,color:'#8891a8',textTransform:'uppercase',letterSpacing:'.08em',margin:'4px 2px 6px'}}>Screens · 6</div>
+          {['Dashboard','Login','Settings','Onboarding · 1','Onboarding · 2','Empty Inbox'].map((x,i)=>(
+            <div key={i} style={{padding:'5px 8px',fontSize:11,color:i===0?'#fff':'#b6bccf',background:i===0?'rgba(78,226,201,.1)':'transparent',borderRadius:4,marginBottom:2}}>{x}</div>
+          ))}
+        </div>
+        <div style={{flex:1,padding:18,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:360,height:240,background:'#0f0f14',borderRadius:8,padding:14,boxShadow:'0 20px 60px rgba(0,0,0,.5)'}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Orders</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:6,marginBottom:10}}>
+              {[['$184k','+12%'],['1,284','+5%'],['23','-18%']].map(([a,b],i)=>(
+                <div key={i} style={{background:'#141522',padding:8,borderRadius:5,border:'1px solid #1f1f2b'}}>
+                  <div style={{fontSize:13,fontWeight:700}}>{a}</div>
+                  <div style={{fontSize:9,color:b.startsWith('+')?'#5cd684':'#ff6183'}}>{b}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:'#141522',border:'1px solid #1f1f2b',borderRadius:5}}>
+              {[1,2,3,4].map(i=>(
+                <div key={i} style={{padding:'6px 10px',fontSize:10,color:'#cdd3e3',borderBottom:i<4?'1px solid #1f1f2b':'none',display:'flex'}}>
+                  <span style={{fontFamily:'monospace',color:'#8891a8'}}>#0124{i}</span>
+                  <span style={{marginLeft:'auto'}}>$240</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function V_Themes() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',padding:14,color:'#e7ebf4',fontFamily:'Inter,sans-serif'}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>Themes</div>
+        <div style={{fontSize:10,color:'#8891a8',marginBottom:12}}>Tailwind v4 / OKLCH tokens</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          {[
+            {n:'Amber',bg:'#faf8f2',btn:'#f59e0b',fg:'#1a1410'},
+            {n:'Zinc',bg:'#fafafa',btn:'#27272a',fg:'#18181b'},
+            {n:'Teal Ink',bg:'#042f2e',btn:'#2dd4bf',fg:'#fff'},
+            {n:'Neo Violet',bg:'#1e1b3a',btn:'#7c3aed',fg:'#fff'},
+            {n:'Rose',bg:'#ffe4e6',btn:'#e11d48',fg:'#1a0a10'},
+            {n:'Slate',bg:'#0f172a',btn:'#38bdf8',fg:'#fff'},
+          ].map((t,i)=>(
+            <div key={i} style={{background:t.bg,color:t.fg,padding:10,borderRadius:6,fontSize:10,minHeight:90}}>
+              <div style={{display:'flex',gap:3,marginBottom:6}}>
+                <button style={{background:t.btn,color:t.bg,border:0,padding:'3px 7px',fontSize:9,borderRadius:3,fontWeight:600}}>Button</button>
+                <button style={{background:'transparent',color:t.fg,border:'1px solid rgba(0,0,0,.1)',padding:'3px 7px',fontSize:9,borderRadius:3}}>Ghost</button>
+              </div>
+              <div style={{fontWeight:600,fontSize:10}}>{t.n}</div>
+              <div style={{fontSize:9,opacity:.7}}>The quick brown fox</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function V_Components() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',display:'flex',fontFamily:'Inter,sans-serif',color:'#e7ebf4'}}>
+        <div style={{width:220,padding:14,borderRight:'1px solid #161922'}}>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Prompt</div>
+          <textarea defaultValue="A login card with glassmorphism..." style={{width:'100%',height:70,background:'#0c0e12',border:'1px solid #161922',color:'#e7ebf4',fontSize:11,padding:6,borderRadius:4,resize:'none'}}/>
+          <button style={{marginTop:8,background:'#4ee2c9',color:'#001814',border:0,padding:'6px 10px',fontSize:11,borderRadius:5,fontWeight:600,width:'100%'}}>✨ Generate</button>
+        </div>
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',backgroundImage:'repeating-linear-gradient(45deg, #08090c, #08090c 12px, #0c0e12 12px, #0c0e12 24px)'}}>
+          <div style={{width:220,padding:18,borderRadius:12,background:'rgba(20,24,34,.6)',backdropFilter:'blur(12px)',border:'1px solid rgba(255,255,255,.08)'}}>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:10}}>Welcome back</div>
+            <input defaultValue="you@example.com" style={{width:'100%',padding:6,fontSize:11,background:'#0c0e12',border:'1px solid #1d2230',color:'#fff',borderRadius:4,marginBottom:6}}/>
+            <input type="password" defaultValue="••••••••" style={{width:'100%',padding:6,fontSize:11,background:'#0c0e12',border:'1px solid #1d2230',color:'#fff',borderRadius:4,marginBottom:10}}/>
+            <button style={{width:'100%',padding:7,background:'#4ee2c9',color:'#001814',border:0,borderRadius:4,fontSize:11,fontWeight:600}}>Sign in</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function V_APIs() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',fontFamily:'Inter,sans-serif',color:'#e7ebf4',padding:14}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>APIs &amp; Integrations</div>
+        <div style={{fontSize:10,color:'#8891a8',marginBottom:10}}>Stripe · OpenAPI · 48 endpoints</div>
+        <div style={{border:'1px solid #161922',borderRadius:5,overflow:'hidden'}}>
+          {[
+            ['GET','#6fb7ff','/v1/customers','List customers'],
+            ['POST','#5cd684','/v1/customers','Create customer'],
+            ['GET','#6fb7ff','/v1/customers/{id}','Retrieve customer'],
+            ['GET','#6fb7ff','/v1/charges','List charges'],
+            ['POST','#5cd684','/v1/charges','Create charge'],
+            ['DELETE','#ff6183','/v1/subscriptions/{id}','Cancel'],
+            ['GET','#6fb7ff','/v1/subscriptions','List subs'],
+          ].map(([m,c,p,d],i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderBottom:i<6?'1px solid #161922':'none',fontSize:11}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:9,fontWeight:700,padding:'2px 5px',background:c+'22',color:c,borderRadius:3,minWidth:42,textAlign:'center'}}>{m}</span>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:10.5,flex:1}}>{p}</span>
+              <span style={{fontSize:10,color:'#8891a8'}}>{d}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function V_Runner() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',fontFamily:'Inter,sans-serif',color:'#e7ebf4',display:'flex'}}>
+        <div style={{width:130,padding:10,borderRight:'1px solid #161922',fontSize:10,fontFamily:'JetBrains Mono'}}>
+          <div style={{color:'#8891a8',fontSize:9,marginBottom:6}}>FILES</div>
+          {['▾ src','  App.tsx','  index.css','▾ components','  LoginCard','  Button','package.json','vite.config.ts'].map((f,i)=>(
+            <div key={i} style={{padding:'2px 4px',color:i===1?'#fff':'#b6bccf',background:i===1?'rgba(78,226,201,.1)':'transparent',borderRadius:3}}>{f}</div>
+          ))}
+        </div>
+        <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+          <pre style={{flex:1,margin:0,padding:12,fontSize:11,color:'#b6bccf',fontFamily:'JetBrains Mono',background:'#0c0e12',overflow:'hidden'}}>{`import { useState } from 'react'
+import { LoginCard } from './components/LoginCard'
+
+export default function App() {
+  const [user, setUser] = useState(null)
+  if (!user) return <LoginCard onSignIn={setUser} />
+  return <main className="p-8">
+    <h1>Hi, {user}</h1>
+  </main>
+}`}</pre>
+          <div style={{padding:10,background:'#000',fontFamily:'JetBrains Mono',fontSize:10,borderTop:'1px solid #161922'}}>
+            <div><span style={{color:'#a78bfa'}}>proto</span>:<span style={{color:'#4ee2c9'}}>generated</span> $ bun dev</div>
+            <div style={{color:'#8891a8'}}>  $ vite</div>
+            <div style={{color:'#5cd684'}}>  → http://localhost:5173/</div>
+            <div style={{color:'#8891a8'}}>  ready in 218ms</div>
+            <div><span style={{color:'#a78bfa'}}>proto</span>:<span style={{color:'#4ee2c9'}}>generated</span> $ <span style={{color:'#4ee2c9',animation:'blink 1s infinite'}}>▋</span></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function V_Library() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',padding:14,fontFamily:'Inter,sans-serif',color:'#e7ebf4'}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Library · Components</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          {['Login Card','Pricing','Stats','Settings','Upload','Chat Bubble'].map((n,i)=>(
+            <div key={i} style={{background:'#0c0e12',border:'1px solid #161922',borderRadius:6,overflow:'hidden'}}>
+              <div style={{aspectRatio:'16/10',background:'#11131a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5a627b'}}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/></svg>
+              </div>
+              <div style={{padding:8}}>
+                <div style={{fontSize:11,fontWeight:500}}>{n}</div>
+                <div style={{fontSize:9,color:'#8891a8'}}>Updated {i+1}d ago</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Full-app variants: dense vs roomy
+  function V_FullApp_Dense() {
+    return (
+      <div style={{width:'100%',height:'100%',background:'#08090c',fontFamily:'Inter,sans-serif',color:'#e7ebf4',display:'flex',flexDirection:'column'}}>
+        <div style={{height:32,background:'#0c0e12',borderBottom:'1px solid #161922',display:'flex',alignItems:'center',padding:'0 10px',gap:10,fontSize:11}}>
+          <span style={{fontWeight:600}}>Prototyper</span>
+          <span style={{color:'#4ee2c9'}}>Workflows</span>
+          <span style={{color:'#8891a8'}}>Screens</span>
+          <span style={{color:'#8891a8'}}>Themes</span>
+          <span style={{color:'#8891a8'}}>APIs</span>
+        </div>
+        <div style={{flex:1,display:'flex',fontSize:10}}>
+          <div style={{width:110,background:'#0c0e12',padding:6,borderRight:'1px solid #161922'}}>
+            <div style={{color:'#8891a8',fontSize:8,marginBottom:4}}>PALETTE</div>
+            {['Input','Req','Design','Arch','Struct','Style','Output'].map(x=>(
+              <div key={x} style={{padding:'2px 4px',color:'#b6bccf'}}>● {x}</div>
+            ))}
+          </div>
+          <div style={{flex:1,background:'#08090c',position:'relative',backgroundImage:'radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px)',backgroundSize:'12px 12px'}}>
+            {[[10,80],[80,80],[150,80],[220,80],[290,80]].map(([x,y],i)=>(
+              <div key={i} style={{position:'absolute',left:x,top:y,padding:'4px 8px',background:'#11131a',border:'1px solid #262c3d',borderRadius:16,fontSize:9}}>node·{i}</div>
+            ))}
+          </div>
+          <div style={{width:120,background:'#0c0e12',padding:6,borderLeft:'1px solid #161922'}}>
+            <div style={{color:'#8891a8',fontSize:8}}>PROPERTIES</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function V_FullApp_Roomy() {
+    return (
+      <div data-accent="amber" style={{width:'100%',height:'100%',background:'#08090c',fontFamily:'Inter,sans-serif',color:'#e7ebf4',display:'flex',flexDirection:'column'}}>
+        <div style={{height:56,background:'#0c0e12',borderBottom:'1px solid #161922',display:'flex',alignItems:'center',padding:'0 22px',gap:20}}>
+          <div style={{fontWeight:700,fontSize:14}}>Prototyper</div>
+          <div style={{display:'flex',gap:16,fontSize:12}}>
+            <span style={{color:'#f5b151',borderBottom:'2px solid #f5b151',padding:'4px 0'}}>Workflows</span>
+            {['Screens','Themes','APIs'].map(x=><span key={x} style={{color:'#8891a8'}}>{x}</span>)}
+          </div>
+        </div>
+        <div style={{flex:1,padding:30,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#0c0e12',border:'1px solid #161922',borderRadius:12,padding:30,width:340}}>
+            <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Simple Component</div>
+            <div style={{fontSize:11,color:'#8891a8',marginBottom:16}}>Single focused, single-purpose UI component</div>
+            <div style={{display:'flex',gap:8,alignItems:'center',fontSize:10,color:'#8891a8',marginBottom:16}}>
+              <span>5 nodes</span><span>·</span><span>4 edges</span><span>·</span><span>2d ago</span>
+            </div>
+            <button style={{width:'100%',padding:'10px 12px',background:'#f5b151',color:'#1d0e00',border:0,borderRadius:6,fontWeight:600,fontSize:12}}>Load workflow</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="wf" title="Workflows — the flagship" subtitle="Flagship screen, three visual directions">
+          <DCArtboard id="teal" label="A · Teal / Card nodes (default)" width={640} height={420}><V_Workflow_Teal/></DCArtboard>
+          <DCArtboard id="violet" label="B · Violet / Pill nodes" width={640} height={420}><V_Workflow_Violet/></DCArtboard>
+          <DCArtboard id="term" label="C · Terminal / text-only" width={640} height={420}><V_Workflow_Terminal/></DCArtboard>
+          <DCArtboard id="live" label="D · Interactive prototype →" width={640} height={420}><F src="Prototyper.html#workflows" w={1440} h={900}/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="apps" title="Full app layout" subtitle="Density and accent directions">
+          <DCArtboard id="dense" label="Dense / teal" width={540} height={360}><V_FullApp_Dense/></DCArtboard>
+          <DCArtboard id="roomy" label="Roomy / amber" width={540} height={360}><V_FullApp_Roomy/></DCArtboard>
+        </DCSection>
+
+        <DCSection id="sub" title="Sub-views" subtitle="Each an independent artboard">
+          <DCArtboard id="screens" label="Screens" width={520} height={360}><V_Screens/></DCArtboard>
+          <DCArtboard id="themes" label="Themes" width={520} height={360}><V_Themes/></DCArtboard>
+          <DCArtboard id="components" label="Components" width={520} height={360}><V_Components/></DCArtboard>
+          <DCArtboard id="apis" label="APIs" width={520} height={360}><V_APIs/></DCArtboard>
+          <DCArtboard id="runner" label="Run / Sandbox" width={520} height={360}><V_Runner/></DCArtboard>
+          <DCArtboard id="library" label="Library" width={520} height={360}><V_Library/></DCArtboard>
+        </DCSection>
+
+        <DCPostIt top={20} right={80} rotate={3}>
+          Winner → "Teal / Card" direction. Full interactive version in the 4th artboard above — open it fullscreen to explore all sections + Tweaks.
+        </DCPostIt>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
