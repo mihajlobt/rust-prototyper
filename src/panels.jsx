@@ -13,6 +13,9 @@ const CODE_THEMES = [
   { id: 'dracula', label: 'Dracula' },
   { id: 'nord', label: 'Nord' },
   { id: 'material', label: 'Material' },
+  { id: 'ayu-dark', label: 'Ayu' },
+  { id: 'vibrant-ink', label: 'Vibrant' },
+  { id: 'moxer', label: 'Moxer' },
 ];
 
 // CodeMirror wrapper

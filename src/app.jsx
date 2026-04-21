@@ -11,6 +11,9 @@ function SettingsModal({ open, onClose, tw, setTw }) {
     { id: 'dracula', label: 'Dracula' },
     { id: 'nord', label: 'Nord' },
     { id: 'material', label: 'Material' },
+    { id: 'ayu-dark', label: 'Ayu' },
+    { id: 'vibrant-ink', label: 'Vibrant' },
+    { id: 'moxer', label: 'Moxer' },
   ];
 
   const defaultPrompts = {
@@ -63,147 +66,149 @@ function SettingsModal({ open, onClose, tw, setTw }) {
           </div>
 
           {/* Body */}
-          <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {section === 'appearance' && (
-              <>
-                <div className="tweaks-row">
-                  <div className="caps">Accent</div>
-                  <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
-                    {['teal','violet','amber','emerald','rose','cyan'].map(a => (
-                      <button key={a} className="accent-sw" data-on={tw.accent === a} onClick={() => set('accent', a)}>
-                        <span style={{ background: `var(--acc)`, ['--acc']: ({teal:'#4ee2c9',violet:'#a78bfa',amber:'#f5b151',emerald:'#5cd684',rose:'#ff7aa2',cyan:'#5dd8ff'})[a] }}/>
-                        <span style={{ fontSize: 10 }}>{a}</span>
-                      </button>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {section === 'appearance' && (
+                <>
+                  <div className="tweaks-row">
+                    <div className="caps">Accent</div>
+                    <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
+                      {['teal','violet','amber','emerald','rose','cyan'].map(a => (
+                        <button key={a} className="accent-sw" data-on={tw.accent === a} onClick={() => set('accent', a)}>
+                          <span style={{ background: `var(--acc)`, ['--acc']: ({teal:'#4ee2c9',violet:'#a78bfa',amber:'#f5b151',emerald:'#5cd684',rose:'#ff7aa2',cyan:'#5dd8ff'})[a] }}/>
+                          <span style={{ fontSize: 10 }}>{a}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">Glow</div>
+                    <div className="seg">
+                      {['off','subtle','full'].map(g => <button key={g} data-on={tw.glow === g} onClick={() => set('glow', g)}>{g}</button>)}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">Density</div>
+                    <div className="seg">
+                      {['compact','comfortable','spacious'].map(d => <button key={d} data-on={tw.density === d} onClick={() => set('density', d)}>{d}</button>)}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">Node style</div>
+                    <div className="seg">
+                      {['pill','card','terminal'].map(x => <button key={x} data-on={tw.nodeStyle === x} onClick={() => set('nodeStyle', x)}>{x}</button>)}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">Edge style</div>
+                    <div className="seg">
+                      {['bezier','dashed'].map(x => <button key={x} data-on={tw.edgeStyle === x} onClick={() => set('edgeStyle', x)}>{x}</button>)}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">Grid</div>
+                    <div className="seg">
+                      {['dots','lines','none'].map(x => <button key={x} data-on={tw.grid === x} onClick={() => set('grid', x)}>{x}</button>)}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">Run metaphor</div>
+                    <div className="seg">
+                      {['pulse','ring','stream'].map(x => <button key={x} data-on={tw.runFx === x} onClick={() => set('runFx', x)}>{x}</button>)}
+                    </div>
+                  </div>
+                  <div className="tweaks-row">
+                    <div className="caps">CodeMirror theme</div>
+                    <div className="seg">
+                      {codeThemes.map(t => <button key={t.id} data-on={tw.cmTheme === t.id} onClick={() => set('cmTheme', t.id)}>{t.label}</button>)}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {section === 'styles' && (
+                <>
+                  <div className="row gap-2" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="caps">Style Presets</div>
+                    <button className="btn btn--acc" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => { setEditingStyle('new'); setStyleDraft({ name: '', prompt: '' }); }}>
+                      <Icons.plus size={11}/> Add style
+                    </button>
+                  </div>
+                  <div className="col gap-2">
+                    {editingStyle === 'new' && (
+                      <div className="card" style={{ padding: 10, borderColor: 'var(--acc)', background: 'var(--acc-soft)' }}>
+                        <div className="row gap-2" style={{ alignItems: 'center', marginBottom: 8 }}>
+                          <input className="input" value={styleDraft.name} onChange={(e) => setStyleDraft({ ...styleDraft, name: e.target.value })} placeholder="Name…" style={{ flex: 1, fontSize: 12 }}/>
+                          <button className="icon-btn" onClick={() => setEditingStyle(null)}><Icons.x size={12}/></button>
+                        </div>
+                        <textarea className="textarea mono" rows={3} value={styleDraft.prompt} onChange={(e) => setStyleDraft({ ...styleDraft, prompt: e.target.value })} placeholder="Style prompt injection…" style={{ fontSize: 11, marginBottom: 8 }}/>
+                        <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                          <button className="btn" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setEditingStyle(null)}>Cancel</button>
+                          <button className="btn btn--acc" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => { setStyles(ss => [...ss, { id: 'st' + Date.now(), ...styleDraft }]); setEditingStyle(null); }}>Save</button>
+                        </div>
+                      </div>
+                    )}
+                    {styles.map(s => (
+                      <div key={s.id} className="card" style={{ padding: 10, transition: 'border-color .12s' }}>
+                        {editingStyle === s.id ? (
+                          <>
+                            <div className="row gap-2" style={{ alignItems: 'center', marginBottom: 8 }}>
+                              <input className="input" value={styleDraft.name} onChange={(e) => setStyleDraft({ ...styleDraft, name: e.target.value })} style={{ flex: 1, fontSize: 12 }}/>
+                              <button className="icon-btn" onClick={() => setEditingStyle(null)}><Icons.x size={12}/></button>
+                            </div>
+                            <textarea className="textarea mono" rows={3} value={styleDraft.prompt} onChange={(e) => setStyleDraft({ ...styleDraft, prompt: e.target.value })} style={{ fontSize: 11, marginBottom: 8 }}/>
+                            <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                              <button className="btn" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setEditingStyle(null)}>Cancel</button>
+                              <button className="btn btn--acc" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => { setStyles(ss => ss.map(x => x.id === s.id ? { ...x, ...styleDraft } : x)); setEditingStyle(null); }}>Save</button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="row gap-2" style={{ alignItems: 'center' }}>
+                              <span style={{ fontSize: 12, fontWeight: 500 }}>{s.name}</span>
+                              <div className="row gap-1" style={{ marginLeft: 'auto' }}>
+                                {s.id === 'auto' ? (
+                                  <span className="pill mono" style={{ fontSize: 9 }}>no injection</span>
+                                ) : (
+                                  <>
+                                    <button className="icon-btn" title="Edit" onClick={(e) => { e.stopPropagation(); setEditingStyle(s.id); setStyleDraft({ name: s.name, prompt: s.prompt }); }}>
+                                      <Icons.cog size={12}/>
+                                    </button>
+                                    <button className="icon-btn" title="Delete" onClick={(e) => { e.stopPropagation(); setStyles(ss => ss.filter(x => x.id !== s.id)); }}>
+                                      <Icons.trash size={12}/>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {s.prompt && <div style={{ fontSize: 11, color: 'var(--fg-mute)', marginTop: 4, lineHeight: 1.4 }}>{s.prompt}</div>}
+                          </>
+                        )}
+                      </div>
                     ))}
                   </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">Glow</div>
-                  <div className="seg">
-                    {['off','subtle','full'].map(g => <button key={g} data-on={tw.glow === g} onClick={() => set('glow', g)}>{g}</button>)}
-                  </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">Density</div>
-                  <div className="seg">
-                    {['compact','comfortable','spacious'].map(d => <button key={d} data-on={tw.density === d} onClick={() => set('density', d)}>{d}</button>)}
-                  </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">Node style</div>
-                  <div className="seg">
-                    {['pill','card','terminal'].map(x => <button key={x} data-on={tw.nodeStyle === x} onClick={() => set('nodeStyle', x)}>{x}</button>)}
-                  </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">Edge style</div>
-                  <div className="seg">
-                    {['bezier','dashed'].map(x => <button key={x} data-on={tw.edgeStyle === x} onClick={() => set('edgeStyle', x)}>{x}</button>)}
-                  </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">Grid</div>
-                  <div className="seg">
-                    {['dots','lines','none'].map(x => <button key={x} data-on={tw.grid === x} onClick={() => set('grid', x)}>{x}</button>)}
-                  </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">Run metaphor</div>
-                  <div className="seg">
-                    {['pulse','ring','stream'].map(x => <button key={x} data-on={tw.runFx === x} onClick={() => set('runFx', x)}>{x}</button>)}
-                  </div>
-                </div>
-                <div className="tweaks-row">
-                  <div className="caps">CodeMirror theme</div>
-                  <div className="seg">
-                    {codeThemes.map(t => <button key={t.id} data-on={tw.cmTheme === t.id} onClick={() => set('cmTheme', t.id)}>{t.label}</button>)}
-                  </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
 
-            {section === 'styles' && (
-              <>
-                <div className="row gap-2" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div className="caps">Style Presets</div>
-                  <button className="btn btn--acc" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => { setEditingStyle('new'); setStyleDraft({ name: '', prompt: '' }); }}>
-                    <Icons.plus size={11}/> Add style
-                  </button>
-                </div>
-                <div className="col gap-2">
-                  {editingStyle === 'new' && (
-                    <div className="card" style={{ padding: 10, borderColor: 'var(--acc)', background: 'var(--acc-soft)' }}>
-                      <div className="row gap-2" style={{ alignItems: 'center', marginBottom: 8 }}>
-                        <input className="input" value={styleDraft.name} onChange={(e) => setStyleDraft({ ...styleDraft, name: e.target.value })} placeholder="Name…" style={{ flex: 1, fontSize: 12 }}/>
-                        <button className="icon-btn" onClick={() => setEditingStyle(null)}><Icons.x size={12}/></button>
-                      </div>
-                      <textarea className="textarea mono" rows={3} value={styleDraft.prompt} onChange={(e) => setStyleDraft({ ...styleDraft, prompt: e.target.value })} placeholder="Style prompt injection…" style={{ fontSize: 11, marginBottom: 8 }}/>
-                      <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
-                        <button className="btn" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setEditingStyle(null)}>Cancel</button>
-                        <button className="btn btn--acc" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => { setStyles(ss => [...ss, { id: 'st' + Date.now(), ...styleDraft }]); setEditingStyle(null); }}>Save</button>
-                      </div>
-                    </div>
-                  )}
-                  {styles.map(s => (
-                    <div key={s.id} className="card" style={{ padding: 10, transition: 'border-color .12s' }}>
-                      {editingStyle === s.id ? (
-                        <>
-                          <div className="row gap-2" style={{ alignItems: 'center', marginBottom: 8 }}>
-                            <input className="input" value={styleDraft.name} onChange={(e) => setStyleDraft({ ...styleDraft, name: e.target.value })} style={{ flex: 1, fontSize: 12 }}/>
-                            <button className="icon-btn" onClick={() => setEditingStyle(null)}><Icons.x size={12}/></button>
-                          </div>
-                          <textarea className="textarea mono" rows={3} value={styleDraft.prompt} onChange={(e) => setStyleDraft({ ...styleDraft, prompt: e.target.value })} style={{ fontSize: 11, marginBottom: 8 }}/>
-                          <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
-                            <button className="btn" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setEditingStyle(null)}>Cancel</button>
-                            <button className="btn btn--acc" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => { setStyles(ss => ss.map(x => x.id === s.id ? { ...x, ...styleDraft } : x)); setEditingStyle(null); }}>Save</button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="row gap-2" style={{ alignItems: 'center' }}>
-                            <span style={{ fontSize: 12, fontWeight: 500 }}>{s.name}</span>
-                            <div className="row gap-1" style={{ marginLeft: 'auto' }}>
-                              {s.id === 'auto' ? (
-                                <span className="pill mono" style={{ fontSize: 9 }}>no injection</span>
-                              ) : (
-                                <>
-                                  <button className="icon-btn" title="Edit" onClick={(e) => { e.stopPropagation(); setEditingStyle(s.id); setStyleDraft({ name: s.name, prompt: s.prompt }); }}>
-                                    <Icons.cog size={12}/>
-                                  </button>
-                                  <button className="icon-btn" title="Delete" onClick={(e) => { e.stopPropagation(); setStyles(ss => ss.filter(x => x.id !== s.id)); }}>
-                                    <Icons.trash size={12}/>
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {s.prompt && <div style={{ fontSize: 11, color: 'var(--fg-mute)', marginTop: 4, lineHeight: 1.4 }}>{s.prompt}</div>}
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {section === 'prompts' && (
-              <>
-                <div className="seg" style={{ alignSelf: 'flex-start' }}>
-                  {['component','screen','theme'].map(t => <button key={t} data-on={promptTab === t} onClick={() => setPromptTab(t)}>{t}</button>)}
-                </div>
-                <div className="caps">System prompt — {promptTab}</div>
-                <textarea
-                  className="textarea mono"
-                  rows={10}
-                  value={prompts[promptTab]}
-                  onChange={(e) => setPrompts({ ...prompts, [promptTab]: e.target.value })}
-                />
-                <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
-                  <button className="btn" style={{ padding: '5px 10px', fontSize: 11 }} onClick={() => setPrompts(defaultPrompts)}><Icons.zap size={11}/> Reset defaults</button>
-                  <button className="btn btn--acc" style={{ padding: '5px 10px', fontSize: 11 }}><Icons.check size={12}/> Save</button>
-                </div>
-              </>
-            )}
+              {section === 'prompts' && (
+                <>
+                  <div className="seg" style={{ alignSelf: 'flex-start' }}>
+                    {['component','screen','theme'].map(t => <button key={t} data-on={promptTab === t} onClick={() => setPromptTab(t)}>{t}</button>)}
+                  </div>
+                  <div className="caps">System prompt — {promptTab}</div>
+                  <textarea
+                    className="textarea mono"
+                    rows={10}
+                    value={prompts[promptTab]}
+                    onChange={(e) => setPrompts({ ...prompts, [promptTab]: e.target.value })}
+                  />
+                  <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                    <button className="btn" style={{ padding: '5px 10px', fontSize: 11 }} onClick={() => setPrompts(defaultPrompts)}><Icons.zap size={11}/> Reset defaults</button>
+                    <button className="btn btn--acc" style={{ padding: '5px 10px', fontSize: 11 }}><Icons.check size={12}/> Save</button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
