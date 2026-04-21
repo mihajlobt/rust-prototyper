@@ -1271,8 +1271,8 @@ function APIsPanel({ cmTheme }) {
           </div>
           {tab === 'endpoints' && <EndpointsTab/>}
           {tab === 'auth' && <AuthTab/>}
-          {tab === 'schemas' && <SchemasTab/>}
-          {tab === 'test' && <TestTab/>}
+          {tab === 'schemas' && <SchemasTab cmTheme={cmTheme}/>}
+          {tab === 'test' && <TestTab cmTheme={cmTheme}/>}
         </div>
       </div>
     </div>
@@ -1316,7 +1316,7 @@ function AuthTab() {
     </div>
   );
 }
-function SchemasTab() {
+function SchemasTab({ cmTheme }) {
   return (
     <CodeMirrorEditor mode="javascript" theme={cmTheme} value={`type Customer = {
   id: string;
@@ -1335,7 +1335,7 @@ type Charge = {
 };`}/>
   );
 }
-function TestTab() {
+function TestTab({ cmTheme }) {
   return (
     <div className="col" style={{ flex: 1 }}>
       <div className="pad-4">
