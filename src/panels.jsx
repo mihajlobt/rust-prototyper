@@ -1408,7 +1408,7 @@ export default function App() {
           {showTerm && (
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%', display: 'flex', flexDirection: 'column', background: 'var(--n-0)', borderTop: '1px solid var(--line)', zIndex: 3 }}>
               <div className="panel-head" style={{ flexShrink: 0, borderBottom: '1px solid var(--line-soft)' }}>
-                <div className="seg">
+                <div className="seg" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
                   <button data-on={termTab === 'terminal'} onClick={() => setTermTab('terminal')}>Terminal</button>
                   <button data-on={termTab === 'logs'} onClick={() => setTermTab('logs')}>Logs</button>
                   <button data-on={termTab === 'net'} onClick={() => setTermTab('net')}>Network</button>
