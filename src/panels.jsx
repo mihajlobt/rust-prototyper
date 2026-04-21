@@ -441,7 +441,7 @@ function SidebarRail({ activeView }) {
 function ThemesPanel({ cmTheme }) {
   const [selected, setSelected] = uS('t4');
   const [prompt, setPrompt] = uS('A cool teal-on-ink cyberpunk theme using OKLCH, designed for a developer dashboard.');
-  const [rightTab, setRightTab] = uS('css');
+  const [showCss, setShowCss] = uS(false);
   const theme = LIB_THEMES.find(t => t.id === selected) || LIB_THEMES[0];
   const isDark = theme.dark;
   const [showLibrary, setShowLibrary] = uS(true);
@@ -496,19 +496,66 @@ function ThemesPanel({ cmTheme }) {
           </div>
         </div>
         <div className="sash sash--v"/>
-        <div className="split-pane">
-          <div className="panel-head">
-            <div className="panel-title">{rightTab === 'css' ? 'CSS Output' : 'Preview'}</div>
-            <div className="seg" style={{ marginLeft: 12 }}>
-              <button data-on={rightTab === 'css'} onClick={() => setRightTab('css')}>CSS</button>
-              <button data-on={rightTab === 'preview'} onClick={() => setRightTab('preview')}>Preview</button>
+        <div className="split-pane" style={{ position: 'relative' }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: 24, background: isDark ? '#0c0c11' : '#fafafa', color: isDark ? '#fff' : '#111' }}>
+            <div style={{ maxWidth: 420, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Common Components</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, border: 'none', cursor: 'default', background: theme.button, color: isDark ? '#fff' : '#000' }}>Primary</button>
+                <button style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, border: 'none', cursor: 'default', background: 'transparent', color: isDark ? '#fff' : '#111', boxShadow: `inset 0 0 0 1px ${theme.accent}40` }}>Secondary</button>
+                <button style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, border: 'none', cursor: 'default', background: 'transparent', color: theme.accent, opacity: 0.9 }}>Ghost</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, opacity: 0.7 }}>Email</label>
+                <input defaultValue="hello@prototyper.dev" style={{
+                  padding: '8px 10px', borderRadius: 8, fontSize: 12,
+                  background: isDark ? 'rgba(255,255,255,0.06)' : '#fff',
+                  border: `1px solid ${theme.accent}30`, color: 'inherit', outline: 'none'
+                }}/>
+              </div>
+              <div style={{
+                padding: 16, borderRadius: 10,
+                background: isDark ? 'rgba(255,255,255,0.05)' : '#fff',
+                border: `1px solid ${theme.accent}20`,
+                boxShadow: isDark ? '0 10px 30px rgba(0,0,0,.3)' : '0 4px 12px rgba(0,0,0,.05)'
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>Invite team members</div>
+                <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>Send an invite link to collaborate.</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+                  <span className="pill mono" style={{ fontSize: 10 }}>https://proto.dev/invite</span>
+                  <button style={{ padding: '4px 8px', borderRadius: 6, fontSize: 10, border: 'none', cursor: 'default', background: theme.button, color: isDark ? '#fff' : '#000' }}>Copy</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, opacity: 0.7 }}>Status</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 8, border: `1px solid ${theme.accent}30`, background: isDark ? 'rgba(255,255,255,0.06)' : '#fff', cursor: 'default' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 4, background: theme.accent }}/>
+                  <span style={{ fontSize: 12, flex: 1 }}>Active</span>
+                  <Icons.chevD size={10} style={{ opacity: 0.6 }}/>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {['Design','Engineering','Marketing'].map((tag, i) => (
+                  <span key={tag} style={{
+                    padding: '4px 10px', borderRadius: 6, fontSize: 11,
+                    background: i === 0 ? theme.accent + '20' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                    color: i === 0 ? theme.accent : 'inherit',
+                    border: i === 0 ? `1px solid ${theme.accent}40` : `1px solid transparent`
+                  }}>{tag}</span>
+                ))}
+              </div>
             </div>
-            <div style={{ flex: 1 }}/>
-            <span className="pill mono">{rightTab === 'css' ? 'oklch' : 'live'}</span>
-            <button className="icon-btn"><Icons.file size={12}/></button>
           </div>
-          {rightTab === 'css' ? (
-            <CodeMirrorEditor mode="css" theme={cmTheme} value={`:root {
+
+          {showCss && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '45%', display: 'flex', flexDirection: 'column', background: 'var(--n-0)', borderTop: '1px solid var(--line)', zIndex: 3 }}>
+              <div className="panel-head" style={{ flexShrink: 0, borderBottom: '1px solid var(--line-soft)' }}>
+                <div className="panel-title">CSS Output</div>
+                <div style={{ flex: 1 }}/>
+                <span className="pill mono" style={{ fontSize: 9 }}>oklch</span>
+                <button className="icon-btn" onClick={() => setShowCss(false)}><Icons.x size={12}/></button>
+              </div>
+              <CodeMirrorEditor mode="css" theme={cmTheme} value={`:root {
   --background: oklch(0.18 0.025 200);
   --foreground: oklch(0.96 0.008 170);
   --card:       oklch(0.22 0.028 195);
@@ -522,56 +569,16 @@ function ThemesPanel({ cmTheme }) {
 .dark {
   --background: oklch(0.14 0.025 200);
 }
-@font-face { font-family: "Geist"; src: ... }`}/>
-          ) : (
-            <div style={{ flex: 1, overflow: 'auto', padding: 24, background: isDark ? '#0c0c11' : '#fafafa', color: isDark ? '#fff' : '#111' }}>
-              <div style={{ maxWidth: 420, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Common Components</div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, border: 'none', cursor: 'default', background: theme.button, color: isDark ? '#fff' : '#000' }}>Primary</button>
-                  <button style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, border: 'none', cursor: 'default', background: 'transparent', color: isDark ? '#fff' : '#111', boxShadow: `inset 0 0 0 1px ${theme.accent}40` }}>Secondary</button>
-                  <button style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, border: 'none', cursor: 'default', background: 'transparent', color: theme.accent, opacity: 0.9 }}>Ghost</button>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 11, opacity: 0.7 }}>Email</label>
-                  <input defaultValue="hello@prototyper.dev" style={{
-                    padding: '8px 10px', borderRadius: 8, fontSize: 12,
-                    background: isDark ? 'rgba(255,255,255,0.06)' : '#fff',
-                    border: `1px solid ${theme.accent}30`, color: 'inherit', outline: 'none'
-                  }}/>
-                </div>
-                <div style={{
-                  padding: 16, borderRadius: 10,
-                  background: isDark ? 'rgba(255,255,255,0.05)' : '#fff',
-                  border: `1px solid ${theme.accent}20`,
-                  boxShadow: isDark ? '0 10px 30px rgba(0,0,0,.3)' : '0 4px 12px rgba(0,0,0,.05)'
-                }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>Invite team members</div>
-                  <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>Send an invite link to collaborate.</div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-                    <span className="pill mono" style={{ fontSize: 10 }}>https://proto.dev/invite</span>
-                    <button style={{ padding: '4px 8px', borderRadius: 6, fontSize: 10, border: 'none', cursor: 'default', background: theme.button, color: isDark ? '#fff' : '#000' }}>Copy</button>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 11, opacity: 0.7 }}>Status</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 8, border: `1px solid ${theme.accent}30`, background: isDark ? 'rgba(255,255,255,0.06)' : '#fff', cursor: 'default' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 4, background: theme.accent }}/>
-                    <span style={{ fontSize: 12, flex: 1 }}>Active</span>
-                    <Icons.chevD size={10} style={{ opacity: 0.6 }}/>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {['Design','Engineering','Marketing'].map((tag, i) => (
-                    <span key={tag} style={{
-                      padding: '4px 10px', borderRadius: 6, fontSize: 11,
-                      background: i === 0 ? theme.accent + '20' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
-                      color: i === 0 ? theme.accent : 'inherit',
-                      border: i === 0 ? `1px solid ${theme.accent}40` : `1px solid transparent`
-                    }}>{tag}</span>
-                  ))}
-                </div>
-              </div>
+@font-face { font-family: "Geist"; src: ... }`} style={{ flex: 1 }}/>
+            </div>
+          )}
+
+          {!showCss && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 32, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8, background: 'var(--n-1)', borderTop: '1px solid var(--line-soft)', cursor: 'pointer', zIndex: 2 }} onClick={() => setShowCss(true)}>
+              <Icons.terminal size={11}/>
+              <span style={{ fontSize: 11, fontWeight: 500 }}>CSS Output</span>
+              <div style={{ flex: 1 }}/>
+              <span className="pill mono" style={{ fontSize: 9 }}>oklch</span>
             </div>
           )}
         </div>
@@ -865,7 +872,7 @@ function ComponentsPanel({ modelId, cmTheme }) {
   const [inspector, setInspector] = uS(false);
   const [showExport, setShowExport] = uS(false);
   const [showSave, setShowSave] = uS(false);
-  const [previewTab, setPreviewTab] = uS('preview');
+  const [showCode, setShowCode] = uS(false);
   const [showAddLib, setShowAddLib] = uS(false);
   const [libs, setLibs] = uS(['shadcn/ui','lucide','motion','radix','tailwind v4']);
   const [activeTheme, setActiveTheme] = uS(null);
@@ -913,18 +920,20 @@ function ComponentsPanel({ modelId, cmTheme }) {
           </div>
         </div>
         <div className="sash sash--v"/>
-        <div className="split-pane">
-          <div className="panel-head">
-            <div className="panel-title">{previewTab === 'code' ? 'Code' : 'Preview'}</div>
-            <div className="seg" style={{ marginLeft: 12 }}>
-              <button data-on={previewTab === 'preview'} onClick={() => setPreviewTab('preview')}>Preview</button>
-              <button data-on={previewTab === 'code'} onClick={() => setPreviewTab('code')}>Code</button>
-            </div>
-            <div style={{ flex: 1 }}/>
-            <div className="pill mono"><span className="sdot sdot--ok"/> built · 180ms</div>
+        <div className="split-pane" style={{ position: 'relative' }}>
+          <div style={{ flex: 1, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'repeating-linear-gradient(45deg, var(--n-0), var(--n-0) 12px, var(--n-1) 12px, var(--n-1) 24px)' }}>
+            <LoginCardMock/>
           </div>
-          {previewTab === 'code' ? (
-            <CodeMirrorEditor mode="jsx" theme={cmTheme} value={`export function LoginCard({ onSignIn }: { onSignIn: (user: string) => void }) {
+
+          {showCode && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '45%', display: 'flex', flexDirection: 'column', background: 'var(--n-0)', borderTop: '1px solid var(--line)', zIndex: 3 }}>
+              <div className="panel-head" style={{ flexShrink: 0, borderBottom: '1px solid var(--line-soft)' }}>
+                <div className="panel-title">Code</div>
+                <div style={{ flex: 1 }}/>
+                <div className="pill mono"><span className="sdot sdot--ok"/> built · 180ms</div>
+                <button className="icon-btn" onClick={() => setShowCode(false)}><Icons.x size={12}/></button>
+              </div>
+              <CodeMirrorEditor mode="jsx" theme={cmTheme} value={`export function LoginCard({ onSignIn }: { onSignIn: (user: string) => void }) {
   return (
     <div className="w-[340px] p-7 rounded-2xl bg-[rgba(20,24,34,.6)] backdrop-blur-xl border border-white/[0.08] shadow-2xl">
       <div className="text-lg font-semibold mb-1">Welcome back</div>
@@ -942,10 +951,16 @@ function ComponentsPanel({ modelId, cmTheme }) {
       </div>
     </div>
   );
-}`}/>
-          ) : (
-            <div style={{ flex: 1, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'repeating-linear-gradient(45deg, var(--n-0), var(--n-0) 12px, var(--n-1) 12px, var(--n-1) 24px)' }}>
-              <LoginCardMock/>
+}`} style={{ flex: 1 }}/>
+            </div>
+          )}
+
+          {!showCode && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 32, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8, background: 'var(--n-1)', borderTop: '1px solid var(--line-soft)', cursor: 'pointer', zIndex: 2 }} onClick={() => setShowCode(true)}>
+              <Icons.terminal size={11}/>
+              <span style={{ fontSize: 11, fontWeight: 500 }}>Code</span>
+              <div style={{ flex: 1 }}/>
+              <div className="pill mono" style={{ fontSize: 9 }}><span className="sdot sdot--ok"/> built · 180ms</div>
             </div>
           )}
         </div>
