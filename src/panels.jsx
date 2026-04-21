@@ -8,6 +8,28 @@ function useInspector() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// CodeMirror wrapper
+function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
+  const ref = uR(null);
+  const cmRef = uR(null);
+  uE(() => {
+    if (!ref.current || typeof CodeMirror === 'undefined') return;
+    cmRef.current = CodeMirror(ref.current, {
+      value: value || '',
+      mode: mode || 'javascript',
+      theme: 'dracula',
+      readOnly: readOnly,
+      lineNumbers: true,
+      lineWrapping: true,
+      scrollbarStyle: 'null',
+      viewportMargin: Infinity,
+    });
+    return () => { cmRef.current?.toTextArea?.(); };
+  }, []);
+  return <div ref={ref} style={{ fontSize: 12, flex: 1, minHeight: 0, ...style }}/>;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Style preset dropdown — short prompts injected into generation
 function StylePresetPicker({ value, onChange }) {
   const [open, setOpen] = uS(false);
@@ -127,6 +149,96 @@ function PromptConfigModal({ open, onClose }) {
             <button className="btn" onClick={() => setTexts(prompts)}><Icons.zap size={11}/> Reset defaults</button>
             <button className="btn btn--acc" onClick={onClose}><Icons.check size={12}/> Save</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Export modal
+function ExportModal({ open, onClose }) {
+  const [format, setFormat] = uS('react-vite');
+  const [routing, setRouting] = uS('react-router');
+  const [include, setInclude] = uS({ apis: true, theme: true, components: true, tests: false });
+  if (!open) return null;
+  return (
+    <div className="pi-backdrop" style={{ justifyContent: 'center', alignItems: 'center' }} onClick={onClose}>
+      <div className="card" style={{ width: 520, maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div className="pi-head" style={{ borderBottom: '1px solid var(--line-soft)', flexShrink: 0 }}>
+          <div className="col">
+            <div className="pi-title">Export Project</div>
+            <div className="pi-sub">Bundle screens, links, APIs and theme into a runnable app</div>
+          </div>
+          <div style={{ flex: 1 }}/>
+          <button className="icon-btn" onClick={onClose}><Icons.x size={13}/></button>
+        </div>
+        <div className="pad-4 col gap-4" style={{ overflow: 'auto', flex: 1 }}>
+          <div>
+            <div className="caps" style={{ marginBottom: 6 }}>Framework</div>
+            <div className="seg" style={{ flexWrap: 'wrap' }}>
+              {[
+                { id: 'react-vite', label: 'React + Vite' },
+                { id: 'next', label: 'Next.js' },
+                { id: 'astro', label: 'Astro' },
+                { id: 'tanstack', label: 'TanStack Start' },
+              ].map(f => (
+                <button key={f.id} data-on={format === f.id} onClick={() => setFormat(f.id)}>{f.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="caps" style={{ marginBottom: 6 }}>Routing</div>
+            <div className="seg">
+              {[
+                { id: 'react-router', label: 'React Router' },
+                { id: 'file-based', label: 'File-based' },
+                { id: 'hash', label: 'Hash' },
+              ].map(r => <button key={r.id} data-on={routing === r.id} onClick={() => setRouting(r.id)}>{r.label}</button>)}
+            </div>
+          </div>
+          <div>
+            <div className="caps" style={{ marginBottom: 6 }}>Include</div>
+            <div className="col gap-2">
+              {[
+                { key: 'apis', label: 'API clients & hooks', desc: 'Fetch wrappers from saved APIs' },
+                { key: 'theme', label: 'Theme tokens', desc: 'OKLCH CSS variables + Tailwind config' },
+                { key: 'components', label: 'Shared components', desc: 'Reusable components from library' },
+                { key: 'tests', label: 'Smoke tests', desc: 'Basic Playwright or Vitest scaffolding' },
+              ].map(item => (
+                <label key={item.key} className="row gap-2" style={{ alignItems: 'flex-start', padding: 8, borderRadius: 8, background: 'var(--n-1)', border: '1px solid var(--line-soft)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={include[item.key]} onChange={(e) => setInclude({ ...include, [item.key]: e.target.checked })}/>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500 }}>{item.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--fg-mute)' }}>{item.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="hair"/>
+          <div className="col gap-2">
+            <div className="caps">Output preview</div>
+            <pre className="code-pane mono" style={{ fontSize: 11, padding: 10, borderRadius: 8, background: 'var(--n-1)' }}>{`src/
+  screens/
+    Dashboard.tsx
+    Orders.tsx
+    OrderDetail.tsx
+  components/
+    LoginCard.tsx
+    Sidebar.tsx
+  api/
+    useCustomers.ts
+    useOrders.ts
+  theme/
+    tokens.css
+  App.tsx
+  main.tsx`}</pre>
+          </div>
+        </div>
+        <div className="pad-4 row gap-2" style={{ borderTop: '1px solid var(--line-soft)', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn--acc"><Icons.file size={12}/> Export {format}</button>
         </div>
       </div>
     </div>
@@ -319,26 +431,18 @@ function ThemesPanel() {
   const [rightTab, setRightTab] = uS('css');
   const theme = LIB_THEMES.find(t => t.id === selected) || LIB_THEMES[0];
   const isDark = theme.dark;
+  const [showLibrary, setShowLibrary] = uS(true);
   return (
     <div className="view-body">
-      <div className="view-head">
-        <div>
-          <div className="view-title">Themes</div>
-          <div className="view-sub">Generate and manage design system themes. Output: Tailwind v4 / OKLCH tokens.</div>
-        </div>
-        <div className="row gap-2">
-          <button className="btn"><Icons.save size={12}/> Save as preset</button>
-          <button className="btn btn--acc"><Icons.sparkles size={12}/> Generate</button>
-        </div>
-      </div>
-
       <div className="split">
         <div className="split-pane">
           <div className="panel-head"><div className="panel-title">Prompt</div></div>
-          <div className="pad-4 col gap-3" style={{ flex: 1, overflow: 'auto' }}>
+          <div className="pad-4 col gap-3" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             <textarea className="textarea" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4}/>
-            <div className="caps">Base</div>
-            <div className="row gap-2">
+            <div className="row gap-2" style={{ alignItems: 'center' }}>
+              <button className="btn btn--acc"><Icons.sparkles size={12}/> Generate</button>
+              <button className="btn"><Icons.save size={12}/> Save as preset</button>
+              <div style={{ flex: 1 }}/>
               <div className="seg">
                 <button data-on="true">shadcn</button>
                 <button>daisy</button>
@@ -346,29 +450,36 @@ function ThemesPanel() {
                 <button>generic</button>
               </div>
             </div>
-            <div className="caps">Library</div>
-            <div className="grid-3">
-              {LIB_THEMES.map(t => (
-                <div key={t.id} className={cx('card', 'theme-card')} data-selected={selected === t.id} onClick={() => setSelected(t.id)}>
-                  <div className="theme-preview">
-                    <div className="theme-preview-hero" style={{ background: t.dark ? '#0f0e0c' : '#faf8f2', color: t.dark ? '#fff' : '#111' }}>
-                      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-                        <button className="theme-btn" style={{ background: t.button, color: t.dark ? '#fff' : '#000', fontSize: 9 }}>Primary</button>
-                        <button className="theme-btn" style={{ background: 'transparent', color: t.dark ? '#fff' : '#111', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', fontSize: 9 }}>Ghost</button>
+            <div className="hair" style={{ margin: '2px 0' }}/>
+            <button className="row gap-2" style={{ alignItems: 'center', padding: '4px 0', background: 'none', border: 'none', color: 'var(--fg-mute)', cursor: 'pointer', fontSize: 11 }} onClick={() => setShowLibrary(!showLibrary)}>
+              <Icons.chevD size={10} style={{ transform: showLibrary ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }}/>
+              <span className="caps">Library</span>
+              <span className="pill" style={{ fontSize: 9 }}>{LIB_THEMES.length}</span>
+            </button>
+            {showLibrary && (
+              <div className="grid-3">
+                {LIB_THEMES.map(t => (
+                  <div key={t.id} className={cx('card', 'theme-card')} data-selected={selected === t.id} onClick={() => setSelected(t.id)}>
+                    <div className="theme-preview">
+                      <div className="theme-preview-hero" style={{ background: t.dark ? '#0f0e0c' : '#faf8f2', color: t.dark ? '#fff' : '#111' }}>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                          <button className="theme-btn" style={{ background: t.button, color: t.dark ? '#fff' : '#000', fontSize: 9 }}>Primary</button>
+                          <button className="theme-btn" style={{ background: 'transparent', color: t.dark ? '#fff' : '#111', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', fontSize: 9 }}>Ghost</button>
+                        </div>
+                        <div style={{ fontSize: 10, fontWeight: 600 }}>The quick brown fox</div>
+                        <div style={{ fontSize: 9, opacity: .7 }}>jumps over the lazy dog</div>
                       </div>
-                      <div style={{ fontSize: 10, fontWeight: 600 }}>The quick brown fox</div>
-                      <div style={{ fontSize: 9, opacity: .7 }}>jumps over the lazy dog</div>
+                    </div>
+                    <div className="row gap-2" style={{ padding: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 500 }}>{t.name}</span>
+                      <div className="row gap-1" style={{ marginLeft: 'auto' }}>
+                        {t.swatches.map((s, i) => <div key={i} className="sw" style={{ background: s }}/>)}
+                      </div>
                     </div>
                   </div>
-                  <div className="row gap-2" style={{ padding: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 500 }}>{t.name}</span>
-                    <div className="row gap-1" style={{ marginLeft: 'auto' }}>
-                      {t.swatches.map((s, i) => <div key={i} className="sw" style={{ background: s }}/>)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="sash sash--v"/>
@@ -384,25 +495,21 @@ function ThemesPanel() {
             <button className="icon-btn"><Icons.file size={12}/></button>
           </div>
           {rightTab === 'css' ? (
-            <pre className="code-pane mono">{`:root {
+            <CodeMirrorEditor mode="css" value={`:root {
   --background: oklch(0.18 0.025 200);
   --foreground: oklch(0.96 0.008 170);
   --card:       oklch(0.22 0.028 195);
   --border:     oklch(0.30 0.030 195);
-
-  --primary:        oklch(0.82 0.14 180);
+  --primary:    oklch(0.82 0.14 180);
   --primary-foreground: oklch(0.18 0.04 200);
-
-  --accent:  oklch(0.78 0.16 176);
-  --muted:   oklch(0.28 0.018 200);
-
-  --radius:  0.5rem;
+  --accent:     oklch(0.78 0.16 176);
+  --muted:      oklch(0.28 0.018 200);
+  --radius:     0.5rem;
 }
 .dark {
   --background: oklch(0.14 0.025 200);
 }
-
-@font-face { font-family: "Geist"; src: ... }`}</pre>
+@font-face { font-family: "Geist"; src: ... }`}/>
           ) : (
             <div style={{ flex: 1, overflow: 'auto', padding: 24, background: isDark ? '#0c0c11' : '#fafafa', color: isDark ? '#fff' : '#111' }}>
               <div style={{ maxWidth: 420, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -462,29 +569,301 @@ function ThemesPanel() {
 
 // ─────────────────────────────────────────────────────────────
 // Components panel
+// ─────────────────────────────────────────────────────────────
+// Component export modal
+function ComponentExportModal({ open, onClose }) {
+  const [format, setFormat] = uS('tsx');
+  const [include, setInclude] = uS({ types: true, storybook: false, test: false, css: true });
+  if (!open) return null;
+  return (
+    <div className="pi-backdrop" style={{ justifyContent: 'center', alignItems: 'center' }} onClick={onClose}>
+      <div className="card" style={{ width: 480, maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div className="pi-head" style={{ borderBottom: '1px solid var(--line-soft)', flexShrink: 0 }}>
+          <div className="col">
+            <div className="pi-title">Export Component</div>
+            <div className="pi-sub">Package the generated component for use in your project</div>
+          </div>
+          <div style={{ flex: 1 }}/>
+          <button className="icon-btn" onClick={onClose}><Icons.x size={13}/></button>
+        </div>
+        <div className="pad-4 col gap-4" style={{ overflow: 'auto', flex: 1 }}>
+          <div>
+            <div className="caps" style={{ marginBottom: 6 }}>Format</div>
+            <div className="seg" style={{ flexWrap: 'wrap' }}>
+              {[
+                { id: 'tsx', label: 'React TSX' },
+                { id: 'jsx', label: 'React JSX' },
+                { id: 'vue', label: 'Vue SFC' },
+                { id: 'svelte', label: 'Svelte' },
+                { id: 'webc', label: 'Web Component' },
+              ].map(f => (
+                <button key={f.id} data-on={format === f.id} onClick={() => setFormat(f.id)}>{f.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="caps" style={{ marginBottom: 6 }}>Include</div>
+            <div className="col gap-2">
+              {[
+                { key: 'types', label: 'Type definitions', desc: 'Props interface / type exports' },
+                { key: 'css', label: 'Styles', desc: 'Tailwind classes or CSS module' },
+                { key: 'storybook', label: 'Storybook story', desc: 'Default + variant stories' },
+                { key: 'test', label: 'Unit test', desc: 'Vitest + React Testing Library scaffold' },
+              ].map(item => (
+                <label key={item.key} className="row gap-2" style={{ alignItems: 'flex-start', padding: 8, borderRadius: 8, background: 'var(--n-1)', border: '1px solid var(--line-soft)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={include[item.key]} onChange={(e) => setInclude({ ...include, [item.key]: e.target.checked })}/>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 500 }}>{item.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--fg-mute)' }}>{item.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="hair"/>
+          <div className="col gap-2">
+            <div className="caps">Output preview</div>
+            <pre className="code-pane mono" style={{ fontSize: 11, padding: 10, borderRadius: 8, background: 'var(--n-1)' }}>{format === 'tsx'
+? `export interface LoginCardProps {
+  onSignIn: (user: string) => void;
+}
+
+export function LoginCard({ onSignIn }: LoginCardProps) {
+  return (
+    <div className="...">
+      {/* generated */}
+    </div>
+  );
+}`
+: format === 'vue'
+? `<script setup lang="ts">
+interface Props { onSignIn: (user: string) => void }
+defineProps<Props>();
+</script>
+
+<template>
+  <div class="...">
+    <!-- generated -->
+  </div>
+</template>`
+: `// ${format} output`}</pre>
+          </div>
+        </div>
+        <div className="pad-4 row gap-2" style={{ borderTop: '1px solid var(--line-soft)', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn--acc"><Icons.file size={12}/> Export {format}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Save component modal
+function SaveComponentModal({ open, onClose }) {
+  const [name, setName] = uS('LoginCard');
+  const [tag, setTag] = uS('auth');
+  const [desc, setDesc] = uS('Glassmorphic login card with email, password and sign-in CTA.');
+  const [scope, setScope] = uS('project');
+  if (!open) return null;
+  return (
+    <div className="pi-backdrop" style={{ justifyContent: 'center', alignItems: 'center' }} onClick={onClose}>
+      <div className="card" style={{ width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div className="pi-head" style={{ borderBottom: '1px solid var(--line-soft)', flexShrink: 0 }}>
+          <div className="col">
+            <div className="pi-title">Save to Library</div>
+            <div className="pi-sub">Tag and store this component for reuse across screens</div>
+          </div>
+          <div style={{ flex: 1 }}/>
+          <button className="icon-btn" onClick={onClose}><Icons.x size={13}/></button>
+        </div>
+        <div className="pad-4 col gap-3" style={{ overflow: 'auto', flex: 1 }}>
+          <div className="col gap-1">
+            <span style={{ fontSize: 11 }}>Name</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ fontSize: 12 }}/>
+          </div>
+          <div className="row gap-2">
+            <div className="col gap-1" style={{ flex: 1 }}>
+              <span style={{ fontSize: 11 }}>Tag</span>
+              <div className="seg" style={{ flexWrap: 'wrap' }}>
+                {['auth','form','data','marketing','ui','social','app'].map(t => (
+                  <button key={t} data-on={tag === t} onClick={() => setTag(t)}>{t}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="col gap-1">
+            <span style={{ fontSize: 11 }}>Description</span>
+            <textarea className="textarea" rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} style={{ fontSize: 12 }}/>
+          </div>
+          <div className="col gap-1">
+            <span style={{ fontSize: 11 }}>Scope</span>
+            <div className="row gap-2">
+              {[
+                { id: 'private', label: 'Private', desc: 'Only you' },
+                { id: 'project', label: 'Project', desc: 'This workspace' },
+                { id: 'library', label: 'Library', desc: 'Across projects' },
+              ].map(s => (
+                <button
+                  key={s.id}
+                  className="card"
+                  onClick={() => setScope(s.id)}
+                  style={{
+                    flex: 1, padding: 10, cursor: 'pointer',
+                    borderColor: scope === s.id ? 'var(--acc)' : undefined,
+                    background: scope === s.id ? 'var(--acc-soft)' : undefined,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>{s.label}</div>
+                  <div style={{ fontSize: 10, color: 'var(--fg-mute)', marginTop: 2 }}>{s.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="pad-4 row gap-2" style={{ borderTop: '1px solid var(--line-soft)', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn--acc" onClick={onClose}><Icons.check size={12}/> Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Theme picker dropdown for component prompt
+function ThemePickerDropdown({ value, onChange }) {
+  const [open, setOpen] = uS(false);
+  const rootRef = uR(null);
+  uE(() => {
+    if (!open) return;
+    const h = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  return (
+    <div ref={rootRef} className="col gap-2" style={{ position: 'relative' }}>
+      <div className="row gap-2" style={{ alignItems: 'center' }}>
+        <span className="caps">Theme</span>
+        {value && (
+          <button className="pill pill--acc" style={{ fontSize: 9, cursor: 'pointer' }} onClick={() => onChange?.(null)}>
+            <Icons.x size={9}/> {value.name}
+          </button>
+        )}
+      </div>
+      <button
+        className="card"
+        onClick={() => setOpen(o => !o)}
+        style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderColor: open ? 'var(--acc)' : undefined }}
+      >
+        {value ? (
+          <>
+            <div className="sw" style={{ background: value.swatches[0], width: 14, height: 14, borderRadius: 3, flexShrink: 0 }}/>
+            <span style={{ fontSize: 11, fontWeight: 500 }}>{value.name}</span>
+          </>
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--fg-mute)' }}>Select a theme…</span>
+        )}
+        <div style={{ flex: 1 }}/>
+        <Icons.chevD size={10} style={{ opacity: .6, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}/>
+      </button>
+      {open && (
+        <div className="mp-pop" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 300, marginTop: 4, maxHeight: 320, overflow: 'auto' }}>
+          {LIB_THEMES.map(t => (
+            <button
+              key={t.id}
+              className="mp-row"
+              data-on={value?.id === t.id}
+              onClick={() => { onChange?.(value?.id === t.id ? null : t); setOpen(false); }}
+              style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: 10 }}
+            >
+              <div className="row gap-2" style={{ alignItems: 'center' }}>
+                <div className="sw" style={{ background: t.swatches[0], width: 14, height: 14, borderRadius: 3, flexShrink: 0 }}/>
+                <span style={{ fontSize: 12, fontWeight: 500 }}>{t.name}</span>
+                <span className="pill mono" style={{ marginLeft: 'auto', fontSize: 9 }}>{t.cat}</span>
+              </div>
+              <div className="theme-preview" style={{ height: 50, borderRadius: 6, overflow: 'hidden' }}>
+                <div className="theme-preview-hero" style={{ background: t.dark ? '#0f0e0c' : '#faf8f2', color: t.dark ? '#fff' : '#111', padding: '6px 8px' }}>
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                    <button className="theme-btn" style={{ background: t.button, color: t.dark ? '#fff' : '#000', fontSize: 8, padding: '2px 6px' }}>Primary</button>
+                    <button className="theme-btn" style={{ background: 'transparent', color: t.dark ? '#fff' : '#111', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.15)', fontSize: 8, padding: '2px 6px' }}>Ghost</button>
+                  </div>
+                  <div style={{ fontSize: 9, opacity: .8 }}>The quick brown fox</div>
+                </div>
+              </div>
+              <div className="row gap-1" style={{ justifyContent: 'flex-end' }}>
+                {t.swatches.map((s, i) => <div key={i} className="sw" style={{ background: s, width: 10, height: 10, borderRadius: 2 }}/>)}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {value && (
+        <div style={{ fontSize: 10, color: 'var(--fg-mute)', lineHeight: 1.4, padding: '4px 6px', borderRadius: 6, background: 'var(--n-1)', border: '1px solid var(--line-soft)' }}>
+          Injected: "Apply the <strong>{value.name}</strong> theme with accent {value.swatches[0]} and surface {value.swatches[2]}."
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Add library modal
+function AddLibraryModal({ open, onClose, onAdd }) {
+  const [custom, setCustom] = uS('');
+  const presets = ['framer-motion', '@radix-ui/react-dialog', 'clsx', 'class-variance-authority', 'tailwind-merge', 'date-fns', 'zod'];
+  if (!open) return null;
+  return (
+    <div className="pi-backdrop" style={{ justifyContent: 'center', alignItems: 'center' }} onClick={onClose}>
+      <div className="card" style={{ width: 360, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div className="pi-head" style={{ borderBottom: '1px solid var(--line-soft)', flexShrink: 0 }}>
+          <div className="col">
+            <div className="pi-title">Add Library</div>
+            <div className="pi-sub">Include an extra dependency in the generated component</div>
+          </div>
+          <div style={{ flex: 1 }}/>
+          <button className="icon-btn" onClick={onClose}><Icons.x size={13}/></button>
+        </div>
+        <div className="pad-4 col gap-3" style={{ overflow: 'auto', flex: 1 }}>
+          <div className="caps">Common</div>
+          <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
+            {presets.map(p => (
+              <button key={p} className="tag" style={{ cursor: 'pointer' }} onClick={() => { onAdd?.(p); onClose(); }}>{p}</button>
+            ))}
+          </div>
+          <div className="hair" style={{ margin: '2px 0' }}/>
+          <div className="caps">Custom</div>
+          <div className="row gap-2">
+            <input className="input mono" placeholder="npm-package-name" value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && custom.trim() && (onAdd?.(custom.trim()), onClose())} style={{ flex: 1, fontSize: 12 }}/>
+            <button className="btn btn--acc" style={{ padding: '5px 10px', fontSize: 11 }} onClick={() => { if (custom.trim()) { onAdd?.(custom.trim()); onClose(); } }}>Add</button>
+          </div>
+        </div>
+        <div className="pad-4 row gap-2" style={{ borderTop: '1px solid var(--line-soft)', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ComponentsPanel({ modelId }) {
   const [prompt, setPrompt] = uS('A login card with email + password, glassmorphic surface, subtle glow on focus.');
   const [attachments, setAttachments] = uS([]);
   const [inspector, setInspector] = uS(false);
+  const [showExport, setShowExport] = uS(false);
+  const [showSave, setShowSave] = uS(false);
+  const [previewTab, setPreviewTab] = uS('preview');
+  const [showAddLib, setShowAddLib] = uS(false);
+  const [libs, setLibs] = uS(['shadcn/ui','lucide','motion','radix','tailwind v4']);
+  const [activeTheme, setActiveTheme] = uS(null);
   const model = MODELS.find(m => m.id === modelId) || MODELS[0];
   const system = `You are Prototyper's component generator. Output a single React/TSX function component using Tailwind v4. Library: shadcn/ui, lucide, motion, radix.`;
   return (
     <div className="view-body">
-      <div className="view-head">
-        <div>
-          <div className="view-title">Components</div>
-          <div className="view-sub">Atomic UI components — generated, previewed, saved to the library.</div>
-        </div>
-        <div className="row gap-2">
-          <button className="btn"><Icons.save size={12}/> Save</button>
-          <button className="btn"><Icons.file size={12}/> Export</button>
-          <button className="btn btn--acc"><Icons.sparkles size={12}/> Generate</button>
-        </div>
-      </div>
       <div className="split">
         <div className="split-pane" style={{ maxWidth: 380 }}>
           <div className="panel-head"><div className="panel-title">Prompt</div></div>
-          <div className="pad-4 col gap-3" style={{ overflow: 'auto' }}>
+          <div className="pad-4 col gap-3" style={{ overflow: 'auto', flex: 1 }}>
             <AttachComposer
               value={prompt}
               setValue={setPrompt}
@@ -496,27 +875,66 @@ function ComponentsPanel({ modelId }) {
               showUpdate={false}
               placeholder="Describe the component…"
             />
-            <div className="caps">Libraries</div>
-            <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
-              {['shadcn/ui','lucide','motion','radix','tailwind v4'].map(l => <span key={l} className="tag">{l}</span>)}
-              <button className="tag" style={{ cursor: 'pointer' }}>+ add</button>
+            <div className="row gap-2">
+              <button className="btn" onClick={() => setShowSave(true)}><Icons.save size={12}/> Save</button>
+              <button className="btn" onClick={() => setShowExport(true)}><Icons.file size={12}/> Export</button>
+              <div style={{ flex: 1 }}/>
             </div>
+            <div className="hair" style={{ margin: '2px 0' }}/>
+            {/* Libraries */}
+            <div className="row gap-2" style={{ alignItems: 'center' }}>
+              <span className="caps">Libraries</span>
+              <span className="pill mono" style={{ fontSize: 9 }}>{libs.length}</span>
+            </div>
+            <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
+              {libs.map(l => (
+                <span key={l} className="tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {l}
+                  <button className="icon-btn" style={{ width: 12, height: 12 }} onClick={() => setLibs(ls => ls.filter(x => x !== l))}><Icons.x size={9}/></button>
+                </span>
+              ))}
+              <button className="tag" style={{ cursor: 'pointer' }} onClick={() => setShowAddLib(true)}>+ add</button>
+            </div>
+            {/* Theme injector */}
+            <ThemePickerDropdown value={activeTheme} onChange={setActiveTheme}/>
           </div>
         </div>
         <div className="sash sash--v"/>
         <div className="split-pane">
           <div className="panel-head">
-            <div className="panel-title">Preview</div>
+            <div className="panel-title">{previewTab === 'code' ? 'Code' : 'Preview'}</div>
             <div className="seg" style={{ marginLeft: 12 }}>
-              <button data-on="true">Preview</button>
-              <button>Code</button>
+              <button data-on={previewTab === 'preview'} onClick={() => setPreviewTab('preview')}>Preview</button>
+              <button data-on={previewTab === 'code'} onClick={() => setPreviewTab('code')}>Code</button>
             </div>
             <div style={{ flex: 1 }}/>
             <div className="pill mono"><span className="sdot sdot--ok"/> built · 180ms</div>
           </div>
-          <div style={{ flex: 1, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'repeating-linear-gradient(45deg, var(--n-0), var(--n-0) 12px, var(--n-1) 12px, var(--n-1) 24px)' }}>
-            <LoginCardMock/>
-          </div>
+          {previewTab === 'code' ? (
+            <CodeMirrorEditor mode="jsx" value={`export function LoginCard({ onSignIn }: { onSignIn: (user: string) => void }) {
+  return (
+    <div className="w-[340px] p-7 rounded-2xl bg-[rgba(20,24,34,.6)] backdrop-blur-xl border border-white/[0.08] shadow-2xl">
+      <div className="text-lg font-semibold mb-1">Welcome back</div>
+      <div className="text-xs text-muted mb-5">Sign in to your workspace.</div>
+      <label className="text-[9px] uppercase tracking-wider">Email</label>
+      <input className="input mb-3" defaultValue="you@prototyper.dev" />
+      <div className="flex gap-2">
+        <label className="text-[9px] uppercase tracking-wider flex-1">Password</label>
+        <a className="link-sub text-[10px]">Forgot?</a>
+      </div>
+      <input className="input mb-4" type="password" defaultValue="••••••••••" />
+      <button className="btn btn--acc w-full justify-center py-2">Sign in</button>
+      <div className="text-center text-[11px] text-muted mt-3">
+        No account? <a className="link-sub">Request access</a>
+      </div>
+    </div>
+  );
+}`}/>
+          ) : (
+            <div style={{ flex: 1, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'repeating-linear-gradient(45deg, var(--n-0), var(--n-0) 12px, var(--n-1) 12px, var(--n-1) 24px)' }}>
+              <LoginCardMock/>
+            </div>
+          )}
         </div>
       </div>
       <PromptInspector
@@ -529,6 +947,9 @@ function ComponentsPanel({ modelId }) {
         user={prompt}
         attachments={attachments}
       />
+      <ComponentExportModal open={showExport} onClose={() => setShowExport(false)}/>
+      <SaveComponentModal open={showSave} onClose={() => setShowSave(false)}/>
+      <AddLibraryModal open={showAddLib} onClose={() => setShowAddLib(false)} onAdd={(lib) => setLibs(ls => [...ls, lib])}/>
     </div>
   );
 }
@@ -575,55 +996,142 @@ function ScreensPanel({ modelId }) {
     { name: 'link_screens', body: 'Create a navigation link between two screens.' },
   ];
 
+  const [linkMode, setLinkMode] = uS(false);
+  const [links, setLinks] = uS([
+    { id: 'l1', from: 'sidebar-orders', to: 'sc2', label: 'Orders nav', type: 'navigate' },
+    { id: 'l2', from: 'btn-new-order', to: 'sc3', label: 'New order', type: 'modal' },
+  ]);
+  const [selectedLinkEl, setSelectedLinkEl] = uS(null);
+  const [showExport, setShowExport] = uS(false);
+
+  const linkableElements = [
+    { id: 'sidebar-home', label: 'Sidebar · Home', x: 8, y: 10 },
+    { id: 'sidebar-orders', label: 'Sidebar · Orders', x: 8, y: 15 },
+    { id: 'sidebar-customers', label: 'Sidebar · Customers', x: 8, y: 20 },
+    { id: 'btn-new-order', label: 'Button · New order', x: 82, y: 12 },
+    { id: 'row-order', label: 'Table row · Order', x: 50, y: 55 },
+  ];
+
   return (
     <div className="view-body">
-      <div className="view-head">
-        <div>
-          <div className="view-title">Screens</div>
-          <div className="view-sub">Full-screen prototypes. Link elements to navigate between screens.</div>
-        </div>
-        <div className="row gap-2">
-          <button className="btn"><Icons.link size={12}/> Link mode</button>
-          <button className="btn"><Icons.file size={12}/> Export</button>
-          <button className="btn btn--acc"><Icons.sparkles size={12}/> Generate</button>
-        </div>
-      </div>
       <div className="split">
         <div className="split-pane" style={{ maxWidth: 380 }}>
-          <div className="panel-head"><div className="panel-title">Chat</div><span className="pill mono" style={{ marginLeft: 'auto' }}>3 turns</span></div>
-          <div style={{ overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-            <div className="chat-msg chat-msg--u"><div className="chat-msg-body">A dashboard with a sidebar, top stats, and a recent orders table.</div></div>
-            <div className="chat-msg chat-msg--a"><div className="chat-msg-body"><span className="pill pill--acc" style={{ fontSize: 10, marginBottom: 6 }}>✧ thinking</span><div style={{ marginTop: 4 }}>Planned: sidebar (nav), 3 KPI cards, table w/ pagination. Generating…</div></div></div>
-            <div className="chat-msg chat-msg--u"><div className="chat-msg-body">Make the KPIs bigger, hide the sidebar on mobile.</div></div>
-          </div>
-          <div style={{ padding: 10, borderTop: '1px solid var(--line-soft)' }}>
-            <AttachComposer
-              value={composer}
-              setValue={setComposer}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              model={model}
-              onOpenPrompt={() => setInspector(true)}
-              onSend={() => { /* demo */ }}
-              placeholder="Describe the screen or refine…"
-            />
-          </div>
+          {linkMode ? (
+            <>
+              <div className="panel-head"><div className="panel-title">Links</div><span className="pill" style={{ marginLeft: 'auto' }}>{links.length}</span></div>
+              <div style={{ overflow: 'auto', padding: 12, flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {links.map(l => (
+                  <div key={l.id} className="card" style={{ padding: 10 }}>
+                    <div className="row gap-2" style={{ alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 500 }}>{l.label}</span>
+                      <span className="pill mono" style={{ marginLeft: 'auto', fontSize: 9 }}>{l.type}</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--fg-mute)', marginTop: 4 }}>
+                      {linkableElements.find(e => e.id === l.from)?.label || l.from} → {LIB_SCREENS.find(s => s.id === l.to)?.name || l.to}
+                    </div>
+                  </div>
+                ))}
+                <div className="hair" style={{ margin: '4px 0' }}/>
+                <div className="caps">Click an element in preview to start a link</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="panel-head"><div className="panel-title">Chat</div><span className="pill mono" style={{ marginLeft: 'auto' }}>3 turns</span></div>
+              <div style={{ overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                <div className="chat-msg chat-msg--u"><div className="chat-msg-body">A dashboard with a sidebar, top stats, and a recent orders table.</div></div>
+                <div className="chat-msg chat-msg--a"><div className="chat-msg-body"><span className="pill pill--acc" style={{ fontSize: 10, marginBottom: 6 }}>✧ thinking</span><div style={{ marginTop: 4 }}>Planned: sidebar (nav), 3 KPI cards, table w/ pagination. Generating…</div></div></div>
+                <div className="chat-msg chat-msg--u"><div className="chat-msg-body">Make the KPIs bigger, hide the sidebar on mobile.</div></div>
+              </div>
+              <div style={{ padding: 10, borderTop: '1px solid var(--line-soft)' }}>
+                <AttachComposer
+                  value={composer}
+                  setValue={setComposer}
+                  attachments={attachments}
+                  setAttachments={setAttachments}
+                  model={model}
+                  onOpenPrompt={() => setInspector(true)}
+                  onSend={() => { /* demo */ }}
+                  placeholder="Describe the screen or refine…"
+                />
+              </div>
+            </>
+          )}
         </div>
         <div className="sash sash--v"/>
         <div className="split-pane">
           <div className="panel-head">
-            <div className="panel-title">Preview</div>
+            <div className="panel-title">{linkMode ? 'Select element to link' : 'Preview'}</div>
             <div className="seg" style={{ marginLeft: 10 }}>
               {['desktop','tablet','mobile'].map(d => <button key={d} data-on={device === d} onClick={() => setDevice(d)}>{d}</button>)}
             </div>
             <div style={{ flex: 1 }}/>
+            <button className={cx('btn', linkMode && 'btn--acc')} style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setLinkMode(!linkMode)}>
+              <Icons.link size={11}/> {linkMode ? 'Done' : 'Link'}
+            </button>
+            <button className="btn" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => setShowExport(true)}><Icons.file size={11}/> Export</button>
+            <div className="hair" style={{ margin: '0 6px', height: 18 }}/>
             <button className="icon-btn"><Icons.zoomOut size={12}/></button>
             <span className="mono" style={{ fontSize: 11, color: 'var(--fg-mute)' }}>100%</span>
             <button className="icon-btn"><Icons.zoomIn size={12}/></button>
-            <button className="icon-btn"><Icons.file size={12}/></button>
           </div>
-          <div style={{ flex: 1, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', background: 'var(--n-0)' }}>
-            <DashboardMock/>
+          <div style={{ flex: 1, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', background: 'var(--n-0)', position: 'relative' }}>
+            <div style={{ position: 'relative' }}>
+              <DashboardMock/>
+              {linkMode && linkableElements.map(el => {
+                const hasLink = links.some(l => l.from === el.id);
+                const isSelected = selectedLinkEl === el.id;
+                return (
+                  <div key={el.id} style={{ position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, zIndex: 10 }}>
+                    <div
+                      onClick={() => setSelectedLinkEl(isSelected ? null : el.id)}
+                      style={{
+                        width: 44, height: 26,
+                        borderRadius: 4,
+                        border: isSelected ? '2px solid var(--acc)' : hasLink ? '2px dashed var(--acc)' : '2px dashed var(--fg-mute)',
+                        background: isSelected ? 'rgba(78,226,201,.2)' : hasLink ? 'rgba(78,226,201,.1)' : 'rgba(255,255,255,.06)',
+                        cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                      title={el.label}
+                    >
+                      {hasLink && <Icons.link size={10} style={{ color: 'var(--acc)' }}/>}
+                    </div>
+                    {isSelected && (
+                      <div className="card" style={{ position: 'absolute', top: 30, left: 0, width: 180, padding: 8, zIndex: 20, boxShadow: 'var(--sh-pop)' }} onClick={e => e.stopPropagation()}>
+                        <div className="caps" style={{ fontSize: 9, marginBottom: 4 }}>Link to screen</div>
+                        <div className="col gap-1" style={{ marginBottom: 6 }}>
+                          {LIB_SCREENS.filter(sc => sc.id !== active).map(sc => (
+                            <button key={sc.id} className="rail-item" style={{ padding: '4px 6px', fontSize: 11 }} onClick={() => {
+                              const existing = links.find(l => l.from === el.id);
+                              if (existing) {
+                                setLinks(ls => ls.map(l => l.id === existing.id ? { ...l, to: sc.id, label: `${el.label} → ${sc.name}` } : l));
+                              } else {
+                                setLinks(ls => [...ls, { id: 'l' + Date.now(), from: el.id, to: sc.id, label: `${el.label} → ${sc.name}`, type: 'navigate' }]);
+                              }
+                              setSelectedLinkEl(null);
+                            }}>
+                              {sc.name}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="caps" style={{ fontSize: 9, marginBottom: 4 }}>Transition</div>
+                        <div className="seg" style={{ flexWrap: 'wrap' }}>
+                          {['navigate','modal','drawer','sheet'].map(t => (
+                            <button key={t} style={{ fontSize: 9, padding: '3px 6px' }} onClick={() => {
+                              const existing = links.find(l => l.from === el.id);
+                              if (existing) setLinks(ls => ls.map(l => l.id === existing.id ? { ...l, type: t } : l));
+                            }}>
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -638,6 +1146,7 @@ function ScreensPanel({ modelId }) {
         attachments={attachments}
         tools={tools}
       />
+      <ExportModal open={showExport} onClose={() => setShowExport(false)}/>
     </div>
   );
 }
@@ -779,7 +1288,7 @@ function AuthTab() {
 }
 function SchemasTab() {
   return (
-    <pre className="code-pane mono" style={{ flex: 1 }}>{`type Customer = {
+    <CodeMirrorEditor mode="javascript" value={`type Customer = {
   id: string;
   email: string;
   name?: string;
@@ -793,7 +1302,7 @@ type Charge = {
   currency: 'usd' | 'eur' | 'gbp';
   customer: Customer['id'];
   status: 'pending' | 'succeeded' | 'failed';
-};`}</pre>
+};`}/>
   );
 }
 function TestTab() {
@@ -807,7 +1316,7 @@ function TestTab() {
         </div>
       </div>
       <div className="hair"/>
-      <pre className="code-pane mono" style={{ flex: 1, background: 'var(--n-0)' }}>{`{
+      <CodeMirrorEditor mode="javascript" value={`{
   "object": "list",
   "data": [
     { "id": "cus_OaBcDe", "email": "liz@acme.io", "created": 1708031920 },
@@ -815,7 +1324,7 @@ function TestTab() {
     { "id": "cus_ObQrSt", "email": "dave@acme.io", "created": 1708021002 }
   ],
   "has_more": true
-}`}</pre>
+}`}/>
     </div>
   );
 }
@@ -857,7 +1366,7 @@ function RunnerPanel() {
               <button data-on={tab === 'net'} onClick={() => setTab('net')}>Network</button>
             </div>
           </div>
-          <pre className="code-pane mono" style={{ flex: 1 }}>{`import { useState } from 'react'
+          <CodeMirrorEditor mode="jsx" value={`import { useState } from 'react'
 import { LoginCard } from './components/LoginCard'
 
 export default function App() {
@@ -868,7 +1377,7 @@ export default function App() {
       <h1 className="text-2xl font-semibold">Hi, {user}</h1>
     </main>
   )
-}`}</pre>
+}`}/>
           <div className="hair"/>
           <div className="terminal">
             <div className="terminal-line"><span className="tl-host">proto</span><span className="tl-sep">:</span><span className="tl-cwd">generated</span><span className="tl-sig">$</span> <span className="tl-cmd">bun install</span></div>
@@ -979,3 +1488,8 @@ window.APIsPanel = APIsPanel;
 window.RunnerPanel = RunnerPanel;
 window.LibraryPanel = LibraryPanel;
 window.StylePresetPicker = StylePresetPicker;
+window.ExportModal = ExportModal;
+window.ComponentExportModal = ComponentExportModal;
+window.SaveComponentModal = SaveComponentModal;
+window.AddLibraryModal = AddLibraryModal;
+window.ThemePickerDropdown = ThemePickerDropdown;

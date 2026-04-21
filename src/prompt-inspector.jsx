@@ -2,6 +2,27 @@
 // Exposed: window.AttachComposer, window.PromptInspector, window.MODELS, window.ModelPicker
 const { useState: uS2, useEffect: uE2, useMemo: uM2, useRef: uR2 } = React;
 
+// CodeMirror wrapper
+function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
+  const ref = uR2(null);
+  const cmRef = uR2(null);
+  uE2(() => {
+    if (!ref.current || typeof CodeMirror === 'undefined') return;
+    cmRef.current = CodeMirror(ref.current, {
+      value: value || '',
+      mode: mode || 'javascript',
+      theme: 'dracula',
+      readOnly: readOnly,
+      lineNumbers: true,
+      lineWrapping: true,
+      scrollbarStyle: 'null',
+      viewportMargin: Infinity,
+    });
+    return () => { cmRef.current?.toTextArea?.(); };
+  }, []);
+  return <div ref={ref} style={{ fontSize: 12, flex: 1, minHeight: 0, ...style }}/>;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Model catalog (mocked) — some support vision, some don't.
 const MODELS = [
@@ -275,7 +296,9 @@ function PromptInspector({ open, onClose, title, model, system, messages, user, 
                       ~{Math.round((b.body?.length||0) / 4)} tok
                     </span>
                   </div>
-                  <pre className="pi-block-body mono">{b.body}</pre>
+                  <div className="pi-block-body">
+                    <CodeMirrorEditor mode="markdown" value={b.body} style={{ minHeight: 40 }}/>
+                  </div>
                   {b.tag === 'images' && (
                     <div className="pi-img-row">
                       {attachments.map((a, j) => (
@@ -290,7 +313,7 @@ function PromptInspector({ open, onClose, title, model, system, messages, user, 
             </div>
           )}
           {tab === 'json' && (
-            <pre className="code-pane mono pi-raw">{JSON.stringify({
+            <CodeMirrorEditor mode="javascript" value={JSON.stringify({
               model: m.id,
               messages: [
                 { role: 'system', content: system },
@@ -305,10 +328,10 @@ function PromptInspector({ open, onClose, title, model, system, messages, user, 
               tools: tools.map(t => ({ type: 'function', function: { name: t.name, description: t.body?.slice(0, 60) } })),
               stream: true,
               temperature: 0.7,
-            }, null, 2)}</pre>
+            }, null, 2)}/>
           )}
           {tab === 'curl' && (
-            <pre className="code-pane mono pi-raw">{`curl -X POST http://localhost:11434/api/chat \\
+            <CodeMirrorEditor mode="shell" value={`curl -X POST http://localhost:11434/api/chat \\
   -H "Content-Type: application/json" \\
   -d @- <<'JSON'
 ${JSON.stringify({
@@ -320,7 +343,7 @@ ${JSON.stringify({
   ],
   stream: true,
 }, null, 2)}
-JSON`}</pre>
+JSON`}/>
           )}
         </div>
 
