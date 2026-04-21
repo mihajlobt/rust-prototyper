@@ -6,6 +6,13 @@ function SettingsModal({ open, onClose, tw, setTw }) {
   const [section, setSection] = aS('appearance');
   const set = (k, v) => setTw({ ...tw, [k]: v });
 
+  const codeThemes = [
+    { id: 'monokai', label: 'Neon' },
+    { id: 'dracula', label: 'Dracula' },
+    { id: 'nord', label: 'Nord' },
+    { id: 'material', label: 'Material' },
+  ];
+
   const defaultPrompts = {
     component: `You are Prototyper's component generator. Output a single React/TSX function component using Tailwind v4. Library: shadcn/ui, lucide, motion, radix.`,
     screen: `You are Prototyper's screen generator. Output a single React/TSX screen as a default export. Use Tailwind v4 class names. Do not import icons — use inline SVG.`,
@@ -104,6 +111,12 @@ function SettingsModal({ open, onClose, tw, setTw }) {
                   <div className="caps">Run metaphor</div>
                   <div className="seg">
                     {['pulse','ring','stream'].map(x => <button key={x} data-on={tw.runFx === x} onClick={() => set('runFx', x)}>{x}</button>)}
+                  </div>
+                </div>
+                <div className="tweaks-row">
+                  <div className="caps">CodeMirror theme</div>
+                  <div className="seg">
+                    {codeThemes.map(t => <button key={t.id} data-on={tw.cmTheme === t.id} onClick={() => set('cmTheme', t.id)}>{t.label}</button>)}
                   </div>
                 </div>
               </>
@@ -283,7 +296,8 @@ function App() {
     "nodeStyle": "card",
     "edgeStyle": "bezier",
     "grid": "dots",
-    "runFx": "pulse"
+    "runFx": "pulse",
+    "cmTheme": "monokai"
   }/*EDITMODE-END*/;
   const [tw, setTw] = aS(defaults);
 
@@ -322,11 +336,11 @@ function App() {
       <div className="app-body">
         {(view === 'screens' || view === 'components') && <SidebarRail activeView={view}/>}
         {view === 'workflows' && <WorkflowsView tw={tw}/>}
-        {view === 'screens'    && <ScreensPanel modelId={modelId}/>}
-        {view === 'components' && <ComponentsPanel modelId={modelId}/>}
-        {view === 'themes'     && <ThemesPanel/>}
-        {view === 'apis'       && <APIsPanel/>}
-        {view === 'runner'     && <RunnerPanel/>}
+        {view === 'screens'    && <ScreensPanel modelId={modelId} cmTheme={tw.cmTheme}/>}
+        {view === 'components' && <ComponentsPanel modelId={modelId} cmTheme={tw.cmTheme}/>}
+        {view === 'themes'     && <ThemesPanel cmTheme={tw.cmTheme}/>}
+        {view === 'apis'       && <APIsPanel cmTheme={tw.cmTheme}/>}
+        {view === 'runner'     && <RunnerPanel cmTheme={tw.cmTheme}/>}
         {view === 'library'    && <LibraryPanel/>}
       </div>
       <SettingsModal open={showTweaks} onClose={() => setShowTweaks(false)} tw={tw} setTw={setTw}/>

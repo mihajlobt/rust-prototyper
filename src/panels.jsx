@@ -8,8 +8,15 @@ function useInspector() {
 }
 
 // ─────────────────────────────────────────────────────────────
+const CODE_THEMES = [
+  { id: 'monokai', label: 'Neon' },
+  { id: 'dracula', label: 'Dracula' },
+  { id: 'nord', label: 'Nord' },
+  { id: 'material', label: 'Material' },
+];
+
 // CodeMirror wrapper
-function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
+function CodeMirrorEditor({ value, mode, readOnly = true, theme, style }) {
   const ref = uR(null);
   const cmRef = uR(null);
   uE(() => {
@@ -17,7 +24,7 @@ function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
     cmRef.current = CodeMirror(ref.current, {
       value: value || '',
       mode: mode || 'javascript',
-      theme: 'dracula',
+      theme: theme || 'monokai',
       readOnly: readOnly,
       lineNumbers: true,
       lineWrapping: true,
@@ -26,6 +33,9 @@ function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
     });
     return () => { cmRef.current?.toTextArea?.(); };
   }, []);
+  uE(() => {
+    if (cmRef.current && theme) cmRef.current.setOption('theme', theme);
+  }, [theme]);
   return <div ref={ref} style={{ fontSize: 12, flex: 1, minHeight: 0, ...style }}/>;
 }
 
@@ -425,7 +435,7 @@ function SidebarRail({ activeView }) {
 
 // ─────────────────────────────────────────────────────────────
 // Themes panel
-function ThemesPanel() {
+function ThemesPanel({ cmTheme }) {
   const [selected, setSelected] = uS('t4');
   const [prompt, setPrompt] = uS('A cool teal-on-ink cyberpunk theme using OKLCH, designed for a developer dashboard.');
   const [rightTab, setRightTab] = uS('css');
@@ -495,7 +505,7 @@ function ThemesPanel() {
             <button className="icon-btn"><Icons.file size={12}/></button>
           </div>
           {rightTab === 'css' ? (
-            <CodeMirrorEditor mode="css" value={`:root {
+            <CodeMirrorEditor mode="css" theme={cmTheme} value={`:root {
   --background: oklch(0.18 0.025 200);
   --foreground: oklch(0.96 0.008 170);
   --card:       oklch(0.22 0.028 195);
@@ -846,7 +856,7 @@ function AddLibraryModal({ open, onClose, onAdd }) {
   );
 }
 
-function ComponentsPanel({ modelId }) {
+function ComponentsPanel({ modelId, cmTheme }) {
   const [prompt, setPrompt] = uS('A login card with email + password, glassmorphic surface, subtle glow on focus.');
   const [attachments, setAttachments] = uS([]);
   const [inspector, setInspector] = uS(false);
@@ -911,7 +921,7 @@ function ComponentsPanel({ modelId }) {
             <div className="pill mono"><span className="sdot sdot--ok"/> built · 180ms</div>
           </div>
           {previewTab === 'code' ? (
-            <CodeMirrorEditor mode="jsx" value={`export function LoginCard({ onSignIn }: { onSignIn: (user: string) => void }) {
+            <CodeMirrorEditor mode="jsx" theme={cmTheme} value={`export function LoginCard({ onSignIn }: { onSignIn: (user: string) => void }) {
   return (
     <div className="w-[340px] p-7 rounded-2xl bg-[rgba(20,24,34,.6)] backdrop-blur-xl border border-white/[0.08] shadow-2xl">
       <div className="text-lg font-semibold mb-1">Welcome back</div>
@@ -946,6 +956,7 @@ function ComponentsPanel({ modelId }) {
         messages={[]}
         user={prompt}
         attachments={attachments}
+        cmTheme={cmTheme}
       />
       <ComponentExportModal open={showExport} onClose={() => setShowExport(false)}/>
       <SaveComponentModal open={showSave} onClose={() => setShowSave(false)}/>
@@ -974,7 +985,7 @@ function LoginCardMock() {
 
 // ─────────────────────────────────────────────────────────────
 // Screens panel
-function ScreensPanel({ modelId }) {
+function ScreensPanel({ modelId, cmTheme }) {
   const [active, setActive] = uS('sc1');
   const [device, setDevice] = uS('desktop');
   const [composer, setComposer] = uS('Make the KPIs bigger, hide the sidebar on mobile. Match the visual style of the attached dribbble shot.');
@@ -1145,6 +1156,7 @@ function ScreensPanel({ modelId }) {
         user={composer}
         attachments={attachments}
         tools={tools}
+        cmTheme={cmTheme}
       />
       <ExportModal open={showExport} onClose={() => setShowExport(false)}/>
     </div>
@@ -1196,7 +1208,7 @@ function DashboardMock() {
 
 // ─────────────────────────────────────────────────────────────
 // APIs panel
-function APIsPanel() {
+function APIsPanel({ cmTheme }) {
   const [active, setActive] = uS('a1');
   const [tab, setTab] = uS('endpoints');
   const api = LIB_APIS.find(a => a.id === active) || LIB_APIS[0];
@@ -1288,7 +1300,7 @@ function AuthTab() {
 }
 function SchemasTab() {
   return (
-    <CodeMirrorEditor mode="javascript" value={`type Customer = {
+    <CodeMirrorEditor mode="javascript" theme={cmTheme} value={`type Customer = {
   id: string;
   email: string;
   name?: string;
@@ -1316,7 +1328,7 @@ function TestTab() {
         </div>
       </div>
       <div className="hair"/>
-      <CodeMirrorEditor mode="javascript" value={`{
+      <CodeMirrorEditor mode="javascript" theme={cmTheme} value={`{
   "object": "list",
   "data": [
     { "id": "cus_OaBcDe", "email": "liz@acme.io", "created": 1708031920 },
@@ -1331,7 +1343,7 @@ function TestTab() {
 
 // ─────────────────────────────────────────────────────────────
 // Runner panel (Tauri sandbox)
-function RunnerPanel() {
+function RunnerPanel({ cmTheme }) {
   const [tab, setTab] = uS('terminal');
   return (
     <div className="view-body">
@@ -1366,7 +1378,7 @@ function RunnerPanel() {
               <button data-on={tab === 'net'} onClick={() => setTab('net')}>Network</button>
             </div>
           </div>
-          <CodeMirrorEditor mode="jsx" value={`import { useState } from 'react'
+          <CodeMirrorEditor mode="jsx" theme={cmTheme} value={`import { useState } from 'react'
 import { LoginCard } from './components/LoginCard'
 
 export default function App() {

@@ -3,7 +3,7 @@
 const { useState: uS2, useEffect: uE2, useMemo: uM2, useRef: uR2 } = React;
 
 // CodeMirror wrapper
-function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
+function CodeMirrorEditor({ value, mode, readOnly = true, theme, style }) {
   const ref = uR2(null);
   const cmRef = uR2(null);
   uE2(() => {
@@ -11,7 +11,7 @@ function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
     cmRef.current = CodeMirror(ref.current, {
       value: value || '',
       mode: mode || 'javascript',
-      theme: 'dracula',
+      theme: theme || 'monokai',
       readOnly: readOnly,
       lineNumbers: true,
       lineWrapping: true,
@@ -20,6 +20,9 @@ function CodeMirrorEditor({ value, mode, readOnly = true, style }) {
     });
     return () => { cmRef.current?.toTextArea?.(); };
   }, []);
+  uE2(() => {
+    if (cmRef.current && theme) cmRef.current.setOption('theme', theme);
+  }, [theme]);
   return <div ref={ref} style={{ fontSize: 12, flex: 1, minHeight: 0, ...style }}/>;
 }
 
@@ -220,7 +223,7 @@ function AttachComposer({
 // ─────────────────────────────────────────────────────────────
 // Prompt Inspector drawer
 // Props: open, onClose, title, model, system, messages [{role, content}], user, attachments, tools
-function PromptInspector({ open, onClose, title, model, system, messages, user, attachments = [], tools = [] }) {
+function PromptInspector({ open, onClose, title, model, system, messages, user, attachments = [], tools = [], cmTheme }) {
   const [tab, setTab] = uS2('assembled');
   const [raw, setRaw] = uS2(false);
   if (!open) return null;
@@ -297,7 +300,7 @@ function PromptInspector({ open, onClose, title, model, system, messages, user, 
                     </span>
                   </div>
                   <div className="pi-block-body">
-                    <CodeMirrorEditor mode="markdown" value={b.body} style={{ minHeight: 40 }}/>
+                    <CodeMirrorEditor mode="markdown" theme={cmTheme} value={b.body} style={{ minHeight: 40 }}/>
                   </div>
                   {b.tag === 'images' && (
                     <div className="pi-img-row">
@@ -313,7 +316,7 @@ function PromptInspector({ open, onClose, title, model, system, messages, user, 
             </div>
           )}
           {tab === 'json' && (
-            <CodeMirrorEditor mode="javascript" value={JSON.stringify({
+            <CodeMirrorEditor mode="javascript" theme={cmTheme} value={JSON.stringify({
               model: m.id,
               messages: [
                 { role: 'system', content: system },
@@ -331,7 +334,7 @@ function PromptInspector({ open, onClose, title, model, system, messages, user, 
             }, null, 2)}/>
           )}
           {tab === 'curl' && (
-            <CodeMirrorEditor mode="shell" value={`curl -X POST http://localhost:11434/api/chat \\
+            <CodeMirrorEditor mode="shell" theme={cmTheme} value={`curl -X POST http://localhost:11434/api.chat \\
   -H "Content-Type: application/json" \\
   -d @- <<'JSON'
 ${JSON.stringify({
