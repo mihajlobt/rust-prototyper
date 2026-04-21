@@ -1,0 +1,89 @@
+/* ─── Generator/library views ─── */
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+
+.code-pane {
+  flex: 1;
+  overflow: auto;
+  padding: 14px 18px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg-dim);
+  background: var(--n-0);
+  margin: 0;
+  white-space: pre;
+}
+
+.theme-card {
+  cursor: pointer; overflow: hidden; padding: 0;
+  transition: border-color .12s;
+}
+.theme-card[data-selected="true"] { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc-line); }
+.theme-card:hover { border-color: var(--line-loud); }
+.theme-preview { height: 80px; overflow: hidden; }
+.theme-preview-hero { height: 100%; padding: 8px 10px; display: flex; flex-direction: column; justify-content: flex-end; }
+
+/* ─── Chat ─── */
+.chat-msg { display: flex; }
+.chat-msg--u { justify-content: flex-end; }
+.chat-msg-body {
+  max-width: 86%;
+  padding: 8px 11px;
+  font-size: 12px;
+  border-radius: 10px;
+  background: var(--n-2);
+  border: 1px solid var(--line-soft);
+}
+.chat-msg--u .chat-msg-body { background: var(--acc-soft); border-color: var(--acc-line); color: var(--fg); }
+
+/* ─── Library cards ─── */
+.lib-card { overflow: hidden; transition: border-color .12s, transform .12s; }
+.lib-card:hover { border-color: var(--acc-line); transform: translateY(-1px); }
+.lib-thumb {
+  aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center;
+  color: var(--fg-mute);
+  background: var(--n-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* ─── Endpoint rows ─── */
+.endpoint-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.endpoint-row:hover { background: var(--n-1); }
+.method-pill {
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+  min-width: 46px; text-align: center;
+}
+.method-pill--get    { background: rgba(111,183,255,.15);  color: #6fb7ff; }
+.method-pill--post   { background: rgba(92,214,132,.15);   color: #5cd684; }
+.method-pill--put    { background: rgba(245,177,81,.15);   color: #f5b151; }
+.method-pill--delete { background: rgba(255,97,131,.15);   color: #ff6183; }
+.method-pill--patch  { background: rgba(167,139,250,.15);  color: #a78bfa; }
+
+/* ─── Terminal ─── */
+.terminal {
+  padding: 12px 16px;
+  background: var(--n-0);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  max-height: 240px;
+  overflow: auto;
+}
+.terminal-line { white-space: pre; }
+.tl-host { color: var(--acc-2); }
+.tl-cwd  { color: var(--acc); }
+.tl-sep, .tl-sig { color: var(--fg-mute); margin: 0 2px; }
+.tl-cmd  { color: var(--fg); }
+.tl-out  { color: var(--fg-dim); }
+.tl-ok   { color: var(--acc-ok); }
+.cursor-blink { display: inline-block; width: 8px; color: var(--acc); animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }

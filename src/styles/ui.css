@@ -1,0 +1,283 @@
+/* ─── Tweaks ─── */
+.tweaks {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 280px;
+  background: var(--n-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--sh-pop);
+  z-index: 100;
+  overflow: hidden;
+}
+.tweaks-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--n-2);
+  font-size: 12px;
+}
+.tweaks-body {
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 12px;
+  max-height: 60vh; overflow: auto;
+}
+.tweaks-row { display: flex; flex-direction: column; gap: 6px; }
+.accent-sw {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px 3px 4px;
+  background: var(--n-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+}
+.accent-sw > span:first-child { width: 12px; height: 12px; border-radius: 50%; }
+.accent-sw[data-on="true"] { border-color: var(--acc); color: var(--acc); }
+
+/* Ensure icons in segmented controls are small */
+.seg svg { flex-shrink: 0; }
+
+/* ─── Attachment composer ─── */
+.attach-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  padding: 8px;
+  background: var(--n-1);
+  transition: border-color .12s, background .12s;
+}
+.attach-composer:focus-within { border-color: var(--acc); background: var(--n-0); }
+.attach-composer--drag { border-color: var(--acc); background: color-mix(in oklab, var(--acc) 6%, var(--n-1)); }
+.attach-composer--warn { border-color: color-mix(in oklab, #f59e0b 50%, var(--line-soft)); }
+.attach-composer .textarea {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  min-height: 42px;
+  font-size: 12px;
+  resize: none;
+}
+.attach-composer .textarea:focus { outline: none; box-shadow: none; }
+
+.attach-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--line-soft);
+  margin-bottom: 4px;
+}
+.attach-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--n-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 3px 6px 3px 3px;
+  font-size: 11px;
+  max-width: 220px;
+  position: relative;
+}
+.attach-chip img, .attach-chip-ph {
+  width: 36px; height: 28px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--n-0);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--fg-mute);
+  flex-shrink: 0;
+}
+.attach-chip-meta { display: flex; flex-direction: column; min-width: 0; }
+.attach-chip-name {
+  font-size: 11px;
+  max-width: 130px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.attach-chip-sub { font-size: 9px; color: var(--fg-mute); }
+.attach-chip-x {
+  background: var(--n-3);
+  border: 0;
+  color: var(--fg-dim);
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  margin-left: 2px;
+}
+.attach-chip-x:hover { background: #e11; color: #fff; }
+
+.attach-warn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 8px;
+  background: color-mix(in oklab, #f59e0b 14%, transparent);
+  color: #f59e0b;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+}
+
+.attach-drop-overlay {
+  position: absolute; inset: 0;
+  background: color-mix(in oklab, var(--acc) 14%, var(--n-1));
+  border: 1px dashed var(--acc);
+  border-radius: var(--r-md);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--acc);
+  font-size: 11px;
+  gap: 4px;
+  pointer-events: none;
+  font-weight: 500;
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 4px;
+  background: color-mix(in oklab, #fff 16%, transparent);
+  border-radius: 3px;
+  color: color-mix(in oklab, #fff 80%, var(--fg));
+}
+
+.vision-badge {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  margin: 0 2px;
+  filter: saturate(0.6);
+}
+
+/* ─── Model picker popover ─── */
+.mp-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 280px;
+  background: var(--n-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  box-shadow: 0 20px 50px rgba(0,0,0,.5);
+  padding: 6px;
+  z-index: 400;
+}
+.mp-head { display: flex; align-items: center; padding: 4px 6px; }
+.mp-row {
+  display: flex; align-items: center; gap: 4px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  color: var(--fg);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  text-align: left;
+}
+.mp-row:hover { background: var(--n-2); }
+.mp-row[data-on="true"] { background: var(--acc-soft); color: var(--acc); }
+
+/* ─── Prompt inspector drawer ─── */
+.pi-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(3px);
+  z-index: 1000;
+  display: flex; justify-content: flex-end;
+}
+.pi-drawer {
+  width: min(760px, 96vw);
+  height: 100vh;
+  background: var(--n-1);
+  border-left: 1px solid var(--line-soft);
+  display: flex; flex-direction: column;
+  animation: pi-slide-in .18s ease-out;
+}
+@keyframes pi-slide-in {
+  from { transform: translateX(20px); }
+  to { transform: translateX(0); }
+}
+.pi-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pi-title { font-size: 14px; font-weight: 600; }
+.pi-sub { font-size: 11px; color: var(--fg-mute); }
+
+.pi-meta {
+  display: flex; gap: 20px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--n-0);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pi-meta-item { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.pi-meta-item .caps { font-size: 9px; }
+.pi-meta-item--tokens { flex: 1; min-width: 220px; }
+.pi-bar { width: 100%; height: 4px; background: var(--n-2); border-radius: 2px; overflow: hidden; }
+.pi-bar-fill { height: 100%; background: linear-gradient(90deg, var(--acc), color-mix(in oklab, var(--acc) 70%, #fff)); }
+
+.pi-body { flex: 1; overflow: auto; padding: 14px 16px; }
+.pi-blocks { display: flex; flex-direction: column; gap: 10px; }
+.pi-block {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--n-0);
+}
+.pi-block-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--n-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.pi-block-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  background: var(--n-3);
+  color: var(--fg-dim);
+}
+.pi-block-tag--system { background: color-mix(in oklab, #a78bfa 30%, var(--n-3)); color: #d4c4ff; }
+.pi-block-tag--user { background: color-mix(in oklab, var(--acc) 30%, var(--n-3)); color: var(--acc); }
+.pi-block-tag--assistant { background: color-mix(in oklab, #6fb7ff 30%, var(--n-3)); color: #b8d7ff; }
+.pi-block-tag--tool { background: color-mix(in oklab, #f5b151 30%, var(--n-3)); color: #fcd8a0; }
+.pi-block-tag--images { background: color-mix(in oklab, #5cd684 30%, var(--n-3)); color: #b8f0cb; }
+.pi-block-label { font-size: 11px; color: var(--fg-dim); }
+.pi-block-body {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+}
+.pi-img-row {
+  display: flex; gap: 6px; padding: 8px 12px;
+  background: var(--n-1);
+  border-top: 1px solid var(--line-soft);
+}
+.pi-img-thumb {
+  width: 56px; height: 42px; border-radius: 4px;
+  overflow: hidden;
+  background: var(--n-2);
+  flex-shrink: 0;
+}
+.pi-img-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.pi-raw {
+  flex: 1;
+  font-size: 11px;
+  line-height: 1.55;
+  background: var(--n-0);
+}
+
+.pi-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--n-0);
+}
