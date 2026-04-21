@@ -101,7 +101,7 @@ function HostPicker() {
   return (
     <div ref={rootRef} style={{ position: 'relative' }}>
       <button className="pill mono" onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer', border: open ? '1px solid var(--acc)' : undefined }}>
-        <Icons.cpu size={11}/> {host}
+        <span className="sdot sdot--ok"/> <Icons.cpu size={11}/> {host}
       </button>
       {open && (
         <div className="mp-pop" style={{ minWidth: 220, padding: 10 }}>
@@ -386,7 +386,7 @@ function Header({ activeView, setActiveView, project, setProject, status, openSe
         })}
       </div>
       <div className="row gap-3" style={{ marginLeft: 'auto', paddingRight: 10 }}>
-        <div className="pill" style={{ cursor: 'pointer' }} onClick={() => setShowProjectManager(true)}><span className="sdot sdot--ok"/> {project}</div>
+        <div className="pill" style={{ cursor: 'pointer' }} onClick={() => setShowProjectManager(true)}><Icons.folder size={11}/> {project}</div>
         <HostPicker/>
         <ModelPicker value={modelId} onChange={setModelId}/>
         <StylePresetPicker value={stylePreset} onChange={setStylePreset}/>
