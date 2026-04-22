@@ -176,15 +176,15 @@ export function parseAiResponse(response: string): string {
 // ─── Workflows ───
 
 export async function saveWorkflow(projectId: string, workflowId: string, data: string): Promise<void> {
-  return invoke("save_workflow", { project_id: projectId, workflow_id: workflowId, data });
+  return invoke("save_workflow", { projectId, workflowId, data });
 }
 
 export async function loadWorkflow(projectId: string, workflowId: string): Promise<string> {
-  return invoke("load_workflow", { project_id: projectId, workflow_id: workflowId });
+  return invoke("load_workflow", { projectId, workflowId });
 }
 
 export async function listWorkflows(projectId: string): Promise<FileEntry[]> {
-  return invoke("list_workflows", { project_id: projectId });
+  return invoke("list_workflows", { projectId });
 }
 
 // ─── Export ───
@@ -199,13 +199,13 @@ export async function exportProject(
   includeTests: boolean
 ): Promise<string> {
   return invoke("export_project", {
-    project_id: projectId,
-    output_path: outputPath,
+    projectId,
+    outputPath,
     format,
-    include_apis: includeApis,
-    include_theme: includeTheme,
-    include_components: includeComponents,
-    include_tests: includeTests,
+    includeApis,
+    includeTheme,
+    includeComponents,
+    includeTests,
   });
 }
 
@@ -219,12 +219,12 @@ export async function exportComponent(
   includeTests: boolean
 ): Promise<string> {
   return invoke("export_component", {
-    project_id: projectId,
-    component_id: componentId,
-    output_path: outputPath,
+    projectId,
+    componentId,
+    outputPath,
     format,
-    include_types: includeTypes,
-    include_storybook: includeStorybook,
-    include_tests: includeTests,
+    includeTypes,
+    includeStorybook,
+    includeTests,
   });
 }

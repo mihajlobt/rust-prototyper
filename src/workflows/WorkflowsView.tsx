@@ -426,6 +426,8 @@ function WorkflowCanvas() {
   const [showWorkflowsPanel, setShowWorkflowsPanel] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const refreshSavedWorkflows = useCallback(async () => {
     try { setSavedWorkflows(await listWorkflows(settings.project)); } catch { setSavedWorkflows([]); }
   }, [settings.project]);
@@ -433,11 +435,19 @@ function WorkflowCanvas() {
   useEffect(() => { refreshSavedWorkflows(); }, [refreshSavedWorkflows]);
 
   const handleSave = async () => {
-    await saveWorkflow(settings.project, workflowId, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
-    await refreshSavedWorkflows();
+    setSaveError(null);
+    try {
+      const id = workflowId.trim() || "default";
+      setWorkflowId(id);
+      await saveWorkflow(settings.project, id, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
+      await refreshSavedWorkflows();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const handleLoad = async (id: string) => {
+    setSaveError(null);
     try {
       const data = await loadWorkflow(settings.project, id.replace(".json", ""));
       const parsed = JSON.parse(data);
@@ -445,7 +455,9 @@ function WorkflowCanvas() {
       if (parsed.edges) setEdges(parsed.edges);
       setWorkflowId(id.replace(".json", ""));
       setShowWorkflowsPanel(false);
-    } catch { /* ignore */ }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   const handleDelete = async (name: string) => {
@@ -453,7 +465,9 @@ function WorkflowCanvas() {
       const { deleteFile } = await import("@/lib/ipc");
       await deleteFile(`projects/${settings.project}/workflows/${name}`);
       await refreshSavedWorkflows();
-    } catch { /* ignore */ }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    }
     setDeleteConfirm(null);
   };
 
@@ -702,6 +716,7 @@ function WorkflowCanvas() {
                 <Button size="sm" className="h-7 text-xs gap-1 shrink-0" onClick={handleSave}><Save size={11} />Save</Button>
               </div>
               <p className="text-[10px] text-muted-foreground px-0.5">{nodes.length} nodes · {edges.length} edges</p>
+              {saveError && <p className="text-[10px] text-destructive px-0.5 break-all">{saveError}</p>}
             </div>
             <div className="flex-1 overflow-auto p-2 space-y-1">
               {savedWorkflows.length === 0 && (

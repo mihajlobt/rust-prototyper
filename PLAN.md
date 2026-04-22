@@ -930,6 +930,87 @@ For detailed implementation guidance during execution, refer to these Tauri v2 s
 
 ---
 
+## Decisions Log
+
+Running record of architectural decisions, discoveries, and deviations from the plan above.
+
+---
+
+### Tauri v2 IPC: snake_case → camelCase param conversion
+`#[tauri::command]` automatically converts Rust snake_case parameter names to camelCase on the JS side. All `invoke()` calls must pass **camelCase** keys — not snake_case.
+
+```typescript
+// WRONG — Tauri v2 will reject this
+invoke("save_workflow", { project_id: id, workflow_id: name });
+
+// CORRECT
+invoke("save_workflow", { projectId: id, workflowId: name });
+```
+
+Affected wrappers fixed in `src/lib/ipc.ts`: `saveWorkflow`, `loadWorkflow`, `listWorkflows`, `exportProject`, `exportComponent`. Single-word params (`path`, `model`, `host`, `data`, etc.) are unaffected.
+
+---
+
+### Workflow canvas: migrated to React Flow (@xyflow/react)
+Custom canvas replaced with `@xyflow/react` v12. Key implementation details:
+- `ReactFlowProvider` must wrap the inner canvas component that calls `useReactFlow()`
+- Custom node component uses `Handle` (target=left, source=right) for visual port-based connections
+- All nodes use a single `"workflow"` type pointing to one `WorkflowNode` component
+- Drag-from-palette uses `dataTransfer` + `screenToFlowPosition()`
+- React Flow node `data` must include `[key: string]: unknown` index signature
+- Attribution removed via `proOptions={{ hideAttribution: true }}`
+- Controls styled via CSS variable overrides on `.react-flow` (see below)
+
+---
+
+### React Flow controls styling
+React Flow controls are styled by overriding their CSS custom properties scoped to `.react-flow` — not via Tailwind className targeting which loses to specificity:
+
+```css
+.react-flow {
+  --xy-controls-button-background-color-default: var(--card);
+  --xy-controls-button-color-default: var(--foreground);
+  --xy-controls-button-border-color-default: var(--border);
+}
+```
+
+Allotment sash hover color uses the same pattern — override `--focus-border: var(--primary)` in `:root`.
+
+---
+
+### CodeMirror 6 theme application
+Pass the theme extension directly to the `theme` prop of `<CodeMirror>` — do NOT include it in the `extensions` array. Including it in both causes the base `"dark"/"light"` string prop to conflict and override the theme extension.
+
+```tsx
+// WRONG — theme in extensions conflicts with theme prop
+<CodeMirror theme="dark" extensions={[themeExt, lang]} />
+
+// CORRECT — theme extension goes to the theme prop directly
+<CodeMirror theme={themeExt} extensions={[lang]} />
+```
+
+All themes sourced from `@uiw/codemirror-themes-all`. The `oneDark` import from `@codemirror/theme-one-dark` was removed as it's a separate package not in themes-all.
+
+---
+
+### Component preview: in-browser Babel (no bun dev server)
+Component preview replaced the `bun dev` localhost approach with a self-contained `srcDoc` iframe that includes React/ReactDOM UMD builds + Babel Standalone from CDN. This strips TS types and import/export lines client-side before evaluating. No process management needed for component preview.
+
+---
+
+### stylePreset wired as default theme
+`settings.stylePreset` was previously defined and persisted but never read anywhere. Now:
+- ComponentsPanel initializes `selectedTheme` from `settings.stylePreset`
+- Changing the theme picker in ComponentsPanel writes back to `settings.stylePreset`
+- Settings label updated to "Default Theme" with description
+
+---
+
+### Package manager: bun/bunx exclusively
+Never use `npm` or `npx`. Always `bun` and `bunx`. Documented in both `CLAUDE.md` and `README.md`.
+
+---
+
 ## Acceptance Criteria
 
 - [ ] App launches as native desktop window (not browser tab)
