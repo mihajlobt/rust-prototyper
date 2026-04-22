@@ -218,11 +218,11 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="component">Components</TabsTrigger>
-          <TabsTrigger value="theme">Themes</TabsTrigger>
-          <TabsTrigger value="screen">Screens</TabsTrigger>
-          <TabsTrigger value="api">APIs</TabsTrigger>
+          <TabsTrigger value="all" className="gap-1.5 text-xs"><LayoutGrid size={12} />All</TabsTrigger>
+          <TabsTrigger value="component" className="gap-1.5 text-xs"><Box size={12} />Components</TabsTrigger>
+          <TabsTrigger value="theme" className="gap-1.5 text-xs"><Palette size={12} />Themes</TabsTrigger>
+          <TabsTrigger value="screen" className="gap-1.5 text-xs"><LayoutGrid size={12} />Screens</TabsTrigger>
+          <TabsTrigger value="api" className="gap-1.5 text-xs"><Terminal size={12} />APIs</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="flex-1 overflow-hidden mt-4">

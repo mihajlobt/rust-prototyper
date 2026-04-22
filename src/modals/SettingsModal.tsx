@@ -121,6 +121,32 @@ export function SettingsModal() {
                 <span className={["inline-block h-3.5 w-3.5 rounded-full bg-background shadow transition-transform", settings.dark ? "translate-x-4.5" : "translate-x-0.5"].join(" ")} />
               </button>
             </div>
+
+            <div className="space-y-2">
+              <Label>Accent color</Label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "Blue",    value: "oklch(0.488 0.243 264.376)" },
+                  { label: "Violet",  value: "oklch(0.5 0.24 300)" },
+                  { label: "Rose",    value: "oklch(0.55 0.22 15)" },
+                  { label: "Orange",  value: "oklch(0.65 0.20 50)" },
+                  { label: "Green",   value: "oklch(0.52 0.18 145)" },
+                  { label: "Cyan",    value: "oklch(0.55 0.15 210)" },
+                  { label: "Zinc",    value: "oklch(0.55 0.01 250)" },
+                ].map(({ label, value }) => (
+                  <button
+                    key={value}
+                    title={label}
+                    onClick={() => setSettings({ accent: value })}
+                    className={[
+                      "h-7 w-7 rounded-full border-2 transition-all",
+                      settings.accent === value ? "border-foreground scale-110" : "border-transparent hover:scale-105",
+                    ].join(" ")}
+                    style={{ backgroundColor: value }}
+                  />
+                ))}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="project">Project</Label>
               <Input

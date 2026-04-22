@@ -308,6 +308,7 @@ struct Message {
 struct ModelInfo {
     id: String,
     name: String,
+    context_length: Option<u64>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -579,6 +580,7 @@ async fn list_ollama_models(host: String, app: AppHandle) -> Result<Vec<ModelInf
             .filter_map(|m| Some(ModelInfo {
                 id: m["name"].as_str()?.to_string(),
                 name: m["name"].as_str()?.to_string(),
+                context_length: m["context_length"].as_u64(),
             }))
             .collect())
         .unwrap_or_default();

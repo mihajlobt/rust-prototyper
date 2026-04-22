@@ -415,16 +415,16 @@ export function RunnerPanel() {
                   </div>
                 )}
                 <Tabs defaultValue="terminal" className="h-full flex flex-col">
-                  <TabsList className="grid w-full grid-cols-3 shrink-0 h-7">
-                    <TabsTrigger value="terminal" className="text-[10px] gap-1">
+                  <TabsList className="flex w-auto shrink-0 h-7 self-start">
+                    <TabsTrigger value="terminal" className="text-[10px] gap-1 px-3">
                       <Terminal size={10} />
                       Terminal
                     </TabsTrigger>
-                    <TabsTrigger value="logs" className="text-[10px] gap-1">
+                    <TabsTrigger value="logs" className="text-[10px] gap-1 px-3">
                       <ScrollText size={10} />
                       Logs
                     </TabsTrigger>
-                    <TabsTrigger value="network" className="text-[10px] gap-1">
+                    <TabsTrigger value="network" className="text-[10px] gap-1 px-3">
                       <Globe size={10} />
                       Network
                     </TabsTrigger>

@@ -9,6 +9,7 @@ export interface Settings {
   project: string;
   stylePreset: string;
   dark: boolean;
+  accent: string;
   tweaks: Record<string, unknown>;
   prompts: Record<string, string>;
   styles: Array<{ name: string; value: string }>;
@@ -22,6 +23,7 @@ const DEFAULT_SETTINGS: Settings = {
   project: "default",
   stylePreset: "default",
   dark: true,
+  accent: "oklch(0.488 0.243 264.376)",
   tweaks: {},
   prompts: {},
   styles: [],

@@ -31,6 +31,12 @@ export default function App() {
     document.documentElement.classList.toggle("dark", settings.dark);
   }, [settings.dark]);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty("--primary", settings.accent);
+    document.documentElement.style.setProperty("--ring", settings.accent);
+    document.documentElement.style.setProperty("--sidebar-primary", settings.accent);
+  }, [settings.accent]);
+
   if (!loaded) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background text-foreground">
