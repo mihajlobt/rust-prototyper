@@ -17,10 +17,12 @@ import {
   ScrollText,
   Globe,
   Plus,
-  Trash2,
+
   ChevronDown,
   ChevronUp,
   Save,
+  FolderPlus,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -28,6 +30,10 @@ import {
   readDir,
   readFile,
   writeFile,
+  createDir,
+  deleteFile,
+  deleteDir,
+  renameFile,
   bunDev,
   bunBuild,
   bunInstall,
@@ -36,7 +42,12 @@ import {
   type FileEntry,
 } from "@/lib/ipc";
 import { Input } from "@/components/ui/input";
-import { deleteFile } from "@/lib/ipc";
+import {
+  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { useSettings } from "@/hooks/useSettings";
 
 export function RunnerPanel() {
@@ -53,11 +64,16 @@ export function RunnerPanel() {
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
+  const [newFileParentDir, setNewFileParentDir] = useState<string>(generatedDir);
   const [shellCommand, setShellCommand] = useState("");
   const [showShellInput, setShowShellInput] = useState(false);
   const [fitPreview, setFitPreview] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [activeTerminalTab, setActiveTerminalTab] = useState("terminal");
+  const [renameTarget, setRenameTarget] = useState<{ path: string; name: string } | null>(null);
+  const [renameTo, setRenameTo] = useState("");
+  const [newFolderTarget, setNewFolderTarget] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
   const verticalAllotmentRef = useRef<AllotmentHandle>(null);
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -200,12 +216,82 @@ export function RunnerPanel() {
 
   const handleCreateFile = async () => {
     if (!newFileName.trim()) return;
-    const path = `${generatedDir}/${newFileName.trim()}`;
+    const path = `${newFileParentDir}/${newFileName.trim()}`;
     await writeFile(path, "");
     setNewFileName("");
     setShowNewFile(false);
+    setNewFileParentDir(generatedDir);
     loadFiles();
     handleSelectFile(path);
+  };
+
+  const handleDeleteDir = async (path: string) => {
+    if (!confirm(`Delete folder ${path.split("/").pop()}?`)) return;
+    await deleteDir(path);
+    if (selectedFile?.startsWith(path)) {
+      setSelectedFile(null);
+      setFileContent("");
+    }
+    expandedDirs.delete(path);
+    loadFiles();
+  };
+
+  const handleDeleteEntry = async (path: string, isDir: boolean) => {
+    if (isDir) {
+      await handleDeleteDir(path);
+    } else {
+      await handleDeleteFile(path);
+    }
+  };
+
+  const startRename = (path: string) => {
+    const name = path.split("/").pop() || "";
+    setRenameTarget({ path, name });
+    setRenameTo(name);
+  };
+
+  const handleRename = async () => {
+    if (!renameTarget || !renameTo.trim()) return;
+    const dir = renameTarget.path.substring(0, renameTarget.path.lastIndexOf("/"));
+    const newPath = `${dir}/${renameTo.trim()}`;
+    try {
+      await renameFile(renameTarget.path, newPath);
+      if (selectedFile === renameTarget.path) {
+        setSelectedFile(newPath);
+      }
+      loadFiles();
+    } catch (e) {
+      console.error("Rename failed:", e);
+    }
+    setRenameTarget(null);
+  };
+
+  const startNewFolder = (parentPath: string) => {
+    setNewFolderTarget(parentPath);
+    setNewFolderName("");
+  };
+
+  const handleCreateFolder = async () => {
+    if (!newFolderTarget || !newFolderName.trim()) return;
+    const path = `${newFolderTarget}/${newFolderName.trim()}`;
+    try {
+      await createDir(path);
+      expandedDirs.add(newFolderTarget);
+      loadFiles();
+    } catch (e) {
+      console.error("Create folder failed:", e);
+    }
+    setNewFolderTarget(null);
+  };
+
+  const handleNewFileInDir = (parentPath: string) => {
+    setNewFileParentDir(parentPath);
+    setNewFileName("");
+    setShowNewFile(true);
+  };
+
+  const collapseAll = () => {
+    setExpandedDirs(new Set());
   };
 
   const getFileMode = (path: string): "tsx" | "css" | "json" | "javascript" => {
@@ -298,10 +384,34 @@ export function RunnerPanel() {
           <Allotment.Pane preferredSize={200} minSize={150}>
             <div className="h-full overflow-auto p-2 bg-card border-r border-border">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-xs font-medium text-muted-foreground">Files</span>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setShowNewFile(true)}>
-                  <Plus size={10} />
-                </Button>
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <span className="text-xs font-medium text-muted-foreground cursor-default">Files</span>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => setShowNewFile(true)}>
+                      <Plus size={12} className="mr-2" /> New File…
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => startNewFolder(generatedDir)}>
+                      <FolderPlus size={12} className="mr-2" /> New Folder…
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={collapseAll}>
+                      Collapse All
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={loadFiles}>
+                      <RefreshCw size={12} className="mr-2" /> Refresh
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+                <div className="flex gap-0.5">
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => startNewFolder(generatedDir)}>
+                    <FolderPlus size={10} />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setNewFileParentDir(generatedDir); setShowNewFile(true); }}>
+                    <Plus size={10} />
+                  </Button>
+                </div>
               </div>
               {showNewFile && (
                 <div className="flex gap-1 mb-2">
@@ -327,7 +437,11 @@ export function RunnerPanel() {
                 expandedDirs={expandedDirs}
                 onToggleDir={toggleDir}
                 onSelectFile={handleSelectFile}
-                onDeleteFile={handleDeleteFile}
+                onDeleteEntry={handleDeleteEntry}
+                onRename={startRename}
+                onNewFile={handleNewFileInDir}
+                onNewFolder={startNewFolder}
+                onCollapse={(path) => { expandedDirs.delete(path); setExpandedDirs(new Set(expandedDirs)); }}
                 depth={0}
               />
             </div>
@@ -524,6 +638,46 @@ export function RunnerPanel() {
           </Allotment.Pane>
         </Allotment>
       </div>
+
+      <Dialog open={!!renameTarget} onOpenChange={(o) => !o && setRenameTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename "{renameTarget?.name}"</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={renameTo}
+              onChange={(e) => setRenameTo(e.target.value)}
+              placeholder="New name..."
+              onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
+              autoFocus
+            />
+            <Button className="w-full" onClick={handleRename} disabled={!renameTo.trim()}>
+              Rename
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!newFolderTarget} onOpenChange={(o) => !o && setNewFolderTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="Folder name..."
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); }}
+              autoFocus
+            />
+            <Button className="w-full" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+              Create
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -534,51 +688,69 @@ interface FileTreeProps {
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
   onSelectFile: (path: string) => void;
-  onDeleteFile: (path: string) => void;
+  onDeleteEntry: (path: string, isDir: boolean) => void;
+  onRename: (path: string) => void;
+  onNewFile: (parentPath: string) => void;
+  onNewFolder: (parentPath: string) => void;
+  onCollapse: (path: string) => void;
   depth: number;
 }
 
-function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteFile, depth }: FileTreeProps) {
+function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, depth }: FileTreeProps) {
   return (
     <>
       {entries.map((file) => (
         <div key={file.path}>
-          <div
-            className={[
-              "group flex items-center gap-1.5 rounded transition-colors",
-              selectedFile === file.path
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            ].join(" ")}
-            style={{ paddingLeft: `${8 + depth * 12}px`, paddingRight: "4px", paddingTop: "2px", paddingBottom: "2px" }}
-          >
-            <button
-              className="flex items-center gap-1.5 flex-1 text-left text-xs"
-              onClick={() => {
-                if (file.is_dir) {
-                  onToggleDir(file.path);
-                } else {
-                  onSelectFile(file.path);
-                }
-              }}
-            >
-              {file.is_dir ? <Folder size={12} /> : <FileCode size={12} />}
-              <span className="truncate">{file.name}</span>
-            </button>
-            {!file.is_dir && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 opacity-0 group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteFile(file.path);
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div
+                className={[
+                  "group flex items-center gap-1.5 rounded transition-colors cursor-pointer",
+                  selectedFile === file.path
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ].join(" ")}
+                style={{ paddingLeft: `${8 + depth * 12}px`, paddingRight: "4px", paddingTop: "2px", paddingBottom: "2px" }}
+                onClick={() => {
+                  if (file.is_dir) onToggleDir(file.path);
+                  else onSelectFile(file.path);
                 }}
               >
-                <Trash2 size={8} className="text-red-500" />
-              </Button>
-            )}
-          </div>
+                {file.is_dir ? <Folder size={12} /> : <FileCode size={12} />}
+                <span className="truncate text-xs">{file.name}</span>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem onClick={() => { if (file.is_dir) onToggleDir(file.path); else onSelectFile(file.path); }}>
+                Open
+              </ContextMenuItem>
+              {file.is_dir && (
+                <>
+                  <ContextMenuItem onClick={() => onNewFile(file.path)}>
+                    New File…
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => onNewFolder(file.path)}>
+                    New Folder…
+                  </ContextMenuItem>
+                  {expandedDirs.has(file.path) && (
+                    <ContextMenuItem onClick={() => onCollapse(file.path)}>
+                      Collapse
+                    </ContextMenuItem>
+                  )}
+                </>
+              )}
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={() => onRename(file.path)}>
+                Rename…
+              </ContextMenuItem>
+              <ContextMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDeleteEntry(file.path, file.is_dir)}
+              >
+                Delete
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
           {file.is_dir && expandedDirs.has(file.path) && (
             <AsyncDirChildren
               path={file.path}
@@ -586,7 +758,11 @@ function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFi
               expandedDirs={expandedDirs}
               onToggleDir={onToggleDir}
               onSelectFile={onSelectFile}
-              onDeleteFile={onDeleteFile}
+              onDeleteEntry={onDeleteEntry}
+              onRename={onRename}
+              onNewFile={onNewFile}
+              onNewFolder={onNewFolder}
+              onCollapse={onCollapse}
               depth={depth + 1}
             />
           )}
