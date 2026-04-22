@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Settings, Plus, Trash2 } from "lucide-react";
+import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
 import { listOllamaModels, type ModelInfo } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
@@ -125,15 +126,26 @@ export function SettingsModal() {
 
             <div className="space-y-2">
               <Label>Accent color</Label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2.5">
                 {[
-                  { label: "Blue",    value: "oklch(0.488 0.243 264.376)" },
-                  { label: "Violet",  value: "oklch(0.5 0.24 300)" },
-                  { label: "Rose",    value: "oklch(0.55 0.22 15)" },
-                  { label: "Orange",  value: "oklch(0.65 0.20 50)" },
-                  { label: "Green",   value: "oklch(0.52 0.18 145)" },
-                  { label: "Cyan",    value: "oklch(0.55 0.15 210)" },
-                  { label: "Zinc",    value: "oklch(0.55 0.01 250)" },
+                  { label: "Indigo",   value: "oklch(0.488 0.243 264.376)" },
+                  { label: "Blue",     value: "oklch(0.55 0.22 240)" },
+                  { label: "Sky",      value: "oklch(0.62 0.19 220)" },
+                  { label: "Cyan",     value: "oklch(0.60 0.16 210)" },
+                  { label: "Teal",     value: "oklch(0.56 0.15 185)" },
+                  { label: "Emerald",  value: "oklch(0.55 0.18 155)" },
+                  { label: "Green",    value: "oklch(0.52 0.18 145)" },
+                  { label: "Lime",     value: "oklch(0.62 0.18 125)" },
+                  { label: "Yellow",   value: "oklch(0.72 0.17 90)" },
+                  { label: "Amber",    value: "oklch(0.68 0.19 65)" },
+                  { label: "Orange",   value: "oklch(0.65 0.20 50)" },
+                  { label: "Red",      value: "oklch(0.58 0.22 25)" },
+                  { label: "Rose",     value: "oklch(0.55 0.22 15)" },
+                  { label: "Pink",     value: "oklch(0.58 0.22 345)" },
+                  { label: "Fuchsia",  value: "oklch(0.55 0.25 320)" },
+                  { label: "Violet",   value: "oklch(0.52 0.25 300)" },
+                  { label: "Purple",   value: "oklch(0.50 0.24 285)" },
+                  { label: "Zinc",     value: "oklch(0.55 0.01 250)" },
                 ].map(({ label, value }) => (
                   <button
                     key={value}
@@ -205,14 +217,29 @@ export function SettingsModal() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(EDITOR_THEMES).map(([key, { label, dark }]) => (
-                    <SelectItem key={key} value={key}>
-                      <span className="flex items-center gap-2">
-                        <span className={["w-2.5 h-2.5 rounded-full shrink-0 border border-border", dark ? "bg-zinc-800" : "bg-zinc-100"].join(" ")} />
-                        {label}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    <SelectLabel className="text-xs text-muted-foreground">Dark</SelectLabel>
+                    {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => dark).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-border bg-zinc-800" />
+                          {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectSeparator />
+                  <SelectGroup>
+                    <SelectLabel className="text-xs text-muted-foreground">Light</SelectLabel>
+                    {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => !dark).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-border bg-zinc-100" />
+                          {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
