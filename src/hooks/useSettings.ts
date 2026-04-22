@@ -51,6 +51,35 @@ export function useSettings() {
           (loadedSettings as unknown as Record<string, unknown>)[key] = value;
         }
       }
+      // Migrate legacy localStorage keys on first launch
+      if (typeof window !== "undefined") {
+        const legacyMap: Record<string, keyof Settings> = {
+          "pt.view": "view",
+          "pt.model": "modelId",
+          "pt.project": "project",
+          "pt.stylePreset": "stylePreset",
+          "pt.host": "host",
+        };
+        let migrated = false;
+        for (const [legacyKey, settingKey] of Object.entries(legacyMap)) {
+          const raw = localStorage.getItem(legacyKey);
+          if (raw !== null) {
+            try {
+              (loadedSettings as unknown as Record<string, unknown>)[settingKey] = raw;
+              localStorage.removeItem(legacyKey);
+              migrated = true;
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
+        if (migrated) {
+          for (const [key, value] of Object.entries(loadedSettings)) {
+            await store.set(key, value);
+          }
+          await store.save();
+        }
+      }
       if (!cancelled) {
         setSettingsState(loadedSettings);
         setLoaded(true);

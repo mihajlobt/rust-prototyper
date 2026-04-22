@@ -12,12 +12,14 @@ interface PromptInspectorProps {
 }
 
 function estimateTokens(text: string): number {
-  // Hybrid heuristic: average of char-based (~4 chars/token) and word-based (~0.75 words/token)
-  const chars = text.length;
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  const byChars = Math.ceil(chars / 4);
-  const byWords = Math.ceil(words / 0.75);
-  return Math.round((byChars + byWords) / 2);
+  try {
+    const { encoding_for_model } = require("js-tiktoken");
+    const enc = encoding_for_model("gpt-4");
+    return enc.encode(text).length;
+  } catch {
+    // Fallback heuristic
+    return Math.ceil(text.length / 4);
+  }
 }
 
 function getContextWindow(model: string): number {

@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback } from "react";
+import { Allotment } from "allotment";
 import { Play, Square, ZoomIn, ZoomOut, Save, Trash2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { generateCompletion, getApiKey, httpRequest, runShellCommand, readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, type FileEntry } from "@/lib/ipc";
+import { generateCompletion, getApiKey, httpRequest, runShellCommand, readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev, parseAiResponse, type FileEntry } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 
 interface NodeData {
@@ -50,6 +51,8 @@ const NODE_TYPES = [
   { type: "transform", label: "Transform", color: "#a855f7" },
   { type: "validate", label: "Validate", color: "#22c55e" },
   { type: "preview", label: "Preview", color: "#84cc16" },
+  { type: "designSystem", label: "Design System", color: "#f472b6" },
+  { type: "bun", label: "Bun", color: "#fbbf24" },
 ];
 
 function generateNodeId() {
@@ -231,8 +234,7 @@ export function WorkflowsView() {
               { role: "system", content: "Extract and structure requirements from the user request. Output as bullet points." },
               { role: "user", content: prevOutput || promptBase },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "architect": {
@@ -240,8 +242,7 @@ export function WorkflowsView() {
               { role: "system", content: "Create a high-level architecture plan. List components, data flow, and state management." },
               { role: "user", content: prevOutput || promptBase },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "structure": {
@@ -249,8 +250,7 @@ export function WorkflowsView() {
               { role: "system", content: "Generate HTML/JSX structure. Output only code, no explanations." },
               { role: "user", content: prevOutput || promptBase },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "style": {
@@ -258,8 +258,7 @@ export function WorkflowsView() {
               { role: "system", content: "Apply Tailwind CSS classes to the provided HTML/JSX. Output only the styled code." },
               { role: "user", content: prevOutput || promptBase },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "interaction": {
@@ -267,8 +266,7 @@ export function WorkflowsView() {
               { role: "system", content: "Add React hooks and state management to the component. Output only code." },
               { role: "user", content: prevOutput || promptBase },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "bash": {
@@ -285,6 +283,16 @@ export function WorkflowsView() {
               headers = JSON.parse(node.data?.headers || "{}");
             } catch {
               // ignore
+            }
+            // Apply auth from previous auth node
+            const prevAuth = nodes.find((n) => edges.some((e) => e.to === nodeId && e.from === n.id && n.type === "auth"));
+            if (prevAuth?.output) {
+              try {
+                const authHeaders = JSON.parse(prevAuth.output);
+                Object.assign(headers, authHeaders);
+              } catch {
+                // ignore
+              }
             }
             const res = await httpRequest(method, url, headers, node.data?.body || undefined);
             output = `Status: ${res.status}\n${res.body.slice(0, 2000)}`;
@@ -306,7 +314,39 @@ export function WorkflowsView() {
           }
           case "parallel": {
             const branches = edges.filter((e) => e.from === nodeId);
-            output = `Forked to ${branches.length} branches`;
+            const childIds = branches.map((e) => e.to);
+            const results = await Promise.all(childIds.map(async (cid) => {
+              const child = nodes.find((n) => n.id === cid);
+              if (!child) return "";
+              updateNode(cid, { status: "running" });
+              try {
+                let childOutput = "";
+                if (child.type === "bash" && child.data?.command) {
+                  await runShellCommand(".", child.data.command);
+                  childOutput = `Executed: ${child.data.command}`;
+                } else if (child.type === "fetch" && child.data?.url) {
+                  let h: Record<string, string> = {};
+                  try { h = JSON.parse(child.data.headers || "{}"); } catch {}
+                  const res = await httpRequest(child.data.method || "GET", child.data.url, h, child.data.body || undefined);
+                  childOutput = `Status: ${res.status}`;
+                } else if (["requirements", "architect", "structure", "style", "interaction", "transform", "validate"].includes(child.type)) {
+                  const p = child.data?.prompt || child.label;
+                  const r = await generateCompletion(settings.modelId, [
+                    { role: "system", content: `Execute ${child.type} node` },
+                    { role: "user", content: p },
+                  ], false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
+                  childOutput = parseAiResponse(r);
+                } else {
+                  childOutput = child.label;
+                }
+                updateNode(cid, { status: "done", output: childOutput.slice(0, 500) });
+                return childOutput;
+              } catch (e) {
+                updateNode(cid, { status: "error", output: String(e).slice(0, 500) });
+                return String(e);
+              }
+            }));
+            output = `Parallel: ${branches.length} branches\n${results.join("\n").slice(0, 500)}`;
             break;
           }
           case "composition": {
@@ -320,7 +360,18 @@ export function WorkflowsView() {
           }
           case "auth": {
             const scheme = node.data?.prompt || "bearer";
-            output = `Applied ${scheme} authentication headers`;
+            const token = node.data?.command || "token";
+            let headers: Record<string, string> = {};
+            if (scheme === "bearer") {
+              headers["Authorization"] = `Bearer ${token}`;
+            } else if (scheme === "apikey") {
+              headers["X-API-Key"] = token;
+            } else if (scheme === "basic") {
+              headers["Authorization"] = `Basic ${btoa(token)}`;
+            } else if (scheme === "oauth2") {
+              headers["Authorization"] = `Bearer ${token}`;
+            }
+            output = JSON.stringify(headers);
             break;
           }
           case "transform": {
@@ -329,8 +380,7 @@ export function WorkflowsView() {
               { role: "system", content: "Transform the provided content according to the instruction. Output only the transformed content." },
               { role: "user", content: `Instruction: ${transformPrompt}\n\nContent: ${prevOutput}` },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "validate": {
@@ -338,12 +388,32 @@ export function WorkflowsView() {
               { role: "system", content: "Validate the provided code. List any syntax errors, type errors, or issues. If valid, say 'Valid'." },
               { role: "user", content: prevOutput || "No code to validate" },
             ], false, host, apiKey);
-            const data = JSON.parse(res);
-            output = data.message?.content || data.response || res;
+            output = parseAiResponse(res);
             break;
           }
           case "preview": {
             output = prevOutput || "Nothing to preview";
+            break;
+          }
+          case "designSystem": {
+            const themeName = node.data?.prompt || "default";
+            output = `Applied design system: ${themeName}\n${prevOutput || ""}`;
+            break;
+          }
+          case "bun": {
+            const cmd = node.data?.command || "dev";
+            if (cmd === "dev") {
+              await bunDev(".", 5173);
+              output = "Started bun dev on port 5173";
+            } else if (cmd === "build") {
+              await runShellCommand(".", "bun build");
+              output = "Ran bun build";
+            } else if (cmd === "install") {
+              await runShellCommand(".", "bun install");
+              output = "Ran bun install";
+            } else {
+              output = `Unknown bun command: ${cmd}`;
+            }
             break;
           }
           default: {
@@ -442,6 +512,343 @@ export function WorkflowsView() {
       </div>
 
       <div className="flex-1 flex overflow-hidden relative">
+        <Allotment>
+          <Allotment.Pane preferredSize={200} minSize={160}>
+            {/* Palette */}
+            <div className="h-full border-r border-border bg-card p-2 space-y-1 overflow-auto">
+              <div className="text-xs font-medium text-muted-foreground mb-2 px-1">Nodes</div>
+              {NODE_TYPES.map((t) => (
+                <button
+                  key={t.type}
+                  onClick={() => addNode(t.type)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors text-left"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ background: t.color }} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </Allotment.Pane>
+
+          <Allotment.Pane>
+            {/* Canvas */}
+            <div className="h-full relative overflow-hidden bg-muted/20" ref={canvasRef}>
+              <div
+                className="absolute inset-0 origin-top-left cursor-grab active:cursor-grabbing"
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <div className="canvas-inner absolute inset-0 w-[3000px] h-[3000px]">
+                  {/* Grid */}
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-10">
+                    <defs>
+                      <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="currentColor" strokeWidth="0.5" />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                  </svg>
+
+                  {/* Edges */}
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    {edges.map((edge) => {
+                      const fromNode = nodes.find((n) => n.id === edge.from);
+                      const toNode = nodes.find((n) => n.id === edge.to);
+                      if (!fromNode || !toNode) return null;
+                      return (
+                        <line
+                          key={`${edge.from}-${edge.to}`}
+                          x1={fromNode.x + 60}
+                          y1={fromNode.y + 20}
+                          x2={toNode.x + 60}
+                          y2={toNode.y + 20}
+                          stroke="currentColor"
+                          strokeWidth="1"
+                          className="text-border"
+                        />
+                      );
+                    })}
+                  </svg>
+
+                  {/* Nodes */}
+                  {nodes.map((node) => {
+                    const def = NODE_TYPES.find((t) => t.type === node.type);
+                    const isSelected = selectedNodeId === node.id;
+                    const isEdgeSource = edgeFrom === node.id;
+                    const statusColor =
+                      node.status === "done"
+                        ? "border-green-500"
+                        : node.status === "error"
+                        ? "border-red-500"
+                        : node.status === "running"
+                        ? "border-blue-500 animate-pulse"
+                        : isSelected || isEdgeSource
+                        ? "border-primary"
+                        : "border-border";
+                    return (
+                      <div
+                        key={node.id}
+                        className={[
+                          "absolute w-[120px] bg-card rounded-md border shadow-sm p-2 cursor-pointer select-none",
+                          statusColor,
+                        ].join(" ")}
+                        style={{ left: node.x, top: node.y }}
+                        onMouseDown={(e) => handleMouseDown(e, node.id)}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ background: def?.color || "#999" }}
+                          />
+                          <span className="text-[10px] font-medium truncate">{node.label}</span>
+                        </div>
+                        {node.output && (
+                          <div className="text-[9px] text-muted-foreground truncate">{node.output}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </Allotment.Pane>
+
+          <Allotment.Pane preferredSize={260} minSize={200}>
+            {/* Properties */}
+            {selectedNode ? (
+              <div className="h-full border-l border-border bg-card p-3 space-y-3 overflow-auto">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Settings size={14} />
+                    <span className="text-sm font-medium">Properties</span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteNode(selectedNode.id)}>
+                    <Trash2 size={12} className="text-red-500" />
+                  </Button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Label</label>
+                  <Input
+                    value={selectedNode.label}
+                    onChange={(e) => updateNode(selectedNode.id, { label: e.target.value })}
+                    className="h-7 text-xs"
+                  />
+                </div>
+
+                {selectedNode.type === "input" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Prompt</label>
+                    <Textarea
+                      value={selectedNode.data?.prompt || ""}
+                      onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                      className="text-xs min-h-[80px] resize-none"
+                      placeholder="Enter prompt..."
+                    />
+                  </div>
+                )}
+
+                {selectedNode.type === "bash" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Command</label>
+                    <Input
+                      value={selectedNode.data?.command || ""}
+                      onChange={(e) => updateNodeData(selectedNode.id, { command: e.target.value })}
+                      className="h-7 text-xs"
+                      placeholder="e.g. echo hello"
+                    />
+                  </div>
+                )}
+
+                {selectedNode.type === "fetch" && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">URL</label>
+                      <Input
+                        value={selectedNode.data?.url || ""}
+                        onChange={(e) => updateNodeData(selectedNode.id, { url: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="https://api.example.com"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Method</label>
+                      <Input
+                        value={selectedNode.data?.method || "GET"}
+                        onChange={(e) => updateNodeData(selectedNode.id, { method: e.target.value })}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Headers (JSON)</label>
+                      <Textarea
+                        value={selectedNode.data?.headers || "{}"}
+                        onChange={(e) => updateNodeData(selectedNode.id, { headers: e.target.value })}
+                        className="text-xs min-h-[60px] resize-none font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Body</label>
+                      <Textarea
+                        value={selectedNode.data?.body || ""}
+                        onChange={(e) => updateNodeData(selectedNode.id, { body: e.target.value })}
+                        className="text-xs min-h-[60px] resize-none"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {selectedNode.type === "fileop" && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Operation</label>
+                      <Input
+                        value={selectedNode.data?.operation || "read"}
+                        onChange={(e) => updateNodeData(selectedNode.id, { operation: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="read or write"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Path</label>
+                      <Input
+                        value={selectedNode.data?.path || ""}
+                        onChange={(e) => updateNodeData(selectedNode.id, { path: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="./file.txt"
+                      />
+                    </div>
+                    {selectedNode.data?.operation === "write" && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Content</label>
+                        <Textarea
+                          value={selectedNode.data?.content || ""}
+                          onChange={(e) => updateNodeData(selectedNode.id, { content: e.target.value })}
+                          className="text-xs min-h-[60px] resize-none"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedNode.type === "preview" && (
+                  <div className="text-xs text-muted-foreground">Displays output from previous node</div>
+                )}
+
+                {selectedNode.type === "auth" && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Auth Scheme</label>
+                      <Input
+                        value={selectedNode.data?.prompt || "bearer"}
+                        onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="bearer, apikey, basic, oauth2"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Token / Key</label>
+                      <Input
+                        value={selectedNode.data?.command || ""}
+                        onChange={(e) => updateNodeData(selectedNode.id, { command: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="token or username:password"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {selectedNode.type === "transform" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Transform Instruction</label>
+                    <Textarea
+                      value={selectedNode.data?.prompt || ""}
+                      onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                      className="text-xs min-h-[60px] resize-none"
+                      placeholder="e.g. Convert to TypeScript, format JSON, etc."
+                    />
+                  </div>
+                )}
+
+                {selectedNode.type === "validate" && (
+                  <div className="text-xs text-muted-foreground">Validates code for syntax and type errors</div>
+                )}
+
+                {selectedNode.type === "designSystem" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Theme Name</label>
+                    <Input
+                      value={selectedNode.data?.prompt || ""}
+                      onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                      className="h-7 text-xs"
+                      placeholder="default, dark, light, etc."
+                    />
+                  </div>
+                )}
+
+                {selectedNode.type === "bun" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Bun Command</label>
+                    <Input
+                      value={selectedNode.data?.command || "dev"}
+                      onChange={(e) => updateNodeData(selectedNode.id, { command: e.target.value })}
+                      className="h-7 text-xs"
+                      placeholder="dev, build, install"
+                    />
+                  </div>
+                )}
+
+                {(selectedNode.type === "requirements" ||
+                  selectedNode.type === "architect" ||
+                  selectedNode.type === "structure" ||
+                  selectedNode.type === "style" ||
+                  selectedNode.type === "interaction") && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Context Override (optional)</label>
+                    <Textarea
+                      value={selectedNode.data?.prompt || ""}
+                      onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                      className="text-xs min-h-[60px] resize-none"
+                      placeholder="Override the input passed from previous node..."
+                    />
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-border">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Status</div>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={[
+                        "w-1.5 h-1.5 rounded-full",
+                        selectedNode.status === "done"
+                          ? "bg-green-500"
+                          : selectedNode.status === "error"
+                          ? "bg-red-500"
+                          : selectedNode.status === "running"
+                          ? "bg-blue-500"
+                          : "bg-muted-foreground",
+                      ].join(" ")}
+                    />
+                    <span className="text-xs capitalize">{selectedNode.status || "idle"}</span>
+                  </div>
+                  {selectedNode.output && (
+                    <div className="mt-2 text-[10px] text-muted-foreground bg-muted p-1.5 rounded break-all">
+                      {selectedNode.output}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-xs">
+                Select a node to edit properties
+              </div>
+            )}
+          </Allotment.Pane>
+        </Allotment>
+
         {/* Load Dialog Overlay */}
         {showLoadDialog && (
           <div className="absolute top-2 right-2 z-50 w-[240px] bg-card border border-border rounded-md shadow-lg p-3 space-y-2">
@@ -464,296 +871,6 @@ export function WorkflowsView() {
                   {wf.name.replace(".json", "")}
                 </button>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* Palette */}
-        <div className="w-[200px] border-r border-border bg-card p-2 space-y-1 overflow-auto shrink-0">
-          <div className="text-xs font-medium text-muted-foreground mb-2 px-1">Nodes</div>
-          {NODE_TYPES.map((t) => (
-            <button
-              key={t.type}
-              onClick={() => addNode(t.type)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors text-left"
-            >
-              <span className="w-2 h-2 rounded-full" style={{ background: t.color }} />
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Canvas */}
-        <div className="flex-1 relative overflow-hidden bg-muted/20" ref={canvasRef}>
-          <div
-            className="absolute inset-0 origin-top-left cursor-grab active:cursor-grabbing"
-            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
-            onMouseDown={handleCanvasMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-          >
-            <div className="canvas-inner absolute inset-0 w-[3000px] h-[3000px]">
-              {/* Grid */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-10">
-                <defs>
-                  <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="currentColor" strokeWidth="0.5" />
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
-              </svg>
-
-              {/* Edges */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                {edges.map((edge) => {
-                  const fromNode = nodes.find((n) => n.id === edge.from);
-                  const toNode = nodes.find((n) => n.id === edge.to);
-                  if (!fromNode || !toNode) return null;
-                  return (
-                    <line
-                      key={`${edge.from}-${edge.to}`}
-                      x1={fromNode.x + 60}
-                      y1={fromNode.y + 20}
-                      x2={toNode.x + 60}
-                      y2={toNode.y + 20}
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-border"
-                    />
-                  );
-                })}
-              </svg>
-
-              {/* Nodes */}
-              {nodes.map((node) => {
-                const def = NODE_TYPES.find((t) => t.type === node.type);
-                const isSelected = selectedNodeId === node.id;
-                const isEdgeSource = edgeFrom === node.id;
-                const statusColor =
-                  node.status === "done"
-                    ? "border-green-500"
-                    : node.status === "error"
-                    ? "border-red-500"
-                    : node.status === "running"
-                    ? "border-blue-500 animate-pulse"
-                    : isSelected || isEdgeSource
-                    ? "border-primary"
-                    : "border-border";
-                return (
-                  <div
-                    key={node.id}
-                    className={[
-                      "absolute w-[120px] bg-card rounded-md border shadow-sm p-2 cursor-pointer select-none",
-                      statusColor,
-                    ].join(" ")}
-                    style={{ left: node.x, top: node.y }}
-                    onMouseDown={(e) => handleMouseDown(e, node.id)}
-                  >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ background: def?.color || "#999" }}
-                      />
-                      <span className="text-[10px] font-medium truncate">{node.label}</span>
-                    </div>
-                    {node.output && (
-                      <div className="text-[9px] text-muted-foreground truncate">{node.output}</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Properties */}
-        {selectedNode && (
-          <div className="w-[260px] border-l border-border bg-card p-3 space-y-3 overflow-auto shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Settings size={14} />
-                <span className="text-sm font-medium">Properties</span>
-              </div>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteNode(selectedNode.id)}>
-                <Trash2 size={12} className="text-red-500" />
-              </Button>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Label</label>
-              <Input
-                value={selectedNode.label}
-                onChange={(e) => updateNode(selectedNode.id, { label: e.target.value })}
-                className="h-7 text-xs"
-              />
-            </div>
-
-            {selectedNode.type === "input" && (
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Prompt</label>
-                <Textarea
-                  value={selectedNode.data?.prompt || ""}
-                  onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
-                  className="text-xs min-h-[80px] resize-none"
-                  placeholder="Enter prompt..."
-                />
-              </div>
-            )}
-
-            {selectedNode.type === "bash" && (
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Command</label>
-                <Input
-                  value={selectedNode.data?.command || ""}
-                  onChange={(e) => updateNodeData(selectedNode.id, { command: e.target.value })}
-                  className="h-7 text-xs"
-                  placeholder="e.g. echo hello"
-                />
-              </div>
-            )}
-
-            {selectedNode.type === "fetch" && (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">URL</label>
-                  <Input
-                    value={selectedNode.data?.url || ""}
-                    onChange={(e) => updateNodeData(selectedNode.id, { url: e.target.value })}
-                    className="h-7 text-xs"
-                    placeholder="https://api.example.com"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Method</label>
-                  <Input
-                    value={selectedNode.data?.method || "GET"}
-                    onChange={(e) => updateNodeData(selectedNode.id, { method: e.target.value })}
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Headers (JSON)</label>
-                  <Textarea
-                    value={selectedNode.data?.headers || "{}"}
-                    onChange={(e) => updateNodeData(selectedNode.id, { headers: e.target.value })}
-                    className="text-xs min-h-[60px] resize-none font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Body</label>
-                  <Textarea
-                    value={selectedNode.data?.body || ""}
-                    onChange={(e) => updateNodeData(selectedNode.id, { body: e.target.value })}
-                    className="text-xs min-h-[60px] resize-none"
-                  />
-                </div>
-              </>
-            )}
-
-            {selectedNode.type === "fileop" && (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Operation</label>
-                  <Input
-                    value={selectedNode.data?.operation || "read"}
-                    onChange={(e) => updateNodeData(selectedNode.id, { operation: e.target.value })}
-                    className="h-7 text-xs"
-                    placeholder="read or write"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Path</label>
-                  <Input
-                    value={selectedNode.data?.path || ""}
-                    onChange={(e) => updateNodeData(selectedNode.id, { path: e.target.value })}
-                    className="h-7 text-xs"
-                    placeholder="./file.txt"
-                  />
-                </div>
-                {selectedNode.data?.operation === "write" && (
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Content</label>
-                    <Textarea
-                      value={selectedNode.data?.content || ""}
-                      onChange={(e) => updateNodeData(selectedNode.id, { content: e.target.value })}
-                      className="text-xs min-h-[60px] resize-none"
-                    />
-                  </div>
-                )}
-              </>
-            )}
-
-            {selectedNode.type === "preview" && (
-              <div className="text-xs text-muted-foreground">Displays output from previous node</div>
-            )}
-
-            {selectedNode.type === "auth" && (
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Auth Scheme</label>
-                <Input
-                  value={selectedNode.data?.prompt || "bearer"}
-                  onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
-                  className="h-7 text-xs"
-                  placeholder="bearer, apikey, basic, oauth2"
-                />
-              </div>
-            )}
-
-            {selectedNode.type === "transform" && (
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Transform Instruction</label>
-                <Textarea
-                  value={selectedNode.data?.prompt || ""}
-                  onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
-                  className="text-xs min-h-[60px] resize-none"
-                  placeholder="e.g. Convert to TypeScript, format JSON, etc."
-                />
-              </div>
-            )}
-
-            {selectedNode.type === "validate" && (
-              <div className="text-xs text-muted-foreground">Validates code for syntax and type errors</div>
-            )}
-
-            {(selectedNode.type === "requirements" ||
-              selectedNode.type === "architect" ||
-              selectedNode.type === "structure" ||
-              selectedNode.type === "style" ||
-              selectedNode.type === "interaction") && (
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Context Override (optional)</label>
-                <Textarea
-                  value={selectedNode.data?.prompt || ""}
-                  onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
-                  className="text-xs min-h-[60px] resize-none"
-                  placeholder="Override the input passed from previous node..."
-                />
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-border">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Status</div>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={[
-                    "w-1.5 h-1.5 rounded-full",
-                    selectedNode.status === "done"
-                      ? "bg-green-500"
-                      : selectedNode.status === "error"
-                      ? "bg-red-500"
-                      : selectedNode.status === "running"
-                      ? "bg-blue-500"
-                      : "bg-muted-foreground",
-                  ].join(" ")}
-                />
-                <span className="text-xs capitalize">{selectedNode.status || "idle"}</span>
-              </div>
-              {selectedNode.output && (
-                <div className="mt-2 text-[10px] text-muted-foreground bg-muted p-1.5 rounded break-all">
-                  {selectedNode.output}
-                </div>
-              )}
             </div>
           </div>
         )}

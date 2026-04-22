@@ -107,6 +107,30 @@ export function Header({ activeView, onViewChange }: HeaderProps) {
         <span className="max-w-[120px] truncate">{settings.host}</span>
       </div>
 
+      {/* Style Preset Picker */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-7">
+            <Palette size={12} />
+            <span className="max-w-[100px] truncate">{settings.stylePreset || "Style"}</span>
+            <ChevronDown size={12} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {settings.styles.length === 0 && (
+            <DropdownMenuItem disabled>No presets</DropdownMenuItem>
+          )}
+          {settings.styles.map((s) => (
+            <DropdownMenuItem
+              key={s.name}
+              onClick={() => setSettings({ stylePreset: s.name })}
+            >
+              {s.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {/* Model Picker */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

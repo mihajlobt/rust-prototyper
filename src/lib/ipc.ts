@@ -123,6 +123,17 @@ export async function listOllamaModels(host: string): Promise<ModelInfo[]> {
   return invoke("list_ollama_models", { host });
 }
 
+// ─── AI Response Parser ───
+
+export function parseAiResponse(response: string): string {
+  try {
+    const data = JSON.parse(response);
+    return data.message?.content || data.response || data.content || response;
+  } catch {
+    return response;
+  }
+}
+
 // ─── Workflows ───
 
 export async function saveWorkflow(projectId: string, workflowId: string, data: string): Promise<void> {

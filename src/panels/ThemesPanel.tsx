@@ -4,7 +4,7 @@ import { Send, Smartphone, Tablet, Monitor, Save, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { generateCompletion, getApiKey, writeFile, createDir, readFile } from "@/lib/ipc";
+import { generateCompletion, getApiKey, writeFile, createDir, readFile, parseAiResponse } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
@@ -65,8 +65,7 @@ export function ThemesPanel() {
         { role: "user", content: prompt.trim() },
       ];
       const response = await generateCompletion(settings.modelId, msgs, false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
-      const data = JSON.parse(response);
-      const content = data.message?.content || data.response || response;
+      const content = parseAiResponse(response);
       const clean = content.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "").trim();
       setCss(clean);
       await persistTheme(clean, prompt);

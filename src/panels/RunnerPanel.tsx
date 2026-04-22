@@ -42,7 +42,7 @@ export function RunnerPanel() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState("");
-  const [terminalLines, setTerminalLines] = useState<string[]>([]);
+  const [terminalLines, setTerminalLines] = useState<Array<{ line: string; source: string }>>([]);
   const [running, setRunning] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -73,8 +73,8 @@ export function RunnerPanel() {
     let unlisten: (() => void) | undefined;
     (async () => {
       unlisten = await listen("terminal-output", (e) => {
-        const payload = e.payload as { line: string };
-        setTerminalLines((prev) => [...prev, payload.line]);
+        const payload = e.payload as { line: string; source: string };
+        setTerminalLines((prev) => [...prev, payload]);
         if (payload.line.includes("Local:")) {
           setPreviewReady(true);
         }
@@ -112,7 +112,7 @@ export function RunnerPanel() {
       setPreviewReady(false);
       return;
     }
-    setTerminalLines((prev) => [...prev, "> bun dev"]);
+    setTerminalLines((prev) => [...prev, { line: "> bun dev", source: "stdout" }]);
     setRunning(true);
     setPreviewReady(false);
     const pid = await bunDev(GENERATED_DIR, 5173);
@@ -120,13 +120,13 @@ export function RunnerPanel() {
   };
 
   const handleBuild = async () => {
-    setTerminalLines((prev) => [...prev, "> bun build"]);
+    setTerminalLines((prev) => [...prev, { line: "> bun build", source: "stdout" }]);
     const pid = await bunBuild(GENERATED_DIR);
     pidRef.current = pid;
   };
 
   const handleInstall = async () => {
-    setTerminalLines((prev) => [...prev, "> bun install"]);
+    setTerminalLines((prev) => [...prev, { line: "> bun install", source: "stdout" }]);
     const pid = await bunInstall(GENERATED_DIR);
     pidRef.current = pid;
   };
@@ -196,7 +196,7 @@ export function RunnerPanel() {
 
   const handleNewShell = async () => {
     if (!shellCommand.trim()) return;
-    setTerminalLines((prev) => [...prev, `> ${shellCommand}`]);
+    setTerminalLines((prev) => [...prev, { line: `> ${shellCommand}`, source: "stdout" }]);
     const pid = await runShellCommand(GENERATED_DIR, shellCommand);
     pidRef.current = pid;
     setShellCommand("");
@@ -402,9 +402,9 @@ export function RunnerPanel() {
                   <TabsContent value="terminal" className="flex-1 overflow-hidden mt-0">
                     <div className="h-full flex flex-col bg-black text-green-400 font-mono text-xs">
                       <div ref={terminalRef} className="flex-1 overflow-auto p-2 space-y-0.5">
-                        {terminalLines.map((line, i) => (
-                          <div key={i} className="break-all whitespace-pre-wrap">
-                            {line}
+                        {terminalLines.map((item, i) => (
+                          <div key={i} className={["break-all whitespace-pre-wrap", item.source === "stderr" ? "text-red-400" : ""].join(" ")}>
+                            {item.line}
                           </div>
                         ))}
                         {terminalLines.length === 0 && (
@@ -419,31 +419,31 @@ export function RunnerPanel() {
                       <div className="flex-1 overflow-auto p-2 space-y-0.5">
                         {terminalLines
                           .filter(
-                            (line) =>
-                              line.includes("error") ||
-                              line.includes("warning") ||
-                              line.includes("hmr") ||
-                              line.includes("Hot") ||
-                              line.includes("build") ||
-                              line.includes("ready")
+                            (item) =>
+                              item.line.includes("error") ||
+                              item.line.includes("warning") ||
+                              item.line.includes("hmr") ||
+                              item.line.includes("Hot") ||
+                              item.line.includes("build") ||
+                              item.line.includes("ready")
                           )
-                          .map((line, i) => (
+                          .map((item, i) => (
                             <div
                               key={i}
                               className={[
                                 "break-all whitespace-pre-wrap",
-                                line.toLowerCase().includes("error")
+                                item.line.toLowerCase().includes("error")
                                   ? "text-red-400"
-                                  : line.toLowerCase().includes("warning")
+                                  : item.line.toLowerCase().includes("warning")
                                   ? "text-yellow-400"
                                   : "",
                               ].join(" ")}
                             >
-                              {line}
+                              {item.line}
                             </div>
                           ))}
-                        {terminalLines.filter((l) =>
-                          /error|warning|hmr|hot|build|ready/i.test(l)
+                        {terminalLines.filter((item) =>
+                          /error|warning|hmr|hot|build|ready/i.test(item.line)
                         ).length === 0 && (
                           <div className="opacity-40">No log events yet…</div>
                         )}
@@ -453,9 +453,41 @@ export function RunnerPanel() {
 
                   <TabsContent value="network" className="flex-1 overflow-hidden mt-0">
                     <div className="h-full flex flex-col bg-black text-green-400 font-mono text-xs">
-                      <div className="flex-1 overflow-auto p-2">
-                        <div className="opacity-40">Network interception requires preview devtools integration.</div>
-                        <div className="mt-2 opacity-60">Tip: Open the preview in your browser devtools to inspect network requests.</div>
+                      <div className="flex-1 overflow-auto p-2 space-y-1">
+                        {(() => {
+                          const requests = terminalLines
+                            .map((item) => {
+                              const line = item.line;
+                              const match = line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
+                              if (match) {
+                                return { method: match[1], path: match[2], status: parseInt(match[3]), line };
+                              }
+                              const hmrMatch = line.match(/hmr update\s+(\S+)/i);
+                              if (hmrMatch) {
+                                return { method: "HMR", path: hmrMatch[1], status: 0, line };
+                              }
+                              return null;
+                            })
+                            .filter(Boolean) as Array<{ method: string; path: string; status: number; line: string }>;
+                          if (requests.length === 0) {
+                            return <div className="opacity-40">No network requests logged yet…</div>;
+                          }
+                          return requests.map((req, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              <span className={[
+                                "font-bold px-1 py-0.5 rounded",
+                                req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" :
+                                req.status >= 400 ? "bg-red-500/20 text-red-400" :
+                                req.method === "HMR" ? "bg-blue-500/20 text-blue-400" :
+                                "bg-muted text-muted-foreground"
+                              ].join(" ")}>
+                                {req.method}
+                              </span>
+                              <span className="truncate flex-1">{req.path}</span>
+                              {req.status > 0 && <span className="text-muted-foreground">{req.status}</span>}
+                            </div>
+                          ));
+                        })()}
                       </div>
                     </div>
                   </TabsContent>

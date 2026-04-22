@@ -1,9 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Send, Paperclip, Image, Smartphone, Tablet, Monitor, Eye } from "lucide-react";
+import { Send, Paperclip, Image, Smartphone, Tablet, Monitor, Eye, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { generateCompletion, getApiKey, writeFile, createDir, readFile } from "@/lib/ipc";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { generateCompletion, getApiKey, writeFile, createDir, readFile, readDir, parseAiResponse } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 import { PromptInspector } from "@/components/PromptInspector";
 
@@ -12,11 +19,10 @@ interface ChatMessage {
   content: string;
 }
 
-const CHAT_PATH = "./projects/{project}/screens/main/chat.json";
-const SCREEN_PATH = "./projects/{project}/screens/main/screen.tsx";
-
 export function ScreensPanel() {
   const { settings } = useSettings();
+  const [screenId, setScreenId] = useState("main");
+  const [screens, setScreens] = useState<string[]>(["main"]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,35 +32,71 @@ export function ScreensPanel() {
   const [linkMode, setLinkMode] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // Load persisted chat on mount
+  const chatPath = `projects/${settings.project}/screens/${screenId}/chat.json`;
+  const screenPath = `projects/${settings.project}/screens/${screenId}/screen.tsx`;
+  const screenJsonPath = `projects/${settings.project}/screens/${screenId}/screen.json`;
+  const attachmentsDir = `projects/${settings.project}/screens/${screenId}/attachments`;
+
+  // Load screens list
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const chatPath = CHAT_PATH.replace("{project}", settings.project);
-        const data = await readFile(chatPath);
-        if (!cancelled) setMessages(JSON.parse(data));
+        const entries = await readDir(`projects/${settings.project}/screens`);
+        const names = entries.filter((e) => e.is_dir).map((e) => e.name);
+        if (!cancelled && names.length > 0) setScreens(names);
       } catch {
-        // no saved chat yet
+        // no screens yet
       }
     })();
     return () => { cancelled = true; };
   }, [settings.project]);
 
+  // Load persisted chat and links when screen changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await readFile(chatPath);
+        if (!cancelled) setMessages(JSON.parse(data));
+      } catch {
+        if (!cancelled) setMessages([]);
+      }
+      try {
+        const data = await readFile(screenJsonPath);
+        const parsed = JSON.parse(data);
+        if (!cancelled && parsed.links) setLinks(parsed.links);
+      } catch {
+        if (!cancelled) setLinks([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.project, screenId, chatPath, screenJsonPath]);
+
   // Persist chat on change
   const persistChat = useCallback(async (msgs: ChatMessage[]) => {
     try {
-      const chatPath = CHAT_PATH.replace("{project}", settings.project);
       await createDir(chatPath.replace("/chat.json", ""));
       await writeFile(chatPath, JSON.stringify(msgs, null, 2));
     } catch {
       // ignore
     }
-  }, [settings.project]);
+  }, [chatPath]);
+
+  // Persist links
+  const persistLinks = useCallback(async (newLinks: typeof links) => {
+    try {
+      await createDir(screenJsonPath.replace("/screen.json", ""));
+      await writeFile(screenJsonPath, JSON.stringify({ links: newLinks }, null, 2));
+    } catch {
+      // ignore
+    }
+  }, [screenJsonPath]);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || loading) return;
@@ -71,15 +113,12 @@ export function ScreensPanel() {
         content: m.content,
       }));
       const response = await generateCompletion(settings.modelId, msgs, false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
-      const data = JSON.parse(response);
-      const assistantContent = data.message?.content || data.response || response;
+      const assistantContent = parseAiResponse(response);
       const finalMessages = [...nextMessages, { role: "assistant" as const, content: assistantContent }];
       setMessages(finalMessages);
       await persistChat(finalMessages);
       if (assistantContent.includes("<") && assistantContent.includes(">")) {
         setPreviewHtml(assistantContent);
-        // Save screen.tsx
-        const screenPath = SCREEN_PATH.replace("{project}", settings.project);
         await createDir(screenPath.replace("/screen.tsx", ""));
         await writeFile(screenPath, assistantContent);
       }
@@ -108,12 +147,10 @@ export function ScreensPanel() {
         const reader = new FileReader();
         reader.onload = async () => {
           const base64 = reader.result as string;
-          const project = settings.project;
-          const dir = `./projects/${project}/screens/main/attachments`;
           const filename = `paste-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
-          await createDir(dir);
-          await writeFile(`${dir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, `${dir}/${filename}`]);
+          await createDir(attachmentsDir);
+          await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
+          setAttachments((prev) => [...prev, `${attachmentsDir}/${filename}`]);
         };
         reader.readAsDataURL(file);
       }
@@ -128,12 +165,10 @@ export function ScreensPanel() {
         const reader = new FileReader();
         reader.onload = async () => {
           const base64 = reader.result as string;
-          const project = settings.project;
-          const dir = `./projects/${project}/screens/main/attachments`;
           const filename = `drop-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
-          await createDir(dir);
-          await writeFile(`${dir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, `${dir}/${filename}`]);
+          await createDir(attachmentsDir);
+          await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
+          setAttachments((prev) => [...prev, `${attachmentsDir}/${filename}`]);
         };
         reader.readAsDataURL(file);
       }
@@ -147,12 +182,10 @@ export function ScreensPanel() {
         const reader = new FileReader();
         reader.onload = async () => {
           const base64 = reader.result as string;
-          const project = settings.project;
-          const dir = `./projects/${project}/screens/main/attachments`;
           const filename = `upload-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
-          await createDir(dir);
-          await writeFile(`${dir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, `${dir}/${filename}`]);
+          await createDir(attachmentsDir);
+          await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
+          setAttachments((prev) => [...prev, `${attachmentsDir}/${filename}`]);
         };
         reader.readAsDataURL(file);
       }
@@ -164,7 +197,11 @@ export function ScreensPanel() {
     const target = e.target as HTMLElement;
     const tagName = target.tagName.toLowerCase();
     if (tagName === 'a' || tagName === 'button') {
-      alert(`Linked: ${target.textContent || target.id || tagName}`);
+      const selector = target.id || target.className || tagName;
+      const newLink = { selector, target: target.getAttribute('href') || target.textContent || tagName };
+      const nextLinks = [...links, newLink];
+      setLinks(nextLinks);
+      persistLinks(nextLinks);
       setLinkMode(false);
     }
   };
@@ -179,6 +216,16 @@ export function ScreensPanel() {
                 <div className="h-full flex flex-col bg-card">
                   <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                     <span className="text-sm font-medium">Chat</span>
+                    <Select value={screenId} onValueChange={setScreenId}>
+                      <SelectTrigger className="h-7 text-xs w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {screens.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <div className="flex-1" />
                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(false)}>
                       <Eye size={12} />
@@ -265,6 +312,29 @@ export function ScreensPanel() {
             <div className="h-full flex flex-col bg-card">
               <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                 <span className="text-sm font-medium">Chat</span>
+                <Select value={screenId} onValueChange={setScreenId}>
+                  <SelectTrigger className="h-7 text-xs w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {screens.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async () => {
+                  const name = prompt("Screen name:");
+                  if (!name) return;
+                  const id = name.toLowerCase().replace(/\s+/g, "-");
+                  const dir = `projects/${settings.project}/screens/${id}`;
+                  await createDir(dir);
+                  await writeFile(`${dir}/chat.json`, "[]");
+                  await writeFile(`${dir}/screen.tsx`, `// ${name}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${name}</div>;\n}\n`);
+                  setScreens((prev) => [...prev, id]);
+                  setScreenId(id);
+                }}>
+                  <Plus size={12} />
+                </Button>
                 <div className="flex-1" />
                 <Button variant={linkMode ? "default" : "ghost"} size="sm" className="h-6 text-xs" onClick={() => setLinkMode(!linkMode)}>
                   {linkMode ? "Linking…" : "Link Mode"}

@@ -1,16 +1,18 @@
 use std::sync::Mutex;
 use std::collections::HashMap;
+use std::time::Duration;
+use std::io::Write;
 use tauri::{AppHandle, Emitter, Manager, State, RunEvent, WindowEvent, ipc::Channel};
-use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use futures_util::StreamExt;
 
 struct AppState {
     active_processes: Mutex<HashMap<u32, CommandChild>>,
+    http_client: reqwest::Client,
 }
 
 #[derive(Debug, thiserror::Error)]
-#[allow(dead_code)]
 enum AppError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -18,6 +20,10 @@ enum AppError {
     NotFound(String),
     #[error("Process error: {0}")]
     Process(String),
+    #[error("Security error: {0}")]
+    Security(String),
+    #[error("HTTP error: {0}")]
+    Http(String),
 }
 
 impl serde::Serialize for AppError {
@@ -27,34 +33,108 @@ impl serde::Serialize for AppError {
     }
 }
 
+// ─── Path Security ───
+
+fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
+    app.path().app_data_dir().map_err(|e| AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+}
+
+fn normalize_path(path: &std::path::Path) -> std::path::PathBuf {
+    let mut result = std::path::PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(c) => result.push(c),
+            std::path::Component::ParentDir => { result.pop(); }
+            _ => {}
+        }
+    }
+    result
+}
+
+fn resolve_path(app: &AppHandle, raw: &str) -> Result<std::path::PathBuf, AppError> {
+    let base = app_data_dir(app)?;
+    let relative = raw.strip_prefix("./").unwrap_or(raw);
+    if raw.starts_with('/') || raw.starts_with('\\') || raw.contains("..") {
+        return Err(AppError::Security("Invalid path".into()));
+    }
+    let target = base.join(relative);
+    let normalized = normalize_path(&target);
+    let normalized_base = normalize_path(&base);
+    if !normalized.starts_with(&normalized_base) {
+        return Err(AppError::Security("Path traversal detected".into()));
+    }
+    Ok(normalized)
+}
+
+fn resolve_cwd(app: &AppHandle, raw: &str) -> Result<std::path::PathBuf, AppError> {
+    resolve_path(app, raw)
+}
+
+// ─── Shell Security ───
+
+const ALLOWED_SHELL_COMMANDS: &[&str] = &[
+    "bun", "node", "npx", "git", "ls", "cat", "echo", "mkdir", "rm", "cp", "mv",
+    "pwd", "find", "grep", "vite", "npm", "pnpm", "yarn", "tsc", "eslint", "prettier", "touch",
+];
+
+// ─── SSRF Protection ───
+
+fn is_private_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    let blocked_prefixes = [
+        "http://127.", "https://127.", "http://localhost", "https://localhost",
+        "http://0.0.0.0", "https://0.0.0.0", "http://::1", "https://::1",
+        "http://10.", "https://10.", "http://192.168.", "https://192.168.",
+        "http://169.254.", "https://169.254.",
+    ];
+    for prefix in &blocked_prefixes {
+        if lower.starts_with(prefix) { return true; }
+    }
+    for protocol in &["http://172.", "https://172."] {
+        if let Some(rest) = lower.strip_prefix(protocol) {
+            if let Some(octet) = rest.split('.').next() {
+                if let Ok(n) = octet.parse::<u8>() {
+                    if n >= 16 && n <= 31 { return true; }
+                }
+            }
+        }
+    }
+    false
+}
+
 // ─── Process Management ───
 
 fn spawn_bun_command(
-    app: AppHandle,
+    app: &AppHandle,
     cmd: &str,
     args: Vec<String>,
     cwd: String,
-) -> Result<u32, String> {
+) -> Result<u32, AppError> {
     let shell = app.shell();
     let mut command = shell.command(cmd);
     for arg in &args {
         command = command.arg(arg);
     }
-    let (mut rx, child) = command.current_dir(cwd).spawn().map_err(|e| e.to_string())?;
+    let (mut rx, child) = command.current_dir(cwd).spawn().map_err(|e| AppError::Process(e.to_string()))?;
 
     let pid = child.pid();
-    let state = app.state::<Mutex<AppState>>();
-    state.lock().unwrap().active_processes.lock().unwrap().insert(pid, child);
+    let state = app.state::<AppState>();
+    state.active_processes.lock().unwrap().insert(pid, child);
 
     let app_emit = app.clone();
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
-            let line = match event {
-                tauri_plugin_shell::process::CommandEvent::Stdout(buf) => String::from_utf8_lossy(&buf).to_string(),
-                tauri_plugin_shell::process::CommandEvent::Stderr(buf) => String::from_utf8_lossy(&buf).to_string(),
+            let (line, source) = match event {
+                CommandEvent::Stdout(buf) => (String::from_utf8_lossy(&buf).to_string(), "stdout"),
+                CommandEvent::Stderr(buf) => (String::from_utf8_lossy(&buf).to_string(), "stderr"),
                 _ => continue,
             };
-            let _ = app_emit.emit("terminal-output", serde_json::json!({ "pid": pid, "line": line, "source": "stdout" }));
+            let _ = app_emit.emit("terminal-output", serde_json::json!({ "pid": pid, "line": line, "source": source }));
+        }
+        if let Some(state) = app_emit.try_state::<AppState>() {
+            if let Ok(mut processes) = state.active_processes.lock() {
+                processes.remove(&pid);
+            }
         }
     });
 
@@ -62,36 +142,42 @@ fn spawn_bun_command(
 }
 
 #[tauri::command]
-async fn bun_dev(cwd: String, port: u16, app: AppHandle) -> Result<u32, String> {
-    spawn_bun_command(app, "bun", vec!["dev".to_string(), "--port".to_string(), port.to_string()], cwd)
+async fn bun_dev(cwd: String, port: u16, app: AppHandle) -> Result<u32, AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    spawn_bun_command(&app, "bun", vec!["dev".into(), "--port".into(), port.to_string()], cwd.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn bun_build(cwd: String, app: AppHandle) -> Result<u32, String> {
-    spawn_bun_command(app, "bun", vec!["build".to_string()], cwd)
+async fn bun_build(cwd: String, app: AppHandle) -> Result<u32, AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    spawn_bun_command(&app, "bun", vec!["build".into()], cwd.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn bun_install(cwd: String, app: AppHandle) -> Result<u32, String> {
-    spawn_bun_command(app, "bun", vec!["install".to_string()], cwd)
+async fn bun_install(cwd: String, app: AppHandle) -> Result<u32, AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    spawn_bun_command(&app, "bun", vec!["install".into()], cwd.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn run_shell_command(cwd: String, command: String, app: AppHandle) -> Result<u32, String> {
-    let parts: Vec<&str> = command.split_whitespace().collect();
+async fn run_shell_command(cwd: String, command: String, app: AppHandle) -> Result<u32, AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    let parts = shlex::split(&command).ok_or_else(|| AppError::Process("Invalid shell syntax".into()))?;
     if parts.is_empty() {
-        return Err("Empty command".into());
+        return Err(AppError::Process("Empty command".into()));
+    }
+    if !ALLOWED_SHELL_COMMANDS.contains(&parts[0].as_str()) {
+        return Err(AppError::Security(format!("Command '{}' not allowed", parts[0])));
     }
     let args = parts.iter().skip(1).map(|s| s.to_string()).collect();
-    spawn_bun_command(app, parts[0], args, cwd)
+    spawn_bun_command(&app, &parts[0], args, cwd.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-async fn kill_process(pid: u32, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
-    let app_state = state.lock().unwrap();
-    let mut processes = app_state.active_processes.lock().unwrap();
+async fn kill_process(pid: u32, state: State<'_, AppState>) -> Result<(), AppError> {
+    let mut processes = state.active_processes.lock().unwrap();
     if let Some(child) = processes.remove(&pid) {
-        child.kill().map_err(|e| e.to_string())?;
+        child.kill().map_err(|e| AppError::Process(e.to_string()))?;
     }
     Ok(())
 }
@@ -106,46 +192,57 @@ struct FileEntry {
 }
 
 #[tauri::command]
-async fn read_dir(path: String) -> Result<Vec<FileEntry>, String> {
+async fn read_dir(path: String, app: AppHandle) -> Result<Vec<FileEntry>, AppError> {
+    let path = resolve_path(&app, &path)?;
     let mut entries = Vec::new();
-    let mut dir = tokio::fs::read_dir(&path).await.map_err(|e: std::io::Error| e.to_string())?;
-    while let Some(entry) = dir.next_entry().await.map_err(|e: std::io::Error| e.to_string())? {
+    let mut dir = tokio::fs::read_dir(&path).await.map_err(AppError::Io)?;
+    while let Some(entry) = dir.next_entry().await.map_err(AppError::Io)? {
         let name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path().to_string_lossy().to_string();
-        let is_dir = entry.file_type().await.map_err(|e: std::io::Error| e.to_string())?.is_dir();
+        let is_dir = entry.file_type().await.map_err(AppError::Io)?.is_dir();
         entries.push(FileEntry { name, path, is_dir });
     }
     Ok(entries)
 }
 
 #[tauri::command]
-async fn read_file(path: String) -> Result<String, String> {
-    tokio::fs::read_to_string(&path).await.map_err(|e: std::io::Error| e.to_string())
+async fn read_file(path: String, app: AppHandle) -> Result<String, AppError> {
+    let path = resolve_path(&app, &path)?;
+    tokio::fs::read_to_string(&path).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn write_file(path: String, content: String) -> Result<(), String> {
-    tokio::fs::write(&path, content).await.map_err(|e: std::io::Error| e.to_string())
+async fn write_file(path: String, content: String, app: AppHandle) -> Result<(), AppError> {
+    let path = resolve_path(&app, &path)?;
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(AppError::Io)?;
+    }
+    tokio::fs::write(&path, content).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn create_dir(path: String) -> Result<(), String> {
-    tokio::fs::create_dir_all(&path).await.map_err(|e: std::io::Error| e.to_string())
+async fn create_dir(path: String, app: AppHandle) -> Result<(), AppError> {
+    let path = resolve_path(&app, &path)?;
+    tokio::fs::create_dir_all(&path).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn delete_file(path: String) -> Result<(), String> {
-    tokio::fs::remove_file(&path).await.map_err(|e: std::io::Error| e.to_string())
+async fn delete_file(path: String, app: AppHandle) -> Result<(), AppError> {
+    let path = resolve_path(&app, &path)?;
+    tokio::fs::remove_file(&path).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn rename_file(from: String, to: String) -> Result<(), String> {
-    tokio::fs::rename(&from, &to).await.map_err(|e: std::io::Error| e.to_string())
+async fn rename_file(from: String, to: String, app: AppHandle) -> Result<(), AppError> {
+    let from = resolve_path(&app, &from)?;
+    let to = resolve_path(&app, &to)?;
+    tokio::fs::rename(&from, &to).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn delete_dir(path: String) -> Result<(), String> {
-    tokio::fs::remove_dir_all(&path).await.map_err(|e: std::io::Error| e.to_string())
+async fn delete_dir(path: String, app: AppHandle) -> Result<(), AppError> {
+    let path = resolve_path(&app, &path)?;
+    tokio::fs::remove_dir_all(&path).await.map_err(AppError::Io)
 }
 
 // ─── HTTP Client ───
@@ -163,23 +260,28 @@ async fn http_request(
     url: String,
     headers: HashMap<String, String>,
     body: Option<String>,
-) -> Result<HttpResponse, String> {
-    let client = reqwest::Client::new();
+    app: AppHandle,
+) -> Result<HttpResponse, AppError> {
+    if is_private_url(&url) {
+        return Err(AppError::Security("Private/internal URLs are blocked".into()));
+    }
+    let state = app.state::<AppState>();
+    let client = &state.http_client;
     let mut req = match method.as_str() {
         "GET" => client.get(&url),
         "POST" => client.post(&url),
         "PUT" => client.put(&url),
         "PATCH" => client.patch(&url),
         "DELETE" => client.delete(&url),
-        _ => return Err(format!("Unsupported method: {}", method)),
+        _ => return Err(AppError::Http(format!("Unsupported method: {}", method))),
     };
     for (k, v) in headers {
         req = req.header(k, v);
     }
     let res = if let Some(b) = body {
-        req.body(b).send().await.map_err(|e: reqwest::Error| e.to_string())?
+        req.body(b).send().await.map_err(|e| AppError::Http(e.to_string()))?
     } else {
-        req.send().await.map_err(|e: reqwest::Error| e.to_string())?
+        req.send().await.map_err(|e| AppError::Http(e.to_string()))?
     };
     let status = res.status().as_u16();
     let mut res_headers = HashMap::new();
@@ -188,7 +290,7 @@ async fn http_request(
             res_headers.insert(k.to_string(), v.to_string());
         }
     }
-    let body = res.text().await.map_err(|e: reqwest::Error| e.to_string())?;
+    let body = res.text().await.map_err(|e| AppError::Http(e.to_string()))?;
     Ok(HttpResponse { status, headers: res_headers, body })
 }
 
@@ -233,7 +335,7 @@ async fn chat_completion_ollama(
     messages: &[Message],
     stream: bool,
     on_event: Option<&Channel<CompletionEvent>>,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let url = format!("{}/api/chat", host);
     let msgs: Vec<serde_json::Value> = messages.iter()
         .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
@@ -241,11 +343,11 @@ async fn chat_completion_ollama(
     let body = serde_json::json!({ "model": model, "messages": msgs, "stream": stream });
 
     if stream {
-        let res = client.post(&url).json(&body).send().await.map_err(|e: reqwest::Error| e.to_string())?;
+        let res = client.post(&url).json(&body).send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let mut full = String::new();
         let mut stream = res.bytes_stream();
         while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.map_err(|e| e.to_string())?;
+            let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if line.is_empty() { continue; }
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
@@ -263,9 +365,10 @@ async fn chat_completion_ollama(
         }
         Ok(full)
     } else {
-        let res = client.post(&url).json(&body).send().await.map_err(|e: reqwest::Error| e.to_string())?;
-        let text = res.text().await.map_err(|e: reqwest::Error| e.to_string())?;
-        Ok(text)
+        let res = client.post(&url).json(&body).send().await.map_err(|e| AppError::Http(e.to_string()))?;
+        let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
+        let content = json["message"]["content"].as_str().unwrap_or("").to_string();
+        Ok(content)
     }
 }
 
@@ -276,7 +379,7 @@ async fn chat_completion_openai(
     messages: &[Message],
     stream: bool,
     on_event: Option<&Channel<CompletionEvent>>,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let url = "https://api.openai.com/v1/chat/completions";
     let msgs: Vec<serde_json::Value> = messages.iter()
         .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
@@ -287,11 +390,11 @@ async fn chat_completion_openai(
         let res = client.post(url)
             .header("Authorization", format!("Bearer {}", api_key))
             .json(&body)
-            .send().await.map_err(|e: reqwest::Error| e.to_string())?;
+            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let mut full = String::new();
         let mut stream = res.bytes_stream();
         while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.map_err(|e| e.to_string())?;
+            let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if !line.starts_with("data: ") { continue; }
                 let data = &line[6..];
@@ -314,8 +417,8 @@ async fn chat_completion_openai(
         let res = client.post(url)
             .header("Authorization", format!("Bearer {}", api_key))
             .json(&body)
-            .send().await.map_err(|e: reqwest::Error| e.to_string())?;
-        let json: serde_json::Value = res.json().await.map_err(|e: reqwest::Error| e.to_string())?;
+            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
+        let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
         let content = json["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string();
         Ok(content)
     }
@@ -328,7 +431,7 @@ async fn chat_completion_claude(
     messages: &[Message],
     stream: bool,
     on_event: Option<&Channel<CompletionEvent>>,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let url = "https://api.anthropic.com/v1/messages";
     let msgs: Vec<serde_json::Value> = messages.iter()
         .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
@@ -345,11 +448,11 @@ async fn chat_completion_claude(
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .json(&body)
-            .send().await.map_err(|e: reqwest::Error| e.to_string())?;
+            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let mut full = String::new();
         let mut stream = res.bytes_stream();
         while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.map_err(|e| e.to_string())?;
+            let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if !line.starts_with("data: ") { continue; }
                 let data = &line[6..];
@@ -372,8 +475,8 @@ async fn chat_completion_claude(
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .json(&body)
-            .send().await.map_err(|e: reqwest::Error| e.to_string())?;
-        let json: serde_json::Value = res.json().await.map_err(|e: reqwest::Error| e.to_string())?;
+            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
+        let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
         let content = json["content"][0]["text"].as_str().unwrap_or("").to_string();
         Ok(content)
     }
@@ -386,27 +489,28 @@ async fn generate_completion(
     host: String,
     api_key: String,
     _stream: bool,
-    _app: AppHandle,
-) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    app: AppHandle,
+) -> Result<String, AppError> {
+    let state = app.state::<AppState>();
+    let client = &state.http_client;
     let provider = detect_provider(&model);
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host };
 
     match provider {
-        "ollama" => chat_completion_ollama(&client, &host, &model, &messages, false, None).await,
+        "ollama" => chat_completion_ollama(client, &host, &model, &messages, false, None).await,
         "openai" => {
             if api_key.is_empty() {
-                return Err("OpenAI API key required".into());
+                return Err(AppError::Http("OpenAI API key required".into()));
             }
-            chat_completion_openai(&client, &api_key, &model, &messages, false, None).await
+            chat_completion_openai(client, &api_key, &model, &messages, false, None).await
         }
         "claude" => {
             if api_key.is_empty() {
-                return Err("Claude API key required".into());
+                return Err(AppError::Http("Claude API key required".into()));
             }
-            chat_completion_claude(&client, &api_key, &model, &messages, false, None).await
+            chat_completion_claude(client, &api_key, &model, &messages, false, None).await
         }
-        _ => Err("Unsupported provider".into()),
+        _ => Err(AppError::Http("Unsupported provider".into())),
     }
 }
 
@@ -417,41 +521,44 @@ async fn generate_completion_stream(
     host: String,
     api_key: String,
     on_event: Channel<CompletionEvent>,
-) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    app: AppHandle,
+) -> Result<(), AppError> {
+    let state = app.state::<AppState>();
+    let client = &state.http_client;
     let provider = detect_provider(&model);
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host };
 
     let result = match provider {
-        "ollama" => chat_completion_ollama(&client, &host, &model, &messages, true, Some(&on_event)).await,
+        "ollama" => chat_completion_ollama(client, &host, &model, &messages, true, Some(&on_event)).await,
         "openai" => {
             if api_key.is_empty() {
-                return Err("OpenAI API key required".into());
+                return Err(AppError::Http("OpenAI API key required".into()));
             }
-            chat_completion_openai(&client, &api_key, &model, &messages, true, Some(&on_event)).await
+            chat_completion_openai(client, &api_key, &model, &messages, true, Some(&on_event)).await
         }
         "claude" => {
             if api_key.is_empty() {
-                return Err("Claude API key required".into());
+                return Err(AppError::Http("Claude API key required".into()));
             }
-            chat_completion_claude(&client, &api_key, &model, &messages, true, Some(&on_event)).await
+            chat_completion_claude(client, &api_key, &model, &messages, true, Some(&on_event)).await
         }
-        _ => Err("Unsupported provider".into()),
+        _ => Err(AppError::Http("Unsupported provider".into())),
     };
 
     if let Err(e) = result {
-        let _ = on_event.send(CompletionEvent::Error { message: e.clone() });
+        let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
         return Err(e);
     }
     Ok(())
 }
 
 #[tauri::command]
-async fn list_ollama_models(host: String) -> Result<Vec<ModelInfo>, String> {
-    let client = reqwest::Client::new();
+async fn list_ollama_models(host: String, app: AppHandle) -> Result<Vec<ModelInfo>, AppError> {
+    let state = app.state::<AppState>();
+    let client = &state.http_client;
     let url = format!("{}/api/tags", host);
-    let res = client.get(&url).send().await.map_err(|e: reqwest::Error| e.to_string())?;
-    let json: serde_json::Value = res.json().await.map_err(|e: reqwest::Error| e.to_string())?;
+    let res = client.get(&url).send().await.map_err(|e| AppError::Http(e.to_string()))?;
+    let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
     let models = json["models"].as_array()
         .map(|arr| arr.iter()
             .filter_map(|m| Some(ModelInfo {
@@ -465,23 +572,25 @@ async fn list_ollama_models(host: String) -> Result<Vec<ModelInfo>, String> {
 
 // ─── Export ───
 
+fn zip_err(e: zip::result::ZipError) -> AppError {
+    AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+}
+
 fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
     zip: &mut zip::ZipWriter<W>,
     dir: &std::path::Path,
     prefix: &std::path::Path,
-) -> Result<(), String> {
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
+) -> Result<(), AppError> {
+    for entry in std::fs::read_dir(dir).map_err(AppError::Io)? {
+        let entry = entry.map_err(AppError::Io)?;
         let path = entry.path();
-        let name = path.strip_prefix(prefix).map_err(|e| e.to_string())?;
+        let name = path.strip_prefix(prefix).map_err(|_| AppError::NotFound("Prefix mismatch".into()))?;
         if path.is_file() {
-            let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
-            zip.start_file_from_path(name, zip::write::SimpleFileOptions::default())
-                .map_err(|e| e.to_string())?;
-            std::io::copy(&mut file, zip).map_err(|e| e.to_string())?;
+            let mut file = std::fs::File::open(&path).map_err(AppError::Io)?;
+            zip.start_file_from_path(name, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            std::io::copy(&mut file, zip).map_err(AppError::Io)?;
         } else if path.is_dir() {
-            zip.add_directory_from_path(name, zip::write::SimpleFileOptions::default())
-                .map_err(|e| e.to_string())?;
+            zip.add_directory_from_path(name, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
             add_dir_to_zip(zip, &path, prefix)?;
         }
     }
@@ -492,66 +601,157 @@ fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
 async fn export_project(
     project_id: String,
     output_path: String,
-    _format: String,
-    _include_apis: bool,
-    _include_theme: bool,
-    _include_components: bool,
-    _include_tests: bool,
-) -> Result<String, String> {
-    let project_dir = std::path::Path::new("./projects").join(&project_id);
-    let file = std::fs::File::create(&output_path).map_err(|e| e.to_string())?;
-    let mut zip = zip::ZipWriter::new(file);
-    add_dir_to_zip(&mut zip, &project_dir, &project_dir)?;
-    zip.finish().map_err(|e| e.to_string())?;
-    Ok(output_path)
+    format: String,
+    include_apis: bool,
+    include_theme: bool,
+    include_components: bool,
+    include_tests: bool,
+    app: AppHandle,
+) -> Result<String, AppError> {
+    let project_dir = resolve_path(&app, &format!("projects/{}", project_id))?;
+    // output_path comes from native save dialog — validate it doesn't contain traversal
+    if output_path.contains("..") {
+        return Err(AppError::Security("Invalid output path".into()));
+    }
+
+    let result = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
+        let file = std::fs::File::create(&output_path).map_err(AppError::Io)?;
+        let mut zip = zip::ZipWriter::new(file);
+
+        if format == "react-vite" || format.is_empty() {
+            let pkg = r#"{"name":"exported-app","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"react":"^19","react-dom":"^19"},"devDependencies":{"@types/react":"^19","@types/react-dom":"^19","@vitejs/plugin-react":"^4","typescript":"^5","vite":"^6"}}"#;
+            zip.start_file("package.json", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(pkg.as_bytes()).map_err(AppError::Io)?;
+            let tsconfig = r#"{"compilerOptions":{"target":"ES2020","useDefineForClassFields":true,"lib":["ES2020","DOM","DOM.Iterable"],"module":"ESNext","skipLibCheck":true,"moduleResolution":"bundler","allowImportingTsExtensions":true,"resolveJsonModule":true,"isolatedModules":true,"noEmit":true,"jsx":"react-jsx","strict":true,"noUnusedLocals":true,"noUnusedParameters":true,"noFallthroughCasesInSwitch":true},"include":["src"],"references":[{"path":"./tsconfig.node.json"}]}"#;
+            zip.start_file("tsconfig.json", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(tsconfig.as_bytes()).map_err(AppError::Io)?;
+            let main = r#"import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App'; ReactDOM.createRoot(document.getElementById('root')!).render(<App />);"#;
+            zip.start_file("src/main.tsx", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(main.as_bytes()).map_err(AppError::Io)?;
+            let html = r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Exported App</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>"#;
+            zip.start_file("index.html", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(html.as_bytes()).map_err(AppError::Io)?;
+        }
+
+        if include_components {
+            let comp_dir = project_dir.join("components");
+            if comp_dir.exists() {
+                add_dir_to_zip(&mut zip, &comp_dir, &project_dir)?;
+            }
+        }
+        if include_theme {
+            let theme_dir = project_dir.join("themes");
+            if theme_dir.exists() {
+                add_dir_to_zip(&mut zip, &theme_dir, &project_dir)?;
+            }
+        }
+        if include_apis {
+            let api_dir = project_dir.join("apis");
+            if api_dir.exists() {
+                add_dir_to_zip(&mut zip, &api_dir, &project_dir)?;
+            }
+        }
+
+        let screens_dir = project_dir.join("screens");
+        if screens_dir.exists() {
+            add_dir_to_zip(&mut zip, &screens_dir, &project_dir)?;
+        }
+
+        let gen_dir = project_dir.join("generated");
+        if gen_dir.exists() {
+            add_dir_to_zip(&mut zip, &gen_dir, &project_dir)?;
+        }
+
+        if include_tests {
+            let test_setup = r#"import { describe, it, expect } from 'vitest';"#;
+            zip.start_file("src/App.test.tsx", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(test_setup.as_bytes()).map_err(AppError::Io)?;
+            let vitest_config = r#"import { defineConfig } from 'vitest/config'; import react from '@vitejs/plugin-react'; export default defineConfig({ plugins: [react()], test: { environment: 'jsdom', globals: true } });"#;
+            zip.start_file("vitest.config.ts", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(vitest_config.as_bytes()).map_err(AppError::Io)?;
+        }
+
+        zip.finish().map_err(zip_err)?;
+        Ok(output_path)
+    }).await.map_err(|e| AppError::Process(e.to_string()))?;
+
+    result
 }
 
 #[tauri::command]
 async fn export_component(
-    _project_id: String,
+    project_id: String,
     component_id: String,
     output_path: String,
-    _format: String,
-    _include_types: bool,
-    _include_storybook: bool,
-    _include_tests: bool,
-) -> Result<String, String> {
-    let file = std::fs::File::create(&output_path).map_err(|e| e.to_string())?;
-    let mut zip = zip::ZipWriter::new(file);
-    let component_path = std::path::Path::new("./generated").join("src").join("components").join(format!("{}.tsx", component_id));
-    if component_path.exists() {
-        let mut f = std::fs::File::open(&component_path).map_err(|e| e.to_string())?;
-        zip.start_file(format!("{}.tsx", component_id), zip::write::SimpleFileOptions::default())
-            .map_err(|e| e.to_string())?;
-        std::io::copy(&mut f, &mut zip).map_err(|e| e.to_string())?;
+    format: String,
+    include_types: bool,
+    include_storybook: bool,
+    include_tests: bool,
+    app: AppHandle,
+) -> Result<String, AppError> {
+    if output_path.contains("..") {
+        return Err(AppError::Security("Invalid output path".into()));
     }
-    zip.finish().map_err(|e| e.to_string())?;
-    Ok(output_path)
+    let component_path = resolve_path(&app, &format!("projects/{}/components/{}/component.tsx", project_id, component_id))?;
+
+    let result = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
+        let file = std::fs::File::create(&output_path).map_err(AppError::Io)?;
+        let mut zip = zip::ZipWriter::new(file);
+
+        if component_path.exists() {
+            let mut f = std::fs::File::open(&component_path).map_err(AppError::Io)?;
+            let ext = if format == "jsx" { "jsx" } else { "tsx" };
+            zip.start_file(format!("{}.{}", component_id, ext), zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            std::io::copy(&mut f, &mut zip).map_err(AppError::Io)?;
+        }
+
+        if include_types {
+            let types = format!("export interface {}Props {{}}\n", component_id);
+            zip.start_file(format!("{}.types.ts", component_id), zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(types.as_bytes()).map_err(AppError::Io)?;
+        }
+
+        if include_storybook {
+            let story = format!(r#"import type {{ Meta, StoryObj }} from '@storybook/react'; import {{ {} }} from './{}'; const meta: Meta<typeof {}> = {{ component: {} }}; export default meta; type Story = StoryObj<typeof {}>; export const Default: Story = {{ args: {{}} }};"#, component_id, component_id, component_id, component_id, component_id);
+            zip.start_file(format!("{}.stories.tsx", component_id), zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(story.as_bytes()).map_err(AppError::Io)?;
+        }
+
+        if include_tests {
+            let test = format!(r#"import {{ render, screen }} from '@testing-library/react'; import {{ {} }} from './{}'; describe('{}', () => {{ it('renders', () => {{ render(<{} />); expect(screen.getByText(/.*/)).toBeInTheDocument(); }}); }});"#, component_id, component_id, component_id, component_id);
+            zip.start_file(format!("{}.test.tsx", component_id), zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.write_all(test.as_bytes()).map_err(AppError::Io)?;
+        }
+
+        zip.finish().map_err(zip_err)?;
+        Ok(output_path)
+    }).await.map_err(|e| AppError::Process(e.to_string()))?;
+
+    result
 }
 
 // ─── Workflows ───
 
 #[tauri::command]
-async fn save_workflow(project_id: String, workflow_id: String, data: String) -> Result<(), String> {
-    let dir = std::path::Path::new("./projects").join(&project_id).join("workflows");
-    tokio::fs::create_dir_all(&dir).await.map_err(|e: std::io::Error| e.to_string())?;
+async fn save_workflow(project_id: String, workflow_id: String, data: String, app: AppHandle) -> Result<(), AppError> {
+    let dir = resolve_path(&app, &format!("projects/{}/workflows", project_id))?;
+    tokio::fs::create_dir_all(&dir).await.map_err(AppError::Io)?;
     let path = dir.join(format!("{}.json", workflow_id));
-    tokio::fs::write(&path, data).await.map_err(|e: std::io::Error| e.to_string())?;
-    Ok(())
+    tokio::fs::write(&path, data).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn load_workflow(project_id: String, workflow_id: String) -> Result<String, String> {
-    let path = std::path::Path::new("./projects").join(&project_id).join("workflows").join(format!("{}.json", workflow_id));
-    tokio::fs::read_to_string(&path).await.map_err(|e: std::io::Error| e.to_string())
+async fn load_workflow(project_id: String, workflow_id: String, app: AppHandle) -> Result<String, AppError> {
+    let path = resolve_path(&app, &format!("projects/{}/workflows/{}.json", project_id, workflow_id))?;
+    tokio::fs::read_to_string(&path).await.map_err(AppError::Io)
 }
 
 #[tauri::command]
-async fn list_workflows(project_id: String) -> Result<Vec<FileEntry>, String> {
-    let dir = std::path::Path::new("./projects").join(&project_id).join("workflows");
+async fn list_workflows(project_id: String, app: AppHandle) -> Result<Vec<FileEntry>, AppError> {
+    let dir = resolve_path(&app, &format!("projects/{}/workflows", project_id))?;
     let mut entries = Vec::new();
-    let mut rd = tokio::fs::read_dir(&dir).await.map_err(|e: std::io::Error| e.to_string())?;
-    while let Some(entry) = rd.next_entry().await.map_err(|e: std::io::Error| e.to_string())? {
+    let mut rd = tokio::fs::read_dir(&dir).await.map_err(AppError::Io)?;
+    while let Some(entry) = rd.next_entry().await.map_err(AppError::Io)? {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.ends_with(".json") {
             let path = entry.path().to_string_lossy().to_string();
@@ -565,16 +765,24 @@ async fn list_workflows(project_id: String) -> Result<Vec<FileEntry>, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .expect("Failed to build HTTP client");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // tauri_plugin_fs and tauri_plugin_http are initialized for frontend JS API access
+        // even though Rust backend uses tokio::fs and reqwest directly for better control
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Mutex::new(AppState {
+        .manage(AppState {
             active_processes: Mutex::new(HashMap::new()),
-        }))
+            http_client,
+        })
         .invoke_handler(tauri::generate_handler![
             bun_dev, bun_build, bun_install, run_shell_command, kill_process,
             read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file,
@@ -588,9 +796,8 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { .. } = event {
-                if let Some(state) = window.try_state::<Mutex<AppState>>() {
-                    let app_state = state.lock().unwrap();
-                    let mut processes = app_state.active_processes.lock().unwrap();
+                if let Some(state) = window.try_state::<AppState>() {
+                    let mut processes = state.active_processes.lock().unwrap();
                     for (_, child) in processes.drain() {
                         let _ = child.kill();
                     }

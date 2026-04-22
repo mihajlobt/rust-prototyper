@@ -12,8 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { httpRequest, type HttpResponse } from "@/lib/ipc";
+import { httpRequest, readFile, writeFile, createDir, type HttpResponse } from "@/lib/ipc";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
+import { useSettings } from "@/hooks/useSettings";
 import YAML from "js-yaml";
 
 interface ApiHistoryEntry {
@@ -38,20 +39,27 @@ interface SavedApi {
   history: ApiHistoryEntry[];
 }
 
-const STORAGE_KEY = "prototyper_apis";
+function getApisPath(project: string) {
+  return `projects/${project}/apis/apis.json`;
+}
 
-function loadApis(): SavedApi[] {
+async function loadApis(project: string): Promise<SavedApi[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    const data = await readFile(getApisPath(project));
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+async function saveApis(project: string, apis: SavedApi[]) {
+  try {
+    const path = getApisPath(project);
+    await createDir(path.replace("/apis.json", ""));
+    await writeFile(path, JSON.stringify(apis, null, 2));
   } catch {
     // ignore
   }
-  return [];
-}
-
-function saveApis(apis: SavedApi[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(apis));
 }
 
 function generateId() {
@@ -74,7 +82,8 @@ function parseCurl(input: string): Partial<SavedApi> | null {
 }
 
 export function APIsPanel() {
-  const [apis, setApis] = useState<SavedApi[]>(loadApis);
+  const { settings } = useSettings();
+  const [apis, setApis] = useState<SavedApi[]>([]);
   const [selectedApiId, setSelectedApiId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [method, setMethod] = useState("GET");
@@ -91,9 +100,19 @@ export function APIsPanel() {
   const [openapiPaste, setOpenapiPaste] = useState("");
   const [history, setHistory] = useState<ApiHistoryEntry[]>([]);
 
+  // Load from FS on project change
   useEffect(() => {
-    saveApis(apis);
-  }, [apis]);
+    let cancelled = false;
+    loadApis(settings.project).then((data) => {
+      if (!cancelled) setApis(data);
+    });
+    return () => { cancelled = true; };
+  }, [settings.project]);
+
+  // Save to FS on change
+  useEffect(() => {
+    saveApis(settings.project, apis);
+  }, [apis, settings.project]);
 
   const selectApi = useCallback((api: SavedApi) => {
     setSelectedApiId(api.id);
