@@ -195,14 +195,16 @@ struct FileEntry {
 
 #[tauri::command]
 async fn read_dir(path: String, app: AppHandle) -> Result<Vec<FileEntry>, AppError> {
-    let path = resolve_path(&app, &path)?;
+    let base = app_data_dir(&app)?;
+    let resolved = resolve_path(&app, &path)?;
     let mut entries = Vec::new();
-    let mut dir = tokio::fs::read_dir(&path).await.map_err(AppError::Io)?;
+    let mut dir = tokio::fs::read_dir(&resolved).await.map_err(AppError::Io)?;
     while let Some(entry) = dir.next_entry().await.map_err(AppError::Io)? {
         let name = entry.file_name().to_string_lossy().to_string();
-        let path = entry.path().to_string_lossy().to_string();
+        let abs_path = entry.path();
+        let rel_path = abs_path.strip_prefix(&base).unwrap_or(&abs_path).to_string_lossy().to_string();
         let is_dir = entry.file_type().await.map_err(AppError::Io)?.is_dir();
-        entries.push(FileEntry { name, path, is_dir });
+        entries.push(FileEntry { name, path: rel_path, is_dir });
     }
     Ok(entries)
 }
@@ -765,14 +767,16 @@ async fn load_workflow(project_id: String, workflow_id: String, app: AppHandle) 
 
 #[tauri::command]
 async fn list_workflows(project_id: String, app: AppHandle) -> Result<Vec<FileEntry>, AppError> {
+    let base = app_data_dir(&app)?;
     let dir = resolve_path(&app, &format!("projects/{}/workflows", project_id))?;
     let mut entries = Vec::new();
     let mut rd = tokio::fs::read_dir(&dir).await.map_err(AppError::Io)?;
     while let Some(entry) = rd.next_entry().await.map_err(AppError::Io)? {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.ends_with(".json") {
-            let path = entry.path().to_string_lossy().to_string();
-            entries.push(FileEntry { name, path, is_dir: false });
+            let abs_path = entry.path();
+            let rel_path = abs_path.strip_prefix(&base).unwrap_or(&abs_path).to_string_lossy().to_string();
+            entries.push(FileEntry { name, path: rel_path, is_dir: false });
         }
     }
     Ok(entries)

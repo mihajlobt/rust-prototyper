@@ -18,6 +18,8 @@ import { useSettings } from "@/hooks/useSettings";
 
 interface SidebarRailProps {
   onNavigateToItem?: (type: string, name: string) => void;
+  activeView?: string;
+  activeItem?: string;
 }
 
 const DIR_LABELS: Record<string, string> = {
@@ -28,7 +30,7 @@ const DIR_LABELS: Record<string, string> = {
   apis: "APIs",
 };
 
-export function SidebarRail({ onNavigateToItem }: SidebarRailProps) {
+export function SidebarRail({ onNavigateToItem, activeView, activeItem }: SidebarRailProps) {
   const { settings, setSettings } = useSettings();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
@@ -229,16 +231,19 @@ export function SidebarRail({ onNavigateToItem }: SidebarRailProps) {
             {entries.length === 0 && (
               <div className="text-[10px] text-muted-foreground px-2">Empty</div>
             )}
-            {entries.map((entry) => (
+            {entries.map((entry) => {
+              const isActive = activeView === section && (activeItem === entry.name || activeItem === entry.name.replace(/\.json$/, ""));
+              return (
               <ContextMenu key={entry.path}>
                 <ContextMenuTrigger asChild>
                   <button
-                    className="w-full flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors text-left"
-                    onClick={() => {
-                      if (entry.is_dir) toggle(entry.path);
-                      else onNavigateToItem?.(section, entry.name);
-                    }}
-                    onDoubleClick={() => onNavigateToItem?.(section, entry.name)}
+                    className={[
+                      "w-full flex items-center gap-1.5 px-2 py-0.5 text-xs rounded cursor-pointer transition-colors text-left",
+                      isActive
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                    ].join(" ")}
+                    onClick={() => onNavigateToItem?.(section, entry.name)}
                   >
                     {entry.is_dir ? <Folder size={10} /> : <FileCode size={10} />}
                     <span className="truncate">{entry.name}</span>
@@ -270,7 +275,8 @@ export function SidebarRail({ onNavigateToItem }: SidebarRailProps) {
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

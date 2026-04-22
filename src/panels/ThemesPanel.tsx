@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
-import { Allotment } from "allotment";
-import { Send, Smartphone, Tablet, Monitor, Save, Plus } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Allotment, type AllotmentHandle } from "allotment";
+import { Send, Smartphone, Tablet, Monitor, Save, Plus, ChevronUp, ChevronDown, FileCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +26,20 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
   const [presetName, setPresetName] = useState("");
   const [availableThemes, setAvailableThemes] = useState<FileEntry[]>([]);
   const [selectedThemeDir, setSelectedThemeDir] = useState(initialItem || "");
+  const [codeOpen, setCodeOpen] = useState(true);
+  const verticalAllotmentRef = useRef<AllotmentHandle>(null);
+  const CODE_PANE_SIZE = 280;
+  const CODE_HEADER = 28;
+
+  const toggleCode = () => {
+    if (codeOpen) {
+      verticalAllotmentRef.current?.resize([9999, CODE_HEADER]);
+      setCodeOpen(false);
+    } else {
+      verticalAllotmentRef.current?.resize([9999, CODE_PANE_SIZE]);
+      setCodeOpen(true);
+    }
+  };
 
   // Load available themes
   useEffect(() => {
@@ -226,7 +240,7 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical>
+          <Allotment vertical ref={verticalAllotmentRef}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
@@ -276,14 +290,19 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
               </div>
             </Allotment.Pane>
 
-            <Allotment.Pane preferredSize={300}>
+            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
               <div className="h-full flex flex-col">
-                <div className="h-8 border-b border-border flex items-center px-3 bg-card shrink-0">
+                <div className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer" onClick={toggleCode}>
+                  <FileCode size={12} className="mr-1.5" />
                   <span className="text-xs font-medium">CSS Output</span>
+                  <div className="flex-1" />
+                  {codeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
-                </div>
+                {codeOpen && (
+                  <div className="flex-1 overflow-hidden">
+                    <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
+                  </div>
+                )}
               </div>
             </Allotment.Pane>
           </Allotment>

@@ -108,7 +108,7 @@ function WorkflowNode({ data, selected }: NodeProps) {
 
   return (
     <div
-      className="bg-card rounded-lg shadow-md relative"
+      className="bg-card rounded-lg shadow-md relative cursor-pointer"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
     >
       {/* Color accent bar */}

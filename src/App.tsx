@@ -75,7 +75,7 @@ export default function App() {
         <Allotment>
           {sidebarOpen && (
             <Allotment.Pane preferredSize={240} minSize={180} maxSize={320}>
-              <SidebarRail onNavigateToItem={handleNavigateToItem} />
+              <SidebarRail onNavigateToItem={handleNavigateToItem} activeView={view} activeItem={pendingItem?.view === view ? pendingItem.name : undefined} />
             </Allotment.Pane>
           )}
           <Allotment.Pane>

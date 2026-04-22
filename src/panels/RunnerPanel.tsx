@@ -20,6 +20,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -103,14 +104,17 @@ export function RunnerPanel() {
 
   const handleSaveFile = useCallback(async () => {
     if (!selectedFile) return;
-    await writeFile(selectedFile, fileContent);
+    try {
+      await writeFile(selectedFile, fileContent);
+    } catch (e) {
+      console.error("Save failed:", e);
+    }
   }, [selectedFile, fileContent]);
 
   const handleEditorBlur = useCallback(() => {
     handleSaveFile();
   }, [handleSaveFile]);
 
-  // Ctrl+S keyboard shortcut
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -342,8 +346,8 @@ export function RunnerPanel() {
                         <div className="h-8 border-b border-border flex items-center px-3 gap-2 bg-card shrink-0">
                           <span className="text-xs font-medium">{selectedFile.split("/").pop()}</span>
                           <div className="flex-1" />
-                          <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSaveFile}>
-                            Save
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleSaveFile}>
+                            <Save size={14} />
                           </Button>
                         </div>
                         <div className="flex-1 overflow-hidden">
