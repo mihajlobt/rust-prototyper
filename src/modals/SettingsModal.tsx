@@ -21,6 +21,7 @@ import {
 import { Settings, Plus, Trash2 } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { listOllamaModels, type ModelInfo } from "@/lib/ipc";
+import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
 
 export function SettingsModal() {
   const { settings, setSettings } = useSettings();
@@ -162,6 +163,27 @@ export function SettingsModal() {
                 value={settings.stylePreset}
                 onChange={(e) => setSettings({ stylePreset: e.target.value })}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Editor theme</Label>
+              <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {Object.entries(EDITOR_THEMES).map(([key, { label, dark }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSettings({ editorTheme: key })}
+                    className={[
+                      "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-left transition-colors border",
+                      settings.editorTheme === key
+                        ? "border-primary bg-primary/10 text-foreground font-medium"
+                        : "border-transparent hover:border-border hover:bg-muted text-muted-foreground",
+                    ].join(" ")}
+                  >
+                    <span className={["w-2.5 h-2.5 rounded-full shrink-0 border border-border", dark ? "bg-zinc-800" : "bg-zinc-100"].join(" ")} />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </TabsContent>
 
