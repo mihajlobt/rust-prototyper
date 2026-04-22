@@ -1,68 +1,117 @@
 import { useState } from "react";
-import { Icons } from "@/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Download, FileCode } from "lucide-react";
+import { save } from "@tauri-apps/plugin-dialog";
+import { exportComponent } from "@/lib/ipc";
+import { useSettings } from "@/hooks/useSettings";
 
-export function ComponentExportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface ComponentExportModalProps {
+  componentId?: string;
+  trigger?: React.ReactNode;
+}
+
+export function ComponentExportModal({ componentId, trigger }: ComponentExportModalProps) {
+  const { settings } = useSettings();
+  const [open, setOpen] = useState(false);
   const [format, setFormat] = useState("tsx");
-  const [include, setInclude] = useState({ types: true, storybook: false, test: false, css: true });
-  if (!open) return null;
+  const [includeTypes, setIncludeTypes] = useState(true);
+  const [includeStorybook, setIncludeStorybook] = useState(false);
+  const [includeTests, setIncludeTests] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!componentId) return;
+    setExporting(true);
+    try {
+      const outputPath = await save({
+        filters: [{ name: "Zip", extensions: ["zip"] }],
+        defaultPath: `${componentId}-component.zip`,
+      });
+      if (!outputPath) {
+        setExporting(false);
+        return;
+      }
+      const path = await exportComponent(
+        settings.project,
+        componentId,
+        outputPath,
+        format,
+        includeTypes,
+        includeStorybook,
+        includeTests
+      );
+      alert(`Exported to: ${path}`);
+      setOpen(false);
+    } catch (e) {
+      alert(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <div className="pi-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={onClose}>
-      <div className="card" style={{ width: 480, maxHeight: "82vh", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-        <div className="pi-head" style={{ borderBottom: "1px solid var(--line-soft)", flexShrink: 0 }}>
-          <div className="col">
-            <div className="pi-title">Export Component</div>
-            <div className="pi-sub">Package the generated component for use in your project</div>
-          </div>
-          <div style={{ flex: 1 }} />
-          <button className="icon-btn" onClick={onClose}><Icons.x size={13} /></button>
-        </div>
-        <div className="pad-4 col gap-4" style={{ overflow: "auto", flex: 1 }}>
-          <div>
-            <div className="caps" style={{ marginBottom: 6 }}>Format</div>
-            <div className="seg" style={{ flexWrap: "wrap" }}>
-              {[
-                { id: "tsx", label: "React TSX" },
-                { id: "jsx", label: "React JSX" },
-                { id: "vue", label: "Vue SFC" },
-                { id: "svelte", label: "Svelte" },
-                { id: "webc", label: "Web Component" },
-              ].map((f) => (
-                <button key={f.id} data-on={format === f.id} onClick={() => setFormat(f.id)}>{f.label}</button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || (
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-7">
+            <Download size={12} />
+            Export
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Export Component</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Format</Label>
+            <div className="flex gap-2">
+              {["tsx", "jsx", "vue", "svelte"].map((f) => (
+                <Button
+                  key={f}
+                  variant={format === f ? "default" : "outline"}
+                  size="sm"
+                  className="text-xs capitalize"
+                  onClick={() => setFormat(f)}
+                >
+                  {f}
+                </Button>
               ))}
             </div>
           </div>
-          <div>
-            <div className="caps" style={{ marginBottom: 6 }}>Include</div>
-            <div className="col gap-2">
-              {[
-                { key: "types", label: "Type definitions", desc: "Props interface / type exports" },
-                { key: "css", label: "Styles", desc: "Tailwind classes or CSS module" },
-                { key: "storybook", label: "Storybook story", desc: "Default + variant stories" },
-                { key: "test", label: "Unit test", desc: "Vitest + React Testing Library scaffold" },
-              ].map((item) => (
-                <label key={item.key} className="row gap-2" style={{ alignItems: "flex-start", padding: 8, borderRadius: 8, background: "var(--n-1)", border: "1px solid var(--line-soft)", cursor: "pointer" }}>
-                  <input type="checkbox" checked={include[item.key as keyof typeof include]} onChange={(e) => setInclude({ ...include, [item.key]: e.target.checked })} />
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{item.label}</div>
-                    <div style={{ fontSize: 10, color: "var(--fg-mute)" }}>{item.desc}</div>
-                  </div>
-                </label>
-              ))}
+          <div className="space-y-2">
+            <Label>Options</Label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox id="types" checked={includeTypes} onCheckedChange={(c) => setIncludeTypes(c === true)} />
+                <Label htmlFor="types" className="text-sm font-normal">Type definitions</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="storybook" checked={includeStorybook} onCheckedChange={(c) => setIncludeStorybook(c === true)} />
+                <Label htmlFor="storybook" className="text-sm font-normal">Storybook</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="tests" checked={includeTests} onCheckedChange={(c) => setIncludeTests(c === true)} />
+                <Label htmlFor="tests" className="text-sm font-normal">Tests</Label>
+              </div>
             </div>
           </div>
-          <div className="hair" />
-          <div className="col gap-2">
-            <div className="caps">Output preview</div>
-            <pre className="code-pane mono" style={{ fontSize: 11, padding: 10, borderRadius: 8, background: "var(--n-1)" }}>{format === "tsx"
-              ? `export interface LoginCardProps {\n  onSignIn: (user: string) => void;\n}\n\nexport function LoginCard({ onSignIn }: LoginCardProps) {\n  return <div>…</div>;\n}`
-              : "// component output"}</pre>
-          </div>
+          <Button className="w-full gap-1" onClick={handleExport} disabled={exporting || !componentId}>
+            <FileCode size={14} />
+            {exporting ? "Exporting…" : "Export Component"}
+          </Button>
         </div>
-        <div className="pad-4 row gap-2" style={{ borderTop: "1px solid var(--line-soft)", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn--acc"><Icons.file size={12} /> Export {format}</button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

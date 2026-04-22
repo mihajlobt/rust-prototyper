@@ -1,140 +1,242 @@
-import { useState } from "react";
-import { Icons } from "@/icons";
-import { LIB_THEMES } from "@/data";
+import { useState, useCallback, useEffect } from "react";
+import { Allotment } from "allotment";
+import { Send, Smartphone, Tablet, Monitor, Save, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { generateCompletion, getApiKey, writeFile, createDir, readFile } from "@/lib/ipc";
+import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
-export function ThemesPanel({ cmTheme }: { cmTheme: string }) {
-  const [selected, setSelected] = useState("t4");
-  const [prompt, setPrompt] = useState("A cool teal-on-ink cyberpunk theme using OKLCH, designed for a developer dashboard.");
-  const [showCss, setShowCss] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(true);
-  const theme = LIB_THEMES.find((t) => t.id === selected) ?? LIB_THEMES[0]!;
-  const isDark = theme.dark;
+const THEME_CSS_PATH = "./projects/{project}/themes/main/theme.css";
+const THEME_PROMPT_PATH = "./projects/{project}/themes/main/prompt.json";
+
+export function ThemesPanel() {
+  const { settings, setSettings } = useSettings();
+  const [prompt, setPrompt] = useState("");
+  const [css, setCss] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
+  const [presetName, setPresetName] = useState("");
+
+  // Load persisted theme on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cssPath = THEME_CSS_PATH.replace("{project}", settings.project);
+        const saved = await readFile(cssPath);
+        if (!cancelled) setCss(saved);
+      } catch {
+        // no saved theme
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.project]);
+
+  const persistTheme = useCallback(async (content: string, p: string) => {
+    try {
+      const base = THEME_CSS_PATH.replace("{project}", settings.project).replace("/theme.css", "");
+      await createDir(base);
+      await writeFile(THEME_CSS_PATH.replace("{project}", settings.project), content);
+      await writeFile(THEME_PROMPT_PATH.replace("{project}", settings.project), JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
+    } catch {
+      // ignore
+    }
+  }, [settings.project]);
+
+  const frameworkPrompts: Record<string, string> = {
+    shadcn: "Generate CSS custom properties compatible with shadcn/ui (using oklch colors): --background, --foreground, --card, --card-foreground, --popover, --popover-foreground, --primary, --primary-foreground, --secondary, --secondary-foreground, --muted, --muted-foreground, --accent, --accent-foreground, --destructive, --destructive-foreground, --border, --input, --ring, --radius.",
+    daisy: "Generate CSS custom properties compatible with DaisyUI: --primary, --primary-content, --secondary, --secondary-content, --accent, --accent-content, --neutral, --neutral-content, --base-100, --base-200, --base-300, --base-content, --info, --info-content, --success, --success-content, --warning, --warning-content, --error, --error-content.",
+    bootstrap: "Generate CSS custom properties compatible with Bootstrap 5: --bs-primary, --bs-secondary, --bs-success, --bs-info, --bs-warning, --bs-danger, --bs-light, --bs-dark, --bs-body-bg, --bs-body-color, --bs-border-color.",
+    generic: "Generate CSS custom properties for a generic design system: --background, --foreground, --primary, --primary-foreground, --secondary, --secondary-foreground, --accent, --accent-foreground, --muted, --muted-foreground, --border, --radius.",
+  };
+
+  const generate = useCallback(async () => {
+    if (!prompt.trim() || loading) return;
+    setLoading(true);
+    try {
+      const msgs = [
+        {
+          role: "system",
+          content: `You are a CSS theme generator. ${frameworkPrompts[framework]} No explanations, no markdown code blocks. Just raw CSS.`,
+        },
+        { role: "user", content: prompt.trim() },
+      ];
+      const response = await generateCompletion(settings.modelId, msgs, false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
+      const data = JSON.parse(response);
+      const content = data.message?.content || data.response || response;
+      const clean = content.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "").trim();
+      setCss(clean);
+      await persistTheme(clean, prompt);
+    } catch (e) {
+      setCss(`/* Error: ${e instanceof Error ? e.message : String(e)} */`);
+    } finally {
+      setLoading(false);
+    }
+  }, [prompt, loading, settings.modelId, settings.apiKeys, framework, persistTheme]);
+
+  const handleSaveCss = async () => {
+    await persistTheme(css, prompt);
+    // Also save as preset
+    const next = [...settings.styles, { name: `Theme ${settings.styles.length + 1}`, value: css }];
+    await setSettings({ styles: next });
+  };
+
+  const deviceWidth = {
+    desktop: "100%",
+    tablet: "768px",
+    mobile: "375px",
+  };
+
+  const previewHtml = css
+    ? `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ${css}
+    body{margin:0;padding:16px;font-family:sans-serif;background:var(--background,#fff);color:var(--foreground,#000);}
+  </style>
+</head>
+<body>
+  <div class="p-4 space-y-4">
+    <h1 class="text-2xl font-bold">Theme Preview</h1>
+    <button class="px-4 py-2 rounded" style="background:var(--primary,#333);color:var(--primary-foreground,#fff)">Primary Button</button>
+    <button class="px-4 py-2 rounded" style="background:var(--secondary,#eee);color:var(--secondary-foreground,#333)">Secondary Button</button>
+    <div class="p-4 rounded border" style="background:var(--card,#fff);border-color:var(--border,#ddd)">Card content</div>
+    <p style="color:var(--muted-foreground,#666)">Muted text</p>
+  </div>
+</body>
+</html>`
+    : "";
 
   return (
-    <div className="view-body">
-      <div className="split">
-        <div className="split-pane">
-          <div className="panel-head"><div className="panel-title">Prompt</div></div>
-          <div className="pad-4 col gap-3" style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-            <textarea className="textarea" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={4} />
-            <div className="row gap-2" style={{ alignItems: "center" }}>
-              <button className="btn btn--acc"><Icons.sparkles size={12} /> Generate</button>
-              <button className="btn"><Icons.save size={12} /> Save as preset</button>
-              <div style={{ flex: 1 }} />
-              <div className="seg">
-                <button data-on="true">shadcn</button>
-                <button>daisy</button>
-                <button>bootstrap</button>
-                <button>generic</button>
+    <div className="h-full flex flex-col">
+      <Allotment>
+        <Allotment.Pane minSize={300}>
+          <div className="h-full flex flex-col bg-card">
+            <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+              <span className="text-sm font-medium">Prompt</span>
+              <div className="flex-1" />
+              <div className="flex gap-1">
+                {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
+                  <Button
+                    key={f}
+                    variant={framework === f ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-6 text-[10px] capitalize"
+                    onClick={() => setFramework(f)}
+                  >
+                    {f}
+                  </Button>
+                ))}
               </div>
             </div>
-            <div className="hair" style={{ margin: "2px 0" }} />
-            <button className="row gap-2" style={{ alignItems: "center", padding: "4px 0", background: "none", border: "none", color: "var(--fg-mute)", cursor: "pointer", fontSize: 11 }} onClick={() => setShowLibrary(!showLibrary)}>
-              <Icons.chevD size={10} style={{ transform: showLibrary ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }} />
-              <span className="caps">Library</span>
-              <span className="pill" style={{ fontSize: 9 }}>{LIB_THEMES.length}</span>
-            </button>
-            {showLibrary && (
-              <div className="grid-3">
-                {LIB_THEMES.map((t) => (
-                  <div key={t.id} className="card theme-card" data-selected={selected === t.id} onClick={() => setSelected(t.id)}>
-                    <div className="theme-preview">
-                      <div className="theme-preview-hero" style={{ background: t.dark ? "#0f0e0c" : "#faf8f2", color: t.dark ? "#fff" : "#111" }}>
-                        <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-                          <button className="theme-btn" style={{ background: t.button, color: t.dark ? "#fff" : "#000", fontSize: 9 }}>Primary</button>
-                          <button className="theme-btn" style={{ background: "transparent", color: t.dark ? "#fff" : "#111", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.15)", fontSize: 9 }}>Ghost</button>
-                        </div>
-                        <div style={{ fontSize: 10, fontWeight: 600 }}>The quick brown fox</div>
-                        <div style={{ fontSize: 9, opacity: 0.7 }}>jumps over the lazy dog</div>
-                      </div>
-                    </div>
-                    <div className="row gap-2" style={{ padding: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 500 }}>{t.name}</span>
-                      <div className="row gap-1" style={{ marginLeft: "auto" }}>
-                        {t.swatches.map((s, i) => <div key={i} className="sw" style={{ background: s }} />)}
-                      </div>
-                    </div>
+            <div className="flex-1 overflow-auto p-3">
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe the theme you want to generate..."
+                className="h-full resize-none text-sm"
+              />
+            </div>
+            <div className="p-3 border-t border-border shrink-0 flex gap-2">
+              <Button className="gap-1 text-sm" onClick={generate} disabled={loading}>
+                <Send size={14} />
+                {loading ? "Generating…" : "Generate"}
+              </Button>
+              <Button variant="outline" className="gap-1 text-sm" onClick={handleSaveCss} disabled={!css}>
+                <Save size={14} />
+                Save
+              </Button>
+            </div>
+            <div className="px-3 pb-3 flex gap-2">
+              <Input
+                placeholder="Preset name..."
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                className="h-7 text-xs"
+              />
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={async () => {
+                if (!css || !presetName.trim()) return;
+                const next = [...settings.styles, { name: presetName.trim(), value: css }];
+                await setSettings({ styles: next });
+                setPresetName("");
+              }} disabled={!css || !presetName.trim()}>
+                <Plus size={12} />
+                Preset
+              </Button>
+            </div>
+          </div>
+        </Allotment.Pane>
+
+        <Allotment.Pane minSize={400}>
+          <Allotment vertical>
+            <Allotment.Pane>
+              <div className="h-full flex flex-col">
+                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+                  <span className="text-sm font-medium">Preview</span>
+                  <div className="flex-1" />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant={device === "mobile" ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setDevice("mobile")}
+                    >
+                      <Smartphone size={12} />
+                    </Button>
+                    <Button
+                      variant={device === "tablet" ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setDevice("tablet")}
+                    >
+                      <Tablet size={12} />
+                    </Button>
+                    <Button
+                      variant={device === "desktop" ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setDevice("desktop")}
+                    >
+                      <Monitor size={12} />
+                    </Button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="sash sash--v" />
-        <div className="split-pane" style={{ position: "relative" }}>
-          <div style={{ flex: 1, overflow: "auto", padding: 24, background: isDark ? "#0c0c11" : "#fafafa", color: isDark ? "#fff" : "#111" }}>
-            <div style={{ maxWidth: 420, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Common Components</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, border: "none", cursor: "default", background: theme.button, color: isDark ? "#fff" : "#000" }}>Primary</button>
-                <button style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, border: "none", cursor: "default", background: "transparent", color: isDark ? "#fff" : "#111", boxShadow: `inset 0 0 0 1px ${theme.accent}40` }}>Secondary</button>
-                <button style={{ padding: "6px 12px", borderRadius: 8, fontSize: 12, border: "none", cursor: "default", background: "transparent", color: theme.accent, opacity: 0.9 }}>Ghost</button>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 11, opacity: 0.7 }}>Email</label>
-                <input defaultValue="hello@prototyper.dev" style={{ padding: "8px 10px", borderRadius: 8, fontSize: 12, background: isDark ? "rgba(255,255,255,0.06)" : "#fff", border: `1px solid ${theme.accent}30`, color: "inherit", outline: "none" }} />
-              </div>
-              <div style={{ padding: 16, borderRadius: 10, background: isDark ? "rgba(255,255,255,0.05)" : "#fff", border: `1px solid ${theme.accent}20`, boxShadow: isDark ? "0 10px 30px rgba(0,0,0,.3)" : "0 4px 12px rgba(0,0,0,.05)" }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>Invite team members</div>
-                <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>Send an invite link to collaborate.</div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  <span className="pill mono" style={{ fontSize: 10 }}>https://proto.dev/invite</span>
-                  <button style={{ padding: "4px 8px", borderRadius: 6, fontSize: 10, border: "none", cursor: "default", background: theme.button, color: isDark ? "#fff" : "#000" }}>Copy</button>
+                </div>
+                <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
+                  {previewHtml ? (
+                    <div
+                      className="h-full bg-background shadow-lg border border-border overflow-hidden"
+                      style={{ width: deviceWidth[device] }}
+                    >
+                      <iframe srcDoc={previewHtml} className="w-full h-full" sandbox="allow-scripts" />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center text-muted-foreground text-sm">
+                      Generated themes will preview here
+                    </div>
+                  )}
                 </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 11, opacity: 0.7 }}>Status</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderRadius: 8, border: `1px solid ${theme.accent}30`, background: isDark ? "rgba(255,255,255,0.06)" : "#fff", cursor: "default" }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, background: theme.accent }} />
-                  <span style={{ fontSize: 12, flex: 1 }}>Active</span>
-                  <Icons.chevD size={10} style={{ opacity: 0.6 }} />
+            </Allotment.Pane>
+
+            <Allotment.Pane preferredSize={300}>
+              <div className="h-full flex flex-col">
+                <div className="h-8 border-b border-border flex items-center px-3 bg-card shrink-0">
+                  <span className="text-xs font-medium">CSS Output</span>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["Design", "Engineering", "Marketing"].map((tag, i) => (
-                  <span key={tag} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, background: i === 0 ? theme.accent + "20" : (isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"), color: i === 0 ? theme.accent : "inherit", border: i === 0 ? `1px solid ${theme.accent}40` : `1px solid transparent` }}>{tag}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {showCss && (
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%", display: "flex", flexDirection: "column", background: "var(--n-0)", borderTop: "1px solid var(--line)", zIndex: 3 }}>
-              <div className="panel-head" style={{ flexShrink: 0, borderBottom: "1px solid var(--line-soft)" }}>
-                <div className="panel-title">CSS Output</div>
-                <div style={{ flex: 1 }} />
-                <span className="pill mono" style={{ fontSize: 9 }}>oklch</span>
-                <button className="icon-btn" onClick={() => setShowCss(false)}><Icons.x size={12} /></button>
-              </div>
-              <CodeMirrorEditor mode="css" theme={cmTheme} value={`:root {
-  --background: oklch(0.18 0.025 200);
-  --foreground: oklch(0.96 0.008 170);
-  --card:       oklch(0.22 0.028 195);
-  --border:     oklch(0.30 0.030 195);
-  --primary:    oklch(0.82 0.14 180);
-  --primary-foreground: oklch(0.18 0.04 200);
-  --accent:     oklch(0.78 0.16 176);
-  --muted:      oklch(0.28 0.018 200);
-  --radius:     0.5rem;
-}
-.dark {
-  --background: oklch(0.14 0.025 200);
-}
-@font-face { font-family: "Geist"; src: ... }`} style={{ flex: 1 }} />
-            </div>
-          )}
-
-          {!showCss && (
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 32, display: "flex", alignItems: "center", padding: "0 12px", gap: 8, background: "var(--n-1)", borderTop: "1px solid var(--line-soft)", cursor: "pointer", zIndex: 2 }} onClick={() => setShowCss(true)}>
-              <Icons.terminal size={11} />
-              <span style={{ fontSize: 11, fontWeight: 500 }}>CSS Output</span>
-              <div style={{ flex: 1 }} />
-              <span className="pill mono" style={{ fontSize: 9 }}>oklch</span>
-            </div>
-          )}
-        </div>
-      </div>
+            </Allotment.Pane>
+          </Allotment>
+        </Allotment.Pane>
+      </Allotment>
     </div>
   );
 }

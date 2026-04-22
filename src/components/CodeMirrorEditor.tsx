@@ -1,65 +1,66 @@
-import { useRef, useEffect } from "react";
-import CodeMirror from "codemirror";
-import "codemirror/lib/codemirror.css";
-import "codemirror/mode/javascript/javascript";
-import "codemirror/mode/css/css";
-import "codemirror/mode/jsx/jsx";
-import "codemirror/mode/xml/xml";
-import "codemirror/mode/shell/shell";
+import { useCallback, useMemo } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { javascript } from "@codemirror/lang-javascript";
+import { css } from "@codemirror/lang-css";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import type { Extension } from "@codemirror/state";
 
-import "codemirror/theme/monokai.css";
-import "codemirror/theme/dracula.css";
-import "codemirror/theme/nord.css";
-import "codemirror/theme/material.css";
-import "codemirror/theme/ayu-dark.css";
-import "codemirror/theme/vibrant-ink.css";
-import "codemirror/theme/moxer.css";
-
-export const CODE_THEMES = [
-  { id: "monokai", label: "Neon" },
-  { id: "dracula", label: "Dracula" },
-  { id: "nord", label: "Nord" },
-  { id: "material", label: "Material" },
-  { id: "ayu-dark", label: "Ayu" },
-  { id: "vibrant-ink", label: "Vibrant" },
-  { id: "moxer", label: "Moxer" },
-];
+const modeMap: Record<string, Extension> = {
+  javascript: javascript(),
+  jsx: javascript({ jsx: true }),
+  typescript: javascript({ typescript: true }),
+  tsx: javascript({ jsx: true, typescript: true }),
+  css: css(),
+  json: json(),
+  markdown: markdown(),
+  shell: javascript(),
+};
 
 interface CodeMirrorEditorProps {
-  value?: string;
+  value: string;
+  onChange?: (value: string) => void;
   mode?: string;
   readOnly?: boolean;
-  theme?: string;
-  style?: React.CSSProperties;
+  className?: string;
+  placeholder?: string;
 }
 
-export function CodeMirrorEditor({ value, mode, readOnly = true, theme, style }: CodeMirrorEditorProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const cmRef = useRef<CodeMirror.Editor | null>(null);
+export function CodeMirrorEditor({
+  value,
+  onChange,
+  mode = "javascript",
+  readOnly = false,
+  className = "",
+  placeholder,
+}: CodeMirrorEditorProps) {
+  const extensions = useMemo(() => {
+    const ext = modeMap[mode];
+    return ext ? [ext] : [];
+  }, [mode]);
 
-  useEffect(() => {
-    if (!ref.current || typeof CodeMirror === "undefined") return;
-    cmRef.current = CodeMirror(ref.current, {
-      value: value || "",
-      mode: mode || "javascript",
-      theme: theme || "monokai",
-      readOnly: readOnly,
-      lineNumbers: true,
-      lineWrapping: true,
-      scrollbarStyle: "null",
-      viewportMargin: Infinity,
-    });
-    return () => {
-      if (cmRef.current) {
-        cmRef.current.getWrapperElement().remove();
-        cmRef.current = null;
-      }
-    };
-  }, []);
+  const handleChange = useCallback(
+    (val: string) => {
+      onChange?.(val);
+    },
+    [onChange]
+  );
 
-  useEffect(() => {
-    if (cmRef.current && theme) cmRef.current.setOption("theme", theme);
-  }, [theme]);
-
-  return <div ref={ref} style={{ fontSize: 12, flex: 1, minHeight: 0, ...style }} />;
+  return (
+    <CodeMirror
+      value={value}
+      height="100%"
+      extensions={extensions}
+      onChange={handleChange}
+      readOnly={readOnly}
+      placeholder={placeholder}
+      className={["h-full text-sm", className].join(" ")}
+      basicSetup={{
+        lineNumbers: true,
+        highlightActiveLineGutter: true,
+        highlightActiveLine: true,
+        foldGutter: true,
+      }}
+    />
+  );
 }

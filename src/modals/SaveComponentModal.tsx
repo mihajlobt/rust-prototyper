@@ -1,53 +1,87 @@
 import { useState } from "react";
-import { Icons } from "@/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Save } from "lucide-react";
+import { writeFile, createDir } from "@/lib/ipc";
+import { useSettings } from "@/hooks/useSettings";
 
-export function SaveComponentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [name, setName] = useState("LoginCard");
-  const [tag, setTag] = useState("auth");
-  const [desc, setDesc] = useState("A glassmorphic login card with email and password fields.");
-  const [scope, setScope] = useState("project");
-  if (!open) return null;
+interface SaveComponentModalProps {
+  code: string;
+  prompt: string;
+  trigger?: React.ReactNode;
+}
+
+export function SaveComponentModal({ code, prompt, trigger }: SaveComponentModalProps) {
+  const { settings } = useSettings();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const id = name.toLowerCase().replace(/\s+/g, "-");
+      const base = `./projects/${settings.project}/components/${id}`;
+      await createDir(base);
+      await writeFile(`${base}/component.tsx`, code);
+      await writeFile(`${base}/prompt.json`, JSON.stringify({ name, prompt, created: new Date().toISOString() }, null, 2));
+      setOpen(false);
+      setName("");
+    } catch (e) {
+      alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="pi-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={onClose}>
-      <div className="card" style={{ width: 420, maxHeight: "82vh", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-        <div className="pi-head" style={{ borderBottom: "1px solid var(--line-soft)", flexShrink: 0 }}>
-          <div className="col">
-            <div className="pi-title">Save Component</div>
-            <div className="pi-sub">Add this component to your library for reuse</div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || (
+          <Button variant="outline" size="sm" className="gap-1 text-sm">
+            <Save size={14} />
+            Save
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Save Component</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="comp-name">Name</Label>
+            <Input
+              id="comp-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="MyComponent"
+            />
           </div>
-          <div style={{ flex: 1 }} />
-          <button className="icon-btn" onClick={onClose}><Icons.x size={13} /></button>
+          <div className="space-y-1">
+            <Label htmlFor="comp-prompt">Prompt</Label>
+            <Textarea
+              id="comp-prompt"
+              value={prompt}
+              readOnly
+              className="min-h-[80px] text-sm"
+            />
+          </div>
+          <Button className="w-full" onClick={handleSave} disabled={saving || !name.trim()}>
+            {saving ? "Saving…" : "Save to Project"}
+          </Button>
         </div>
-        <div className="pad-4 col gap-3" style={{ overflow: "auto", flex: 1 }}>
-          <div>
-            <div className="caps">Name</div>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <div className="caps">Tag</div>
-            <input className="input" value={tag} onChange={(e) => setTag(e.target.value)} />
-          </div>
-          <div>
-            <div className="caps">Description</div>
-            <textarea className="textarea" rows={2} value={desc} onChange={(e) => setDesc(e.target.value)} />
-          </div>
-          <div>
-            <div className="caps">Scope</div>
-            <div className="seg">
-              {[
-                { id: "project", label: "Project", desc: "This workspace" },
-                { id: "library", label: "Library", desc: "Across projects" },
-              ].map((s) => (
-                <button key={s.id} data-on={scope === s.id} onClick={() => setScope(s.id)}>{s.label}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="pad-4 row gap-2" style={{ borderTop: "1px solid var(--line-soft)", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn--acc" onClick={onClose}><Icons.save size={12} /> Save</button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

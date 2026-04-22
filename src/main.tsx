@@ -1,22 +1,10 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "./App";
-import "./styles/tokens.css";
-import "./styles/base.css";
-import "./styles/workflows.css";
-import "./styles/panels.css";
-import "./styles/ui.css";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./styles/globals.css";
 
-const elem = document.getElementById("root")!;
-const app = (
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>
     <App />
-  </StrictMode>
+  </React.StrictMode>,
 );
-
-if (import.meta.hot) {
-  const root = (import.meta.hot.data.root ??= createRoot(elem));
-  root.render(app);
-} else {
-  createRoot(elem).render(app);
-}

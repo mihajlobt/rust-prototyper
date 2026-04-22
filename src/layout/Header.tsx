@@ -1,64 +1,138 @@
-import { useState } from "react";
-import { Icons } from "@/icons";
-import { ModelPicker } from "@/prompt-inspector";
-import { StylePresetPicker } from "@/components/StylePresetPicker";
-import { HostPicker } from "@/components/HostPicker";
+import {
+  LayoutGrid,
+  Box,
+  Palette,
+  GitBranch,
+  Play,
+  BookOpen,
+  Terminal,
+  ChevronDown,
+  Server,
+  Zap,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useState, useEffect } from "react";
+import { listOllamaModels } from "@/lib/ipc";
+import { useSettings } from "@/hooks/useSettings";
+import { SettingsModal } from "@/modals/SettingsModal";
 import { ProjectManagerModal } from "@/modals/ProjectManagerModal";
-import { cx } from "@/data";
+import { ExportModal } from "@/modals/ExportModal";
 
 const tabs = [
-  { id: "screens",    label: "Screens",    icon: "grid" },
-  { id: "components", label: "Components", icon: "cube" },
-  { id: "themes",     label: "Themes",     icon: "palette" },
-  { id: "workflows",  label: "Workflows",  icon: "flow" },
-  { id: "apis",       label: "APIs",       icon: "send" },
-  { id: "library",    label: "Library",    icon: "folder" },
-  { id: "runner",     label: "Run",        icon: "play" },
+  { id: "screens", label: "Screens", icon: LayoutGrid },
+  { id: "components", label: "Components", icon: Box },
+  { id: "themes", label: "Themes", icon: Palette },
+  { id: "workflows", label: "Workflows", icon: GitBranch },
+  { id: "apis", label: "APIs", icon: Terminal },
+  { id: "runner", label: "Runner", icon: Play },
+  { id: "library", label: "Library", icon: BookOpen },
 ];
 
-export function Header({
-  activeView, setActiveView, project, setProject, openSettings, modelId, setModelId, stylePreset, setStylePreset,
-}: {
+interface HeaderProps {
   activeView: string;
-  setActiveView: (v: string) => void;
-  project: string;
-  setProject: (v: string) => void;
-  openSettings: () => void;
-  modelId: string;
-  setModelId: (v: string) => void;
-  stylePreset: string;
-  setStylePreset: (v: string) => void;
-}) {
-  const [showProjectManager, setShowProjectManager] = useState(false);
+  onViewChange: (view: string) => void;
+}
+
+export function Header({ activeView, onViewChange }: HeaderProps) {
+  const { settings, setSettings } = useSettings();
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [hostStatus, setHostStatus] = useState<"online" | "offline">("offline");
+
+  useEffect(() => {
+    let cancelled = false;
+    const ping = async () => {
+      try {
+        const list = await listOllamaModels(settings.host);
+        if (!cancelled) {
+          setModels(list);
+          setHostStatus("online");
+        }
+      } catch {
+        if (!cancelled) setHostStatus("offline");
+      }
+    };
+    ping();
+    const interval = setInterval(ping, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [settings.host]);
+
   return (
-    <div className="hdr">
-      <div className="row gap-3" style={{ paddingLeft: 12 }}>
-        <div className="hdr-logo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M4 6 L12 2 L20 6 L20 18 L12 22 L4 18 Z" stroke="var(--acc)" strokeWidth="1.5" />
-            <path d="M4 6 L12 10 L20 6 M12 10 L12 22" stroke="var(--acc)" strokeWidth="1.5" opacity=".6" />
-          </svg>
-        </div>
-        <div className="hdr-wordmark">Prototyper</div>
-      </div>
-      <div className="hdr-tabs">
-        {tabs.map((t) => {
-          const Ic = Icons[t.icon as keyof typeof Icons];
+    <header className="h-12 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+      {/* View Tabs */}
+      <nav className="flex items-center gap-1">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = tab.id === activeView;
           return (
-            <button key={t.id} className={cx("hdr-tab", activeView === t.id && "hdr-tab--on")} onClick={() => setActiveView(t.id)}>
-              <Ic size={12} /> {t.label}
+            <button
+              key={tab.id}
+              onClick={() => onViewChange(tab.id)}
+              className={[
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors",
+                active
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              ].join(" ")}
+            >
+              <Icon size={14} />
+              {tab.label}
             </button>
           );
         })}
+      </nav>
+
+      <div className="flex-1" />
+
+      {/* Project Manager */}
+      <ProjectManagerModal />
+
+      {/* Export */}
+      <ExportModal />
+
+      {/* Host Status */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Server size={12} />
+        <span
+          className={[
+            "w-1.5 h-1.5 rounded-full",
+            hostStatus === "online" ? "bg-green-500" : "bg-red-500",
+          ].join(" ")}
+        />
+        <span className="max-w-[120px] truncate">{settings.host}</span>
       </div>
-      <div className="row gap-3" style={{ marginLeft: "auto", paddingRight: 10 }}>
-        <div className="pill" style={{ cursor: "pointer" }} onClick={() => setShowProjectManager(true)}><Icons.folder size={11} /> {project}</div>
-        <HostPicker />
-        <ModelPicker value={modelId} onChange={setModelId} />
-        <StylePresetPicker value={stylePreset} onChange={setStylePreset} />
-        <button className="icon-btn" onClick={openSettings} title="Settings"><Icons.cog size={14} /></button>
-      </div>
-      <ProjectManagerModal open={showProjectManager} onClose={() => setShowProjectManager(false)} project={project} setProject={setProject} />
-    </div>
+
+      {/* Model Picker */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-7">
+            <Zap size={12} />
+            <span className="max-w-[140px] truncate">{settings.modelId || "Select model"}</span>
+            <ChevronDown size={12} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {models.length === 0 && (
+            <DropdownMenuItem disabled>No models found</DropdownMenuItem>
+          )}
+          {models.map((m) => (
+            <DropdownMenuItem
+              key={m.id}
+              onClick={() => setSettings({ modelId: m.id })}
+            >
+              {m.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Settings */}
+      <SettingsModal />
+    </header>
   );
 }

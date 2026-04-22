@@ -1,99 +1,165 @@
-import { useState, useEffect } from "react";
-import { Icons } from "@/icons";
+import { useState, useEffect, useCallback } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Folder, Plus, Trash2, Loader2 } from "lucide-react";
+import { readDir, createDir, writeFile, deleteDir } from "@/lib/ipc";
+import { useSettings } from "@/hooks/useSettings";
 
 interface Project {
   id: string;
   name: string;
-  updated: string;
+  path: string;
 }
 
-export function ProjectManagerModal({ open, onClose, project, setProject }: { open: boolean; onClose: () => void; project: string; setProject: (v: string) => void }) {
-  const [projects, setProjects] = useState<Project[]>(() => {
+const PROJECTS_DIR = "./projects";
+
+export function ProjectManagerModal() {
+  const { settings, setSettings } = useSettings();
+  const [open, setOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+
+  const loadProjects = useCallback(async () => {
+    setLoading(true);
     try {
-      const saved = localStorage.getItem("pt.projects");
-      if (saved) return JSON.parse(saved);
-      return [
-        { id: "default", name: "Default Project", updated: "Just now" },
-        { id: "p2", name: "E-commerce App", updated: "2h ago" },
-        { id: "p3", name: "Portfolio Site", updated: "1d ago" },
-      ];
-    } catch { return [{ id: "default", name: "Default Project", updated: "Just now" }]; }
-  });
-  const [draft, setDraft] = useState(project);
-
-  useEffect(() => { localStorage.setItem("pt.projects", JSON.stringify(projects)); }, [projects]);
-  useEffect(() => { setDraft(project); }, [project, open]);
-
-  const saveCurrent = () => {
-    setProject(draft);
-    setProjects((ps) => {
-      const exists = ps.find((p) => p.name === project);
-      if (exists) {
-        return ps.map((p) => p.name === project ? { ...p, name: draft, updated: "Just now" } : p);
+      const entries = await readDir(PROJECTS_DIR);
+      const list: Project[] = [];
+      for (const entry of entries) {
+        if (entry.is_dir) {
+          list.push({
+            id: entry.name,
+            name: entry.name,
+            path: entry.path,
+          });
+        }
       }
-      return [{ id: "p" + Date.now(), name: draft, updated: "Just now" }, ...ps];
-    });
+      setProjects(list);
+    } catch {
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) loadProjects();
+  }, [open, loadProjects]);
+
+  const createProject = async () => {
+    if (!newProjectName.trim()) return;
+    const id = newProjectName.toLowerCase().replace(/\s+/g, "-");
+    const projectPath = `${PROJECTS_DIR}/${id}`;
+    await createDir(projectPath);
+    await createDir(`${projectPath}/screens`);
+    await createDir(`${projectPath}/components`);
+    await createDir(`${projectPath}/themes`);
+    await createDir(`${projectPath}/workflows`);
+    await createDir(`${projectPath}/apis`);
+    await createDir(`${projectPath}/generated`);
+    await writeFile(
+      `${projectPath}/project.json`,
+      JSON.stringify({ name: newProjectName, created: new Date().toISOString(), updated: new Date().toISOString() }, null, 2)
+    );
+    setNewProjectName("");
+    await loadProjects();
   };
 
-  const loadProject = (name: string) => { setProject(name); onClose(); };
-
-  const deleteProject = (id: string, name: string) => {
-    setProjects((ps) => ps.filter((p) => p.id !== id));
-    if (name === project) { setProject("Default Project"); }
+  const deleteProject = async (id: string) => {
+    if (!confirm(`Delete project "${id}"?`)) return;
+    try {
+      await deleteDir(`${PROJECTS_DIR}/${id}`);
+      await loadProjects();
+    } catch {
+      // ignore
+    }
   };
 
-  const createNew = () => {
-    const name = "New Project";
-    const id = "p" + Date.now();
-    setProjects((ps) => [{ id, name, updated: "Just now" }, ...ps]);
-    setProject(name);
-    setDraft(name);
+  const switchProject = async (id: string) => {
+    await setSettings({ project: id });
+    setOpen(false);
+    window.location.reload();
   };
 
-  if (!open) return null;
   return (
-    <div className="pi-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={onClose}>
-      <div className="card" style={{ width: 520, maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-        <div className="pi-head" style={{ borderBottom: "1px solid var(--line-soft)", flexShrink: 0 }}>
-          <div className="col">
-            <div className="pi-title">Project Manager</div>
-            <div className="pi-sub">Save, load and manage your prototypes</div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7">
+          <Folder size={12} />
+          {settings.project || "default"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Project Manager</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="New project name..."
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createProject()}
+            />
+            <Button onClick={createProject} disabled={!newProjectName.trim()}>
+              <Plus size={14} />
+            </Button>
           </div>
-          <div style={{ flex: 1 }} />
-          <button className="icon-btn" onClick={onClose}><Icons.x size={13} /></button>
-        </div>
-        <div className="pad-4 col gap-3" style={{ overflow: "auto", flex: 1 }}>
-          <div className="row gap-2" style={{ alignItems: "center" }}>
-            <div className="caps">Current</div>
-            <input className="input" value={draft} onChange={(e) => setDraft(e.target.value)} style={{ flex: 1 }} />
-            <button className="btn btn--acc" onClick={saveCurrent}><Icons.save size={12} /> Save</button>
-          </div>
-          <div className="hair" />
-          <div className="row gap-2" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <div className="caps">Projects</div>
-            <button className="btn" onClick={createNew}><Icons.plus size={12} /> New</button>
-          </div>
-          <div className="col gap-1">
-            {projects.map((p) => (
-              <div key={p.id} className="row gap-2" style={{ padding: "8px 10px", borderRadius: 8, background: p.name === project ? "var(--acc-soft)" : "var(--n-1)", alignItems: "center", cursor: "pointer", transition: "background .12s" }} onClick={() => loadProject(p.name)}>
-                <Icons.folder size={14} style={{ color: "var(--fg-mute)", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--fg-mute)" }}>{p.updated}</div>
-                </div>
-                {p.name === project ? (
-                  <span className="pill pill--acc" style={{ fontSize: 9 }}>active</span>
-                ) : (
-                  <button className="icon-btn" title="Delete" onClick={(e) => { e.stopPropagation(); deleteProject(p.id, p.name); }}><Icons.trash size={12} /></button>
-                )}
+
+          <div className="space-y-1 max-h-[300px] overflow-auto">
+            {loading && (
+              <div className="flex items-center justify-center py-4 text-muted-foreground">
+                <Loader2 size={16} className="animate-spin mr-2" />
+                Loading projects...
               </div>
-            ))}
+            )}
+            {projects.length === 0 && !loading && (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                No projects yet. Create one above.
+              </div>
+            )}
+            {projects.map((project) => {
+              const active = project.id === settings.project;
+              return (
+                <div
+                  key={project.id}
+                  className={[
+                    "flex items-center justify-between p-2 rounded border",
+                    active
+                      ? "bg-accent border-accent"
+                      : "bg-card border-border",
+                  ].join(" ")}
+                >
+                  <button
+                    className="flex-1 text-left text-sm font-medium"
+                    onClick={() => switchProject(project.id)}
+                  >
+                    {project.name}
+                    {active && (
+                      <span className="ml-2 text-xs text-muted-foreground">(active)</span>
+                    )}
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive"
+                    onClick={() => deleteProject(project.id)}
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="pad-4 row gap-2" style={{ borderTop: "1px solid var(--line-soft)", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button className="btn" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

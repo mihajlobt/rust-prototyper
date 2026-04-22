@@ -1,39 +1,100 @@
 import { useState } from "react";
-import { Icons } from "@/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PackagePlus } from "lucide-react";
+import { readFile, writeFile, bunInstall } from "@/lib/ipc";
+import { useSettings } from "@/hooks/useSettings";
 
-export function AddLibraryModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd?: (lib: string) => void }) {
-  const [custom, setCustom] = useState("");
-  const presets = ["framer-motion", "@radix-ui/react-dialog", "clsx", "class-variance-authority", "tailwind-merge", "date-fns", "zod"];
-  if (!open) return null;
+const NPM_NAME_REGEX = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
+
+interface AddLibraryModalProps {
+  onAdded?: () => void;
+  trigger?: React.ReactNode;
+}
+
+export function AddLibraryModal({ onAdded, trigger }: AddLibraryModalProps) {
+  const { settings } = useSettings();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleAdd = async () => {
+    setError("");
+    if (!name.trim()) return;
+    if (!NPM_NAME_REGEX.test(name.trim())) {
+      setError("Invalid npm package name");
+      return;
+    }
+    setAdding(true);
+    try {
+      const pkgPath = `./projects/${settings.project}/generated/package.json`;
+      let pkg: Record<string, unknown> = { dependencies: {} };
+      try {
+        const existing = await readFile(pkgPath);
+        pkg = JSON.parse(existing);
+      } catch {
+        // create new
+      }
+      const deps = (pkg.dependencies as Record<string, string>) || {};
+      deps[name.trim()] = "latest";
+      pkg.dependencies = deps;
+      await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
+      // Auto-install
+      try {
+        await bunInstall(`./projects/${settings.project}/generated`);
+      } catch {
+        // ignore install errors
+      }
+      setOpen(false);
+      setName("");
+      onAdded?.();
+    } catch (e) {
+      setError(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
-    <div className="pi-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={onClose}>
-      <div className="card" style={{ width: 360, display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-        <div className="pi-head" style={{ borderBottom: "1px solid var(--line-soft)", flexShrink: 0 }}>
-          <div className="col">
-            <div className="pi-title">Add Library</div>
-            <div className="pi-sub">Include an extra dependency in the generated component</div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || (
+          <Button variant="outline" size="sm" className="gap-1 text-xs h-7">
+            <PackagePlus size={12} />
+            Add Library
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add Library</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="lib-name">Package Name</Label>
+            <Input
+              id="lib-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="lodash"
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            />
           </div>
-          <div style={{ flex: 1 }} />
-          <button className="icon-btn" onClick={onClose}><Icons.x size={13} /></button>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button className="w-full" onClick={handleAdd} disabled={adding}>
+            {adding ? "Adding…" : "Add to package.json"}
+          </Button>
         </div>
-        <div className="pad-4 col gap-3" style={{ overflow: "auto", flex: 1 }}>
-          <div className="caps">Common</div>
-          <div className="row gap-1" style={{ flexWrap: "wrap" }}>
-            {presets.map((p) => (
-              <button key={p} className="tag" style={{ cursor: "pointer" }} onClick={() => { onAdd?.(p); onClose(); }}>{p}</button>
-            ))}
-          </div>
-          <div className="hair" style={{ margin: "2px 0" }} />
-          <div className="caps">Custom</div>
-          <div className="row gap-2">
-            <input className="input mono" placeholder="npm-package-name" value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => e.key === "Enter" && custom.trim() && (onAdd?.(custom.trim()), onClose())} style={{ flex: 1, fontSize: 12 }} />
-            <button className="btn btn--acc" style={{ padding: "5px 10px", fontSize: 11 }} onClick={() => { if (custom.trim()) { onAdd?.(custom.trim()); onClose(); } }}>Add</button>
-          </div>
-        </div>
-        <div className="pad-4 row gap-2" style={{ borderTop: "1px solid var(--line-soft)", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
