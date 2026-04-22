@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { encodingForModel } from "js-tiktoken";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Copy, Eye } from "lucide-react";
@@ -13,8 +14,18 @@ interface PromptInspectorProps {
   host: string;
 }
 
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+function countTokens(text: string, model: string): number {
+  try {
+    const enc = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
+    return enc.encode(text).length;
+  } catch {
+    try {
+      const enc = encodingForModel("gpt-4");
+      return enc.encode(text).length;
+    } catch {
+      return Math.ceil(text.length / 4);
+    }
+  }
 }
 
 interface ModelPricing {
@@ -37,7 +48,7 @@ function getModelPricing(model: string): ModelPricing {
 }
 
 export function PromptInspector({ model, messages, host }: PromptInspectorProps) {
-  const [copied, setCopied] = useState(false);
+  const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [fetchedContextWindow, setFetchedContextWindow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -59,7 +70,7 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
   }, [model, host]);
 
   const assembled = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
-  const tokenCount = useMemo(() => estimateTokens(assembled), [assembled]);
+  const tokenCount = useMemo(() => countTokens(assembled, model), [assembled, model]);
   const heuristicContextWindow = getContextWindow(model);
   const contextWindow = fetchedContextWindow ?? heuristicContextWindow;
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
@@ -104,13 +115,13 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     })}'`;
 
-  const handleCopy = async (text: string) => {
+  const handleCopy = async (text: string, tab: string) => {
     await writeText(text);
-    setCopied(true);
+    setCopiedTab(tab);
   };
 
   const handleCopiedAnimationEnd = () => {
-    setCopied(false);
+    setCopiedTab(null);
   };
 
   return (
@@ -151,10 +162,10 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
             variant="ghost"
             size="sm"
             className="absolute top-2 right-2 z-10 gap-1 text-xs"
-            onClick={() => handleCopy(assembled)}
+            onClick={() => handleCopy(assembled, "assembled")}
           >
             <Copy size={12} />
-            {copied ? (
+            {copiedTab === "assembled" ? (
               <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
             ) : "Copy"}
           </Button>
@@ -166,10 +177,10 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
             variant="ghost"
             size="sm"
             className="absolute top-2 right-2 z-10 gap-1 text-xs"
-            onClick={() => handleCopy(payload)}
+            onClick={() => handleCopy(payload, "json")}
           >
             <Copy size={12} />
-            {copied ? (
+            {copiedTab === "json" ? (
               <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
             ) : "Copy"}
           </Button>
@@ -181,10 +192,10 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
             variant="ghost"
             size="sm"
             className="absolute top-2 right-2 z-10 gap-1 text-xs"
-            onClick={() => handleCopy(curl)}
+            onClick={() => handleCopy(curl, "curl")}
           >
             <Copy size={12} />
-            {copied ? (
+            {copiedTab === "curl" ? (
               <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
             ) : "Copy"}
           </Button>
