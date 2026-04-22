@@ -11,7 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletion, getApiKey, writeFile, createDir, readFile, readDir, parseAiResponse, type FileEntry } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, writeFile, createDir, readFile, readDir, type FileEntry, type CompletionEvent, type Message } from "@/lib/ipc";
+import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
@@ -81,16 +82,27 @@ export function ThemesPanel() {
     try {
       const defaultSystem = `You are a CSS theme generator. ${frameworkPrompts[framework]} No explanations, no markdown code blocks. Just raw CSS.`;
       const systemContent = settings.prompts["themes-system"] || defaultSystem;
-      const msgs = [
-        {
-          role: "system",
-          content: systemContent,
-        },
+      const msgs: Message[] = [
+        { role: "system", content: systemContent },
         { role: "user", content: prompt.trim() },
       ];
-      const response = await generateCompletion(settings.modelId, msgs, settings.host, getApiKey(settings.modelId, settings.apiKeys));
-      const content = parseAiResponse(response);
-      const clean = content.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "").trim();
+
+      const channel = new Channel<CompletionEvent>();
+      let accumulated = "";
+      channel.onmessage = (msg: CompletionEvent) => {
+        if (msg.event === "Chunk") {
+          accumulated += msg.data.text;
+          setCss(accumulated.replace(/```[a-z]*\n?/g, "").replace(/```$/g, ""));
+        }
+      };
+
+      await generateCompletionStream(
+        settings.modelId, msgs, settings.host,
+        getApiKey(settings.modelId, settings.apiKeys),
+        channel
+      );
+
+      const clean = accumulated.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "").trim();
       setCss(clean);
       await persistTheme(clean, prompt);
     } catch (e) {

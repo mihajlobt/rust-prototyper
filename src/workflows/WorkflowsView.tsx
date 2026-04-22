@@ -4,7 +4,8 @@ import { Play, Square, ZoomIn, ZoomOut, Save, Trash2, Settings, Undo2, Redo2 } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { generateCompletion, getApiKey, httpRequest, runShellCommand, readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev, parseAiResponse, type FileEntry } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, httpRequest, runShellCommand, readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev, type FileEntry, type CompletionEvent, type Message } from "@/lib/ipc";
+import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 
 const MAX_UNDO = 50;
@@ -288,6 +289,19 @@ export function WorkflowsView() {
         const host = settings.host;
         const apiKey = getApiKey(model, settings.apiKeys);
 
+        const streamAI = async (msgs: Message[]): Promise<string> => {
+          const channel = new Channel<CompletionEvent>();
+          let accumulated = "";
+          channel.onmessage = (msg: CompletionEvent) => {
+            if (msg.event === "Chunk") {
+              accumulated += msg.data.text;
+              updateNode(nodeId, { output: accumulated.slice(0, 500) });
+            }
+          };
+          await generateCompletionStream(model, msgs, host, apiKey, channel);
+          return accumulated;
+        };
+
         switch (node.type) {
           case "input": {
             output = promptBase;
@@ -295,32 +309,27 @@ export function WorkflowsView() {
           }
           case "requirements": {
             const sys = customPrompts["workflow-requirements-system"] || "Extract and structure requirements from the user request. Output as bullet points.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }]);
             break;
           }
           case "architect": {
             const sys = customPrompts["workflow-architect-system"] || "Create a high-level architecture plan. List components, data flow, and state management.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }]);
             break;
           }
           case "structure": {
             const sys = customPrompts["workflow-structure-system"] || "Generate HTML/JSX structure. Output only code, no explanations.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }]);
             break;
           }
           case "style": {
             const sys = customPrompts["workflow-style-system"] || "Apply Tailwind CSS classes to the provided HTML/JSX. Output only the styled code.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }]);
             break;
           }
           case "interaction": {
             const sys = customPrompts["workflow-interaction-system"] || "Add React hooks and state management to the component. Output only code.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }]);
             break;
           }
           case "bash": {
@@ -387,14 +396,12 @@ export function WorkflowsView() {
           case "transform": {
             const transformPrompt = node.data?.prompt || "Clean up and format the input";
             const sys = customPrompts["workflow-transform-system"] || "Transform the provided content according to the instruction. Output only the transformed content.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: `Instruction: ${transformPrompt}\n\nContent: ${prevOutput}` }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: `Instruction: ${transformPrompt}\n\nContent: ${prevOutput}` }]);
             break;
           }
           case "validate": {
             const sys = customPrompts["workflow-validate-system"] || "Validate the provided code. List any syntax errors, type errors, or issues. If valid, say 'Valid'.";
-            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || "No code to validate" }], host, apiKey);
-            output = parseAiResponse(res);
+            output = await streamAI([{ role: "system", content: sys }, { role: "user", content: prevOutput || "No code to validate" }]);
             break;
           }
           case "preview": {

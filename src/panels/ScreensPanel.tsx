@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletion, getApiKey, writeFile, createDir, readFile, readDir, parseAiResponse, exportProject } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, writeFile, createDir, readFile, readDir, exportProject, type CompletionEvent, type Message } from "@/lib/ipc";
+import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -113,9 +114,13 @@ export function ScreensPanel() {
     setInput("");
     setLoading(true);
 
+    const assistantMsg: ChatMessage = { role: "assistant", content: "" };
+    const streamingMessages = [...nextMessages, assistantMsg];
+    setMessages(streamingMessages);
+
     try {
       const customSystem = settings.prompts["screens-system"];
-      const msgs: { role: string; content: string }[] = [];
+      const msgs: Message[] = [];
       if (customSystem) {
         msgs.push({ role: "system", content: customSystem });
       }
@@ -126,8 +131,23 @@ export function ScreensPanel() {
         const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.split("/").pop()).join(", ")}]`;
         msgs[msgs.length - 1].content += attachmentContext;
       }
-      const response = await generateCompletion(settings.modelId, msgs, settings.host, getApiKey(settings.modelId, settings.apiKeys));
-      const assistantContent = parseAiResponse(response);
+
+      const channel = new Channel<CompletionEvent>();
+      let accumulated = "";
+      channel.onmessage = (msg: CompletionEvent) => {
+        if (msg.event === "Chunk") {
+          accumulated += msg.data.text;
+          setMessages([...nextMessages, { role: "assistant", content: accumulated }]);
+        }
+      };
+
+      await generateCompletionStream(
+        settings.modelId, msgs, settings.host,
+        getApiKey(settings.modelId, settings.apiKeys),
+        channel
+      );
+
+      const assistantContent = accumulated || "No response";
       const finalMessages = [...nextMessages, { role: "assistant" as const, content: assistantContent }];
       setMessages(finalMessages);
       await persistChat(finalMessages);

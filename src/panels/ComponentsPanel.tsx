@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletion, getApiKey, writeFile, createDir, readDir, readFile, parseAiResponse, bunDev, killProcess } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, writeFile, createDir, readDir, readFile, bunDev, killProcess, type CompletionEvent, type Message } from "@/lib/ipc";
+import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
@@ -125,22 +126,31 @@ export function ComponentsPanel() {
         : "";
       const defaultSystem = `You are a React component generator. Generate only the component code in TSX format. No explanations, no markdown code blocks. Just raw code. Export the component as default.${themePrompt}`;
       const systemContent = settings.prompts["components-system"] || defaultSystem;
-      const msgs = [
-        {
-          role: "system",
-          content: systemContent,
-        },
+      const msgs: Message[] = [
+        { role: "system", content: systemContent },
         { role: "user", content: prompt.trim() },
       ];
-      const response = await generateCompletion(settings.modelId, msgs, settings.host, getApiKey(settings.modelId, settings.apiKeys));
-      const content = parseAiResponse(response);
-      const clean = content.replace(/\`\`\`[a-z]*\n?/g, "").replace(/\`\`\`$/g, "").trim();
+
+      const channel = new Channel<CompletionEvent>();
+      let accumulated = "";
+      channel.onmessage = (msg: CompletionEvent) => {
+        if (msg.event === "Chunk") {
+          accumulated += msg.data.text;
+          setCode(accumulated.replace(/\`\`\`[a-z]*\n?/g, "").replace(/\`\`\`$/g, ""));
+        }
+      };
+
+      await generateCompletionStream(
+        settings.modelId, msgs, settings.host,
+        getApiKey(settings.modelId, settings.apiKeys),
+        channel
+      );
+
+      const clean = accumulated.replace(/\`\`\`[a-z]*\n?/g, "").replace(/\`\`\`$/g, "").trim();
       setCode(clean);
-      // Auto-save to generated directory
       const genDir = `projects/${settings.project}/generated`;
       await createDir(`${genDir}/src/components`);
       await writeFile(`${genDir}/src/components/Generated.tsx`, clean);
-      // Write preview files
       await writeFile(`${genDir}/preview.html`, PREVIEW_HTML);
       await writeFile(`${genDir}/src/preview.tsx`, PREVIEW_TSX);
     } catch (e) {
