@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Send, Paperclip, ImageIcon, Smartphone, Tablet, Monitor, Eye, Plus, Download } from "lucide-react";
+import { Send, Paperclip, ImageIcon, Smartphone, Tablet, Monitor, Eye, Plus, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,15 @@ interface ChatMessage {
   content: string;
 }
 
+function wordCount(text: string) {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
+function modelSupportsVision(modelId: string) {
+  const lower = modelId.toLowerCase();
+  return lower.includes("vision") || lower.includes("llava") || lower.includes("gpt-4o") || lower.includes("claude-3") || lower.includes("gemini");
+}
+
 export function ScreensPanel() {
   const { settings } = useSettings();
   const [screenId, setScreenId] = useState("main");
@@ -40,7 +49,8 @@ export function ScreensPanel() {
   const [showInspector, setShowInspector] = useState(false);
   const [linkMode, setLinkMode] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [attachments, setAttachments] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<Array<{ path: string; name: string; size?: number }>>([]);
+  const [updateExisting, setUpdateExisting] = useState(true);
   const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
   const [showNewScreenDialog, setShowNewScreenDialog] = useState(false);
   const [newScreenName, setNewScreenName] = useState("");
@@ -128,7 +138,7 @@ export function ScreensPanel() {
         msgs.push({ role: m.role, content: m.content });
       }
       if (attachments.length > 0) {
-        const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.split("/").pop()).join(", ")}]`;
+        const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.name).join(", ")}]`;
         msgs[msgs.length - 1].content += attachmentContext;
       }
 
@@ -184,7 +194,7 @@ export function ScreensPanel() {
           const filename = `paste-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
           await createDir(attachmentsDir);
           await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, `${attachmentsDir}/${filename}`]);
+          setAttachments((prev) => [...prev, { path: `${attachmentsDir}/${filename}`, name: filename, size: file.size }]);
         };
         reader.readAsDataURL(file);
       }
@@ -202,7 +212,7 @@ export function ScreensPanel() {
           const filename = `drop-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
           await createDir(attachmentsDir);
           await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, `${attachmentsDir}/${filename}`]);
+          setAttachments((prev) => [...prev, { path: `${attachmentsDir}/${filename}`, name: file.name, size: file.size }]);
         };
         reader.readAsDataURL(file);
       }
@@ -219,7 +229,7 @@ export function ScreensPanel() {
           const filename = `upload-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
           await createDir(attachmentsDir);
           await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, `${attachmentsDir}/${filename}`]);
+          setAttachments((prev) => [...prev, { path: `${attachmentsDir}/${filename}`, name: file.name, size: file.size }]);
         };
         reader.readAsDataURL(file);
       }
@@ -335,27 +345,27 @@ export function ScreensPanel() {
                               : "bg-muted text-foreground",
                           ].join(" ")}
                         >
-                          <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                          {loading && i === messages.length - 1 && msg.role === "assistant" && msg.content === "" ? (
+                            <span className="flex items-center gap-1 text-muted-foreground text-xs">
+                              <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                              <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                              <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                              <span className="ml-1">thinking</span>
+                            </span>
+                          ) : (
+                            <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                          )}
                         </div>
                       </div>
                     ))}
-                    {loading && (
-                      <div className="flex justify-start">
-                        <div className="bg-muted rounded-lg px-3 py-2 text-sm">
-                          <span className="animate-pulse">Generating…</span>
-                        </div>
-                      </div>
-                    )}
                     <div ref={messagesEndRef} />
                   </div>
-                  <div className="p-3 border-t border-border shrink-0">
+                  <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
                     <div className="flex items-end gap-2">
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} multiple />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
                           <Paperclip size={14} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <ImageIcon size={14} />
                         </Button>
                       </div>
                       <Textarea
@@ -391,6 +401,11 @@ export function ScreensPanel() {
             <div className="h-full flex flex-col bg-card">
               <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                 <span className="text-sm font-medium">Chat</span>
+                {messages.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                    {Math.ceil(messages.filter(m => m.role === "user").length)} turns
+                  </span>
+                )}
                 <Select value={screenId} onValueChange={setScreenId}>
                   <SelectTrigger className="h-7 text-xs w-[120px]">
                     <SelectValue />
@@ -442,25 +457,42 @@ export function ScreensPanel() {
                           : "bg-muted text-foreground",
                       ].join(" ")}
                     >
-                      <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                      {loading && i === messages.length - 1 && msg.role === "assistant" && msg.content === "" ? (
+                        <span className="flex items-center gap-1 text-muted-foreground text-xs">
+                          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                          <span className="ml-1">thinking</span>
+                        </span>
+                      ) : (
+                        <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
+                      )}
                     </div>
                   </div>
                 ))}
-                {loading && (
-                  <div className="flex justify-start">
-                    <div className="bg-muted rounded-lg px-3 py-2 text-sm">
-                      <span className="animate-pulse">Generating…</span>
-                    </div>
-                  </div>
-                )}
                 <div ref={messagesEndRef} />
               </div>
-              <div className="p-3 border-t border-border shrink-0">
+              <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
                 {attachments.length > 0 && (
-                  <div className="flex gap-1 mb-2 flex-wrap">
+                  <div className="space-y-1">
                     {attachments.map((att, i) => (
-                      <span key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{att.split("/").pop()}</span>
+                      <div key={i} className="flex items-center gap-2 bg-muted rounded px-2 py-1.5">
+                        <ImageIcon size={12} className="text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium truncate">{att.name}</div>
+                          {att.size && <div className="text-[10px] text-muted-foreground">{(att.size / 1024).toFixed(1)} KB</div>}
+                        </div>
+                        <button className="text-muted-foreground hover:text-foreground" onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}>
+                          <X size={12} />
+                        </button>
+                      </div>
                     ))}
+                    {!modelSupportsVision(settings.modelId) && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+                        <ImageIcon size={10} />
+                        Images ignored — <span className="font-medium">{settings.modelId.split(":")[0]}</span> doesn't support vision
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="flex items-end gap-2">
@@ -468,9 +500,6 @@ export function ScreensPanel() {
                     <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} multiple />
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
                       <Paperclip size={14} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
-                      <ImageIcon size={14} />
                     </Button>
                   </div>
                   <Textarea
@@ -487,9 +516,26 @@ export function ScreensPanel() {
                     className="min-h-[40px] max-h-[120px] text-sm resize-none"
                     rows={1}
                   />
-                  <Button size="icon" className="h-8 w-8 shrink-0" onClick={sendMessage} disabled={loading}>
-                    <Send size={14} />
-                  </Button>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <Button size="icon" className="h-8 w-8" onClick={sendMessage} disabled={loading}>
+                      <Send size={14} />
+                    </Button>
+                    {input.trim() && (
+                      <span className="text-[10px] text-muted-foreground">{wordCount(input)}w</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="update-existing"
+                    checked={updateExisting}
+                    onChange={(e) => setUpdateExisting(e.target.checked)}
+                    className="h-3 w-3 rounded"
+                  />
+                  <label htmlFor="update-existing" className="text-[11px] text-muted-foreground cursor-pointer select-none">
+                    Update existing
+                  </label>
                 </div>
               </div>
             </div>

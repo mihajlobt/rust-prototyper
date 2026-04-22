@@ -139,3 +139,45 @@
 .animate-fade-out {
   animation: fade-out 1.5s ease-out forwards;
 }
+
+/* Glow effects — activated by .glow-subtle or .glow-full on <html> */
+.glow-subtle .ring-primary,
+.glow-subtle [data-glow] {
+  --tw-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent), 0 0 24px -4px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+.glow-subtle button:focus-visible,
+.glow-subtle [role="button"]:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--primary) 50%, transparent), 0 0 16px -2px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+.dark.glow-subtle .bg-primary,
+.dark .glow-subtle .bg-primary {
+  box-shadow: 0 0 12px -2px color-mix(in oklch, var(--primary) 50%, transparent);
+}
+.dark.glow-full .bg-primary,
+.dark .glow-full .bg-primary {
+  box-shadow: 0 0 20px -2px color-mix(in oklch, var(--primary) 70%, transparent), 0 0 48px -6px color-mix(in oklch, var(--primary) 30%, transparent);
+}
+.dark.glow-full button[class*="bg-primary"],
+.dark .glow-full button[class*="bg-primary"] {
+  box-shadow: 0 0 20px -2px color-mix(in oklch, var(--primary) 60%, transparent);
+}
+
+/* AMOLED — true black backgrounds when in dark mode */
+.dark.amoled {
+  --background: oklch(0 0 0);
+  --card: oklch(0.07 0 0);
+  --popover: oklch(0.07 0 0);
+  --muted: oklch(0.1 0 0);
+  --sidebar: oklch(0.07 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+}
+
+/* Thinking animation */
+@keyframes thinking-dot {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+.thinking-dot:nth-child(1) { animation: thinking-dot 1.2s ease-in-out infinite 0s; }
+.thinking-dot:nth-child(2) { animation: thinking-dot 1.2s ease-in-out infinite 0.2s; }
+.thinking-dot:nth-child(3) { animation: thinking-dot 1.2s ease-in-out infinite 0.4s; }

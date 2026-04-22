@@ -16,6 +16,8 @@ export interface Settings {
   styles: Array<{ name: string; value: string }>;
   host: string;
   apiKeys: Record<string, string>;
+  glow: "off" | "subtle" | "full";
+  amoled: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +33,8 @@ const DEFAULT_SETTINGS: Settings = {
   styles: [],
   host: "http://localhost:11434",
   apiKeys: {},
+  glow: "subtle",
+  amoled: false,
 };
 
 // Module-level shared state — all useSettings() instances share one copy

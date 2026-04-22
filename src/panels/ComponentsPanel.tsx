@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, Play, Square, RotateCw } from "lucide-react";
+import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletionStream, getApiKey, writeFile, createDir, readDir, readFile, bunDev, killProcess, type CompletionEvent, type Message } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, writeFile, createDir, readDir, readFile, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -19,20 +19,42 @@ import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import type { FileEntry } from "@/lib/ipc";
 
-const PREVIEW_PORT = 5173;
+function buildPreviewDoc(code: string, dark: boolean): string {
+  // Strip TS types and import/export lines so the code runs in-browser via Babel
+  const stripped = code
+    .replace(/^import\s+.*?from\s+['"].*?['"]\s*;?\s*$/gm, "")
+    .replace(/^export\s+default\s+/m, "const __DefaultExport = ")
+    .replace(/^export\s+\{[^}]*\}\s*;?\s*$/gm, "")
+    .replace(/:\s*[A-Z][a-zA-Z<>\[\]|&,\s]+(?=[=,)\n{])/g, "");
 
-const PREVIEW_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Preview</title></head>
-<body><div id="root"></div><script type="module" src="/src/preview.tsx"></script></body>
+  return `<!DOCTYPE html>
+<html class="${dark ? "dark" : ""}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; background: ${dark ? "#0f0f0f" : "#ffffff"}; color: ${dark ? "#f1f5f9" : "#0f172a"}; font-family: system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root" style="padding:16px"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+${stripped}
+const __Comp = typeof __DefaultExport !== 'undefined' ? __DefaultExport : null;
+if (__Comp) {
+  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(__Comp));
+} else {
+  document.getElementById('root').innerHTML = '<p style="color:#888">No default export found</p>';
+}
+</script>
+</body>
 </html>`;
-
-const PREVIEW_TSX = `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import Component from './components/Generated';
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<Component />);
-`;
+}
 
 export function ComponentsPanel() {
   const { settings } = useSettings();
@@ -41,12 +63,11 @@ export function ComponentsPanel() {
   const [loading, setLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [showCode, setShowCode] = useState(false);
-  const [running, setRunning] = useState(false);
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState("");
   const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
   const [selectedComponent, setSelectedComponent] = useState("");
-  const pidRef = useRef<number | null>(null);
+  const [previewKey, setPreviewKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const saveCode = useCallback(async (value: string) => {
@@ -151,8 +172,6 @@ export function ComponentsPanel() {
       const genDir = `projects/${settings.project}/generated`;
       await createDir(`${genDir}/src/components`);
       await writeFile(`${genDir}/src/components/Generated.tsx`, clean);
-      await writeFile(`${genDir}/preview.html`, PREVIEW_HTML);
-      await writeFile(`${genDir}/src/preview.tsx`, PREVIEW_TSX);
     } catch (e) {
       setCode(`// Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -160,27 +179,8 @@ export function ComponentsPanel() {
     }
   }, [prompt, loading, settings.modelId, settings.project, settings.host, settings.apiKeys, settings.prompts, selectedTheme]);
 
-  const handleRunPreview = async () => {
-    if (running && pidRef.current) {
-      await killProcess(pidRef.current);
-      pidRef.current = null;
-      setRunning(false);
-      return;
-    }
-    // Kill previous process before starting new one
-    if (pidRef.current) {
-      await killProcess(pidRef.current);
-      pidRef.current = null;
-    }
-    setRunning(true);
-    const pid = await bunDev(`projects/${settings.project}/generated`, PREVIEW_PORT);
-    pidRef.current = pid;
-  };
-
   const handleRefreshPreview = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
-    }
+    setPreviewKey((k) => k + 1);
   };
 
   const deviceWidth = {
@@ -263,16 +263,7 @@ export function ComponentsPanel() {
                 <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
                   <span className="text-sm font-medium">Preview</span>
                   <div className="flex-1" />
-                  <Button
-                    variant={running ? "destructive" : "default"}
-                    size="sm"
-                    className="gap-1 h-7 text-xs"
-                    onClick={handleRunPreview}
-                  >
-                    {running ? <Square size={12} /> : <Play size={12} />}
-                    {running ? "Stop" : "Run"}
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefreshPreview}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefreshPreview} title="Refresh">
                     <RotateCw size={12} />
                   </Button>
                   <div className="flex items-center gap-1">
@@ -303,29 +294,23 @@ export function ComponentsPanel() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
-                  {running ? (
+                  {code ? (
                     <div
                       className="h-full bg-background shadow-lg border border-border overflow-hidden"
                       style={{ width: deviceWidth[device] }}
                     >
                       <iframe
+                        key={previewKey}
                         ref={iframeRef}
-                        src={`http://localhost:${PREVIEW_PORT}/preview.html`}
+                        srcDoc={buildPreviewDoc(code, settings.dark)}
                         className="w-full h-full"
-                        sandbox="allow-scripts allow-same-origin allow-forms"
+                        sandbox="allow-scripts"
+                        title="Component preview"
                       />
                     </div>
                   ) : (
                     <div className="flex items-center justify-center text-muted-foreground text-sm">
-                      {code ? (
-                        <div className="text-center">
-                          <Play size={32} className="mx-auto mb-3 opacity-30" />
-                          <p>Click Run to preview the component</p>
-                          <p className="text-xs opacity-50 mt-1">Preview renders via localhost:5173</p>
-                        </div>
-                      ) : (
-                        "Generated components will preview here"
-                      )}
+                      Generated components will preview here
                     </div>
                   )}
                 </div>

@@ -165,25 +165,56 @@ export function SettingsModal() {
               />
             </div>
 
+            <div className="flex items-center justify-between">
+              <Label>AMOLED dark (true black)</Label>
+              <button
+                onClick={() => setSettings({ amoled: !settings.amoled })}
+                className={[
+                  "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  settings.amoled ? "bg-primary" : "bg-input",
+                ].join(" ")}
+              >
+                <span className={["inline-block h-3.5 w-3.5 rounded-full bg-background shadow transition-transform", settings.amoled ? "translate-x-4.5" : "translate-x-0.5"].join(" ")} />
+              </button>
+            </div>
+
             <div className="space-y-2">
-              <Label>Editor theme</Label>
-              <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                {Object.entries(EDITOR_THEMES).map(([key, { label, dark }]) => (
+              <Label>Glow intensity</Label>
+              <div className="flex gap-1">
+                {(["off", "subtle", "full"] as const).map((g) => (
                   <button
-                    key={key}
-                    onClick={() => setSettings({ editorTheme: key })}
+                    key={g}
+                    onClick={() => setSettings({ glow: g })}
                     className={[
-                      "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-left transition-colors border",
-                      settings.editorTheme === key
-                        ? "border-primary bg-primary/10 text-foreground font-medium"
-                        : "border-transparent hover:border-border hover:bg-muted text-muted-foreground",
+                      "px-3 py-1 rounded text-xs border transition-colors capitalize",
+                      settings.glow === g
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border hover:bg-muted",
                     ].join(" ")}
                   >
-                    <span className={["w-2.5 h-2.5 rounded-full shrink-0 border border-border", dark ? "bg-zinc-800" : "bg-zinc-100"].join(" ")} />
-                    {label}
+                    {g}
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Editor theme</Label>
+              <Select value={settings.editorTheme} onValueChange={(v) => setSettings({ editorTheme: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(EDITOR_THEMES).map(([key, { label, dark }]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        <span className={["w-2.5 h-2.5 rounded-full shrink-0 border border-border", dark ? "bg-zinc-800" : "bg-zinc-100"].join(" ")} />
+                        {label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </TabsContent>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Allotment } from "allotment";
+import { Allotment, type AllotmentHandle } from "allotment";
 import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import {
   Play,
@@ -18,9 +18,10 @@ import {
   Globe,
   Plus,
   Trash2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import {
   readDir,
@@ -54,6 +55,9 @@ export function RunnerPanel() {
   const [shellCommand, setShellCommand] = useState("");
   const [showShellInput, setShowShellInput] = useState(false);
   const [fitPreview, setFitPreview] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(true);
+  const [activeTerminalTab, setActiveTerminalTab] = useState("terminal");
+  const verticalAllotmentRef = useRef<AllotmentHandle>(null);
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -247,10 +251,6 @@ export function RunnerPanel() {
           <Package size={12} />
           Install
         </Button>
-        <Button variant="outline" size="sm" className="gap-1 h-7 text-xs" onClick={() => setShowShellInput(!showShellInput)}>
-          <Terminal size={12} />
-          Shell
-        </Button>
         <div className="w-px h-4 bg-border mx-1" />
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefreshPreview}>
           <RotateCw size={12} />
@@ -331,7 +331,8 @@ export function RunnerPanel() {
 
           {/* Editor + Preview side by side */}
           <Allotment.Pane>
-            <Allotment vertical>
+            <div className="h-full flex flex-col">
+            <Allotment vertical ref={verticalAllotmentRef} className="flex-1 min-h-0" >
               <Allotment.Pane>
                 <Allotment>
                   {/* Editor */}
@@ -397,134 +398,125 @@ export function RunnerPanel() {
               </Allotment.Pane>
 
               {/* Terminal / Logs / Network */}
-              <Allotment.Pane preferredSize={160} minSize={80}>
-                {showShellInput && (
-                  <div className="flex gap-1 px-2 py-1 border-b border-border bg-card shrink-0">
-                    <span className="text-xs text-muted-foreground self-center">$</span>
-                    <Input
-                      value={shellCommand}
-                      onChange={(e) => setShellCommand(e.target.value)}
-                      placeholder="Enter shell command..."
-                      className="h-6 text-xs"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleNewShell();
-                        if (e.key === "Escape") setShowShellInput(false);
+              <Allotment.Pane preferredSize={180} minSize={28}>
+                <div className="h-full flex flex-col">
+                  {/* Tab bar — always visible */}
+                  <div className="flex items-center border-b border-border shrink-0 bg-card h-7">
+                    <div className="flex h-7">
+                      {(["terminal", "logs", "network"] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTerminalTab(tab)}
+                          className={["flex items-center gap-1 px-3 h-7 text-[10px] border-r border-border transition-colors", activeTerminalTab === tab ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"].join(" ")}
+                        >
+                          {tab === "terminal" && <Terminal size={10} />}
+                          {tab === "logs" && <ScrollText size={10} />}
+                          {tab === "network" && <Globe size={10} />}
+                          {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex-1" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-7 text-[10px] px-2"
+                      onClick={() => {
+                        setShowShellInput((v) => !v);
+                        if (!terminalOpen) {
+                          setTerminalOpen(true);
+                          verticalAllotmentRef.current?.resize([9999, 180]);
+                        }
                       }}
-                      autoFocus
-                    />
-                  </div>
-                )}
-                <Tabs defaultValue="terminal" className="h-full flex flex-col">
-                  <TabsList className="flex w-auto shrink-0 h-7 self-start">
-                    <TabsTrigger value="terminal" className="text-[10px] gap-1 px-3">
+                    >
                       <Terminal size={10} />
-                      Terminal
-                    </TabsTrigger>
-                    <TabsTrigger value="logs" className="text-[10px] gap-1 px-3">
-                      <ScrollText size={10} />
-                      Logs
-                    </TabsTrigger>
-                    <TabsTrigger value="network" className="text-[10px] gap-1 px-3">
-                      <Globe size={10} />
-                      Network
-                    </TabsTrigger>
-                  </TabsList>
+                      Shell
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => {
+                        if (terminalOpen) {
+                          verticalAllotmentRef.current?.resize([9999, 28]);
+                          setTerminalOpen(false);
+                        } else {
+                          verticalAllotmentRef.current?.resize([9999, 180]);
+                          setTerminalOpen(true);
+                        }
+                      }}
+                      title={terminalOpen ? "Collapse terminal" : "Expand terminal"}
+                    >
+                      {terminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                    </Button>
+                  </div>
 
-                  <TabsContent value="terminal" className="flex-1 overflow-hidden mt-0">
-                    <div className="h-full flex flex-col bg-black text-green-400 font-mono text-xs">
-                      <div ref={terminalRef} className="flex-1 overflow-auto p-2 space-y-0.5">
+                  {/* Shell input */}
+                  {showShellInput && (
+                    <div className="flex gap-1 px-2 py-1 border-b border-border bg-card shrink-0">
+                      <span className="text-xs text-muted-foreground self-center">$</span>
+                      <Input
+                        value={shellCommand}
+                        onChange={(e) => setShellCommand(e.target.value)}
+                        placeholder="Enter shell command..."
+                        className="h-6 text-xs"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleNewShell();
+                          if (e.key === "Escape") setShowShellInput(false);
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  )}
+
+                  {/* Terminal content */}
+                  <div className="flex-1 overflow-hidden bg-black text-green-400 font-mono text-xs">
+                    {activeTerminalTab === "terminal" && (
+                      <div ref={terminalRef} className="h-full overflow-auto p-2 space-y-0.5">
                         {terminalLines.map((item, i) => (
                           <div key={i} className={["break-all whitespace-pre-wrap", item.source === "stderr" ? "text-red-400" : ""].join(" ")}>
                             {item.line}
                           </div>
                         ))}
-                        {terminalLines.length === 0 && (
-                          <div className="opacity-40">No output yet…</div>
-                        )}
+                        {terminalLines.length === 0 && <div className="opacity-40">No output yet…</div>}
                       </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="logs" className="flex-1 overflow-hidden mt-0">
-                    <div className="h-full flex flex-col bg-black text-green-400 font-mono text-xs">
-                      <div className="flex-1 overflow-auto p-2 space-y-0.5">
-                        {terminalLines
-                          .filter(
-                            (item) =>
-                              item.line.includes("error") ||
-                              item.line.includes("warning") ||
-                              item.line.includes("hmr") ||
-                              item.line.includes("Hot") ||
-                              item.line.includes("build") ||
-                              item.line.includes("ready")
-                          )
-                          .map((item, i) => (
-                            <div
-                              key={i}
-                              className={[
-                                "break-all whitespace-pre-wrap",
-                                item.line.toLowerCase().includes("error")
-                                  ? "text-red-400"
-                                  : item.line.toLowerCase().includes("warning")
-                                  ? "text-yellow-400"
-                                  : "",
-                              ].join(" ")}
-                            >
-                              {item.line}
-                            </div>
-                          ))}
-                        {terminalLines.filter((item) =>
-                          /error|warning|hmr|hot|build|ready/i.test(item.line)
-                        ).length === 0 && (
-                          <div className="opacity-40">No log events yet…</div>
-                        )}
+                    )}
+                    {activeTerminalTab === "logs" && (
+                      <div className="h-full overflow-auto p-2 space-y-0.5">
+                        {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
+                          <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : ""].join(" ")}>
+                            {item.line}
+                          </div>
+                        ))}
+                        {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && <div className="opacity-40">No log events yet…</div>}
                       </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="network" className="flex-1 overflow-hidden mt-0">
-                    <div className="h-full flex flex-col bg-black text-green-400 font-mono text-xs">
-                      <div className="flex-1 overflow-auto p-2 space-y-1">
+                    )}
+                    {activeTerminalTab === "network" && (
+                      <div className="h-full overflow-auto p-2 space-y-1">
                         {(() => {
-                          const requests = terminalLines
-                            .map((item) => {
-                              const line = item.line;
-                              const match = line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
-                              if (match) {
-                                return { method: match[1], path: match[2], status: parseInt(match[3]), line };
-                              }
-                              const hmrMatch = line.match(/hmr update\s+(\S+)/i);
-                              if (hmrMatch) {
-                                return { method: "HMR", path: hmrMatch[1], status: 0, line };
-                              }
-                              return null;
-                            })
-                            .filter(Boolean) as Array<{ method: string; path: string; status: number; line: string }>;
-                          if (requests.length === 0) {
-                            return <div className="opacity-40">No network requests logged yet…</div>;
-                          }
+                          const requests = terminalLines.map((item) => {
+                            const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
+                            if (match) return { method: match[1], path: match[2], status: parseInt(match[3]) };
+                            const hmr = item.line.match(/hmr update\s+(\S+)/i);
+                            if (hmr) return { method: "HMR", path: hmr[1], status: 0 };
+                            return null;
+                          }).filter(Boolean) as Array<{ method: string; path: string; status: number }>;
+                          if (requests.length === 0) return <div className="opacity-40">No network requests logged yet…</div>;
                           return requests.map((req, i) => (
                             <div key={i} className="flex items-center gap-2 text-xs">
-                              <span className={[
-                                "font-bold px-1 py-0.5 rounded",
-                                req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" :
-                                req.status >= 400 ? "bg-red-500/20 text-red-400" :
-                                req.method === "HMR" ? "bg-blue-500/20 text-blue-400" :
-                                "bg-muted text-muted-foreground"
-                              ].join(" ")}>
-                                {req.method}
-                              </span>
+                              <span className={["font-bold px-1 py-0.5 rounded", req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" : req.status >= 400 ? "bg-red-500/20 text-red-400" : req.method === "HMR" ? "bg-blue-500/20 text-blue-400" : "bg-muted text-muted-foreground"].join(" ")}>{req.method}</span>
                               <span className="truncate flex-1">{req.path}</span>
                               {req.status > 0 && <span className="text-muted-foreground">{req.status}</span>}
                             </div>
                           ));
                         })()}
                       </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                    )}
+                  </div>
+                </div>
               </Allotment.Pane>
             </Allotment>
+            </div>
           </Allotment.Pane>
         </Allotment>
       </div>

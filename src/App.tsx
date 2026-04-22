@@ -37,6 +37,16 @@ export default function App() {
     document.documentElement.style.setProperty("--sidebar-primary", settings.accent);
   }, [settings.accent]);
 
+  useEffect(() => {
+    const el = document.documentElement;
+    el.classList.toggle("glow-subtle", settings.glow === "subtle");
+    el.classList.toggle("glow-full", settings.glow === "full");
+  }, [settings.glow]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("amoled", settings.amoled);
+  }, [settings.amoled]);
+
   if (!loaded) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background text-foreground">
