@@ -57,7 +57,6 @@ export function RunnerPanel() {
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -98,22 +97,36 @@ export function RunnerPanel() {
     }
   };
 
-  const handleSaveFile = async () => {
+  const handleSaveFile = useCallback(async () => {
     if (!selectedFile) return;
     await writeFile(selectedFile, fileContent);
-  };
+  }, [selectedFile, fileContent]);
 
-  // Auto-save on content change with debounce
+  const handleEditorBlur = useCallback(() => {
+    handleSaveFile();
+  }, [handleSaveFile]);
+
+  // Ctrl+S keyboard shortcut
   useEffect(() => {
-    if (!selectedFile) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      writeFile(selectedFile, fileContent).catch(() => {});
-    }, 1000);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSaveFile();
+      }
     };
-  }, [fileContent, selectedFile]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleSaveFile]);
+
+  // HMR: detect file update events from dev server terminal output and refresh iframe
+  useEffect(() => {
+    const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
+      if (running && iframeRef.current && (event.line.includes("updated") || event.line.includes("hmr") || event.line.includes("HMR"))) {
+        iframeRef.current.src = iframeRef.current.src;
+      }
+    });
+    return () => { unlistenPromise.then((fn) => fn()); };
+  }, [running]);
 
   const handleRun = async () => {
     if (running && pidRef.current) {
@@ -186,18 +199,6 @@ export function RunnerPanel() {
     loadFiles();
     handleSelectFile(path);
   };
-
-  // Keyboard shortcut: Ctrl+S to save
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        handleSaveFile();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedFile, fileContent]);
 
   const getFileMode = (path: string): "tsx" | "css" | "json" | "javascript" => {
     if (path.endsWith(".css")) return "css";
@@ -348,6 +349,7 @@ export function RunnerPanel() {
                           <CodeMirrorEditor
                             value={fileContent}
                             onChange={setFileContent}
+                            onBlur={handleEditorBlur}
                             mode={getFileMode(selectedFile)}
                           />
                         </div>

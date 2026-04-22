@@ -10,13 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletion, getApiKey, writeFile, createDir, readDir, parseAiResponse, bunDev, killProcess } from "@/lib/ipc";
+import { generateCompletion, getApiKey, writeFile, createDir, readDir, readFile, parseAiResponse, bunDev, killProcess } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import type { FileEntry } from "@/lib/ipc";
+
+const PREVIEW_PORT = 5173;
 
 const PREVIEW_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -41,22 +43,35 @@ export function ComponentsPanel() {
   const [running, setRunning] = useState(false);
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState("");
+  const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
+  const [selectedComponent, setSelectedComponent] = useState("");
   const pidRef = useRef<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-save code changes with debounce
+  const saveCode = useCallback(async (value: string) => {
+    if (!value) return;
+    const genDir = `projects/${settings.project}/generated`;
+    await writeFile(`${genDir}/src/components/Generated.tsx`, value);
+  }, [settings.project]);
+
+  const handleCodeChange = useCallback((value: string) => {
+    setCode(value);
+  }, []);
+
+  const handleCodeBlur = useCallback(() => {
+    saveCode(code);
+  }, [code, saveCode]);
+
   useEffect(() => {
-    if (!code) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const genDir = `projects/${settings.project}/generated`;
-      writeFile(`${genDir}/src/components/Generated.tsx`, code).catch(() => {});
-    }, 1000);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        saveCode(code);
+      }
     };
-  }, [code, settings.project]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [code, saveCode]);
 
   // Load themes
   useEffect(() => {
@@ -71,6 +86,35 @@ export function ComponentsPanel() {
     })();
     return () => { cancelled = true; };
   }, [settings.project]);
+
+  // Load saved components
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const entries = await readDir(`projects/${settings.project}/components`);
+        if (!cancelled) setSavedComponents(entries.filter((e) => e.is_dir));
+      } catch {
+        if (!cancelled) setSavedComponents([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.project]);
+
+  // Load selected component
+  useEffect(() => {
+    if (!selectedComponent) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const content = await readFile(`projects/${settings.project}/components/${selectedComponent}/component.tsx`);
+        if (!cancelled) setCode(content);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedComponent, settings.project]);
 
   const generate = useCallback(async () => {
     if (!prompt.trim() || loading) return;
@@ -111,13 +155,13 @@ export function ComponentsPanel() {
       setRunning(false);
       return;
     }
-    // Kill any previous process before starting a new one
+    // Kill previous process before starting new one
     if (pidRef.current) {
       await killProcess(pidRef.current);
       pidRef.current = null;
     }
     setRunning(true);
-    const pid = await bunDev(`projects/${settings.project}/generated`, 5173);
+    const pid = await bunDev(`projects/${settings.project}/generated`, PREVIEW_PORT);
     pidRef.current = pid;
   };
 
@@ -141,6 +185,16 @@ export function ComponentsPanel() {
             <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
               <span className="text-sm font-medium">Prompt</span>
               <div className="flex-1" />
+              <Select value={selectedComponent} onValueChange={setSelectedComponent}>
+                <SelectTrigger className="h-7 text-xs w-[140px]">
+                  <SelectValue placeholder="Load component…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {savedComponents.map((c) => (
+                    <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={selectedTheme} onValueChange={setSelectedTheme}>
                 <SelectTrigger className="h-7 text-xs w-[140px]">
                   <SelectValue placeholder="Theme…" />
@@ -244,7 +298,7 @@ export function ComponentsPanel() {
                     >
                       <iframe
                         ref={iframeRef}
-                        src="http://localhost:5173/preview.html"
+                        src={`http://localhost:${PREVIEW_PORT}/preview.html`}
                         className="w-full h-full"
                         sandbox="allow-scripts allow-same-origin allow-forms"
                       />
@@ -273,7 +327,7 @@ export function ComponentsPanel() {
                     <span className="text-xs font-medium">Code</span>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <CodeMirrorEditor value={code} onChange={setCode} mode="tsx" />
+                    <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
                   </div>
                 </div>
               </Allotment.Pane>

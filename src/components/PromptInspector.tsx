@@ -5,16 +5,15 @@ import { Copy, Eye } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getContextWindow } from "@/lib/ipc";
+import type { Message } from "@/lib/ipc";
 
 interface PromptInspectorProps {
   model: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: Message[];
   host: string;
 }
 
 function estimateTokens(text: string): number {
-  // Heuristic: ~4 chars per token for English text
-  // This avoids the ESM/CJS incompatibility of js-tiktoken
   return Math.ceil(text.length / 4);
 }
 
@@ -67,7 +66,10 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
   const handleCopy = async (text: string) => {
     await writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleCopiedAnimationEnd = () => {
+    setCopied(false);
   };
 
   return (
@@ -106,7 +108,9 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
             onClick={() => handleCopy(assembled)}
           >
             <Copy size={12} />
-            {copied ? "Copied!" : "Copy"}
+            {copied ? (
+              <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
+            ) : "Copy"}
           </Button>
           <CodeMirrorEditor value={assembled} mode="markdown" readOnly />
         </TabsContent>
@@ -119,7 +123,9 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
             onClick={() => handleCopy(payload)}
           >
             <Copy size={12} />
-            Copy
+            {copied ? (
+              <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
+            ) : "Copy"}
           </Button>
           <CodeMirrorEditor value={payload} mode="json" readOnly />
         </TabsContent>
@@ -132,7 +138,9 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
             onClick={() => handleCopy(curl)}
           >
             <Copy size={12} />
-            Copy
+            {copied ? (
+              <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
+            ) : "Copy"}
           </Button>
           <CodeMirrorEditor value={curl} mode="shell" readOnly />
         </TabsContent>

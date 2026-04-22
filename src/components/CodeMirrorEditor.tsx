@@ -5,6 +5,7 @@ import { css } from "@codemirror/lang-css";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import type { Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 
 const modeMap: Record<string, Extension> = {
   javascript: javascript(),
@@ -20,6 +21,7 @@ const modeMap: Record<string, Extension> = {
 interface CodeMirrorEditorProps {
   value: string;
   onChange?: (value: string) => void;
+  onBlur?: () => void;
   mode?: string;
   readOnly?: boolean;
   className?: string;
@@ -29,6 +31,7 @@ interface CodeMirrorEditorProps {
 export function CodeMirrorEditor({
   value,
   onChange,
+  onBlur,
   mode = "javascript",
   readOnly = false,
   className = "",
@@ -36,8 +39,12 @@ export function CodeMirrorEditor({
 }: CodeMirrorEditorProps) {
   const extensions = useMemo(() => {
     const ext = modeMap[mode];
-    return ext ? [ext] : [];
-  }, [mode]);
+    const result: Extension[] = ext ? [ext] : [];
+    if (onBlur) {
+      result.push(EditorView.domEventHandlers({ blur: () => { onBlur(); } }));
+    }
+    return result;
+  }, [mode, onBlur]);
 
   const handleChange = useCallback(
     (val: string) => {
