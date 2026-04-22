@@ -104,7 +104,7 @@ bunx create-tauri-ui@latest --template vite
 
 ### 0.3 Configure Tauri
 - `tauri.conf.json`:
-  - `build.devUrl`: `http://localhost:5173`
+  - `build.devUrl`: `http://localhost:1420`
   - `build.frontendDist`: `../dist`
   - `build.beforeDevCommand`: `bun run dev`
   - `build.beforeBuildCommand`: `bun run build`

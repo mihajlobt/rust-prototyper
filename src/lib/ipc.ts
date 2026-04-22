@@ -144,7 +144,7 @@ export async function generateCompletion(
   host: string = "",
   apiKey: string = ""
 ): Promise<string> {
-  return invoke("generate_completion", { model, messages, host, api_key: apiKey });
+  return invoke("generate_completion", { model, messages, host, apiKey });
 }
 
 /** Streaming completion — emits Chunk/Done/Error events via Channel */
@@ -155,7 +155,7 @@ export async function generateCompletionStream(
   apiKey: string,
   onEvent: Channel<CompletionEvent>
 ): Promise<void> {
-  return invoke("generate_completion_stream", { model, messages, host, api_key: apiKey, onEvent });
+  return invoke("generate_completion_stream", { model, messages, host, apiKey, onEvent });
 }
 
 export async function listOllamaModels(host: string): Promise<ModelInfo[]> {

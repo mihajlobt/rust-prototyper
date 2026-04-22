@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import { Header } from "./layout/Header";
@@ -25,6 +25,11 @@ const views: Record<string, React.FC> = {
 export default function App() {
   const { settings, setSettings, loaded } = useSettings();
   const [view, setView] = useState(settings.view || "screens");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", settings.dark);
+  }, [settings.dark]);
 
   if (!loaded) {
     return (
@@ -55,19 +60,17 @@ export default function App() {
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
       <Header
         activeView={view}
-        onViewChange={(v) => {
-          setView(v);
-          setSettings({ view: v });
-        }}
+        onViewChange={(v) => { setView(v); setSettings({ view: v }); }}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((o) => !o)}
       />
       <div className="flex-1 overflow-hidden">
         <Allotment>
-          <Allotment.Pane preferredSize={240} minSize={180} maxSize={320}>
-            <SidebarRail activeView={view} onViewChange={(v) => {
-            setView(v);
-            setSettings({ view: v });
-          }} />
-          </Allotment.Pane>
+          {sidebarOpen && (
+            <Allotment.Pane preferredSize={240} minSize={180} maxSize={320}>
+              <SidebarRail onNavigateToItem={handleNavigateToItem} />
+            </Allotment.Pane>
+          )}
           <Allotment.Pane>
             {view === "library" ? (
               <LibraryPanel onNavigateToItem={handleNavigateToItem} />

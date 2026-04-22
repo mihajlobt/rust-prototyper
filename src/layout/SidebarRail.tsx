@@ -6,13 +6,6 @@ import {
   ChevronRight,
   ChevronDown,
   Plus,
-  LayoutGrid,
-  Box,
-  Palette,
-  GitBranch,
-  Play,
-  BookOpen,
-  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,23 +25,11 @@ import {
 import { createDir, writeFile, readDir, type FileEntry } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 
-const views = [
-  { id: "screens", label: "Screens", icon: LayoutGrid },
-  { id: "components", label: "Components", icon: Box },
-  { id: "themes", label: "Themes", icon: Palette },
-  { id: "workflows", label: "Workflows", icon: GitBranch },
-  { id: "apis", label: "APIs", icon: Terminal },
-  { id: "runner", label: "Runner", icon: Play },
-  { id: "library", label: "Library", icon: BookOpen },
-];
-
 interface SidebarRailProps {
-  activeView: string;
-  onViewChange: (view: string) => void;
   onNavigateToItem?: (type: string, name: string) => void;
 }
 
-export function SidebarRail({ activeView, onViewChange, onNavigateToItem }: SidebarRailProps) {
+export function SidebarRail({ onNavigateToItem }: SidebarRailProps) {
   const { settings } = useSettings();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
@@ -181,31 +162,8 @@ export function SidebarRail({ activeView, onViewChange, onNavigateToItem }: Side
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
-      {/* View Switcher */}
+      {/* Project Explorer */}
       <div className="flex-1 overflow-y-auto py-2">
-        {views.map((view) => {
-          const Icon = view.icon;
-          const active = view.id === activeView;
-          return (
-            <button
-              key={view.id}
-              onClick={() => onViewChange(view.id)}
-              className={[
-                "w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors text-left",
-                active
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
-              ].join(" ")}
-            >
-              <Icon size={16} />
-              {view.label}
-            </button>
-          );
-        })}
-
-        <div className="mx-3 my-2 h-px bg-border" />
-
-        {/* Directory Browser */}
         <div className="px-2 space-y-0.5">
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 mb-1">
             Project

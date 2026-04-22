@@ -43,9 +43,11 @@ fn normalize_path(path: &std::path::Path) -> std::path::PathBuf {
     let mut result = std::path::PathBuf::new();
     for component in path.components() {
         match component {
+            std::path::Component::RootDir => result.push("/"),
+            std::path::Component::Prefix(p) => result.push(p.as_os_str()),
             std::path::Component::Normal(c) => result.push(c),
             std::path::Component::ParentDir => { result.pop(); }
-            _ => {}
+            std::path::Component::CurDir => {}
         }
     }
     result
@@ -342,11 +344,19 @@ async fn chat_completion_ollama(
         .collect();
     let body = serde_json::json!({ "model": model, "messages": msgs, "stream": stream });
 
+    let res = client.post(&url).json(&body).send().await.map_err(|e| AppError::Http(e.to_string()))?;
+    if !res.status().is_success() {
+        let err_body = res.text().await.unwrap_or_default();
+        let msg = serde_json::from_str::<serde_json::Value>(&err_body)
+            .ok().and_then(|v| v["error"].as_str().map(String::from))
+            .unwrap_or(err_body);
+        return Err(AppError::Http(msg));
+    }
+
     if stream {
-        let res = client.post(&url).json(&body).send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let mut full = String::new();
-        let mut stream = res.bytes_stream();
-        while let Some(chunk_result) = stream.next().await {
+        let mut byte_stream = res.bytes_stream();
+        while let Some(chunk_result) = byte_stream.next().await {
             let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if line.is_empty() { continue; }
@@ -365,7 +375,6 @@ async fn chat_completion_ollama(
         }
         Ok(full)
     } else {
-        let res = client.post(&url).json(&body).send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
         let content = json["message"]["content"].as_str().unwrap_or("").to_string();
         Ok(content)
@@ -386,14 +395,22 @@ async fn chat_completion_openai(
         .collect();
     let body = serde_json::json!({ "model": model, "messages": msgs, "stream": stream });
 
+    let res = client.post(url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send().await.map_err(|e| AppError::Http(e.to_string()))?;
+    if !res.status().is_success() {
+        let err_body = res.text().await.unwrap_or_default();
+        let msg = serde_json::from_str::<serde_json::Value>(&err_body)
+            .ok().and_then(|v| v["error"]["message"].as_str().map(String::from))
+            .unwrap_or(err_body);
+        return Err(AppError::Http(msg));
+    }
+
     if stream {
-        let res = client.post(url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .json(&body)
-            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let mut full = String::new();
-        let mut stream = res.bytes_stream();
-        while let Some(chunk_result) = stream.next().await {
+        let mut byte_stream = res.bytes_stream();
+        while let Some(chunk_result) = byte_stream.next().await {
             let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if !line.starts_with("data: ") { continue; }
@@ -414,10 +431,6 @@ async fn chat_completion_openai(
         }
         Ok(full)
     } else {
-        let res = client.post(url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .json(&body)
-            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
         let content = json["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string();
         Ok(content)
@@ -443,15 +456,23 @@ async fn chat_completion_claude(
         "max_tokens": 4096,
     });
 
+    let res = client.post(url)
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&body)
+        .send().await.map_err(|e| AppError::Http(e.to_string()))?;
+    if !res.status().is_success() {
+        let err_body = res.text().await.unwrap_or_default();
+        let msg = serde_json::from_str::<serde_json::Value>(&err_body)
+            .ok().and_then(|v| v["error"]["message"].as_str().map(String::from))
+            .unwrap_or(err_body);
+        return Err(AppError::Http(msg));
+    }
+
     if stream {
-        let res = client.post(url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let mut full = String::new();
-        let mut stream = res.bytes_stream();
-        while let Some(chunk_result) = stream.next().await {
+        let mut byte_stream = res.bytes_stream();
+        while let Some(chunk_result) = byte_stream.next().await {
             let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if !line.starts_with("data: ") { continue; }
@@ -471,11 +492,6 @@ async fn chat_completion_claude(
         }
         Ok(full)
     } else {
-        let res = client.post(url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send().await.map_err(|e| AppError::Http(e.to_string()))?;
         let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
         let content = json["content"][0]["text"].as_str().unwrap_or("").to_string();
         Ok(content)
@@ -493,7 +509,7 @@ async fn generate_completion(
     let state = app.state::<AppState>();
     let client = &state.http_client;
     let provider = detect_provider(&model);
-    let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host };
+    let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     match provider {
         "ollama" => chat_completion_ollama(client, &host, &model, &messages, false, None).await,
@@ -525,7 +541,7 @@ async fn generate_completion_stream(
     let state = app.state::<AppState>();
     let client = &state.http_client;
     let provider = detect_provider(&model);
-    let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host };
+    let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     let result = match provider {
         "ollama" => chat_completion_ollama(client, &host, &model, &messages, true, Some(&on_event)).await,
@@ -766,6 +782,11 @@ async fn list_workflows(project_id: String, app: AppHandle) -> Result<Vec<FileEn
 pub fn run() {
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 10 { return attempt.error("too many redirects"); }
+            // Preserve method (POST stays POST) on all redirects
+            attempt.follow()
+        }))
         .build()
         .expect("Failed to build HTTP client");
 

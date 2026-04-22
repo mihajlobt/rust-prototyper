@@ -6,12 +6,14 @@ import {
   Play,
   BookOpen,
   Terminal,
+  PanelLeft,
 } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { SettingsModal } from "@/modals/SettingsModal";
 import { ProjectManagerModal } from "@/modals/ProjectManagerModal";
 import { ExportModal } from "@/modals/ExportModal";
 import { ModelPicker } from "@/components/ModelPicker";
+import { Button } from "@/components/ui/button";
 
 const tabs = [
   { id: "screens", label: "Screens", icon: LayoutGrid },
@@ -26,13 +28,28 @@ const tabs = [
 interface HeaderProps {
   activeView: string;
   onViewChange: (view: string) => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
-export function Header({ activeView, onViewChange }: HeaderProps) {
+export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar }: HeaderProps) {
   const { settings, setSettings } = useSettings();
 
   return (
     <header className="h-12 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+      {/* Sidebar toggle */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className={["h-8 w-8 shrink-0", sidebarOpen ? "text-foreground" : "text-muted-foreground"].join(" ")}
+        onClick={onToggleSidebar}
+        title="Toggle sidebar"
+      >
+        <PanelLeft size={16} />
+      </Button>
+
+      <div className="w-px h-5 bg-border" />
+
       {/* View Tabs */}
       <nav className="flex items-center gap-1">
         {tabs.map((tab) => {
@@ -58,20 +75,13 @@ export function Header({ activeView, onViewChange }: HeaderProps) {
 
       <div className="flex-1" />
 
-      {/* Project Manager */}
       <ProjectManagerModal />
-
-      {/* Export */}
       <ExportModal />
-
-      {/* Model Picker */}
       <ModelPicker
         value={settings.modelId}
         onChange={(model) => setSettings({ modelId: model })}
         host={settings.host}
       />
-
-      {/* Settings */}
       <SettingsModal />
     </header>
   );
