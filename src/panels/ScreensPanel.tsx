@@ -37,9 +37,9 @@ function modelSupportsVision(modelId: string) {
   return lower.includes("vision") || lower.includes("llava") || lower.includes("gpt-4o") || lower.includes("claude-3") || lower.includes("gemini");
 }
 
-export function ScreensPanel() {
+export function ScreensPanel({ initialItem }: { initialItem?: string }) {
   const { settings } = useSettings();
-  const [screenId, setScreenId] = useState("main");
+  const [screenId, setScreenId] = useState(initialItem || "main");
   const [screens, setScreens] = useState<string[]>(["main"]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");

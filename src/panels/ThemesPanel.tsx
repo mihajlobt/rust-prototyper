@@ -16,7 +16,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
-export function ThemesPanel() {
+export function ThemesPanel({ initialItem }: { initialItem?: string }) {
   const { settings, setSettings } = useSettings();
   const [prompt, setPrompt] = useState("");
   const [css, setCss] = useState("");
@@ -25,7 +25,7 @@ export function ThemesPanel() {
   const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
   const [presetName, setPresetName] = useState("");
   const [availableThemes, setAvailableThemes] = useState<FileEntry[]>([]);
-  const [selectedThemeDir, setSelectedThemeDir] = useState("");
+  const [selectedThemeDir, setSelectedThemeDir] = useState(initialItem || "");
 
   // Load available themes
   useEffect(() => {

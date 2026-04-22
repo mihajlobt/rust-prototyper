@@ -145,7 +145,7 @@ function generateId() {
 
 // ─── Main view (needs ReactFlowProvider) ──────────────────────────────────
 
-function WorkflowCanvas() {
+function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
   const { settings } = useSettings();
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 
@@ -433,6 +433,12 @@ function WorkflowCanvas() {
   }, [settings.project]);
 
   useEffect(() => { refreshSavedWorkflows(); }, [refreshSavedWorkflows]);
+
+  useEffect(() => {
+    if (!initialWorkflow) return;
+    handleLoad(initialWorkflow);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialWorkflow]);
 
   const handleSave = async () => {
     setSaveError(null);
@@ -761,10 +767,10 @@ function WorkflowCanvas() {
   );
 }
 
-export function WorkflowsView() {
+export function WorkflowsView({ initialWorkflow }: { initialWorkflow?: string }) {
   return (
     <ReactFlowProvider>
-      <WorkflowCanvas />
+      <WorkflowCanvas initialWorkflow={initialWorkflow} />
     </ReactFlowProvider>
   );
 }

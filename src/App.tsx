@@ -12,20 +12,11 @@ import { LibraryPanel } from "./panels/LibraryPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
 import { useSettings } from "./hooks/useSettings";
 
-const views: Record<string, React.FC> = {
-  screens: ScreensPanel,
-  components: ComponentsPanel,
-  themes: ThemesPanel,
-  apis: APIsPanel,
-  runner: RunnerPanel,
-  library: LibraryPanel,
-  workflows: WorkflowsView,
-};
-
 export default function App() {
   const { settings, setSettings, loaded } = useSettings();
   const [view, setView] = useState(settings.view || "screens");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [pendingItem, setPendingItem] = useState<{ view: string; name: string } | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", settings.dark);
@@ -55,21 +46,21 @@ export default function App() {
     );
   }
 
-  const ActiveView = views[view] || ScreensPanel;
+  const itemFor = (v: string) => pendingItem?.view === v ? pendingItem.name : undefined;
 
-  const handleNavigateToItem = (_type: string, _name: string) => {
-    // Switch to the appropriate view when navigating from Library
+  const handleNavigateToItem = (type: string, name: string) => {
     const viewMap: Record<string, string> = {
-      component: "components",
-      theme: "themes",
-      screen: "screens",
-      api: "apis",
+      screens: "screens",
+      components: "components",
+      themes: "themes",
+      workflows: "workflows",
+      apis: "apis",
     };
-    const targetView = viewMap[_type];
-    if (targetView && targetView !== view) {
-      setView(targetView);
-      setSettings({ view: targetView });
-    }
+    const targetView = viewMap[type];
+    if (!targetView) return;
+    setPendingItem({ view: targetView, name });
+    setView(targetView);
+    setSettings({ view: targetView });
   };
 
   return (
@@ -88,11 +79,13 @@ export default function App() {
             </Allotment.Pane>
           )}
           <Allotment.Pane>
-            {view === "library" ? (
-              <LibraryPanel onNavigateToItem={handleNavigateToItem} />
-            ) : (
-              <ActiveView />
-            )}
+            {view === "screens"    && <ScreensPanel    initialItem={itemFor("screens")} />}
+            {view === "components" && <ComponentsPanel initialItem={itemFor("components")} />}
+            {view === "themes"     && <ThemesPanel     initialItem={itemFor("themes")} />}
+            {view === "workflows"  && <WorkflowsView   initialWorkflow={itemFor("workflows")} />}
+            {view === "apis"       && <APIsPanel />}
+            {view === "runner"     && <RunnerPanel />}
+            {view === "library"    && <LibraryPanel onNavigateToItem={handleNavigateToItem} />}
           </Allotment.Pane>
         </Allotment>
       </div>

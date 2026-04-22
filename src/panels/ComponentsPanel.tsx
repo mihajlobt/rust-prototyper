@@ -56,7 +56,7 @@ if (__Comp) {
 </html>`;
 }
 
-export function ComponentsPanel() {
+export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
   const { settings, setSettings } = useSettings();
   const [prompt, setPrompt] = useState("");
   const [code, setCode] = useState("");
@@ -66,7 +66,7 @@ export function ComponentsPanel() {
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
-  const [selectedComponent, setSelectedComponent] = useState("");
+  const [selectedComponent, setSelectedComponent] = useState(initialItem || "");
   const [previewKey, setPreviewKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const verticalAllotmentRef = useRef<AllotmentHandle>(null);
