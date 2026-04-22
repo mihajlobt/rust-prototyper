@@ -123,10 +123,12 @@ export function ComponentsPanel() {
       const themePrompt = selectedTheme
         ? ` Use the theme named "${selectedTheme}" for styling.`
         : "";
+      const defaultSystem = `You are a React component generator. Generate only the component code in TSX format. No explanations, no markdown code blocks. Just raw code. Export the component as default.${themePrompt}`;
+      const systemContent = settings.prompts["components-system"] || defaultSystem;
       const msgs = [
         {
           role: "system",
-          content: `You are a React component generator. Generate only the component code in TSX format. No explanations, no markdown code blocks. Just raw code. Export the component as default.${themePrompt}`,
+          content: systemContent,
         },
         { role: "user", content: prompt.trim() },
       ];
@@ -146,7 +148,7 @@ export function ComponentsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [prompt, loading, settings.modelId, settings.project, settings.host, settings.apiKeys, selectedTheme]);
+  }, [prompt, loading, settings.modelId, settings.project, settings.host, settings.apiKeys, settings.prompts, selectedTheme]);
 
   const handleRunPreview = async () => {
     if (running && pidRef.current) {

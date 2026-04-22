@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Copy, Eye } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-import { getContextWindow } from "@/lib/ipc";
+import { getContextWindow, listOllamaModels } from "@/lib/ipc";
 import type { Message } from "@/lib/ipc";
 
 interface PromptInspectorProps {
@@ -38,10 +38,30 @@ function getModelPricing(model: string): ModelPricing {
 
 export function PromptInspector({ model, messages, host }: PromptInspectorProps) {
   const [copied, setCopied] = useState(false);
+  const [fetchedContextWindow, setFetchedContextWindow] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await listOllamaModels(host);
+        const found = list.find((m) => m.id === model || m.name === model);
+        if (!cancelled && found && found.context_length && found.context_length > 0) {
+          setFetchedContextWindow(found.context_length);
+        } else {
+          setFetchedContextWindow(null);
+        }
+      } catch {
+        if (!cancelled) setFetchedContextWindow(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [model, host]);
 
   const assembled = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
   const tokenCount = useMemo(() => estimateTokens(assembled), [assembled]);
-  const contextWindow = getContextWindow(model);
+  const heuristicContextWindow = getContextWindow(model);
+  const contextWindow = fetchedContextWindow ?? heuristicContextWindow;
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
   const pricing = getModelPricing(model);
   const estimatedCost = (tokenCount / 1000) * pricing.inputPer1k;

@@ -114,10 +114,14 @@ export function ScreensPanel() {
     setLoading(true);
 
     try {
-      const msgs = nextMessages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const customSystem = settings.prompts["screens-system"];
+      const msgs: { role: string; content: string }[] = [];
+      if (customSystem) {
+        msgs.push({ role: "system", content: customSystem });
+      }
+      for (const m of nextMessages) {
+        msgs.push({ role: m.role, content: m.content });
+      }
       if (attachments.length > 0) {
         const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.split("/").pop()).join(", ")}]`;
         msgs[msgs.length - 1].content += attachmentContext;
@@ -139,7 +143,7 @@ export function ScreensPanel() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, settings.modelId, settings.project, persistChat, attachments, screenPath]);
+  }, [input, loading, messages, settings.modelId, settings.project, settings.prompts, persistChat, attachments, screenPath]);
 
   const deviceWidth = {
     desktop: "100%",

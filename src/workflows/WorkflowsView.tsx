@@ -1,11 +1,13 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Play, Square, ZoomIn, ZoomOut, Save, Trash2, Settings } from "lucide-react";
+import { Play, Square, ZoomIn, ZoomOut, Save, Trash2, Settings, Undo2, Redo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { generateCompletion, getApiKey, httpRequest, runShellCommand, readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev, parseAiResponse, type FileEntry } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
+
+const MAX_UNDO = 50;
 
 interface NodeData {
   prompt?: string;
@@ -87,19 +89,59 @@ export function WorkflowsView() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const panStart = useRef({ x: 0, y: 0 });
 
+  // Undo/redo
+  const undoStack = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  const redoStack = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+
+  const pushUndo = useCallback(() => {
+    undoStack.current.push({ nodes: [...nodes], edges: [...edges] });
+    if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+    redoStack.current = [];
+  }, [nodes, edges]);
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.current.length === 0) return;
+    redoStack.current.push({ nodes: [...nodes], edges: [...edges] });
+    const prev = undoStack.current.pop()!;
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+  }, [nodes, edges]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.current.length === 0) return;
+    undoStack.current.push({ nodes: [...nodes], edges: [...edges] });
+    const next = redoStack.current.pop()!;
+    setNodes(next.nodes);
+    setEdges(next.edges);
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndo, handleRedo]);
+
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
 
   const updateNode = useCallback((id: string, patch: Partial<Node>) => {
+    pushUndo();
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
-  }, []);
+  }, [pushUndo]);
 
   const updateNodeData = useCallback((id: string, dataPatch: Partial<NodeData>) => {
+    pushUndo();
     setNodes((prev) =>
       prev.map((n) =>
         n.id === id ? { ...n, data: { ...n.data, ...dataPatch } } : n
       )
     );
-  }, []);
+  }, [pushUndo]);
 
   const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
@@ -107,6 +149,7 @@ export function WorkflowsView() {
       if (edgeFrom === null) {
         setEdgeFrom(nodeId);
       } else if (edgeFrom !== nodeId) {
+        pushUndo();
         setEdges((prev) => {
           const exists = prev.some((ed) => ed.from === edgeFrom && ed.to === nodeId);
           if (exists) return prev;
@@ -151,6 +194,7 @@ export function WorkflowsView() {
   };
 
   const addNode = (type: string) => {
+    pushUndo();
     const def = NODE_TYPES.find((t) => t.type === type)!;
     setNodes((prev) => [
       ...prev,
@@ -167,35 +211,36 @@ export function WorkflowsView() {
   };
 
   const deleteNode = (id: string) => {
+    pushUndo();
     setNodes((prev) => prev.filter((n) => n.id !== id));
     setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id));
     if (selectedNodeId === id) setSelectedNodeId(null);
   };
 
-  const getPrevOutput = (nodeId: string): string => {
-    const incoming = edges.filter((e) => e.to === nodeId);
-    if (incoming.length === 0) return "";
-    const prevNode = nodes.find((n) => n.id === incoming[0].from);
-    return prevNode?.output || "";
-  };
-
   const runWorkflow = async () => {
     setRunning(true);
     abortRef.current = false;
-    // Reset statuses
     setNodes((prev) => prev.map((n) => ({ ...n, status: "idle" as const, output: undefined })));
 
-    // Topological order using Kahn's algorithm
-    const inDegree = new Map<string, number>();
+    const currentNodes = nodes;
+    const currentEdges = edges;
+
+    // Build adjacency + reverse adjacency
     const adj = new Map<string, string[]>();
-    for (const n of nodes) {
-      inDegree.set(n.id, 0);
+    const radj = new Map<string, string[]>();
+    for (const n of currentNodes) {
       adj.set(n.id, []);
+      radj.set(n.id, []);
     }
-    for (const e of edges) {
+    for (const e of currentEdges) {
       adj.get(e.from)!.push(e.to);
-      inDegree.set(e.to, inDegree.get(e.to)! + 1);
+      radj.get(e.to)!.push(e.from);
     }
+
+    // Topological sort (Kahn's)
+    const inDegree = new Map<string, number>();
+    for (const n of currentNodes) inDegree.set(n.id, 0);
+    for (const e of currentEdges) inDegree.set(e.to, inDegree.get(e.to)! + 1);
     const queue: string[] = [];
     for (const [id, deg] of inDegree) {
       if (deg === 0) queue.push(id);
@@ -209,13 +254,29 @@ export function WorkflowsView() {
         if (inDegree.get(next) === 0) queue.push(next);
       }
     }
-    // Fallback: if cycle, execute in node array order
-    const executionOrder = order.length === nodes.length ? order : nodes.map((n) => n.id);
+    const executionOrder = order.length === currentNodes.length ? order : currentNodes.map((n) => n.id);
 
-    for (const nodeId of executionOrder) {
-      if (abortRef.current) break;
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node) continue;
+    // Track which composition nodes are waiting and what they need
+    const compositionDeps = new Map<string, Set<string>>();
+    for (const n of currentNodes) {
+      if (n.type === "composition") {
+        compositionDeps.set(n.id, new Set(radj.get(n.id)!));
+      }
+    }
+
+    const getPrevOutput = (nodeId: string): string => {
+      const incoming = currentEdges.filter((e) => e.to === nodeId);
+      if (incoming.length === 0) return "";
+      const prevNode = currentNodes.find((n) => n.id === incoming[0].from);
+      return prevNode?.output || "";
+    };
+
+    const customPrompts = settings.prompts;
+
+    const executeNode = async (nodeId: string) => {
+      if (abortRef.current) return;
+      const node = currentNodes.find((n) => n.id === nodeId);
+      if (!node) return;
 
       updateNode(nodeId, { status: "running", output: undefined });
       const prevOutput = getPrevOutput(nodeId);
@@ -233,42 +294,32 @@ export function WorkflowsView() {
             break;
           }
           case "requirements": {
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Extract and structure requirements from the user request. Output as bullet points." },
-              { role: "user", content: prevOutput || promptBase },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-requirements-system"] || "Extract and structure requirements from the user request. Output as bullet points.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "architect": {
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Create a high-level architecture plan. List components, data flow, and state management." },
-              { role: "user", content: prevOutput || promptBase },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-architect-system"] || "Create a high-level architecture plan. List components, data flow, and state management.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "structure": {
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Generate HTML/JSX structure. Output only code, no explanations." },
-              { role: "user", content: prevOutput || promptBase },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-structure-system"] || "Generate HTML/JSX structure. Output only code, no explanations.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "style": {
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Apply Tailwind CSS classes to the provided HTML/JSX. Output only the styled code." },
-              { role: "user", content: prevOutput || promptBase },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-style-system"] || "Apply Tailwind CSS classes to the provided HTML/JSX. Output only the styled code.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "interaction": {
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Add React hooks and state management to the component. Output only code." },
-              { role: "user", content: prevOutput || promptBase },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-interaction-system"] || "Add React hooks and state management to the component. Output only code.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || promptBase }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -282,20 +333,10 @@ export function WorkflowsView() {
             const url = node.data?.url || "https://api.github.com";
             const method = node.data?.method || "GET";
             let headers: Record<string, string> = {};
-            try {
-              headers = JSON.parse(node.data?.headers || "{}");
-            } catch {
-              // ignore
-            }
-            // Apply auth from previous auth node
-            const prevAuth = nodes.find((n) => edges.some((e) => e.to === nodeId && e.from === n.id && n.type === "auth"));
+            try { headers = JSON.parse(node.data?.headers || "{}"); } catch {}
+            const prevAuth = currentNodes.find((n) => currentEdges.some((e) => e.to === nodeId && e.from === n.id && n.type === "auth"));
             if (prevAuth?.output) {
-              try {
-                const authHeaders = JSON.parse(prevAuth.output);
-                Object.assign(headers, authHeaders);
-              } catch {
-                // ignore
-              }
+              try { Object.assign(headers, JSON.parse(prevAuth.output)); } catch {}
             }
             const res = await httpRequest(method, url, headers, node.data?.body || undefined);
             output = `Status: ${res.status}\n${res.body.slice(0, 2000)}`;
@@ -316,46 +357,16 @@ export function WorkflowsView() {
             break;
           }
           case "parallel": {
-            const branches = edges.filter((e) => e.from === nodeId);
-            const childIds = branches.map((e) => e.to);
-            const results = await Promise.all(childIds.map(async (cid) => {
-              const child = nodes.find((n) => n.id === cid);
-              if (!child) return "";
-              updateNode(cid, { status: "running" });
-              try {
-                let childOutput = "";
-                if (child.type === "bash" && child.data?.command) {
-                  await runShellCommand(".", child.data.command);
-                  childOutput = `Executed: ${child.data.command}`;
-                } else if (child.type === "fetch" && child.data?.url) {
-                  let h: Record<string, string> = {};
-                  try { h = JSON.parse(child.data.headers || "{}"); } catch {}
-                  const res = await httpRequest(child.data.method || "GET", child.data.url, h, child.data.body || undefined);
-                  childOutput = `Status: ${res.status}`;
-                } else if (["requirements", "architect", "structure", "style", "interaction", "transform", "validate"].includes(child.type)) {
-                  const p = child.data?.prompt || child.label;
-                  const r = await generateCompletion(settings.modelId, [
-                    { role: "system", content: `Execute ${child.type} node` },
-                    { role: "user", content: p },
-                  ], settings.host, getApiKey(settings.modelId, settings.apiKeys));
-                  childOutput = parseAiResponse(r);
-                } else {
-                  childOutput = child.label;
-                }
-                updateNode(cid, { status: "done", output: childOutput.slice(0, 500) });
-                return childOutput;
-              } catch (e) {
-                updateNode(cid, { status: "error", output: String(e).slice(0, 500) });
-                return String(e);
-              }
-            }));
-            output = `Parallel: ${branches.length} branches\n${results.join("\n").slice(0, 500)}`;
+            // Fork: mark done, children execute as separate branches
+            const branches = currentEdges.filter((e) => e.from === nodeId);
+            output = `Forked into ${branches.length} branches`;
             break;
           }
           case "composition": {
-            const incoming = edges.filter((e) => e.to === nodeId);
+            // Merge: collect all incoming node outputs
+            const incoming = currentEdges.filter((e) => e.to === nodeId);
             const merged = incoming.map((e) => {
-              const n = nodes.find((n) => n.id === e.from);
+              const n = currentNodes.find((n) => n.id === e.from);
               return n?.output || "";
             }).join("\n\n---\n\n");
             output = merged || "No inputs to compose";
@@ -366,38 +377,28 @@ export function WorkflowsView() {
             const token = node.data?.authToken || "token";
             const headerName = node.data?.authHeaderName || "X-API-Key";
             let headers: Record<string, string> = {};
-            if (scheme === "bearer") {
-              headers["Authorization"] = `Bearer ${token}`;
-            } else if (scheme === "apikey") {
-              headers[headerName] = token;
-            } else if (scheme === "basic") {
-              headers["Authorization"] = `Basic ${btoa(token)}`;
-            } else if (scheme === "oauth2") {
-              headers["Authorization"] = `Bearer ${token}`;
-            }
+            if (scheme === "bearer") headers["Authorization"] = `Bearer ${token}`;
+            else if (scheme === "apikey") headers[headerName] = token;
+            else if (scheme === "basic") headers["Authorization"] = `Basic ${btoa(token)}`;
+            else if (scheme === "oauth2") headers["Authorization"] = `Bearer ${token}`;
             output = JSON.stringify(headers);
             break;
           }
           case "transform": {
             const transformPrompt = node.data?.prompt || "Clean up and format the input";
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Transform the provided content according to the instruction. Output only the transformed content." },
-              { role: "user", content: `Instruction: ${transformPrompt}\n\nContent: ${prevOutput}` },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-transform-system"] || "Transform the provided content according to the instruction. Output only the transformed content.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: `Instruction: ${transformPrompt}\n\nContent: ${prevOutput}` }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "validate": {
-            const res = await generateCompletion(model, [
-              { role: "system", content: "Validate the provided code. List any syntax errors, type errors, or issues. If valid, say 'Valid'." },
-              { role: "user", content: prevOutput || "No code to validate" },
-            ], host, apiKey);
+            const sys = customPrompts["workflow-validate-system"] || "Validate the provided code. List any syntax errors, type errors, or issues. If valid, say 'Valid'.";
+            const res = await generateCompletion(model, [{ role: "system", content: sys }, { role: "user", content: prevOutput || "No code to validate" }], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "preview": {
             output = prevOutput || "Nothing to preview";
-            updateNode(nodeId, { status: "done", output: output.slice(0, 500) });
             break;
           }
           case "designSystem": {
@@ -427,14 +428,106 @@ export function WorkflowsView() {
             }
             break;
           }
-          default: {
+          default:
             output = prevOutput || `Node ${node.label} passed through`;
-          }
         }
 
         updateNode(nodeId, { status: "done", output: output.slice(0, 500) });
       } catch (e) {
         updateNode(nodeId, { status: "error", output: String(e).slice(0, 500) });
+      }
+    };
+
+    // Identify parallel branches: walk from each parallel node's children until composition
+    const findBranchEnd = (startId: string): string[] => {
+      const branch: string[] = [startId];
+      const visited = new Set<string>([startId]);
+      const walk = (id: string) => {
+        for (const next of adj.get(id)!) {
+          if (visited.has(next)) continue;
+          if (currentNodes.find((n) => n.id === next)?.type === "composition") continue;
+          visited.add(next);
+          branch.push(next);
+          walk(next);
+        }
+      };
+      walk(startId);
+      return branch;
+    };
+
+    // Execute with parallel branch support
+    const completed = new Set<string>();
+
+    for (const nodeId of executionOrder) {
+      if (abortRef.current) break;
+      const node = currentNodes.find((n) => n.id === nodeId);
+      if (!node) continue;
+
+      // For composition nodes: check if all deps are done
+      if (node.type === "composition") {
+        const deps = radj.get(nodeId)!;
+        const allDone = deps.every((d) => completed.has(d));
+        if (!allDone) {
+          // Skip for now, will be retried by branch completion
+          continue;
+        }
+      }
+
+      // For parallel nodes: fork execution
+      if (node.type === "parallel") {
+        await executeNode(nodeId);
+        completed.add(nodeId);
+
+        const branches = adj.get(nodeId)!;
+        await Promise.all(branches.map(async (childId) => {
+          const branchNodeIds = findBranchEnd(childId);
+          for (const bid of branchNodeIds) {
+            if (!completed.has(bid)) {
+              await executeNode(bid);
+              completed.add(bid);
+            }
+          }
+        }));
+
+        // After all branches complete, check composition nodes that depend on these branch nodes
+        for (const compId of compositionDeps.keys()) {
+          const deps = compositionDeps.get(compId)!;
+          if (deps.size > 0 && [...deps].every((d) => completed.has(d))) {
+            if (!completed.has(compId)) {
+              await executeNode(compId);
+              completed.add(compId);
+            }
+          }
+        }
+        continue;
+      }
+
+      // Normal sequential execution
+      if (!completed.has(nodeId)) {
+        await executeNode(nodeId);
+        completed.add(nodeId);
+
+        // Check if any composition node is now unblocked
+        for (const compId of compositionDeps.keys()) {
+          const deps = compositionDeps.get(compId)!;
+          if (deps.size > 0 && [...deps].every((d) => completed.has(d))) {
+            if (!completed.has(compId)) {
+              await executeNode(compId);
+              completed.add(compId);
+            }
+          }
+        }
+      }
+    }
+
+    // Execute any remaining composition nodes that weren't reached
+    for (const compId of compositionDeps.keys()) {
+      if (!completed.has(compId)) {
+        const deps = compositionDeps.get(compId)!;
+        if ([...deps].some((d) => completed.has(d))) {
+          await executeNode(compId);
+          completed.add(compId);
+        }
       }
     }
 
@@ -486,6 +579,13 @@ export function WorkflowsView() {
         >
           {running ? <Square size={12} /> : <Play size={12} />}
           {running ? "Stop" : "Run"}
+        </Button>
+        <div className="w-px h-4 bg-border mx-1" />
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleUndo} disabled={undoStack.current.length === 0}>
+          <Undo2 size={12} />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRedo} disabled={redoStack.current.length === 0}>
+          <Redo2 size={12} />
         </Button>
         <div className="w-px h-4 bg-border mx-1" />
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setZoom((z) => Math.min(z + 0.1, 2))}>

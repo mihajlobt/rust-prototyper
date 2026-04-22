@@ -79,10 +79,12 @@ export function ThemesPanel() {
     if (!prompt.trim() || loading) return;
     setLoading(true);
     try {
+      const defaultSystem = `You are a CSS theme generator. ${frameworkPrompts[framework]} No explanations, no markdown code blocks. Just raw CSS.`;
+      const systemContent = settings.prompts["themes-system"] || defaultSystem;
       const msgs = [
         {
           role: "system",
-          content: `You are a CSS theme generator. ${frameworkPrompts[framework]} No explanations, no markdown code blocks. Just raw CSS.`,
+          content: systemContent,
         },
         { role: "user", content: prompt.trim() },
       ];
@@ -96,7 +98,7 @@ export function ThemesPanel() {
     } finally {
       setLoading(false);
     }
-  }, [prompt, loading, settings.modelId, settings.apiKeys, framework, persistTheme]);
+  }, [prompt, loading, settings.modelId, settings.apiKeys, settings.prompts, framework, persistTheme]);
 
   const handleSaveCss = async () => {
     await persistTheme(css, prompt);

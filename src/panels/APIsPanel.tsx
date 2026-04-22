@@ -37,11 +37,37 @@ interface SavedApi {
   authHeaderName: string;
   authUsername: string;
   authPassword: string;
+  authTokenUrl: string;
+  authClientId: string;
+  authClientSecret: string;
   history: ApiHistoryEntry[];
 }
 
 function getApisPath(project: string) {
   return `projects/${project}/apis/apis.json`;
+}
+
+function getEnvPath(project: string) {
+  return `projects/${project}/apis/env.json`;
+}
+
+async function loadEnvVars(project: string): Promise<Record<string, string>> {
+  try {
+    const data = await readFile(getEnvPath(project));
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+async function saveEnvVars(project: string, envVars: Record<string, string>) {
+  try {
+    const path = getEnvPath(project);
+    await createDir(path.replace("/env.json", ""));
+    await writeFile(path, JSON.stringify(envVars, null, 2));
+  } catch {
+    // ignore
+  }
 }
 
 async function loadApis(project: string): Promise<SavedApi[]> {
@@ -103,17 +129,29 @@ export function APIsPanel() {
   const [authHeaderName, setAuthHeaderName] = useState("X-API-Key");
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authTokenUrl, setAuthTokenUrl] = useState("");
+  const [authClientId, setAuthClientId] = useState("");
+  const [authClientSecret, setAuthClientSecret] = useState("");
+  const [oauthCode, setOauthCode] = useState("");
+  const [showOauthDialog, setShowOauthDialog] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [response, setResponse] = useState<HttpResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [curlPaste, setCurlPaste] = useState("");
   const [openapiPaste, setOpenapiPaste] = useState("");
   const [history, setHistory] = useState<ApiHistoryEntry[]>([]);
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
+  const [newEnvKey, setNewEnvKey] = useState("");
+  const [newEnvValue, setNewEnvValue] = useState("");
 
   // Load from FS on project change
   useEffect(() => {
     let cancelled = false;
     loadApis(settings.project).then((data) => {
       if (!cancelled) setApis(data);
+    });
+    loadEnvVars(settings.project).then((data) => {
+      if (!cancelled) setEnvVars(data);
     });
     return () => { cancelled = true; };
   }, [settings.project]);
@@ -122,6 +160,10 @@ export function APIsPanel() {
   useEffect(() => {
     saveApis(settings.project, apis);
   }, [apis, settings.project]);
+
+  useEffect(() => {
+    saveEnvVars(settings.project, envVars);
+  }, [envVars, settings.project]);
 
   const selectApi = useCallback((api: SavedApi) => {
     setSelectedApiId(api.id);
@@ -135,9 +177,16 @@ export function APIsPanel() {
     setAuthHeaderName(api.authHeaderName || "X-API-Key");
     setAuthUsername(api.authUsername || "");
     setAuthPassword(api.authPassword || "");
+    setAuthTokenUrl(api.authTokenUrl || "");
+    setAuthClientId(api.authClientId || "");
+    setAuthClientSecret(api.authClientSecret || "");
     setHistory(api.history || []);
     setResponse(null);
   }, []);
+
+  function resolveEnvVars(text: string): string {
+    return text.replace(/\{\{(\w+)\}\}/g, (_, key) => envVars[key] ?? `{{${key}}}`);
+  }
 
   const createApi = () => {
     const api: SavedApi = {
@@ -152,6 +201,9 @@ export function APIsPanel() {
       authHeaderName: "X-API-Key",
       authUsername: "",
       authPassword: "",
+      authTokenUrl: "",
+      authClientId: "",
+      authClientSecret: "",
       history: [],
     };
     setApis((prev) => [...prev, api]);
@@ -166,7 +218,7 @@ export function APIsPanel() {
     setApis((prev) =>
       prev.map((a) =>
         a.id === selectedApiId
-          ? { ...a, name: name || a.name, method, url, headersText, body, authType, authToken, authHeaderName, authUsername, authPassword, history }
+          ? { ...a, name: name || a.name, method, url, headersText, body, authType, authToken, authHeaderName, authUsername, authPassword, authTokenUrl, authClientId, authClientSecret, history }
           : a
       )
     );
@@ -227,6 +279,9 @@ export function APIsPanel() {
             authHeaderName: "X-API-Key",
             authUsername: "",
             authPassword: "",
+            authTokenUrl: "",
+            authClientId: "",
+            authClientSecret: "",
             history: [],
           });
         }
@@ -240,14 +295,79 @@ export function APIsPanel() {
     setOpenapiPaste("");
   };
 
+  function generateCodeVerifier(): string {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return btoa(String.fromCharCode(...array)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  async function generateCodeChallenge(verifier: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  const startOAuth2 = async () => {
+    if (!authTokenUrl || !authClientId) return;
+    const verifier = generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+    const redirectUri = "http://localhost:8080/callback";
+    const state = Math.random().toString(36).slice(2);
+    const authorizeUrl = new URL(authTokenUrl.replace("/token", "/authorize"));
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("client_id", authClientId);
+    authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+    authorizeUrl.searchParams.set("code_challenge", challenge);
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    authorizeUrl.searchParams.set("state", state);
+    window.open(authorizeUrl.toString(), "_blank");
+    setShowOauthDialog(true);
+    setOauthCode("");
+  };
+
+  const exchangeOAuth2Code = async () => {
+    if (!oauthCode.trim() || !authTokenUrl || !authClientId) return;
+    setOauthLoading(true);
+    try {
+      const redirectUri = "http://localhost:8080/callback";
+      const tokenBody = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: oauthCode.trim(),
+        redirect_uri: redirectUri,
+        client_id: authClientId,
+        client_secret: authClientSecret,
+      }).toString();
+      const res = await httpRequest("POST", authTokenUrl, {
+        "Content-Type": "application/x-www-form-urlencoded",
+      }, tokenBody);
+      const data = JSON.parse(res.body);
+      const token = data.access_token || data.token || "";
+      if (token) {
+        setAuthToken(token);
+      }
+      setShowOauthDialog(false);
+      setOauthCode("");
+    } catch {
+      // ignore token exchange errors
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
   const send = async () => {
     if (!url.trim()) return;
     setLoading(true);
     const start = Date.now();
     try {
+      const resolvedUrl = resolveEnvVars(url);
+      const resolvedBody = body ? resolveEnvVars(body) : undefined;
       let headers: Record<string, string> = {};
       try {
-        headers = JSON.parse(headersText);
+        const parsedHeaders = JSON.parse(headersText);
+        for (const [key, value] of Object.entries(parsedHeaders)) {
+          headers[key] = resolveEnvVars(value as string);
+        }
       } catch {
         // ignore invalid JSON
       }
@@ -261,7 +381,7 @@ export function APIsPanel() {
       } else if (authType === "oauth2" && authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
       }
-      const res = await httpRequest(method, url, headers, body || undefined);
+      const res = await httpRequest(method, resolvedUrl, headers, resolvedBody || undefined);
       setResponse(res);
       const entry: ApiHistoryEntry = {
         timestamp: Date.now(),
@@ -463,6 +583,19 @@ export function APIsPanel() {
                         <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="h-8 text-xs" />
                       </div>
                     )}
+                    {authType === "oauth2" && (
+                      <div className="space-y-2">
+                        <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setAuthTokenUrl(e.target.value)} className="h-8 text-xs" />
+                        <div className="flex gap-2">
+                          <Input placeholder="Client ID" value={authClientId} onChange={(e) => setAuthClientId(e.target.value)} className="h-8 text-xs" />
+                          <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setAuthClientSecret(e.target.value)} className="h-8 text-xs" />
+                        </div>
+                        <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>
+                          Authorize
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -477,9 +610,52 @@ export function APIsPanel() {
                     <Textarea
                       value={body}
                       onChange={(e) => setBody(e.target.value)}
-                      placeholder="Request body..."
+                      placeholder="Request body... (use {{VAR_NAME}} for env vars)"
                       className="min-h-[120px] text-sm font-mono"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Environment Variables</label>
+                    {Object.entries(envVars).map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded w-28 truncate">{key}</span>
+                        <Input
+                          value={value}
+                          onChange={(e) => setEnvVars((prev) => ({ ...prev, [key]: e.target.value }))}
+                          className="h-7 text-xs flex-1"
+                        />
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
+                          const next = { ...envVars };
+                          delete next[key];
+                          setEnvVars(next);
+                        }}>
+                          <Trash2 size={10} />
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Key (e.g. BASE_URL)"
+                        value={newEnvKey}
+                        onChange={(e) => setNewEnvKey(e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                      <Input
+                        placeholder="Value"
+                        value={newEnvValue}
+                        onChange={(e) => setNewEnvValue(e.target.value)}
+                        className="h-7 text-xs flex-1"
+                      />
+                      <Button size="sm" className="h-7" onClick={() => {
+                        if (!newEnvKey.trim()) return;
+                        setEnvVars((prev) => ({ ...prev, [newEnvKey.trim()]: newEnvValue }));
+                        setNewEnvKey("");
+                        setNewEnvValue("");
+                      }} disabled={!newEnvKey.trim()}>
+                        <Plus size={14} />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -607,6 +783,35 @@ export function APIsPanel() {
           </Allotment>
         </Allotment.Pane>
       </Allotment>
+
+      {showOauthDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card border border-border rounded-lg shadow-lg p-4 w-[400px] space-y-3">
+            <h3 className="text-sm font-medium">OAuth2 Authorization Code</h3>
+            <p className="text-xs text-muted-foreground">
+              After authorizing in your browser, paste the authorization code from the redirect URL.
+              The redirect URL will look like: http://localhost:8080/callback?code=AUTH_CODE
+            </p>
+            <Input
+              placeholder="Paste authorization code here..."
+              value={oauthCode}
+              onChange={(e) => setOauthCode(e.target.value)}
+              className="h-8 text-xs font-mono"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") exchangeOAuth2Code();
+              }}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowOauthDialog(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" className="h-7 text-xs" onClick={exchangeOAuth2Code} disabled={!oauthCode.trim() || oauthLoading}>
+                {oauthLoading ? "Exchanging..." : "Exchange Code"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
