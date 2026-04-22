@@ -506,27 +506,26 @@ export function APIsPanel() {
                   )}
                 </div>
                 <Tabs defaultValue="body" className="flex-1 flex flex-col overflow-hidden">
-                  <TabsList className="grid w-full grid-cols-3 shrink-0">
+                  <TabsList className="grid w-full grid-cols-4 shrink-0">
                     <TabsTrigger value="body">Body</TabsTrigger>
+                    <TabsTrigger value="schema">Schema</TabsTrigger>
                     <TabsTrigger value="headers">Headers</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="body" className="flex-1 overflow-auto p-3 mt-0">
+                  <TabsContent value="body" className="flex-1 overflow-hidden mt-0">
                     {response ? (
-                      <div className="relative">
+                      <div className="relative h-full">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="absolute top-0 right-0 z-10 gap-1 text-xs"
+                          className="absolute top-1 right-1 z-10 gap-1 text-xs"
                           onClick={() => navigator.clipboard.writeText(response.body)}
                         >
                           <Copy size={12} />
                           Copy
                         </Button>
-                        <pre className="text-xs bg-muted p-2 rounded overflow-auto whitespace-pre-wrap">
-                          {response.body}
-                        </pre>
+                        <CodeMirrorEditor value={response.body} mode={(() => { try { JSON.parse(response.body); return "json"; } catch { return "yaml"; } })()} readOnly />
                       </div>
                     ) : (
                       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -535,11 +534,32 @@ export function APIsPanel() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="headers" className="flex-1 overflow-auto p-3 mt-0">
+                  <TabsContent value="schema" className="flex-1 overflow-hidden mt-0">
                     {response ? (
-                      <pre className="text-xs bg-muted p-2 rounded overflow-auto">
-                        {JSON.stringify(response.headers, null, 2)}
-                      </pre>
+                      <div className="relative h-full">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-1 right-1 z-10 gap-1 text-xs"
+                          onClick={() => navigator.clipboard.writeText(response.body)}
+                        >
+                          <Copy size={12} />
+                          Copy
+                        </Button>
+                        <CodeMirrorEditor value={response.body} mode={(() => { try { JSON.parse(response.body); return "json"; } catch { return "yaml"; } })()} readOnly />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                        Send a request to see the schema
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="headers" className="flex-1 overflow-hidden mt-0">
+                    {response ? (
+                      <div className="h-full">
+                        <CodeMirrorEditor value={JSON.stringify(response.headers, null, 2)} mode="json" readOnly />
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                         No response yet

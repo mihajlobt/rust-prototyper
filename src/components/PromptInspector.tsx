@@ -17,6 +17,25 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+interface ModelPricing {
+  inputPer1k: number;
+  outputPer1k: number;
+}
+
+const modelPricing: Record<string, ModelPricing> = {
+  "gpt-4": { inputPer1k: 0.03, outputPer1k: 0.06 },
+  "gpt-3.5": { inputPer1k: 0.001, outputPer1k: 0.002 },
+  "claude": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "ollama": { inputPer1k: 0, outputPer1k: 0 },
+};
+
+function getModelPricing(model: string): ModelPricing {
+  if (model.startsWith("gpt-4")) return modelPricing["gpt-4"];
+  if (model.startsWith("gpt-3.5")) return modelPricing["gpt-3.5"];
+  if (model.startsWith("claude-")) return modelPricing["claude"];
+  return modelPricing["ollama"];
+}
+
 export function PromptInspector({ model, messages, host }: PromptInspectorProps) {
   const [copied, setCopied] = useState(false);
 
@@ -24,6 +43,8 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
   const tokenCount = useMemo(() => estimateTokens(assembled), [assembled]);
   const contextWindow = getContextWindow(model);
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
+  const pricing = getModelPricing(model);
+  const estimatedCost = (tokenCount / 1000) * pricing.inputPer1k;
 
   const payload = JSON.stringify(
     {
@@ -91,6 +112,11 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
           <span className="text-xs text-muted-foreground">
             ~{tokenCount} / {contextWindow.toLocaleString()} tokens ({usagePercent}%)
           </span>
+          {pricing.inputPer1k > 0 && (
+            <span className="text-xs text-muted-foreground">
+              ~${estimatedCost < 0.001 ? estimatedCost.toFixed(4) : estimatedCost.toFixed(3)}
+            </span>
+          )}
         </div>
       </div>
       <Tabs defaultValue="assembled" className="flex-1 flex flex-col overflow-hidden">

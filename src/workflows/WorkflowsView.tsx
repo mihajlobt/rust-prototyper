@@ -749,7 +749,22 @@ export function WorkflowsView() {
                 )}
 
                 {selectedNode.type === "preview" && (
-                  <div className="text-xs text-muted-foreground">Displays output from previous node</div>
+                  <>
+                    <div className="text-xs text-muted-foreground mb-2">Displays output from previous node</div>
+                    {selectedNode.output && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Preview</label>
+                        <div className="border border-border rounded overflow-hidden bg-white" style={{ height: 200 }}>
+                          <iframe
+                            srcDoc={selectedNode.output}
+                            className="w-full h-full"
+                            sandbox="allow-scripts"
+                            title="Preview"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {selectedNode.type === "auth" && (

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Send, Paperclip, Image, Smartphone, Tablet, Monitor, Eye, Plus, Download } from "lucide-react";
+import { Send, Paperclip, ImageIcon, Smartphone, Tablet, Monitor, Eye, Plus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -52,7 +52,6 @@ export function ScreensPanel() {
   const screenJsonPath = `projects/${settings.project}/screens/${screenId}/screen.json`;
   const attachmentsDir = `projects/${settings.project}/screens/${screenId}/attachments`;
 
-  // Load screens list
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -67,7 +66,6 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [settings.project]);
 
-  // Load persisted chat and links when screen changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -88,7 +86,6 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [settings.project, screenId, chatPath, screenJsonPath]);
 
-  // Persist chat on change
   const persistChat = useCallback(async (msgs: ChatMessage[]) => {
     try {
       await createDir(chatPath.replace("/chat.json", ""));
@@ -98,7 +95,6 @@ export function ScreensPanel() {
     }
   }, [chatPath]);
 
-  // Persist links
   const persistLinks = useCallback(async (newLinks: typeof links) => {
     try {
       await createDir(screenJsonPath.replace("/screen.json", ""));
@@ -118,12 +114,10 @@ export function ScreensPanel() {
     setLoading(true);
 
     try {
-      // Build messages with attachment context
       const msgs = nextMessages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
-      // If there are attachments, append context about them
       if (attachments.length > 0) {
         const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.split("/").pop()).join(", ")}]`;
         msgs[msgs.length - 1].content += attachmentContext;
@@ -145,7 +139,7 @@ export function ScreensPanel() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, settings.modelId, settings.project, persistChat]);
+  }, [input, loading, messages, settings.modelId, settings.project, persistChat, attachments, screenPath]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -235,9 +229,27 @@ export function ScreensPanel() {
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {
-    if (!linkMode) return;
     const target = e.target as HTMLElement;
     const tagName = target.tagName.toLowerCase();
+
+    if (!linkMode) {
+      for (const link of links) {
+        const matchesSelector =
+          (link.selector === tagName) ||
+          (target.id && link.selector === target.id) ||
+          (target.className && typeof target.className === "string" && link.selector === target.className) ||
+          target.matches?.(link.selector);
+        if (matchesSelector) {
+          e.preventDefault();
+          if (screens.includes(link.target)) {
+            setScreenId(link.target);
+          }
+          return;
+        }
+      }
+      return;
+    }
+
     if (tagName === 'a' || tagName === 'button') {
       const selector = target.id || target.className || tagName;
       const newLink = { selector, target: target.getAttribute('href') || target.textContent || tagName };
@@ -319,7 +331,7 @@ export function ScreensPanel() {
                           <Paperclip size={14} />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Image size={14} />
+                          <ImageIcon size={14} />
                         </Button>
                       </div>
                       <Textarea
@@ -434,7 +446,7 @@ export function ScreensPanel() {
                       <Paperclip size={14} />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
-                      <Image size={14} />
+                      <ImageIcon size={14} />
                     </Button>
                   </div>
                   <Textarea
@@ -525,7 +537,6 @@ export function ScreensPanel() {
         </Allotment.Pane>
       </Allotment>
 
-      {/* New Screen Dialog */}
       <Dialog open={showNewScreenDialog} onOpenChange={setShowNewScreenDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

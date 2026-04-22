@@ -4,6 +4,8 @@ import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
+import { yaml } from "@codemirror/lang-yaml";
+import { oneDark } from "@codemirror/theme-one-dark";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
@@ -15,8 +17,13 @@ const modeMap: Record<string, Extension> = {
   css: css(),
   json: json(),
   markdown: markdown(),
+  yaml: yaml(),
   shell: javascript(),
 };
+
+function isDarkMode(): boolean {
+  return document.documentElement.classList.contains("dark");
+}
 
 interface CodeMirrorEditorProps {
   value: string;
@@ -40,6 +47,9 @@ export function CodeMirrorEditor({
   const extensions = useMemo(() => {
     const ext = modeMap[mode];
     const result: Extension[] = ext ? [ext] : [];
+    if (isDarkMode()) {
+      result.push(oneDark);
+    }
     if (onBlur) {
       result.push(EditorView.domEventHandlers({ blur: () => { onBlur(); } }));
     }

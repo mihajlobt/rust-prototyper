@@ -88,6 +88,13 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
     api: <Terminal size={14} />,
   };
 
+  const typeGradients: Record<string, string> = {
+    component: "from-blue-500 to-purple-500",
+    theme: "from-pink-500 to-orange-500",
+    screen: "from-green-500 to-teal-500",
+    api: "from-gray-500 to-slate-500",
+  };
+
   const handleDelete = async (item: LibraryItem) => {
     if (!confirm(`Delete ${item.type} "${item.name}"?`)) return;
     const project = settings.project || "default";
@@ -224,8 +231,10 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
               {filtered.map((item) => (
                 <div
                   key={`${item.type}-${item.id}`}
-                  className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors"
+                  className="rounded-lg border border-border bg-card hover:border-primary/50 transition-colors overflow-hidden"
                 >
+                  <div className={`w-full h-2 bg-gradient-to-r ${typeGradients[item.type]}`} />
+                  <div className="p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-muted-foreground">{typeIcons[item.type]}</span>
                     {editingId === `${item.type}-${item.id}` ? (
@@ -266,6 +275,7 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDelete(item)}>
                       <Trash2 size={12} />
                     </Button>
+                  </div>
                   </div>
                 </div>
               ))}
