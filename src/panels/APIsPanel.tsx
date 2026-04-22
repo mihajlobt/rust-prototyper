@@ -34,6 +34,7 @@ interface SavedApi {
   body: string;
   authType: "none" | "bearer" | "apikey" | "basic" | "oauth2";
   authToken: string;
+  authHeaderName: string;
   authUsername: string;
   authPassword: string;
   history: ApiHistoryEntry[];
@@ -67,18 +68,25 @@ function generateId() {
 }
 
 function parseCurl(input: string): Partial<SavedApi> | null {
-  const methodMatch = input.match(/curl\s+(-X\s+(\w+)\s+)?['"]?(https?:\/\/[^\s'"]+)['"]?/);
+  // Improved cURL parser handling multiline, nested quotes, etc.
+  const normalized = input.replace(/\\\n/g, " ").replace(/\n/g, " ").trim();
+  const methodMatch = normalized.match(/curl\s+(?:-X\s+|--request\s+)(\w+)\s+['"]?(https?:\/\/[^\s'"]+)['"]?/i)
+    || normalized.match(/curl\s+['"]?(https?:\/\/[^\s'"]+)['"]?/i);
   if (!methodMatch) return null;
-  const url = methodMatch[3];
-  const method = methodMatch[2] || "GET";
+  const url = methodMatch[2] || methodMatch[1];
+  const method = methodMatch[1] && /^https?:\/\//i.test(methodMatch[1]) ? "GET" : (methodMatch[1] || "GET").toUpperCase();
   const headers: Record<string, string> = {};
-  const headerMatches = input.matchAll(/-H\s+['"]([^:]+):\s*([^'"]+)['"]/g);
+  const headerMatches = normalized.matchAll(/(?:-H|--header)\s+['"]([^'"]+?)['"]/g);
   for (const m of headerMatches) {
-    headers[m[1].trim()] = m[2].trim();
+    const colonIdx = m[1].indexOf(":");
+    if (colonIdx > 0) {
+      headers[m[1].slice(0, colonIdx).trim()] = m[1].slice(colonIdx + 1).trim();
+    }
   }
-  const bodyMatch = input.match(/-d\s+['"]([\s\S]*?)['"]\s*(?:-H|-X|curl|$)/);
+  const bodyMatch = normalized.match(/(?:-d|--data|--data-raw)\s+['"]([\s\S]*?)['"]\s*(?:-H|-X|curl|$)/i)
+    || normalized.match(/(?:-d|--data|--data-raw)\s+['"]([\s\S]*?)['"]\s*$/i);
   const body = bodyMatch ? bodyMatch[1] : "";
-  return { url, method: method.toUpperCase(), headersText: JSON.stringify(headers, null, 2), body };
+  return { url, method, headersText: JSON.stringify(headers, null, 2), body };
 }
 
 export function APIsPanel() {
@@ -92,6 +100,7 @@ export function APIsPanel() {
   const [body, setBody] = useState("");
   const [authType, setAuthType] = useState<"none" | "bearer" | "apikey" | "basic" | "oauth2">("none");
   const [authToken, setAuthToken] = useState("");
+  const [authHeaderName, setAuthHeaderName] = useState("X-API-Key");
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [response, setResponse] = useState<HttpResponse | null>(null);
@@ -123,6 +132,7 @@ export function APIsPanel() {
     setBody(api.body);
     setAuthType(api.authType);
     setAuthToken(api.authToken);
+    setAuthHeaderName(api.authHeaderName || "X-API-Key");
     setAuthUsername(api.authUsername || "");
     setAuthPassword(api.authPassword || "");
     setHistory(api.history || []);
@@ -139,6 +149,7 @@ export function APIsPanel() {
       body: "",
       authType: "none",
       authToken: "",
+      authHeaderName: "X-API-Key",
       authUsername: "",
       authPassword: "",
       history: [],
@@ -155,7 +166,7 @@ export function APIsPanel() {
     setApis((prev) =>
       prev.map((a) =>
         a.id === selectedApiId
-          ? { ...a, name: name || a.name, method, url, headersText, body, authType, authToken, authUsername, authPassword, history }
+          ? { ...a, name: name || a.name, method, url, headersText, body, authType, authToken, authHeaderName, authUsername, authPassword, history }
           : a
       )
     );
@@ -172,6 +183,7 @@ export function APIsPanel() {
       setBody("");
       setAuthType("none");
       setAuthToken("");
+      setAuthHeaderName("X-API-Key");
       setHistory([]);
     }
   };
@@ -212,6 +224,7 @@ export function APIsPanel() {
             body: "",
             authType: "none",
             authToken: "",
+            authHeaderName: "X-API-Key",
             authUsername: "",
             authPassword: "",
             history: [],
@@ -241,7 +254,7 @@ export function APIsPanel() {
       if (authType === "bearer" && authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
       } else if (authType === "apikey" && authToken) {
-        headers["X-API-Key"] = authToken;
+        headers[authHeaderName || "X-API-Key"] = authToken;
       } else if (authType === "basic" && authUsername) {
         const encoded = btoa(`${authUsername}:${authPassword}`);
         headers["Authorization"] = `Basic ${encoded}`;
@@ -435,7 +448,10 @@ export function APIsPanel() {
                         <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
                       )}
                       {authType === "apikey" && (
-                        <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                        <div className="flex gap-2">
+                          <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setAuthHeaderName(e.target.value)} className="h-8 text-xs w-[140px]" />
+                          <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                        </div>
                       )}
                       {authType === "oauth2" && (
                         <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />

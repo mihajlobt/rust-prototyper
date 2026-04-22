@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Eye } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
+import { getContextWindow } from "@/lib/ipc";
 
 interface PromptInspectorProps {
   model: string;
@@ -12,22 +13,9 @@ interface PromptInspectorProps {
 }
 
 function estimateTokens(text: string): number {
-  try {
-    const { encoding_for_model } = require("js-tiktoken");
-    const enc = encoding_for_model("gpt-4");
-    return enc.encode(text).length;
-  } catch {
-    // Fallback heuristic
-    return Math.ceil(text.length / 4);
-  }
-}
-
-function getContextWindow(model: string): number {
-  if (model.includes("32b") || model.includes("14b")) return 32768;
-  if (model.includes("72b") || model.includes("70b")) return 32768;
-  if (model.includes("gpt-4") || model.includes("claude")) return 128000;
-  if (model.includes("gpt-3.5")) return 16384;
-  return 8192;
+  // Heuristic: ~4 chars per token for English text
+  // This avoids the ESM/CJS incompatibility of js-tiktoken
+  return Math.ceil(text.length / 4);
 }
 
 export function PromptInspector({ model, messages, host }: PromptInspectorProps) {
@@ -48,13 +36,33 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
     2
   );
 
-  const curl = `curl -X POST ${host}/api/chat \\
+  const isOllama = !model.startsWith("gpt-") && !model.startsWith("o1-") && !model.startsWith("o3-") && !model.startsWith("claude-");
+
+  const curl = isOllama
+    ? `curl -X POST ${host}/api/chat \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({
-    model,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    stream: false,
-  })}'`;
+      model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      stream: false,
+    })}'`
+    : model.startsWith("claude-")
+      ? `curl -X POST https://api.anthropic.com/v1/messages \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: $ANTHROPIC_API_KEY" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -d '${JSON.stringify({
+      model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      max_tokens: 4096,
+    })}'`
+      : `curl -X POST https://api.openai.com/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $OPENAI_API_KEY" \\
+  -d '${JSON.stringify({
+      model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    })}'`;
 
   const handleCopy = async (text: string) => {
     await writeText(text);

@@ -4,12 +4,16 @@ import { Send, Smartphone, Tablet, Monitor, Save, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { generateCompletion, getApiKey, writeFile, createDir, readFile, parseAiResponse } from "@/lib/ipc";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { generateCompletion, getApiKey, writeFile, createDir, readFile, readDir, parseAiResponse, type FileEntry } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-
-const THEME_CSS_PATH = "./projects/{project}/themes/main/theme.css";
-const THEME_PROMPT_PATH = "./projects/{project}/themes/main/prompt.json";
 
 export function ThemesPanel() {
   const { settings, setSettings } = useSettings();
@@ -19,13 +23,30 @@ export function ThemesPanel() {
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
   const [presetName, setPresetName] = useState("");
+  const [availableThemes, setAvailableThemes] = useState<FileEntry[]>([]);
+  const [selectedThemeDir, setSelectedThemeDir] = useState("");
 
-  // Load persisted theme on mount
+  // Load available themes
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const cssPath = THEME_CSS_PATH.replace("{project}", settings.project);
+        const entries = await readDir(`projects/${settings.project}/themes`);
+        if (!cancelled) setAvailableThemes(entries.filter((e) => e.is_dir));
+      } catch {
+        if (!cancelled) setAvailableThemes([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.project]);
+
+  // Load persisted theme on mount or when selectedThemeDir changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const themeDir = selectedThemeDir || "main";
+        const cssPath = `projects/${settings.project}/themes/${themeDir}/theme.css`;
         const saved = await readFile(cssPath);
         if (!cancelled) setCss(saved);
       } catch {
@@ -33,18 +54,19 @@ export function ThemesPanel() {
       }
     })();
     return () => { cancelled = true; };
-  }, [settings.project]);
+  }, [settings.project, selectedThemeDir]);
 
   const persistTheme = useCallback(async (content: string, p: string) => {
     try {
-      const base = THEME_CSS_PATH.replace("{project}", settings.project).replace("/theme.css", "");
+      const themeDir = selectedThemeDir || "main";
+      const base = `projects/${settings.project}/themes/${themeDir}`;
       await createDir(base);
-      await writeFile(THEME_CSS_PATH.replace("{project}", settings.project), content);
-      await writeFile(THEME_PROMPT_PATH.replace("{project}", settings.project), JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
+      await writeFile(`${base}/theme.css`, content);
+      await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
     } catch {
       // ignore
     }
-  }, [settings.project]);
+  }, [settings.project, selectedThemeDir]);
 
   const frameworkPrompts: Record<string, string> = {
     shadcn: "Generate CSS custom properties compatible with shadcn/ui (using oklch colors): --background, --foreground, --card, --card-foreground, --popover, --popover-foreground, --primary, --primary-foreground, --secondary, --secondary-foreground, --muted, --muted-foreground, --accent, --accent-foreground, --destructive, --destructive-foreground, --border, --input, --ring, --radius.",
@@ -64,7 +86,7 @@ export function ThemesPanel() {
         },
         { role: "user", content: prompt.trim() },
       ];
-      const response = await generateCompletion(settings.modelId, msgs, false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
+      const response = await generateCompletion(settings.modelId, msgs, settings.host, getApiKey(settings.modelId, settings.apiKeys));
       const content = parseAiResponse(response);
       const clean = content.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "").trim();
       setCss(clean);
@@ -120,6 +142,17 @@ export function ThemesPanel() {
             <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
               <span className="text-sm font-medium">Prompt</span>
               <div className="flex-1" />
+              <Select value={selectedThemeDir} onValueChange={setSelectedThemeDir}>
+                <SelectTrigger className="h-7 text-xs w-[140px]">
+                  <SelectValue placeholder="Theme…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="main">main</SelectItem>
+                  {availableThemes.map((t) => (
+                    t.name !== "main" ? <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem> : null
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="flex gap-1">
                 {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
                   <Button

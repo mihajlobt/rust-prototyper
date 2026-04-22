@@ -45,9 +45,10 @@ const views = [
 interface SidebarRailProps {
   activeView: string;
   onViewChange: (view: string) => void;
+  onNavigateToItem?: (type: string, name: string) => void;
 }
 
-export function SidebarRail({ activeView, onViewChange }: SidebarRailProps) {
+export function SidebarRail({ activeView, onViewChange, onNavigateToItem }: SidebarRailProps) {
   const { settings } = useSettings();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
@@ -137,7 +138,7 @@ export function SidebarRail({ activeView, onViewChange }: SidebarRailProps) {
     }
   };
 
-  const renderDir = (name: string, label: string) => {
+  const renderDir = (name: string, label: string, _viewType: string) => {
     const isExpanded = expanded.has(name);
     const entries = tree[name] || [];
     return (
@@ -157,13 +158,20 @@ export function SidebarRail({ activeView, onViewChange }: SidebarRailProps) {
               <div className="text-[10px] text-muted-foreground px-2">Empty</div>
             )}
             {entries.map((entry) => (
-              <div
+              <button
                 key={entry.path}
-                className="flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors"
+                className="w-full flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors text-left"
+                onClick={() => {
+                  if (entry.is_dir) {
+                    toggle(entry.path);
+                  } else if (onNavigateToItem) {
+                    onNavigateToItem(name, entry.name);
+                  }
+                }}
               >
                 {entry.is_dir ? <Folder size={10} /> : <FileCode size={10} />}
                 <span className="truncate">{entry.name}</span>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -202,11 +210,11 @@ export function SidebarRail({ activeView, onViewChange }: SidebarRailProps) {
           <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 mb-1">
             Project
           </div>
-          {renderDir("screens", "Screens")}
-          {renderDir("components", "Components")}
-          {renderDir("themes", "Themes")}
-          {renderDir("workflows", "Workflows")}
-          {renderDir("apis", "APIs")}
+          {renderDir("screens", "Screens", "screens")}
+          {renderDir("components", "Components", "components")}
+          {renderDir("themes", "Themes", "themes")}
+          {renderDir("workflows", "Workflows", "workflows")}
+          {renderDir("apis", "APIs", "apis")}
         </div>
       </div>
 

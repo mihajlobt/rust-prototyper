@@ -1,4 +1,6 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 // ─── Process Management ───
 
@@ -20,6 +22,20 @@ export async function runShellCommand(cwd: string, command: string): Promise<num
 
 export async function killProcess(pid: number): Promise<void> {
   return invoke("kill_process", { pid });
+}
+
+// ─── Terminal Output Event Listener (centralized) ───
+
+export interface TerminalOutputEvent {
+  pid: number;
+  line: string;
+  source: "stdout" | "stderr";
+}
+
+export function onTerminalOutput(
+  handler: (event: TerminalOutputEvent) => void
+): Promise<UnlistenFn> {
+  return listen<TerminalOutputEvent>("terminal-output", (e) => handler(e.payload));
 }
 
 // ─── File System ───
@@ -58,6 +74,11 @@ export async function renameFile(from: string, to: string): Promise<void> {
   return invoke("rename_file", { from, to });
 }
 
+/** Convert a Rust-side file path to a URL loadable in the webview */
+export function toFileUrl(filePath: string): string {
+  return convertFileSrc(filePath);
+}
+
 // ─── HTTP Client ───
 
 export interface HttpResponse {
@@ -85,6 +106,7 @@ export interface Message {
 export interface ModelInfo {
   id: string;
   name: string;
+  context_length?: number;
 }
 
 export function getApiKey(modelId: string, apiKeys: Record<string, string>): string {
@@ -94,21 +116,38 @@ export function getApiKey(modelId: string, apiKeys: Record<string, string>): str
   return "";
 }
 
+/** Determine the API host for a given model ID */
+export function getModelHost(modelId: string, ollamaHost: string): string {
+  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return "https://api.openai.com";
+  if (modelId.startsWith("claude-")) return "https://api.anthropic.com";
+  return ollamaHost;
+}
+
+/** Estimate context window size for a model */
+export function getContextWindow(modelId: string): number {
+  if (modelId.includes("32b") || modelId.includes("14b")) return 32768;
+  if (modelId.includes("72b") || modelId.includes("70b")) return 32768;
+  if (modelId.includes("gpt-4") || modelId.includes("claude")) return 128000;
+  if (modelId.includes("gpt-3.5")) return 16384;
+  return 8192;
+}
+
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string } }
   | { event: "Done"; data: null }
   | { event: "Error"; data: { message: string } };
 
+/** Non-streaming completion — returns full response at once */
 export async function generateCompletion(
   model: string,
   messages: Message[],
-  stream: boolean = false,
   host: string = "",
   apiKey: string = ""
 ): Promise<string> {
-  return invoke("generate_completion", { model, messages, stream, host, api_key: apiKey });
+  return invoke("generate_completion", { model, messages, host, api_key: apiKey });
 }
 
+/** Streaming completion — emits Chunk/Done/Error events via Channel */
 export async function generateCompletionStream(
   model: string,
   messages: Message[],

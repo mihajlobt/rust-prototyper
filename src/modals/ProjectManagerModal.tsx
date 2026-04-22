@@ -85,7 +85,6 @@ export function ProjectManagerModal() {
   const switchProject = async (id: string) => {
     await setSettings({ project: id });
     setOpen(false);
-    window.location.reload();
   };
 
   return (

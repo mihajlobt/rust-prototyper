@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Allotment } from "allotment";
-import { listen } from "@tauri-apps/api/event";
+import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import {
   Play,
   Square,
@@ -35,10 +35,12 @@ import {
 } from "@/lib/ipc";
 import { Input } from "@/components/ui/input";
 import { deleteFile } from "@/lib/ipc";
-
-const GENERATED_DIR = "./generated";
+import { useSettings } from "@/hooks/useSettings";
 
 export function RunnerPanel() {
+  const { settings } = useSettings();
+  const generatedDir = `projects/${settings.project}/generated`;
+
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState("");
@@ -55,32 +57,29 @@ export function RunnerPanel() {
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFiles = useCallback(async () => {
     try {
-      const entries = await readDir(GENERATED_DIR);
+      const entries = await readDir(generatedDir);
       setFiles(entries);
     } catch {
       setFiles([]);
     }
-  }, []);
+  }, [generatedDir]);
 
   useEffect(() => {
     loadFiles();
   }, [loadFiles]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      unlisten = await listen("terminal-output", (e) => {
-        const payload = e.payload as { line: string; source: string };
-        setTerminalLines((prev) => [...prev, payload]);
-        if (payload.line.includes("Local:")) {
-          setPreviewReady(true);
-        }
-      });
-    })();
-    return () => unlisten?.();
+    const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
+      setTerminalLines((prev) => [...prev, { line: event.line, source: event.source }]);
+      if (event.line.includes("Local:")) {
+        setPreviewReady(true);
+      }
+    });
+    return () => { unlistenPromise.then((fn) => fn()); };
   }, []);
 
   useEffect(() => {
@@ -104,6 +103,18 @@ export function RunnerPanel() {
     await writeFile(selectedFile, fileContent);
   };
 
+  // Auto-save on content change with debounce
+  useEffect(() => {
+    if (!selectedFile) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      writeFile(selectedFile, fileContent).catch(() => {});
+    }, 1000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [fileContent, selectedFile]);
+
   const handleRun = async () => {
     if (running && pidRef.current) {
       await killProcess(pidRef.current);
@@ -115,19 +126,19 @@ export function RunnerPanel() {
     setTerminalLines((prev) => [...prev, { line: "> bun dev", source: "stdout" }]);
     setRunning(true);
     setPreviewReady(false);
-    const pid = await bunDev(GENERATED_DIR, 5173);
+    const pid = await bunDev(generatedDir, 5173);
     pidRef.current = pid;
   };
 
   const handleBuild = async () => {
     setTerminalLines((prev) => [...prev, { line: "> bun build", source: "stdout" }]);
-    const pid = await bunBuild(GENERATED_DIR);
+    const pid = await bunBuild(generatedDir);
     pidRef.current = pid;
   };
 
   const handleInstall = async () => {
     setTerminalLines((prev) => [...prev, { line: "> bun install", source: "stdout" }]);
-    const pid = await bunInstall(GENERATED_DIR);
+    const pid = await bunInstall(generatedDir);
     pidRef.current = pid;
   };
 
@@ -150,6 +161,7 @@ export function RunnerPanel() {
         next.delete(path);
       } else {
         next.add(path);
+        loadFiles();
       }
       return next;
     });
@@ -167,7 +179,7 @@ export function RunnerPanel() {
 
   const handleCreateFile = async () => {
     if (!newFileName.trim()) return;
-    const path = `${GENERATED_DIR}/${newFileName.trim()}`;
+    const path = `${generatedDir}/${newFileName.trim()}`;
     await writeFile(path, "");
     setNewFileName("");
     setShowNewFile(false);
@@ -197,7 +209,7 @@ export function RunnerPanel() {
   const handleNewShell = async () => {
     if (!shellCommand.trim()) return;
     setTerminalLines((prev) => [...prev, { line: `> ${shellCommand}`, source: "stdout" }]);
-    const pid = await runShellCommand(GENERATED_DIR, shellCommand);
+    const pid = await runShellCommand(generatedDir, shellCommand);
     pidRef.current = pid;
     setShellCommand("");
     setShowShellInput(false);
@@ -316,53 +328,70 @@ export function RunnerPanel() {
             </div>
           </Allotment.Pane>
 
-          {/* Editor + Terminal / Preview */}
+          {/* Editor + Preview side by side */}
           <Allotment.Pane>
             <Allotment vertical>
               <Allotment.Pane>
-                {selectedFile ? (
-                  <div className="h-full flex flex-col">
-                    <div className="h-8 border-b border-border flex items-center px-3 gap-2 bg-card shrink-0">
-                      <span className="text-xs font-medium">{selectedFile.split("/").pop()}</span>
-                      <div className="flex-1" />
-                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSaveFile}>
-                        Save
-                      </Button>
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <CodeMirrorEditor
-                        value={fileContent}
-                        onChange={setFileContent}
-                        mode={getFileMode(selectedFile)}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                    {previewReady ? (
-                      <div className="w-full h-full flex items-center justify-center bg-muted/30 p-4">
-                        <div
-                          className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                          style={{ width: deviceWidth[device], transform: `scale(${deviceScale[device]})`, transformOrigin: "top center" }}
-                        >
-                          <iframe
-                            ref={iframeRef}
-                            src="http://localhost:5173"
-                            className="w-full h-full"
-                            sandbox="allow-scripts allow-same-origin allow-forms"
-                            style={fitPreview ? { width: "100%", height: "100%" } : undefined}
+                <Allotment>
+                  {/* Editor */}
+                  <Allotment.Pane minSize={200}>
+                    {selectedFile ? (
+                      <div className="h-full flex flex-col">
+                        <div className="h-8 border-b border-border flex items-center px-3 gap-2 bg-card shrink-0">
+                          <span className="text-xs font-medium">{selectedFile.split("/").pop()}</span>
+                          <div className="flex-1" />
+                          <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={handleSaveFile}>
+                            Save
+                          </Button>
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <CodeMirrorEditor
+                            value={fileContent}
+                            onChange={setFileContent}
+                            mode={getFileMode(selectedFile)}
                           />
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center">
-                        <Play size={32} className="mx-auto mb-3 opacity-30" />
-                        <p>Click Run to start the dev server</p>
-                        <p className="text-xs opacity-50 mt-1">Preview will appear here</p>
+                      <div className="h-full flex items-center justify-center text-muted-foreground text-sm p-4">
+                        Select a file to edit
                       </div>
                     )}
-                  </div>
-                )}
+                  </Allotment.Pane>
+
+                  {/* Preview */}
+                  <Allotment.Pane minSize={300}>
+                    <div className="h-full flex flex-col">
+                      <div className="h-8 border-b border-border flex items-center px-3 bg-card shrink-0">
+                        <span className="text-xs font-medium">Preview</span>
+                      </div>
+                      <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
+                        {previewReady ? (
+                          <div
+                            className="h-full bg-background shadow-lg border border-border overflow-hidden"
+                            style={{ width: deviceWidth[device], transform: fitPreview ? "none" : `scale(${deviceScale[device]})`, transformOrigin: "top center" }}
+                          >
+                            <iframe
+                              ref={iframeRef}
+                              src="http://localhost:5173"
+                              className="w-full h-full"
+                              sandbox="allow-scripts allow-same-origin allow-forms"
+                              style={fitPreview ? { width: "100%", height: "100%" } : undefined}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center text-muted-foreground text-sm">
+                            <div className="text-center">
+                              <Play size={32} className="mx-auto mb-3 opacity-30" />
+                              <p>Click Run to start the dev server</p>
+                              <p className="text-xs opacity-50 mt-1">Preview will appear here</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Allotment.Pane>
+                </Allotment>
               </Allotment.Pane>
 
               {/* Terminal / Logs / Network */}

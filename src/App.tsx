@@ -36,6 +36,21 @@ export default function App() {
 
   const ActiveView = views[view] || ScreensPanel;
 
+  const handleNavigateToItem = (_type: string, _name: string) => {
+    // Switch to the appropriate view when navigating from Library
+    const viewMap: Record<string, string> = {
+      component: "components",
+      theme: "themes",
+      screen: "screens",
+      api: "apis",
+    };
+    const targetView = viewMap[_type];
+    if (targetView && targetView !== view) {
+      setView(targetView);
+      setSettings({ view: targetView });
+    }
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
       <Header
@@ -48,10 +63,17 @@ export default function App() {
       <div className="flex-1 overflow-hidden">
         <Allotment>
           <Allotment.Pane preferredSize={240} minSize={180} maxSize={320}>
-            <SidebarRail activeView={view} onViewChange={setView} />
+            <SidebarRail activeView={view} onViewChange={(v) => {
+            setView(v);
+            setSettings({ view: v });
+          }} />
           </Allotment.Pane>
           <Allotment.Pane>
-            <ActiveView />
+            {view === "library" ? (
+              <LibraryPanel onNavigateToItem={handleNavigateToItem} />
+            ) : (
+              <ActiveView />
+            )}
           </Allotment.Pane>
         </Allotment>
       </div>

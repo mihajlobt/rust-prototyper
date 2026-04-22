@@ -488,7 +488,6 @@ async fn generate_completion(
     messages: Vec<Message>,
     host: String,
     api_key: String,
-    _stream: bool,
     app: AppHandle,
 ) -> Result<String, AppError> {
     let state = app.state::<AppState>();

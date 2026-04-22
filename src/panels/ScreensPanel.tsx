@@ -1,8 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Send, Paperclip, Image, Smartphone, Tablet, Monitor, Eye, Plus } from "lucide-react";
+import { Send, Paperclip, Image, Smartphone, Tablet, Monitor, Eye, Plus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -10,9 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletion, getApiKey, writeFile, createDir, readFile, readDir, parseAiResponse } from "@/lib/ipc";
+import { generateCompletion, getApiKey, writeFile, createDir, readFile, readDir, parseAiResponse, exportProject } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 import { PromptInspector } from "@/components/PromptInspector";
+import { save } from "@tauri-apps/plugin-dialog";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -33,6 +41,8 @@ export function ScreensPanel() {
   const [zoom, setZoom] = useState(1);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
+  const [showNewScreenDialog, setShowNewScreenDialog] = useState(false);
+  const [newScreenName, setNewScreenName] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -108,11 +118,17 @@ export function ScreensPanel() {
     setLoading(true);
 
     try {
+      // Build messages with attachment context
       const msgs = nextMessages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
-      const response = await generateCompletion(settings.modelId, msgs, false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
+      // If there are attachments, append context about them
+      if (attachments.length > 0) {
+        const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.split("/").pop()).join(", ")}]`;
+        msgs[msgs.length - 1].content += attachmentContext;
+      }
+      const response = await generateCompletion(settings.modelId, msgs, settings.host, getApiKey(settings.modelId, settings.apiKeys));
       const assistantContent = parseAiResponse(response);
       const finalMessages = [...nextMessages, { role: "assistant" as const, content: assistantContent }];
       setMessages(finalMessages);
@@ -190,6 +206,32 @@ export function ScreensPanel() {
         reader.readAsDataURL(file);
       }
     }
+  };
+
+  const handleExport = async () => {
+    try {
+      const outputPath = await save({
+        filters: [{ name: "Zip", extensions: ["zip"] }],
+        defaultPath: `${settings.project}-screens.zip`,
+      });
+      if (!outputPath) return;
+      await exportProject(settings.project, outputPath, "react", true, true, true, false);
+    } catch (e) {
+      alert(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const handleCreateScreen = async () => {
+    if (!newScreenName.trim()) return;
+    const id = newScreenName.toLowerCase().replace(/\s+/g, "-");
+    const dir = `projects/${settings.project}/screens/${id}`;
+    await createDir(dir);
+    await writeFile(`${dir}/chat.json`, "[]");
+    await writeFile(`${dir}/screen.tsx`, `// ${newScreenName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newScreenName}</div>;\n}\n`);
+    setScreens((prev) => [...prev, id]);
+    setScreenId(id);
+    setShowNewScreenDialog(false);
+    setNewScreenName("");
   };
 
   const handlePreviewClick = (e: React.MouseEvent) => {
@@ -289,6 +331,7 @@ export function ScreensPanel() {
                             sendMessage();
                           }
                         }}
+                        onPaste={handlePaste}
                         placeholder="Describe your screen..."
                         className="min-h-[40px] max-h-[120px] text-sm resize-none"
                         rows={1}
@@ -322,20 +365,14 @@ export function ScreensPanel() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={async () => {
-                  const name = prompt("Screen name:");
-                  if (!name) return;
-                  const id = name.toLowerCase().replace(/\s+/g, "-");
-                  const dir = `projects/${settings.project}/screens/${id}`;
-                  await createDir(dir);
-                  await writeFile(`${dir}/chat.json`, "[]");
-                  await writeFile(`${dir}/screen.tsx`, `// ${name}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${name}</div>;\n}\n`);
-                  setScreens((prev) => [...prev, id]);
-                  setScreenId(id);
-                }}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowNewScreenDialog(true)}>
                   <Plus size={12} />
                 </Button>
                 <div className="flex-1" />
+                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleExport}>
+                  <Download size={12} />
+                  Export
+                </Button>
                 <Button variant={linkMode ? "default" : "ghost"} size="sm" className="h-6 text-xs" onClick={() => setLinkMode(!linkMode)}>
                   {linkMode ? "Linking…" : "Link Mode"}
                 </Button>
@@ -487,6 +524,29 @@ export function ScreensPanel() {
           </div>
         </Allotment.Pane>
       </Allotment>
+
+      {/* New Screen Dialog */}
+      <Dialog open={showNewScreenDialog} onOpenChange={setShowNewScreenDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New Screen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={newScreenName}
+              onChange={(e) => setNewScreenName(e.target.value)}
+              placeholder="Screen name..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateScreen();
+              }}
+              autoFocus
+            />
+            <Button className="w-full" onClick={handleCreateScreen} disabled={!newScreenName.trim()}>
+              Create
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

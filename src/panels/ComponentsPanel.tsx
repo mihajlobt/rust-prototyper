@@ -43,6 +43,20 @@ export function ComponentsPanel() {
   const [selectedTheme, setSelectedTheme] = useState("");
   const pidRef = useRef<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-save code changes with debounce
+  useEffect(() => {
+    if (!code) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const genDir = `projects/${settings.project}/generated`;
+      writeFile(`${genDir}/src/components/Generated.tsx`, code).catch(() => {});
+    }, 1000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [code, settings.project]);
 
   // Load themes
   useEffect(() => {
@@ -72,7 +86,7 @@ export function ComponentsPanel() {
         },
         { role: "user", content: prompt.trim() },
       ];
-      const response = await generateCompletion(settings.modelId, msgs, false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
+      const response = await generateCompletion(settings.modelId, msgs, settings.host, getApiKey(settings.modelId, settings.apiKeys));
       const content = parseAiResponse(response);
       const clean = content.replace(/\`\`\`[a-z]*\n?/g, "").replace(/\`\`\`$/g, "").trim();
       setCode(clean);
@@ -96,6 +110,11 @@ export function ComponentsPanel() {
       pidRef.current = null;
       setRunning(false);
       return;
+    }
+    // Kill any previous process before starting a new one
+    if (pidRef.current) {
+      await killProcess(pidRef.current);
+      pidRef.current = null;
     }
     setRunning(true);
     const pid = await bunDev(`projects/${settings.project}/generated`, 5173);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Box, Palette, LayoutGrid, Terminal, Search, Trash2, Copy, Download, Edit2 } from "lucide-react";
+import { Box, Palette, LayoutGrid, Terminal, Search, Trash2, Copy, Download, Edit2, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,11 @@ interface LibraryItem {
   description?: string;
 }
 
-export function LibraryPanel() {
+interface LibraryPanelProps {
+  onNavigateToItem?: (type: string, name: string) => void;
+}
+
+export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
   const { settings } = useSettings();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
@@ -142,12 +146,22 @@ export function LibraryPanel() {
         const content = await readFile(paths[item.type].from);
         await writeFile(paths[item.type].to, content);
       } else {
-        await createDir(paths[item.type].to);
-        const entries = await readDir(paths[item.type].from);
-        for (const entry of entries) {
-          const content = await readFile(entry.path);
-          await writeFile(`${paths[item.type].to}/${entry.name}`, content);
-        }
+        // Recursive directory copy
+        const copyDir = async (src: string, dest: string) => {
+          await createDir(dest);
+          const entries = await readDir(src);
+          for (const entry of entries) {
+            const srcPath = `${src}/${entry.name}`;
+            const destPath = `${dest}/${entry.name}`;
+            if (entry.is_dir) {
+              await copyDir(srcPath, destPath);
+            } else {
+              const content = await readFile(srcPath);
+              await writeFile(destPath, content);
+            }
+          }
+        };
+        await copyDir(paths[item.type].from, paths[item.type].to);
       }
       await loadItems();
     } catch {
@@ -237,6 +251,9 @@ export function LibraryPanel() {
                     <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{item.description}</p>
                   )}
                   <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Open in editor" onClick={() => onNavigateToItem?.(item.type, item.id)}>
+                      <ExternalLink size={12} />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingId(`${item.type}-${item.id}`); setEditName(item.name); }}>
                       <Edit2 size={12} />
                     </Button>

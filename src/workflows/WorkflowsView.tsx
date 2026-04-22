@@ -17,6 +17,9 @@ interface NodeData {
   path?: string;
   operation?: string;
   content?: string;
+  authScheme?: string;
+  authToken?: string;
+  authHeaderName?: string;
 }
 
 interface Node {
@@ -233,7 +236,7 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Extract and structure requirements from the user request. Output as bullet points." },
               { role: "user", content: prevOutput || promptBase },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -241,7 +244,7 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Create a high-level architecture plan. List components, data flow, and state management." },
               { role: "user", content: prevOutput || promptBase },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -249,7 +252,7 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Generate HTML/JSX structure. Output only code, no explanations." },
               { role: "user", content: prevOutput || promptBase },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -257,7 +260,7 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Apply Tailwind CSS classes to the provided HTML/JSX. Output only the styled code." },
               { role: "user", content: prevOutput || promptBase },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -265,7 +268,7 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Add React hooks and state management to the component. Output only code." },
               { role: "user", content: prevOutput || promptBase },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -334,7 +337,7 @@ export function WorkflowsView() {
                   const r = await generateCompletion(settings.modelId, [
                     { role: "system", content: `Execute ${child.type} node` },
                     { role: "user", content: p },
-                  ], false, settings.host, getApiKey(settings.modelId, settings.apiKeys));
+                  ], settings.host, getApiKey(settings.modelId, settings.apiKeys));
                   childOutput = parseAiResponse(r);
                 } else {
                   childOutput = child.label;
@@ -359,13 +362,14 @@ export function WorkflowsView() {
             break;
           }
           case "auth": {
-            const scheme = node.data?.prompt || "bearer";
-            const token = node.data?.command || "token";
+            const scheme = node.data?.authScheme || "bearer";
+            const token = node.data?.authToken || "token";
+            const headerName = node.data?.authHeaderName || "X-API-Key";
             let headers: Record<string, string> = {};
             if (scheme === "bearer") {
               headers["Authorization"] = `Bearer ${token}`;
             } else if (scheme === "apikey") {
-              headers["X-API-Key"] = token;
+              headers[headerName] = token;
             } else if (scheme === "basic") {
               headers["Authorization"] = `Basic ${btoa(token)}`;
             } else if (scheme === "oauth2") {
@@ -379,7 +383,7 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Transform the provided content according to the instruction. Output only the transformed content." },
               { role: "user", content: `Instruction: ${transformPrompt}\n\nContent: ${prevOutput}` },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
@@ -387,17 +391,24 @@ export function WorkflowsView() {
             const res = await generateCompletion(model, [
               { role: "system", content: "Validate the provided code. List any syntax errors, type errors, or issues. If valid, say 'Valid'." },
               { role: "user", content: prevOutput || "No code to validate" },
-            ], false, host, apiKey);
+            ], host, apiKey);
             output = parseAiResponse(res);
             break;
           }
           case "preview": {
             output = prevOutput || "Nothing to preview";
+            updateNode(nodeId, { status: "done", output: output.slice(0, 500) });
             break;
           }
           case "designSystem": {
             const themeName = node.data?.prompt || "default";
-            output = `Applied design system: ${themeName}\n${prevOutput || ""}`;
+            const themeDir = `projects/${settings.project}/themes/${themeName}`;
+            try {
+              const themeCss = await readFile(`${themeDir}/theme.css`);
+              output = `${prevOutput ? prevOutput + "\n\n" : ""}/* Applied theme: ${themeName} */\n${themeCss}`;
+            } catch {
+              output = `Theme "${themeName}" not found. ${prevOutput || ""}`;
+            }
             break;
           }
           case "bun": {
@@ -558,13 +569,16 @@ export function WorkflowsView() {
                       const fromNode = nodes.find((n) => n.id === edge.from);
                       const toNode = nodes.find((n) => n.id === edge.to);
                       if (!fromNode || !toNode) return null;
+                      const x1 = fromNode.x + 60;
+                      const y1 = fromNode.y + 20;
+                      const x2 = toNode.x + 60;
+                      const y2 = toNode.y + 20;
+                      const dx = Math.abs(x2 - x1) * 0.5;
                       return (
-                        <line
+                        <path
                           key={`${edge.from}-${edge.to}`}
-                          x1={fromNode.x + 60}
-                          y1={fromNode.y + 20}
-                          x2={toNode.x + 60}
-                          y2={toNode.y + 20}
+                          d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
+                          fill="none"
                           stroke="currentColor"
                           strokeWidth="1"
                           className="text-border"
@@ -743,8 +757,8 @@ export function WorkflowsView() {
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Auth Scheme</label>
                       <Input
-                        value={selectedNode.data?.prompt || "bearer"}
-                        onChange={(e) => updateNodeData(selectedNode.id, { prompt: e.target.value })}
+                        value={selectedNode.data?.authScheme || "bearer"}
+                        onChange={(e) => updateNodeData(selectedNode.id, { authScheme: e.target.value })}
                         className="h-7 text-xs"
                         placeholder="bearer, apikey, basic, oauth2"
                       />
@@ -752,12 +766,23 @@ export function WorkflowsView() {
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Token / Key</label>
                       <Input
-                        value={selectedNode.data?.command || ""}
-                        onChange={(e) => updateNodeData(selectedNode.id, { command: e.target.value })}
+                        value={selectedNode.data?.authToken || ""}
+                        onChange={(e) => updateNodeData(selectedNode.id, { authToken: e.target.value })}
                         className="h-7 text-xs"
                         placeholder="token or username:password"
                       />
                     </div>
+                    {selectedNode.data?.authScheme === "apikey" && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Header Name</label>
+                        <Input
+                          value={selectedNode.data?.authHeaderName || "X-API-Key"}
+                          onChange={(e) => updateNodeData(selectedNode.id, { authHeaderName: e.target.value })}
+                          className="h-7 text-xs"
+                          placeholder="X-API-Key"
+                        />
+                      </div>
+                    )}
                   </>
                 )}
 
