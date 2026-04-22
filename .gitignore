@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Opencode
+*.opencode/
+
 # Build output
 dist/
 
@@ -52,3 +55,4 @@ Thumbs.db
 # Skill registry files
 skills/
 skills-lock.json
+.tmp/
