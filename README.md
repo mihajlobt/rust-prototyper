@@ -19,6 +19,16 @@ AI-powered app generator built as a Tauri v2 desktop application.
 - [Rust](https://rustup.rs/) toolchain (`rustc`, `cargo`)
 - Ollama running locally (default: `http://localhost:11434`) — optional but recommended for AI features
 
+## Package Manager
+
+This project uses **Bun** exclusively. Never use `npm`, `npx`, or `yarn`.
+
+```bash
+bun install        # install deps
+bun add <pkg>      # add a package
+bunx <tool>        # run a package binary (replaces npx)
+```
+
 ## Install Dependencies
 
 ```bash

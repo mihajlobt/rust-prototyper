@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Allotment } from "allotment";
-import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, RotateCw } from "lucide-react";
+import { Allotment, type AllotmentHandle } from "allotment";
+import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, RotateCw, ChevronUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -62,13 +62,26 @@ export function ComponentsPanel() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [showCode, setShowCode] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(true);
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
   const [selectedComponent, setSelectedComponent] = useState("");
   const [previewKey, setPreviewKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const verticalAllotmentRef = useRef<AllotmentHandle>(null);
+  const CODE_PANE_SIZE = 280;
+  const CODE_HEADER = 28;
+
+  const toggleCode = () => {
+    if (codeOpen) {
+      verticalAllotmentRef.current?.resize([9999, CODE_HEADER]);
+      setCodeOpen(false);
+    } else {
+      verticalAllotmentRef.current?.resize([9999, CODE_PANE_SIZE]);
+      setCodeOpen(true);
+    }
+  };
 
   const saveCode = useCallback(async (value: string) => {
     if (!value) return;
@@ -241,9 +254,6 @@ export function ComponentsPanel() {
                 <Send size={14} />
                 {loading ? "Generating…" : "Generate"}
               </Button>
-              <Button variant="outline" className="gap-1 text-sm" onClick={() => setShowCode(!showCode)}>
-                {showCode ? "Hide" : "Show"} Code
-              </Button>
               <SaveComponentModal code={code} prompt={prompt} trigger={
                 <Button variant="outline" className="gap-1 text-sm" disabled={!code}>
                   <Save size={14} />
@@ -261,7 +271,7 @@ export function ComponentsPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical>
+          <Allotment vertical ref={verticalAllotmentRef}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
@@ -273,24 +283,21 @@ export function ComponentsPanel() {
                   <div className="flex items-center gap-1">
                     <Button
                       variant={device === "mobile" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-7 w-7"
+                      size="icon" className="h-7 w-7"
                       onClick={() => setDevice("mobile")}
                     >
                       <Smartphone size={12} />
                     </Button>
                     <Button
                       variant={device === "tablet" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-7 w-7"
+                      size="icon" className="h-7 w-7"
                       onClick={() => setDevice("tablet")}
                     >
                       <Tablet size={12} />
                     </Button>
                     <Button
                       variant={device === "desktop" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-7 w-7"
+                      size="icon" className="h-7 w-7"
                       onClick={() => setDevice("desktop")}
                     >
                       <Monitor size={12} />
@@ -321,18 +328,20 @@ export function ComponentsPanel() {
               </div>
             </Allotment.Pane>
 
-            {showCode && (
-              <Allotment.Pane preferredSize={300}>
-                <div className="h-full flex flex-col">
-                  <div className="h-8 border-b border-border flex items-center px-3 bg-card shrink-0">
-                    <span className="text-xs font-medium">Code</span>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
-                  </div>
+            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
+              <div className="h-full flex flex-col">
+                <div
+                  className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"
+                  onClick={toggleCode}
+                >
+                  <span className="text-xs font-medium flex-1">Code</span>
+                  {codeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
                 </div>
-              </Allotment.Pane>
-            )}
+                <div className="flex-1 overflow-hidden">
+                  <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
+                </div>
+              </div>
+            </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
       </Allotment>

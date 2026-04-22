@@ -176,6 +176,16 @@
 /* Allotment sash — use accent color on hover/drag */
 :root { --focus-border: var(--primary); }
 
+/* React Flow controls — match app theme */
+.react-flow {
+  --xy-controls-button-background-color-default: var(--card);
+  --xy-controls-button-background-color-hover-default: var(--muted);
+  --xy-controls-button-color-default: var(--foreground);
+  --xy-controls-button-color-hover-default: var(--foreground);
+  --xy-controls-button-border-color-default: var(--border);
+  --xy-controls-box-shadow-default: 0 1px 4px rgba(0,0,0,0.15);
+}
+
 /* Thinking animation */
 @keyframes thinking-dot {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }

@@ -574,10 +574,11 @@ function WorkflowCanvas() {
               snapGrid={[16, 16]}
               defaultEdgeOptions={{ type: "smoothstep", animated: false }}
               deleteKeyCode={null}
+              proOptions={{ hideAttribution: true }}
               className="bg-muted/10"
             >
               <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
-              <Controls className="[&_button]:bg-card [&_button]:border-border [&_button]:text-foreground" />
+              <Controls />
               <MiniMap
                 nodeColor={(n) => (n.data as WorkflowNodeData).color || "#94a3b8"}
                 className="!bg-card !border-border rounded-lg overflow-hidden"

@@ -101,6 +101,17 @@ Global shortcuts use `window.addEventListener('keydown', ...)` in `useEffect` �
   generated/         ← bun dev runs here; Runner panel previews localhost:5173
 ```
 
+## Package Manager
+
+Always use `bun` and `bunx` — never `npm`, `npx`, or `yarn`.
+
+```bash
+bun install          # install deps
+bun add <pkg>        # add package
+bunx shadcn@latest   # run package binaries
+bunx tsc --noEmit    # type-check
+```
+
 ## Common Pitfalls
 
 - **White screen**: `devUrl` in `tauri.conf.json` must match Vite's port (`1420`)
@@ -108,3 +119,4 @@ Global shortcuts use `window.addEventListener('keydown', ...)` in `useEffect` �
 - **Wayland crash**: Use `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `bun run tauri:dev`
 - **IPC timeout**: Never block async commands — use `tokio::spawn` for heavy ops
 - **v1 vs v2 imports**: Always `@tauri-apps/api/core`, never `@tauri-apps/api/tauri`
+- **Package manager**: Never use `npx` or `npm` — always `bun`/`bunx`
