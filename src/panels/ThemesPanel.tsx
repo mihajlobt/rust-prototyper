@@ -153,31 +153,37 @@ export function ThemesPanel() {
       <Allotment>
         <Allotment.Pane minSize={300}>
           <div className="h-full flex flex-col bg-card">
-            <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
-              <span className="text-sm font-medium">Prompt</span>
-              <div className="flex-1" />
-              <Select value={selectedThemeDir} onValueChange={setSelectedThemeDir}>
-                <SelectTrigger className="h-7 text-xs w-[140px]">
-                  <SelectValue placeholder="Theme…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="main">main</SelectItem>
-                  {availableThemes.map((t) => (
-                    t.name !== "main" ? <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem> : null
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex gap-1">
+            <div className="border-b border-border shrink-0">
+              <div className="h-10 flex items-center px-3 gap-2">
+                <span className="text-sm font-medium">Prompt</span>
+                <div className="flex-1" />
+                <Select value={selectedThemeDir} onValueChange={setSelectedThemeDir}>
+                  <SelectTrigger className="h-7 text-xs w-[130px]">
+                    <SelectValue placeholder="Theme…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="main">main</SelectItem>
+                    {availableThemes.map((t) =>
+                      t.name !== "main" ? <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem> : null
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-1 px-3 pb-2">
+                <span className="text-[10px] text-muted-foreground mr-1">Framework</span>
                 {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
-                  <Button
+                  <button
                     key={f}
-                    variant={framework === f ? "secondary" : "ghost"}
-                    size="sm"
-                    className="h-6 text-[10px] capitalize"
                     onClick={() => setFramework(f)}
+                    className={[
+                      "px-2.5 py-0.5 rounded text-[11px] border transition-colors capitalize",
+                      framework === f
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
                   >
                     {f}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </div>

@@ -169,11 +169,13 @@ export function SettingsModal() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="stylePreset">Default Style Preset</Label>
+              <Label htmlFor="stylePreset">Default Theme</Label>
+              <p className="text-xs text-muted-foreground">Name of the theme folder auto-selected when generating components.</p>
               <Input
                 id="stylePreset"
                 value={settings.stylePreset}
                 onChange={(e) => setSettings({ stylePreset: e.target.value })}
+                placeholder="e.g. main"
               />
             </div>
 

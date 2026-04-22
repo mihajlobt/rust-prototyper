@@ -57,14 +57,14 @@ if (__Comp) {
 }
 
 export function ComponentsPanel() {
-  const { settings } = useSettings();
+  const { settings, setSettings } = useSettings();
   const [prompt, setPrompt] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [showCode, setShowCode] = useState(false);
   const [themes, setThemes] = useState<FileEntry[]>([]);
-  const [selectedTheme, setSelectedTheme] = useState("");
+  const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
   const [selectedComponent, setSelectedComponent] = useState("");
   const [previewKey, setPreviewKey] = useState(0);
@@ -194,35 +194,39 @@ export function ComponentsPanel() {
       <Allotment>
         <Allotment.Pane minSize={300}>
           <div className="h-full flex flex-col bg-card">
-            <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
-              <span className="text-sm font-medium">Prompt</span>
-              <div className="flex-1" />
-              <Select value={selectedComponent} onValueChange={setSelectedComponent}>
-                <SelectTrigger className="h-7 text-xs w-[140px]">
-                  <SelectValue placeholder="Load component…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {savedComponents.map((c) => (
-                    <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedTheme} onValueChange={setSelectedTheme}>
-                <SelectTrigger className="h-7 text-xs w-[140px]">
-                  <SelectValue placeholder="Theme…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {themes.map((t) => (
-                    <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <AddLibraryModal trigger={
-                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1">
-                  <PackagePlus size={12} />
-                  Add Lib
-                </Button>
-              } />
+            <div className="border-b border-border shrink-0">
+              <div className="h-10 flex items-center px-3 gap-2">
+                <span className="text-sm font-medium">Prompt</span>
+                <div className="flex-1" />
+                <AddLibraryModal trigger={
+                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1">
+                    <PackagePlus size={12} />
+                    Add Lib
+                  </Button>
+                } />
+              </div>
+              <div className="flex items-center gap-2 px-3 pb-2">
+                <Select value={selectedComponent} onValueChange={setSelectedComponent}>
+                  <SelectTrigger className="h-7 text-xs flex-1">
+                    <SelectValue placeholder="Load component…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {savedComponents.map((c) => (
+                      <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedTheme} onValueChange={(v) => { setSelectedTheme(v); setSettings({ stylePreset: v }); }}>
+                  <SelectTrigger className="h-7 text-xs flex-1">
+                    <SelectValue placeholder="Theme…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {themes.map((t) => (
+                      <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-3">
               <Textarea
