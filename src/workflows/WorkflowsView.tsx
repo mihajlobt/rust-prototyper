@@ -29,12 +29,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  generateCompletionStream, getApiKey, httpRequest, runShellCommand,
+  generateCompletionStream, getApiKey, getModelHost, httpRequest, runShellCommand,
   readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev,
   type FileEntry, type CompletionEvent, type Message,
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
+import Frame from "react-frame-component";
 
 // ─── Node type definitions ─────────────────────────────────────────────────
 
@@ -327,7 +328,8 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
       try {
         let output = "";
         const promptBase = d.prompt || d.label;
-        const model = settings.modelId, host = settings.host;
+        const model = settings.modelId;
+        const host = getModelHost(model, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"]);
         const apiKey = getApiKey(model, settings.apiKeys);
         const customPrompts = settings.prompts;
 
@@ -667,7 +669,7 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
                   <div className="space-y-1"><label className="text-xs text-muted-foreground">Context Override</label><Textarea value={selectedData.prompt || ""} onChange={(e) => updateNodeData(selectedNodeId!, { prompt: e.target.value })} className="text-xs min-h-[60px] resize-none" placeholder="Override input from previous node…" /></div>
                 )}
                 {selectedData.nodeType === "preview" && selectedData.output && (
-                  <div className="space-y-1"><label className="text-xs text-muted-foreground">Preview</label><div className="border border-border rounded overflow-hidden bg-white" style={{ height: 200 }}><iframe srcDoc={selectedData.output} className="w-full h-full" sandbox="allow-scripts" title="Preview" /></div></div>
+                  <div className="space-y-1"><label className="text-xs text-muted-foreground">Preview</label><div className="border border-border rounded overflow-hidden bg-white" style={{ height: 200 }}><Frame className="w-full h-full border-0"><div dangerouslySetInnerHTML={{ __html: selectedData.output }} /></Frame></div></div>
                 )}
 
                 <div className="pt-2 border-t border-border">

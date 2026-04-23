@@ -16,8 +16,10 @@ export interface Settings {
   styles: Array<{ name: string; value: string }>;
   host: string;
   apiKeys: Record<string, string>;
+  ollamaCloudModels: string[];
   glow: "off" | "subtle" | "full";
   amoled: boolean;
+  iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -33,8 +35,10 @@ const DEFAULT_SETTINGS: Settings = {
   styles: [],
   host: "http://localhost:11434",
   apiKeys: {},
+  ollamaCloudModels: [],
   glow: "subtle",
   amoled: false,
+  iconLibrary: "lucide",
 };
 
 // Module-level shared state — all useSettings() instances share one copy

@@ -244,6 +244,25 @@ async fn rename_file(from: String, to: String, app: AppHandle) -> Result<(), App
 }
 
 #[tauri::command]
+async fn reveal_in_explorer(path: String, app: AppHandle) -> Result<(), AppError> {
+    let resolved = resolve_path(&app, &path)?;
+    // For files, open the parent directory. For directories, open the directory itself.
+    let target = if resolved.is_file() {
+        resolved.parent().map(|p| p.to_path_buf()).unwrap_or(resolved)
+    } else {
+        resolved
+    };
+    let target_str = target.to_string_lossy().to_string();
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open").arg(&target_str).spawn().map_err(AppError::Io)?;
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open").arg(&target_str).spawn().map_err(AppError::Io)?;
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer.exe").arg(&target_str).spawn().map_err(AppError::Io)?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn delete_dir(path: String, app: AppHandle) -> Result<(), AppError> {
     let path = resolve_path(&app, &path)?;
     tokio::fs::remove_dir_all(&path).await.map_err(AppError::Io)
@@ -338,6 +357,7 @@ async fn chat_completion_ollama(
     host: &str,
     model: &str,
     messages: &[Message],
+    api_key: &str,
     stream: bool,
     on_event: Option<&Channel<CompletionEvent>>,
 ) -> Result<String, AppError> {
@@ -347,7 +367,11 @@ async fn chat_completion_ollama(
         .collect();
     let body = serde_json::json!({ "model": model, "messages": msgs, "stream": stream });
 
-    let res = client.post(&url).json(&body).send().await.map_err(|e| AppError::Http(e.to_string()))?;
+    let mut req = client.post(&url).json(&body);
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+    let res = req.send().await.map_err(|e| AppError::Http(e.to_string()))?;
     if !res.status().is_success() {
         let err_body = res.text().await.unwrap_or_default();
         let msg = serde_json::from_str::<serde_json::Value>(&err_body)
@@ -515,7 +539,7 @@ async fn generate_completion(
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     match provider {
-        "ollama" => chat_completion_ollama(client, &host, &model, &messages, false, None).await,
+        "ollama" => chat_completion_ollama(client, &host, &model, &messages, &api_key, false, None).await,
         "openai" => {
             if api_key.is_empty() {
                 return Err(AppError::Http("OpenAI API key required".into()));
@@ -547,7 +571,7 @@ async fn generate_completion_stream(
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     let result = match provider {
-        "ollama" => chat_completion_ollama(client, &host, &model, &messages, true, Some(&on_event)).await,
+        "ollama" => chat_completion_ollama(client, &host, &model, &messages, &api_key, true, Some(&on_event)).await,
         "openai" => {
             if api_key.is_empty() {
                 return Err(AppError::Http("OpenAI API key required".into()));
@@ -571,11 +595,15 @@ async fn generate_completion_stream(
 }
 
 #[tauri::command]
-async fn list_ollama_models(host: String, app: AppHandle) -> Result<Vec<ModelInfo>, AppError> {
+async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Result<Vec<ModelInfo>, AppError> {
     let state = app.state::<AppState>();
     let client = &state.http_client;
     let url = format!("{}/api/tags", host);
-    let res = client.get(&url).send().await.map_err(|e| AppError::Http(e.to_string()))?;
+    let mut req = client.get(&url);
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+    let res = req.send().await.map_err(|e| AppError::Http(e.to_string()))?;
     let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
     let models = json["models"].as_array()
         .map(|arr| arr.iter()
@@ -811,7 +839,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             bun_dev, bun_build, bun_install, run_shell_command, kill_process,
-            read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file,
+            read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file, reveal_in_explorer,
             http_request,
             generate_completion, generate_completion_stream, list_ollama_models,
             export_project, export_component,

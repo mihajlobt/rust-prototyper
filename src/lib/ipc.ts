@@ -74,6 +74,10 @@ export async function renameFile(from: string, to: string): Promise<void> {
   return invoke("rename_file", { from, to });
 }
 
+export async function revealInExplorer(path: string): Promise<void> {
+  return invoke("reveal_in_explorer", { path });
+}
+
 /** Convert a Rust-side file path to a URL loadable in the webview */
 export function toFileUrl(filePath: string): string {
   return convertFileSrc(filePath);
@@ -110,16 +114,17 @@ export interface ModelInfo {
 }
 
 export function getApiKey(modelId: string, apiKeys: Record<string, string>): string {
-  if (modelId.includes(":")) return "";
-  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return apiKeys.openai || "";
-  if (modelId.startsWith("claude-")) return apiKeys.claude || "";
-  return "";
+  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return apiKeys["openai"] || "";
+  if (modelId.startsWith("claude-")) return apiKeys["claude"] || "";
+  return apiKeys["ollama"] || "";
 }
 
 /** Determine the API host for a given model ID */
-export function getModelHost(modelId: string, ollamaHost: string): string {
+export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?: ReadonlyArray<string>, ollamaApiKey?: string): string {
   if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return "https://api.openai.com";
   if (modelId.startsWith("claude-")) return "https://api.anthropic.com";
+  // Cloud model by explicit list or by having an Ollama cloud key set
+  if (cloudModelIds?.includes(modelId) || ollamaApiKey) return "https://ollama.com";
   return ollamaHost;
 }
 
@@ -158,8 +163,8 @@ export async function generateCompletionStream(
   return invoke("generate_completion_stream", { model, messages, host, apiKey, onEvent });
 }
 
-export async function listOllamaModels(host: string): Promise<ModelInfo[]> {
-  return invoke("list_ollama_models", { host });
+export async function listOllamaModels(host: string, apiKey = ""): Promise<ModelInfo[]> {
+  return invoke("list_ollama_models", { host, apiKey });
 }
 
 // ─── Workflows ───

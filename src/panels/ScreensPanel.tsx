@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
 import { Send, Paperclip, ImageIcon, Smartphone, Tablet, Monitor, Eye, Plus, Download, X } from "lucide-react";
+import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -17,11 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletionStream, getApiKey, writeFile, createDir, readFile, readDir, exportProject, type CompletionEvent, type Message } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readFile, readDir, exportProject, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
+import { getScreenNewPrompt } from "@/lib/prompts";
+import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -54,6 +57,7 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
   const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
   const [showNewScreenDialog, setShowNewScreenDialog] = useState(false);
   const [newScreenName, setNewScreenName] = useState("");
+  const [themeCss, setThemeCss] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -62,6 +66,13 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
   const screenPath = `projects/${settings.project}/screens/${screenId}/screen.tsx`;
   const screenJsonPath = `projects/${settings.project}/screens/${screenId}/screen.json`;
   const attachmentsDir = `projects/${settings.project}/screens/${screenId}/attachments`;
+
+  const parentCss = getParentCss();
+  const iconFontCss = useIconFontCss(settings.iconLibrary, settings.project);
+  const Preview = useMemo(() => {
+    if (!previewHtml) return null;
+    return createPreviewComponent(previewHtml, settings.iconLibrary);
+  }, [previewHtml, settings.iconLibrary]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +108,24 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
     return () => { cancelled = true; };
   }, [settings.project, screenId, chatPath, screenJsonPath]);
 
+  useEffect(() => {
+    const selectedTheme = settings.stylePreset;
+    if (!selectedTheme) {
+      setThemeCss("");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const css = await readFile(`projects/${settings.project}/themes/${selectedTheme}/theme.css`);
+        if (!cancelled) setThemeCss(css);
+      } catch {
+        if (!cancelled) setThemeCss("");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.stylePreset, settings.project]);
+
   const persistChat = useCallback(async (msgs: ChatMessage[]) => {
     try {
       await createDir(chatPath.replace("/chat.json", ""));
@@ -129,11 +158,10 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
     setMessages(streamingMessages);
 
     try {
-      const customSystem = settings.prompts["screens-system"];
-      const msgs: Message[] = [];
-      if (customSystem) {
-        msgs.push({ role: "system", content: customSystem });
-      }
+      const defaultSystem = getScreenNewPrompt(settings.iconLibrary) +
+        (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
+      const systemContent = settings.prompts["screens-system"] || defaultSystem;
+      const msgs: Message[] = [{ role: "system", content: systemContent }];
       for (const m of nextMessages) {
         msgs.push({ role: m.role, content: m.content });
       }
@@ -152,7 +180,8 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
       };
 
       await generateCompletionStream(
-        settings.modelId, msgs, settings.host,
+        settings.modelId, msgs,
+        getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"]),
         getApiKey(settings.modelId, settings.apiKeys),
         channel
       );
@@ -161,10 +190,12 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
       const finalMessages = [...nextMessages, { role: "assistant" as const, content: assistantContent }];
       setMessages(finalMessages);
       await persistChat(finalMessages);
-      if (assistantContent.includes("<") && assistantContent.includes(">")) {
-        setPreviewHtml(assistantContent);
+      const extracted = extractCode(assistantContent);
+      const looksLikeCode = extracted !== null;
+      if (looksLikeCode && extracted) {
+        setPreviewHtml(extracted);
         await createDir(screenPath.replace("/screen.tsx", ""));
-        await writeFile(screenPath, assistantContent);
+        await writeFile(screenPath, extracted);
       }
     } catch (e) {
       const errMessages = [...nextMessages, { role: "assistant" as const, content: `Error: ${e instanceof Error ? e.message : String(e)}` }];
@@ -393,7 +424,7 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
                 <PromptInspector
                   model={settings.modelId}
                   messages={messages.map((m) => ({ role: m.role, content: m.content }))}
-                  host={settings.host}
+                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"])}
                 />
               </Allotment.Pane>
             </Allotment>
@@ -586,16 +617,17 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
               onDragOver={(e) => e.preventDefault()}
               onClick={handlePreviewClick}
             >
-              {previewHtml ? (
+              {Preview ? (
                 <div
                   className="h-full bg-background shadow-lg border border-border overflow-hidden"
                   style={{ width: deviceWidth[device], transform: `scale(${zoom})`, transformOrigin: "top center" }}
                 >
-                  <iframe
-                    srcDoc={previewHtml}
-                    className="w-full h-full"
-                    sandbox="allow-scripts"
-                  />
+                  <Frame
+                    head={<style>{parentCss + themeCss + iconFontCss}</style>}
+                    className="w-full h-full border-0"
+                  >
+                    <Preview />
+                  </Frame>
                 </div>
               ) : (
                 <div className="flex items-center justify-center text-muted-foreground text-sm">

@@ -34,6 +34,7 @@ import {
   deleteFile,
   deleteDir,
   renameFile,
+  revealInExplorer,
   bunDev,
   bunBuild,
   bunInstall,
@@ -399,6 +400,9 @@ export function RunnerPanel() {
                       Collapse All
                     </ContextMenuItem>
                     <ContextMenuSeparator />
+                    <ContextMenuItem onClick={() => revealInExplorer(generatedDir)}>
+                      Show in File Explorer
+                    </ContextMenuItem>
                     <ContextMenuItem onClick={loadFiles}>
                       <RefreshCw size={12} className="mr-2" /> Refresh
                     </ContextMenuItem>
@@ -427,6 +431,7 @@ export function RunnerPanel() {
                 onNewFile={handleNewFileInDir}
                 onNewFolder={startNewFolder}
                 onCollapse={(path) => { expandedDirs.delete(path); setExpandedDirs(new Set(expandedDirs)); }}
+                onReveal={(path) => revealInExplorer(path)}
                 depth={0}
               />
             </div>
@@ -698,10 +703,11 @@ interface FileTreeProps {
   onNewFile: (parentPath: string) => void;
   onNewFolder: (parentPath: string) => void;
   onCollapse: (path: string) => void;
+  onReveal: (path: string) => void;
   depth: number;
 }
 
-function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, depth }: FileTreeProps) {
+function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, onReveal, depth }: FileTreeProps) {
   return (
     <>
       {entries.map((file) => (
@@ -729,8 +735,12 @@ function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFi
               <ContextMenuItem onClick={() => { if (file.is_dir) onToggleDir(file.path); else onSelectFile(file.path); }}>
                 Open
               </ContextMenuItem>
+              <ContextMenuItem onClick={() => onReveal(file.path)}>
+                Show in File Explorer
+              </ContextMenuItem>
               {file.is_dir && (
                 <>
+                  <ContextMenuSeparator />
                   <ContextMenuItem onClick={() => onNewFile(file.path)}>
                     New File…
                   </ContextMenuItem>
@@ -768,6 +778,7 @@ function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFi
               onNewFile={onNewFile}
               onNewFolder={onNewFolder}
               onCollapse={onCollapse}
+              onReveal={onReveal}
               depth={depth + 1}
             />
           )}

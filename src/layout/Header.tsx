@@ -81,6 +81,8 @@ export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar 
         value={settings.modelId}
         onChange={(model) => setSettings({ modelId: model })}
         host={settings.host}
+        ollamaApiKey={settings.apiKeys["ollama"] ?? ""}
+        cloudModelIds={settings.ollamaCloudModels}
       />
       <SettingsModal />
     </header>
