@@ -14,6 +14,7 @@ import {
 import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readFile, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt } from "@/lib/prompts";
 import { getParentCss } from "@/lib/preview";
@@ -76,8 +77,8 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
       await createDir(base);
       await writeFile(`${base}/theme.css`, content);
       await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Failed to save theme", e instanceof Error ? e.message : String(e));
     }
   }, [settings.project, selectedThemeDir]);
 
@@ -112,7 +113,9 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
       setCss(clean);
       await persistTheme(clean, prompt);
     } catch (e) {
-      setCss(`/* Error: ${e instanceof Error ? e.message : String(e)} */`);
+      const msg = e instanceof Error ? e.message : String(e);
+      setCss(`/* Error: ${msg} */`);
+      notify.error("Theme generation failed", msg);
     } finally {
       setLoading(false);
     }

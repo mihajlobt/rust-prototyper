@@ -139,7 +139,12 @@ bunx tsc --noEmit    # type-check
 ## External Libraries & APIs
 - **URGENT: ALWAYS search Context7 when implementing new libraries, APIs, or any code that has external documentation.** This includes but is not limited to: npm packages, frameworks, SDKs, APIs, CLI tools, cloud services. Even for well-known libraries like React, Next.js, Prisma - ALWAYS check Context7 first to get current documentation. Your training data may be outdated. NEVER assume you know the current API without checking.
 
+## Adherence to Approved Plans
+- **CRITICAL: NEVER deviate from an approved plan or todo list.** Once a plan is approved, execute it exactly as specified. Do not skip steps, change scope, or substitute simpler alternatives without explicit user approval.
+- **CRITICAL: DO NOT go for the "simplest approach" or take shortcuts.** Implement what was requested properly, even if it requires more effort, research, or code.
+
 ## Quality Standards
 - **NEVER compromise on the user's request.** Do not take the "simplest approach" or a shortcut just to get out of a difficult or long task. If the user asks for something, implement it properly.
 - **NEVER guess or hallucinate implementations.** When working with external libraries (e.g., `react-frame-component`), ALWAYS verify against official documentation or GitHub examples. Provide links to the examples/docs you followed.
 - **Avoid hacky solutions.** If a proper solution requires more research (Context7, official docs), do the research. Do not patch around problems with workarounds.
+- **CRITICAL: NEVER EVER redefine types or recreate interfaces when they already exist in external packages.** ALWAYS import and reuse types from the source package. Do not create local copies of library types just to "make TypeScript happy" — fix the root cause or use the library's exported types correctly.

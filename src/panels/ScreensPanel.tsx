@@ -21,6 +21,7 @@ import {
 import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readFile, readDir, exportProject, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt } from "@/lib/prompts";
@@ -130,8 +131,8 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
     try {
       await createDir(chatPath.replace("/chat.json", ""));
       await writeFile(chatPath, JSON.stringify(msgs, null, 2));
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Failed to save chat", e instanceof Error ? e.message : String(e));
     }
   }, [chatPath]);
 
@@ -139,8 +140,8 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
     try {
       await createDir(screenJsonPath.replace("/screen.json", ""));
       await writeFile(screenJsonPath, JSON.stringify({ links: newLinks }, null, 2));
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Failed to save links", e instanceof Error ? e.message : String(e));
     }
   }, [screenJsonPath]);
 
@@ -276,7 +277,7 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
       if (!outputPath) return;
       await exportProject(settings.project, outputPath, "react", true, true, true, false);
     } catch (e) {
-      alert(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      notify.error("Export failed", e instanceof Error ? e.message : String(e));
     }
   };
 

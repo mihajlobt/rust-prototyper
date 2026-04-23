@@ -21,6 +21,7 @@ import {
 import { Settings, Plus, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide-react";
 import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 import { listOllamaModels, type ModelInfo, readFile, writeFile, bunInstall } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
 import { OPENAI_MODELS, ANTHROPIC_MODELS } from "@/lib/models";
@@ -103,8 +104,8 @@ export function SettingsModal() {
           await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
           await bunInstall(`./projects/${settings.project}/generated`);
         }
-      } catch {
-        // ignore install errors
+      } catch (e) {
+        notify.error("Icon library install failed", e instanceof Error ? e.message : String(e));
       }
     })();
   }, [settings.iconLibrary, settings.project]);

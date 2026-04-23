@@ -50,6 +50,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 
 export function RunnerPanel() {
   const { settings } = useSettings();
@@ -124,7 +125,7 @@ export function RunnerPanel() {
     try {
       await writeFile(selectedFile, fileContent);
     } catch (e) {
-      console.error("Save failed:", e);
+      notify.error("Save failed", e instanceof Error ? e.message : String(e));
     }
   }, [selectedFile, fileContent]);
 
@@ -155,7 +156,11 @@ export function RunnerPanel() {
 
   const handleRun = async () => {
     if (running && pidRef.current) {
-      await killProcess(pidRef.current);
+      try {
+        await killProcess(pidRef.current);
+      } catch (e) {
+        notify.error("Failed to stop process", e instanceof Error ? e.message : String(e));
+      }
       pidRef.current = null;
       setRunning(false);
       setPreviewReady(false);
@@ -164,20 +169,33 @@ export function RunnerPanel() {
     setTerminalLines((prev) => [...prev, { line: "> bun dev", source: "stdout" }]);
     setRunning(true);
     setPreviewReady(false);
-    const pid = await bunDev(generatedDir, 5173);
-    pidRef.current = pid;
+    try {
+      const pid = await bunDev(generatedDir, 5173);
+      pidRef.current = pid;
+    } catch (e) {
+      setRunning(false);
+      notify.error("Failed to start dev server", e instanceof Error ? e.message : String(e));
+    }
   };
 
   const handleBuild = async () => {
     setTerminalLines((prev) => [...prev, { line: "> bun build", source: "stdout" }]);
-    const pid = await bunBuild(generatedDir);
-    pidRef.current = pid;
+    try {
+      const pid = await bunBuild(generatedDir);
+      pidRef.current = pid;
+    } catch (e) {
+      notify.error("Build failed", e instanceof Error ? e.message : String(e));
+    }
   };
 
   const handleInstall = async () => {
     setTerminalLines((prev) => [...prev, { line: "> bun install", source: "stdout" }]);
-    const pid = await bunInstall(generatedDir);
-    pidRef.current = pid;
+    try {
+      const pid = await bunInstall(generatedDir);
+      pidRef.current = pid;
+    } catch (e) {
+      notify.error("Install failed", e instanceof Error ? e.message : String(e));
+    }
   };
 
   const deviceScale = {
@@ -262,7 +280,7 @@ export function RunnerPanel() {
       }
       loadFiles();
     } catch (e) {
-      console.error("Rename failed:", e);
+      notify.error("Rename failed", e instanceof Error ? e.message : String(e));
     }
     setRenameTarget(null);
   };
@@ -280,7 +298,7 @@ export function RunnerPanel() {
       expandedDirs.add(newFolderTarget);
       loadFiles();
     } catch (e) {
-      console.error("Create folder failed:", e);
+      notify.error("Create folder failed", e instanceof Error ? e.message : String(e));
     }
     setNewFolderTarget(null);
   };

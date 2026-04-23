@@ -222,3 +222,8 @@ export async function exportComponent(
     includeTests,
   });
 }
+
+// ─── Safe IPC Wrappers (with toast notifications) ───
+
+import { safeInvoke, safeInvokeSilent } from "./notifications";
+export { safeInvoke, safeInvokeSilent };

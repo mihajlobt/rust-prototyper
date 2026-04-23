@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Allotment, type AllotmentHandle } from "allotment";
-import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, ChevronUp, ChevronDown, Eye, Code2, Sun, Moon } from "lucide-react";
+import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, ChevronUp, ChevronDown, Eye, Code2, Sun, Moon, Copy, Check } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,7 @@ import {
 import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readDir, readFile, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
@@ -43,6 +44,7 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
   const [themeCss, setThemeCss] = useState("");
   const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
   const [selectedComponent, setSelectedComponent] = useState(initialItem || "");
+  const [copiedIndices, setCopiedIndices] = useState<Set<number>>(new Set());
   const verticalAllotmentRef = useRef<AllotmentHandle>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const CODE_PANE_SIZE = 280;
@@ -71,8 +73,12 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
 
   const saveCode = useCallback(async (value: string) => {
     if (!value) return;
-    const genDir = `projects/${settings.project}/generated`;
-    await writeFile(`${genDir}/src/components/Generated.tsx`, value);
+    try {
+      const genDir = `projects/${settings.project}/generated`;
+      await writeFile(`${genDir}/src/components/Generated.tsx`, value);
+    } catch (e) {
+      notify.error("Failed to save generated code", e instanceof Error ? e.message : String(e));
+    }
   }, [settings.project]);
 
   const handleCodeChange = useCallback((value: string) => {
@@ -171,17 +177,37 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
       const base = `projects/${settings.project}/components/${selectedComponent}`;
       await createDir(base);
       await writeFile(`${base}/chat.json`, JSON.stringify(msgs, null, 2));
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Failed to save chat", e instanceof Error ? e.message : String(e));
     }
   }, [settings.project, selectedComponent]);
 
   const applyCode = useCallback(async (extracted: string) => {
     setCode(extracted);
-    const genDir = `projects/${settings.project}/generated`;
-    await createDir(`${genDir}/src/components`);
-    await writeFile(`${genDir}/src/components/Generated.tsx`, extracted);
+    try {
+      const genDir = `projects/${settings.project}/generated`;
+      await createDir(`${genDir}/src/components`);
+      await writeFile(`${genDir}/src/components/Generated.tsx`, extracted);
+    } catch (e) {
+      notify.error("Failed to apply generated code", e instanceof Error ? e.message : String(e));
+    }
   }, [settings.project]);
+
+  const handleCopyMessage = useCallback(async (index: number, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndices((prev) => new Set(prev).add(index));
+      setTimeout(() => {
+        setCopiedIndices((prev) => {
+          const next = new Set(prev);
+          next.delete(index);
+          return next;
+        });
+      }, 2000);
+    } catch {
+      notify.error("Copy failed", "Could not copy to clipboard");
+    }
+  }, []);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || loading) return;
@@ -312,7 +338,7 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
           return (
             <div
               key={i}
-              className={["flex flex-col", msg.role === "user" ? "items-end" : "items-start"].join(" ")}
+              className={["flex flex-col group", msg.role === "user" ? "items-end" : "items-start"].join(" ")}
             >
               <div
                 className={[
@@ -360,9 +386,34 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
                   </div>
                 )}
               </div>
+              {/* Action bar for assistant messages */}
+              {msg.role === "assistant" && !isStreaming && (
+                <div className="flex items-center gap-0.5 mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleCopyMessage(i, msg.content)}
+                    title="Copy message"
+                  >
+                    {copiedIndices.has(i) ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                  </Button>
+                  {extracted && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                      onClick={() => applyCode(extracted)}
+                      title="Apply to editor and preview"
+                    >
+                      <Code2 size={10} />
+                    </Button>
+                  )}
+                </div>
+              )}
               {/* Show code-applied badge on last assistant message with code (not streaming) */}
               {!isStreaming && extracted && i === messages.length - 1 && (
-                <span className="text-[10px] text-muted-foreground mt-1 px-1">
+                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">
                   Code applied to editor
                 </span>
               )}

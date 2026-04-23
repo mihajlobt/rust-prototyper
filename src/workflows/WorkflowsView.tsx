@@ -35,6 +35,7 @@ import {
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 import Frame from "react-frame-component";
 
 // ─── Node type definitions ─────────────────────────────────────────────────
@@ -384,7 +385,9 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
 
         updateStatus(nodeId, { status: "done", output: output.slice(0, 500) });
       } catch (e) {
-        updateStatus(nodeId, { status: "error", output: String(e).slice(0, 500) });
+        const msg = e instanceof Error ? e.message : String(e);
+        updateStatus(nodeId, { status: "error", output: msg.slice(0, 500) });
+        notify.error(`Workflow node "${d.label}" failed`, msg);
       }
     };
 
@@ -450,7 +453,9 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
       await saveWorkflow(settings.project, id, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
       await refreshSavedWorkflows();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setSaveError(msg);
+      notify.error("Failed to save workflow", msg);
     }
   };
 
@@ -464,7 +469,9 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
       setWorkflowId(id.replace(".json", ""));
       setShowWorkflowsPanel(false);
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setSaveError(msg);
+      notify.error("Failed to load workflow", msg);
     }
   };
 
@@ -474,7 +481,9 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
       await deleteFile(`projects/${settings.project}/workflows/${name}`);
       await refreshSavedWorkflows();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setSaveError(msg);
+      notify.error("Failed to delete workflow", msg);
     }
     setDeleteConfirm(null);
   };

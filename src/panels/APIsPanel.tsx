@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { httpRequest, readFile, writeFile, createDir, type HttpResponse } from "@/lib/ipc";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 import YAML from "js-yaml";
 
 interface ApiHistoryEntry {
@@ -65,8 +66,8 @@ async function saveEnvVars(project: string, envVars: Record<string, string>) {
     const path = getEnvPath(project);
     await createDir(path.replace("/env.json", ""));
     await writeFile(path, JSON.stringify(envVars, null, 2));
-  } catch {
-    // ignore
+  } catch (e) {
+    notify.error("Failed to save environment variables", e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -84,8 +85,8 @@ async function saveApis(project: string, apis: SavedApi[]) {
     const path = getApisPath(project);
     await createDir(path.replace("/apis.json", ""));
     await writeFile(path, JSON.stringify(apis, null, 2));
-  } catch {
-    // ignore
+  } catch (e) {
+    notify.error("Failed to save APIs", e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -348,8 +349,8 @@ export function APIsPanel() {
       }
       setShowOauthDialog(false);
       setOauthCode("");
-    } catch {
-      // ignore token exchange errors
+    } catch (e) {
+      notify.error("OAuth token exchange failed", e instanceof Error ? e.message : String(e));
     } finally {
       setOauthLoading(false);
     }
@@ -398,11 +399,13 @@ export function APIsPanel() {
         );
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       setResponse({
         status: 0,
         headers: {},
-        body: `Error: ${e instanceof Error ? e.message : String(e)}`,
+        body: `Error: ${msg}`,
       });
+      notify.error("Request failed", msg);
     } finally {
       setLoading(false);
     }

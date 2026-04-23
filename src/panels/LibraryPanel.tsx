@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { readDir, readFile, writeFile, deleteDir, createDir, renameFile } from "@/lib/ipc";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 
 interface LibraryItem {
   id: string;
@@ -108,8 +109,8 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
     try {
       await deleteDir(paths[item.type]);
       await loadItems();
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Delete failed", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -133,8 +134,8 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
       await renameFile(paths[item.type].from, paths[item.type].to);
       setEditingId(null);
       await loadItems();
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Rename failed", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -171,8 +172,8 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
         await copyDir(paths[item.type].from, paths[item.type].to);
       }
       await loadItems();
-    } catch {
-      // ignore
+    } catch (e) {
+      notify.error("Duplicate failed", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -193,9 +194,9 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
       });
       if (!outputPath) return;
       await writeFile(outputPath, content);
-      alert(`Exported to ${outputPath}`);
+      notify.success("Exported", `Saved to ${outputPath}`);
     } catch (e) {
-      alert(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      notify.error("Export failed", e instanceof Error ? e.message : String(e));
     }
   };
 
