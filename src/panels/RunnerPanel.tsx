@@ -389,7 +389,7 @@ export function RunnerPanel() {
                     <span className="text-xs font-medium text-muted-foreground cursor-default">Files</span>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
-                    <ContextMenuItem onClick={() => setShowNewFile(true)}>
+                    <ContextMenuItem onClick={() => { setNewFileParentDir(generatedDir); setShowNewFile(true); }}>
                       <Plus size={12} className="mr-2" /> New File…
                     </ContextMenuItem>
                     <ContextMenuItem onClick={() => startNewFolder(generatedDir)}>
@@ -413,21 +413,6 @@ export function RunnerPanel() {
                   </Button>
                 </div>
               </div>
-              {showNewFile && (
-                <div className="flex gap-1 mb-2">
-                  <Input
-                    value={newFileName}
-                    onChange={(e) => setNewFileName(e.target.value)}
-                    placeholder="filename.ts"
-                    className="h-6 text-xs"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreateFile();
-                      if (e.key === "Escape") setShowNewFile(false);
-                    }}
-                    autoFocus
-                  />
-                </div>
-              )}
               {files.length === 0 && (
                 <div className="text-xs text-muted-foreground px-1">No files yet</div>
               )}
@@ -673,6 +658,26 @@ export function RunnerPanel() {
               autoFocus
             />
             <Button className="w-full" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+              Create
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNewFile} onOpenChange={(o) => !o && setShowNewFile(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New File</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              placeholder="filename.tsx"
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateFile(); }}
+              autoFocus
+            />
+            <Button className="w-full" onClick={handleCreateFile} disabled={!newFileName.trim()}>
               Create
             </Button>
           </div>

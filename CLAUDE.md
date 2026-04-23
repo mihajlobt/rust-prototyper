@@ -120,3 +120,21 @@ bunx tsc --noEmit    # type-check
 - **IPC timeout**: Never block async commands — use `tokio::spawn` for heavy ops
 - **v1 vs v2 imports**: Always `@tauri-apps/api/core`, never `@tauri-apps/api/tauri`
 - **Package manager**: Never use `npx` or `npm` — always `bun`/`bunx`
+
+## Coding Rules
+
+## URGENT - DO NOT REVERT UNCOMMITTED FILES
+- **CRITICAL: NEVER use `git checkout`, `git revert`, or any git command that discards uncommitted changes.**
+- If you need to fix something, build ON TOP of existing changes, never discard them.
+- If you're unsure about the current state, use `git status` or `git diff` to understand what changed.
+- Breaking this rule will result in immediate termination of the task.
+
+## Types
+- NEVER use `any` type in TypeScript or JSDoc
+- Use specific types, `unknown`, `object`, or `Record<string, unknown>` instead
+- NEVER ignore eslint rules. DO NOT add ignore lines.
+- NEVER hardcode types or structures that exist in external packages. ALWAYS import and reuse types from the source package (e.g., use `import type { Options } from 'ollama'` instead of recreating the interface)
+- **NEVER recast types if they can be inferred from usage.** Let TypeScript infer types naturally. If TypeScript infers `any`, fix the root cause (add proper types to the source) instead of recasting.
+
+## External Libraries & APIs
+- **URGENT: ALWAYS search Context7 when implementing new libraries, APIs, or any code that has external documentation.** This includes but is not limited to: npm packages, frameworks, SDKs, APIs, CLI tools, cloud services. Even for well-known libraries like React, Next.js, Prisma - ALWAYS check Context7 first to get current documentation. Your training data may be outdated. NEVER assume you know the current API without checking.
