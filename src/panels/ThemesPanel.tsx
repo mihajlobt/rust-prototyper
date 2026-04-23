@@ -292,7 +292,10 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
 
             <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
               <div className="h-full flex flex-col">
-                <div className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer" onClick={toggleCode}>
+                <div
+                  className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"
+                  onClick={toggleCode}
+                >
                   <FileCode size={12} className="mr-1.5" />
                   <span className="text-xs font-medium">CSS Output</span>
                   <div className="flex-1" />
