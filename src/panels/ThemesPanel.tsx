@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment, type AllotmentHandle } from "allotment";
-import { Send, Smartphone, Tablet, Monitor, Save, Plus, ChevronUp, ChevronDown, FileCode } from "lucide-react";
+import { Send, Smartphone, Tablet, Monitor, Save, Plus, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,8 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
   const [loading, setLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
+  const [darkLightSupport, setDarkLightSupport] = useState(false);
+  const [darkPreview, setDarkPreview] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [availableThemes, setAvailableThemes] = useState<FileEntry[]>([]);
   const [selectedThemeDir, setSelectedThemeDir] = useState(initialItem || "");
@@ -94,7 +96,7 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
     if (!prompt.trim() || loading) return;
     setLoading(true);
     try {
-      const defaultSystem = `You are a CSS theme generator. ${frameworkPrompts[framework]} No explanations, no markdown code blocks. Just raw CSS.`;
+      const defaultSystem = `You are a CSS theme generator. ${frameworkPrompts[framework]}${darkLightSupport ? " Generate both :root (light) and .dark (dark mode) variants in the same CSS block." : ""} No explanations, no markdown code blocks. Just raw CSS.`;
       const systemContent = settings.prompts["themes-system"] || defaultSystem;
       const msgs: Message[] = [
         { role: "system", content: systemContent },
@@ -124,7 +126,7 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [prompt, loading, settings.modelId, settings.apiKeys, settings.prompts, framework, persistTheme]);
+  }, [prompt, loading, settings.modelId, settings.apiKeys, settings.prompts, framework, darkLightSupport, persistTheme]);
 
   const handleSaveCss = async () => {
     await persistTheme(css, prompt);
@@ -141,7 +143,7 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
 
   const previewHtml = css
     ? `<!DOCTYPE html>
-<html>
+<html${darkPreview ? ' class="dark"' : ''}>
 <head>
   <meta charset="UTF-8" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -199,6 +201,18 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
                     {f}
                   </button>
                 ))}
+                <div className="w-px h-4 bg-border mx-1" />
+                <button
+                  onClick={() => setDarkLightSupport(!darkLightSupport)}
+                  className={[
+                    "px-2.5 py-0.5 rounded text-[11px] border transition-colors",
+                    darkLightSupport
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <span className="flex items-center gap-1"><Sun size={10} /><Moon size={10} /> Dark+Light</span>
+                </button>
               </div>
             </div>
             <div className="flex-1 overflow-auto p-3">
@@ -272,6 +286,16 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
                       <Monitor size={12} />
                     </Button>
                   </div>
+                  <div className="w-px h-4 bg-border mx-1" />
+                  <Button
+                    variant={darkPreview ? "secondary" : "ghost"}
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setDarkPreview(!darkPreview)}
+                    title={darkPreview ? "Light preview" : "Dark preview"}
+                  >
+                    {darkPreview ? <Moon size={12} /> : <Sun size={12} />}
+                  </Button>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
                   {previewHtml ? (
