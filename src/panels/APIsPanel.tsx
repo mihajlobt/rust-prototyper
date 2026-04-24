@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { httpRequest, readFile, writeFile, createDir, type HttpResponse } from "@/lib/ipc";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { useAppStore } from "@/stores/appStore";
 import { notify } from "@/hooks/useToast";
@@ -118,6 +119,7 @@ function parseCurl(input: string): Partial<SavedApi> | null {
 
 export function APIsPanel() {
   const { settings } = useAppStore();
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("apis", 2);
   const [apis, setApis] = useState<SavedApi[]>([]);
   const [selectedApiId, setSelectedApiId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -413,7 +415,7 @@ export function APIsPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <Allotment>
+      <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         {/* APIs Sidebar */}
         <Allotment.Pane preferredSize={220} minSize={180}>
           <div className="h-full flex flex-col bg-card border-r border-border">

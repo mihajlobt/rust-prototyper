@@ -35,6 +35,7 @@ import {
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
 import Frame from "react-frame-component";
@@ -151,6 +152,7 @@ function generateId() {
 function WorkflowCanvas() {
   const { settings } = useAppStore();
   const { activeWorkflow: initialWorkflow } = useProjectStore();
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): Node => ({
@@ -533,7 +535,7 @@ function WorkflowCanvas() {
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        <Allotment>
+        <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
           {/* Palette */}
           <Allotment.Pane preferredSize={200} minSize={160}>
             <div className="h-full border-r border-border bg-card overflow-auto">

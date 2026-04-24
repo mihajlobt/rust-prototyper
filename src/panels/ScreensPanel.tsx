@@ -25,6 +25,7 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
+import { stripThinking } from "@/lib/chat-utils";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -72,7 +73,7 @@ export function ScreensPanel() {
       (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
     ),
     onOutput: (content) => {
-      const extracted = extractCode(content);
+      const extracted = extractCode(stripThinking(content));
       if (extracted) {
         setPreviewHtml(extracted);
         createDir(screenPath.replace("/screen.tsx", ""))
@@ -206,7 +207,7 @@ export function ScreensPanel() {
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) setPreviewHtml(c); }}
+        onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setPreviewHtml(c); }}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

@@ -14,6 +14,8 @@ import { getModelHost, writeFile, createDir, readDir, readFile } from "@/lib/ipc
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useComponentCode } from "@/hooks/useProjectFiles";
+import { useQueryClient } from "@tanstack/react-query";
+import { projectKeys } from "@/lib/queryKeys";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
@@ -23,6 +25,7 @@ import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
+import { stripThinking } from "@/lib/chat-utils";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
@@ -30,6 +33,7 @@ import { MessageList, ChatInput } from "@/components/chat";
 export function ComponentsPanel() {
   const { settings, setSettings } = useAppStore();
   const { activeComponent: selectedComponent, openComponent: setSelectedComponent } = useProjectStore();
+  const queryClient = useQueryClient();
   const [code, setCode] = useState("");
   const [showInspector, setShowInspector] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -151,7 +155,7 @@ export function ComponentsPanel() {
     chatPath,
     systemPrompt: systemContent,
     onOutput: (content) => {
-      const extracted = extractCode(content);
+      const extracted = extractCode(stripThinking(content));
       if (extracted) applyCode(extracted);
     },
   });
@@ -166,11 +170,13 @@ export function ComponentsPanel() {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;
         await createDir(compDir);
         await writeFile(`${compDir}/component.tsx`, extracted);
+        // Invalidate cache so useComponentCode reloads on next mount
+        queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
       }
     } catch (e) {
       notify.error("Failed to apply generated code", e instanceof Error ? e.message : String(e));
     }
-  }, [settings.project, selectedComponent]);
+  }, [settings.project, selectedComponent, queryClient]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -224,7 +230,7 @@ export function ComponentsPanel() {
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
+        onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) applyCode(c); }}
       />
       <ChatInput
         value={input}

@@ -1,5 +1,10 @@
 import type { MessageBlock } from "@/types/chat"
 
+/** Remove all <think>...</think> blocks from a string before code extraction. */
+export function stripThinking(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim()
+}
+
 export function parseBlocks(content: string): MessageBlock[] {
   const blocks: MessageBlock[] = []
   let remaining = content
