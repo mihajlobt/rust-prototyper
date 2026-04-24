@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/stores/appStore";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import type { MentionAsset } from "@/types/chat";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { hasViteScaffold, scaffoldGenerated } from "@/lib/scaffold";
@@ -796,6 +797,13 @@ export function RunnerPanel() {
   );
 }
 
+function getAssetType(filePath: string): MentionAsset["type"] | null {
+  if (filePath.includes("/components/")) return "component"
+  if (filePath.includes("/themes/")) return "theme"
+  if (filePath.includes("/screens/")) return "screen"
+  return null
+}
+
 interface FileTreeProps {
   entries: FileEntry[];
   selectedFile: string | null;
@@ -826,6 +834,17 @@ function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFi
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 ].join(" ")}
                 style={{ paddingLeft: `${8 + depth * 12}px`, paddingRight: "4px", paddingTop: "2px", paddingBottom: "2px" }}
+                draggable={!file.is_dir && getAssetType(file.path) !== null}
+                onDragStart={(e) => {
+                  const assetType = getAssetType(file.path)
+                  if (!file.is_dir && assetType) {
+                    e.dataTransfer.setData(
+                      "application/prototyper-asset",
+                      JSON.stringify({ filePath: file.path, assetType, assetName: file.name.replace(/\.(tsx|css)$/, "") })
+                    )
+                    e.dataTransfer.effectAllowed = "copy"
+                  }
+                }}
                 onClick={() => {
                   if (file.is_dir) onToggleDir(file.path);
                   else onSelectFile(file.path);
