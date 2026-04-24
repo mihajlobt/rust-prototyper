@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Send, Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
+import { Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -11,9 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, type CompletionEvent, type Message } from "@/lib/ipc";
-import { Channel } from "@tauri-apps/api/core";
+import { writeFile, createDir } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
+import { useChat } from "@/hooks/useChat";
+import { MessageList, ChatInput } from "@/components/chat";
 import { useProjectStore } from "@/stores/projectStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
@@ -26,9 +26,7 @@ import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 export function ThemesPanel() {
   const { settings } = useAppStore();
   const { activeTheme: selectedThemeDir, openTheme: setSelectedThemeDir } = useProjectStore();
-  const [prompt, setPrompt] = useState("");
   const [css, setCss] = useState("");
-  const [loading, setLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
   const [darkLightSupport, setDarkLightSupport] = useState(true);
@@ -36,6 +34,33 @@ export function ThemesPanel() {
   const [codeOpen, setCodeOpen] = useState(true);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
+  const chatPath = selectedThemeDir
+    ? `projects/${settings.project}/themes/${selectedThemeDir}/chat.json`
+    : "projects/__placeholder__/chat.json";
+
+  const {
+    messages, isStreaming, input, setInput, sendMessage,
+    attachments, addAttachment, removeAttachment,
+    mentions, addMention, removeMention,
+  } = useChat({
+    entityId: selectedThemeDir ? `theme-${selectedThemeDir}` : "theme-none",
+    chatPath,
+    systemPrompt: settings.prompts["themes-system"] || (
+      getThemeSystemPrompt(framework) +
+      (darkLightSupport
+        ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block."
+        : "")
+    ),
+    onOutput: (content) => {
+      const cleaned = content
+        .replace(/^```css\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+      setCss(cleaned);
+    },
+  });
+
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("themes", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("themes-code", 2);
   const CODE_PANE_SIZE = 280;
@@ -70,50 +95,11 @@ export function ThemesPanel() {
     }
   }, [settings.project, selectedThemeDir]);
 
-  const generate = useCallback(async () => {
-    if (!prompt.trim() || loading) return;
-    setLoading(true);
-    try {
-      const defaultSystem = getThemeSystemPrompt(framework) + (darkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : "");
-      const systemContent = settings.prompts["themes-system"] || defaultSystem;
-      const msgs: Message[] = [
-        { role: "system", content: systemContent },
-        { role: "user", content: prompt.trim() },
-      ];
-
-      const channel = new Channel<CompletionEvent>();
-      let accumulated = "";
-      channel.onmessage = (msg: CompletionEvent) => {
-        if (msg.event === "Chunk") {
-          accumulated += msg.data.text;
-          setCss(accumulated.replace(/```[a-z]*\n?/g, "").replace(/```$/g, ""));
-        }
-      };
-
-      await generateCompletionStream(
-        settings.modelId, msgs,
-        getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"]),
-        getApiKey(settings.modelId, settings.apiKeys),
-        channel
-      );
-
-      const clean = accumulated.replace(/```[a-z]*\n?/g, "").replace(/```$/g, "").trim();
-      setCss(clean);
-      await persistTheme(clean, prompt);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setCss(`/* Error: ${msg} */`);
-      notify.error("Theme generation failed", msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [prompt, loading, settings.modelId, settings.apiKeys, settings.prompts, framework, darkLightSupport, persistTheme]);
-
   const handleSaveConfirm = async () => {
     if (!saveDialogName.trim()) return;
     const slug = saveDialogName.trim().toLowerCase().replace(/\s+/g, "-");
     setSelectedThemeDir(slug);
-    await persistTheme(css, prompt, slug);
+    await persistTheme(css, "", slug);
     setShowSaveDialog(false);
     setSaveDialogName("");
     window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
@@ -167,19 +153,24 @@ export function ThemesPanel() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-3">
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the theme you want to generate..."
-                className="h-full resize-none text-sm"
+            <div className="flex-1 overflow-auto p-3 flex flex-col gap-2" style={{ minHeight: 0 }}>
+              <MessageList messages={messages} isStreaming={isStreaming} />
+              <ChatInput
+                value={input}
+                onChange={setInput}
+                onSend={sendMessage}
+                disabled={isStreaming}
+                attachments={attachments}
+                onAddAttachment={addAttachment}
+                onRemoveAttachment={removeAttachment}
+                mentions={mentions}
+                onAddMention={addMention}
+                onRemoveMention={removeMention}
+                projectPath={`projects/${settings.project}`}
+                placeholder="Describe the theme you want…"
               />
             </div>
             <div className="p-3 border-t border-border shrink-0 flex gap-2">
-              <Button className="gap-1 text-sm" onClick={generate} disabled={loading}>
-                <Send size={14} />
-                {loading ? "Generating…" : "Generate"}
-              </Button>
               <Button variant="outline" className="gap-1 text-sm" onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }} disabled={!css}>
                 <Save size={14} />
                 Save as…
