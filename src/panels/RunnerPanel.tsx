@@ -50,6 +50,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/stores/appStore";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { notify } from "@/hooks/useToast";
 
 export function RunnerPanel() {
@@ -224,7 +225,7 @@ export function RunnerPanel() {
   };
 
   const handleDeleteFile = async (path: string) => {
-    if (!confirm(`Delete ${path.split("/").pop()}?`)) return;
+    if (!(await confirm(`Delete ${path.split("/").pop()}?`))) return;
     await deleteFile(path);
     if (selectedFile === path) {
       setSelectedFile(null);
@@ -245,7 +246,7 @@ export function RunnerPanel() {
   };
 
   const handleDeleteDir = async (path: string) => {
-    if (!confirm(`Delete folder ${path.split("/").pop()}?`)) return;
+    if (!(await confirm(`Delete folder ${path.split("/").pop()}?`))) return;
     await deleteDir(path);
     if (selectedFile?.startsWith(path)) {
       setSelectedFile(null);

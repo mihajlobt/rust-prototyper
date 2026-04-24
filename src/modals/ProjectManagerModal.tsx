@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Folder, Plus, Trash2, Loader2 } from "lucide-react";
 import { readDir, createDir, writeFile, deleteDir } from "@/lib/ipc";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
 
 interface Project {
@@ -73,7 +74,7 @@ export function ProjectManagerModal() {
   };
 
   const deleteProject = async (id: string) => {
-    if (!confirm(`Delete project "${id}"?`)) return;
+    if (!(await confirm(`Delete project "${id}"?`))) return;
     try {
       await deleteDir(`${PROJECTS_DIR}/${id}`);
       await loadProjects();

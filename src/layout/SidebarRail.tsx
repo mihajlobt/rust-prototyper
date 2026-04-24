@@ -14,6 +14,7 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, type FileEntry } from "@/lib/ipc";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useProjectTree } from "@/hooks/useProjectFiles";
@@ -111,7 +112,7 @@ export function SidebarRail() {
 
   // --- Delete ---
   const handleDelete = async (section: string, name: string) => {
-    if (!confirm(`Delete "${name}"?`)) return;
+    if (!(await confirm(`Delete "${name}"?`))) return;
     try {
       if (section === "apis") {
         await deleteFile(`${base}/apis/${name}`);

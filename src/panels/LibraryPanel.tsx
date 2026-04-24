@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { readDir, readFile, writeFile, deleteDir, createDir, renameFile } from "@/lib/ipc";
-import { save } from "@tauri-apps/plugin-dialog";
+import { save, confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
@@ -95,7 +95,7 @@ export function LibraryPanel() {
   };
 
   const handleDelete = async (item: LibraryItem) => {
-    if (!confirm(`Delete ${item.type} "${item.name}"?`)) return;
+    if (!(await confirm(`Delete ${item.type} "${item.name}"?`))) return;
     const project = settings.project || "default";
     const base = `./projects/${project}`;
     const paths: Record<string, string> = {
