@@ -53,6 +53,7 @@ import { useAppStore } from "@/stores/appStore";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
+import { hasViteScaffold, scaffoldGenerated } from "@/lib/scaffold";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
@@ -170,6 +171,25 @@ export function RunnerPanel() {
       setPreviewReady(false);
       return;
     }
+
+    // Check for Vite scaffold
+    const scaffolded = await hasViteScaffold(generatedDir);
+    if (!scaffolded) {
+      const ok = await confirm(
+        "The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?"
+      );
+      if (!ok) return;
+      setTerminalLines((prev) => [...prev, { line: "> scaffolding vite project...", source: "stdout" }]);
+      try {
+        await scaffoldGenerated(generatedDir, settings.iconLibrary);
+        await loadFiles();
+        notify.success("Scaffold complete", "Vite + React project created in generated/");
+      } catch (e) {
+        notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+        return;
+      }
+    }
+
     setTerminalLines((prev) => [...prev, { line: "> bun dev", source: "stdout" }]);
     setRunning(true);
     setPreviewReady(false);
@@ -183,6 +203,24 @@ export function RunnerPanel() {
   };
 
   const handleBuild = async () => {
+    // Check for Vite scaffold
+    const scaffolded = await hasViteScaffold(generatedDir);
+    if (!scaffolded) {
+      const ok = await confirm(
+        "The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?"
+      );
+      if (!ok) return;
+      setTerminalLines((prev) => [...prev, { line: "> scaffolding vite project...", source: "stdout" }]);
+      try {
+        await scaffoldGenerated(generatedDir, settings.iconLibrary);
+        await loadFiles();
+        notify.success("Scaffold complete", "Vite + React project created in generated/");
+      } catch (e) {
+        notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+        return;
+      }
+    }
+
     setTerminalLines((prev) => [...prev, { line: "> bun build", source: "stdout" }]);
     try {
       const pid = await bunBuild(generatedDir);

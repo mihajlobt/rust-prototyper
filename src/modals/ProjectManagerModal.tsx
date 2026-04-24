@@ -12,6 +12,8 @@ import { Folder, Plus, Trash2, Loader2 } from "lucide-react";
 import { readDir, createDir, writeFile, deleteDir } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
+import { scaffoldGenerated } from "@/lib/scaffold";
+import { notify } from "@/hooks/useToast";
 
 interface Project {
   id: string;
@@ -26,6 +28,7 @@ export function ProjectManagerModal() {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
+  const [scaffolding, setScaffolding] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
 
   const loadProjects = useCallback(async () => {
@@ -69,6 +72,18 @@ export function ProjectManagerModal() {
       `${projectPath}/project.json`,
       JSON.stringify({ name: newProjectName, created: new Date().toISOString(), updated: new Date().toISOString() }, null, 2)
     );
+
+    // Scaffold Vite project in generated/
+    setScaffolding(true);
+    try {
+      await scaffoldGenerated(`${projectPath}/generated`, settings.iconLibrary);
+      notify.success("Project created", `Scaffolded Vite + React in ${id}/generated`);
+    } catch (e) {
+      notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setScaffolding(false);
+    }
+
     setNewProjectName("");
     await loadProjects();
   };
@@ -108,8 +123,8 @@ export function ProjectManagerModal() {
               onChange={(e) => setNewProjectName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createProject()}
             />
-            <Button onClick={createProject} disabled={!newProjectName.trim()}>
-              <Plus size={14} />
+            <Button onClick={createProject} disabled={!newProjectName.trim() || scaffolding}>
+              {scaffolding ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             </Button>
           </div>
 

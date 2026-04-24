@@ -123,6 +123,11 @@ bunx tsc --noEmit    # type-check
 
 ## Coding Rules
 
+## CRITICAL — NEVER USE TEMP DIRECTORIES FOR SCAFFOLDING
+- **DO NOT USE TEMP DIRECTORIES and then move files to `generated/`. THAT IS NEVER EVER GOING TO BE A GOOD SOLUTION.**
+- Temp directories create race conditions, permission issues, and stale file problems.
+- If a CLI tool refuses to scaffold into a non-empty directory, the correct approach is to save user data, clear the target directory, scaffold into the now-empty directory, then restore user data.
+
 ## URGENT - DO NOT REVERT UNCOMMITTED FILES
 - **CRITICAL: NEVER use `git checkout`, `git revert`, or any git command that discards uncommitted changes.**
 - If you need to fix something, build ON TOP of existing changes, never discard them.
@@ -146,5 +151,6 @@ bunx tsc --noEmit    # type-check
 ## Quality Standards
 - **NEVER compromise on the user's request.** Do not take the "simplest approach" or a shortcut just to get out of a difficult or long task. If the user asks for something, implement it properly.
 - **NEVER guess or hallucinate implementations.** When working with external libraries (e.g., `react-frame-component`), ALWAYS verify against official documentation or GitHub examples. Provide links to the examples/docs you followed.
+- **NEVER guess CLI flags or command behavior.** When using external CLI tools (e.g., `bun create vite`, `bun init`, `vite build`), ALWAYS check Context7 or official docs for the exact flags and behavior. Do NOT assume flags like `--force`, `--yes`, or `--non-interactive` exist without verification.
 - **Avoid hacky solutions.** If a proper solution requires more research (Context7, official docs), do the research. Do not patch around problems with workarounds.
 - **CRITICAL: NEVER EVER redefine types or recreate interfaces when they already exist in external packages.** ALWAYS import and reuse types from the source package. Do not create local copies of library types just to "make TypeScript happy" — fix the root cause or use the library's exported types correctly.
