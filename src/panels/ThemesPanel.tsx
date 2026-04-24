@@ -122,6 +122,16 @@ export function ThemesPanel() {
               <div className="h-10 flex items-center px-3 gap-2">
                 <span className="text-sm font-medium">{selectedThemeDir}</span>
                 <div className="flex-1" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
+                  disabled={!css}
+                  title="Save as…"
+                >
+                  <Save size={14} />
+                </Button>
               </div>
               <div className="flex items-center gap-1 px-3 pb-2">
                 <span className="text-[10px] text-muted-foreground mr-1">Framework</span>
@@ -169,12 +179,6 @@ export function ThemesPanel() {
                 projectPath={`projects/${settings.project}`}
                 placeholder="Describe the theme you want…"
               />
-            </div>
-            <div className="p-3 border-t border-border shrink-0 flex gap-2">
-              <Button variant="outline" className="gap-1 text-sm" onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }} disabled={!css}>
-                <Save size={14} />
-                Save as…
-              </Button>
             </div>
           </div>
         </Allotment.Pane>
