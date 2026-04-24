@@ -1,0 +1,209 @@
+import {
+  useRef, useState,
+  type KeyboardEvent, type DragEvent, type ClipboardEvent, type ChangeEvent,
+} from "react"
+import { Send, ImageIcon } from "lucide-react"
+import { readFile } from "@/lib/ipc"
+import { MentionPicker } from "./MentionPicker"
+import { AttachmentChip } from "./AttachmentChip"
+import { MentionChip } from "./MentionChip"
+import type { AttachmentFile, MentionAsset } from "@/types/chat"
+
+interface ChatInputProps {
+  value: string
+  onChange: (v: string) => void
+  onSend: () => void
+  disabled: boolean
+  attachments: AttachmentFile[]
+  onAddAttachment: (file: AttachmentFile) => void
+  onRemoveAttachment: (index: number) => void
+  mentions: MentionAsset[]
+  onAddMention: (asset: MentionAsset) => void
+  onRemoveMention: (id: string) => void
+  projectPath: string
+  placeholder?: string
+}
+
+export function ChatInput({
+  value, onChange, onSend, disabled,
+  attachments, onAddAttachment, onRemoveAttachment,
+  mentions, onAddMention, onRemoveMention,
+  projectPath, placeholder = "Ask anything… type @ to reference assets",
+}: ChatInputProps) {
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleChange(text: string) {
+    onChange(text)
+    const lastAt = text.lastIndexOf("@")
+    if (lastAt !== -1) {
+      const before = text[lastAt - 1]
+      if (lastAt === 0 || before === " " || before === "\n") {
+        const afterAt = text.slice(lastAt + 1)
+        if (!afterAt.includes(" ") && !afterAt.includes("\n")) {
+          setMentionQuery(afterAt)
+          return
+        }
+      }
+    }
+    setMentionQuery(null)
+  }
+
+  function handleMentionSelect(asset: Omit<MentionAsset, "code">) {
+    const lastAt = value.lastIndexOf("@")
+    onChange(value.slice(0, lastAt))
+    setMentionQuery(null)
+    readFile(asset.path)
+      .then((code) => onAddMention({ ...asset, code }))
+      .catch(() => onAddMention({ ...asset, code: "" }))
+    textareaRef.current?.focus()
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey && mentionQuery === null) {
+      e.preventDefault()
+      if (!disabled && value.trim()) onSend()
+    }
+    if (e.key === "Escape") setMentionQuery(null)
+  }
+
+  async function processImageFile(file: File) {
+    const base64 = await fileToBase64(file)
+    const previewUrl = URL.createObjectURL(file)
+    onAddAttachment({ name: file.name, size: file.size, mimeType: file.type, base64, previewUrl })
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(e.clipboardData.items)
+    const imageItem = items.find((item) => item.type.startsWith("image/"))
+    if (imageItem) {
+      e.preventDefault()
+      const file = imageItem.getAsFile()
+      if (file) processImageFile(file)
+    }
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setIsDragOver(false)
+
+    // Project file drag from RunnerPanel
+    const projectData = e.dataTransfer.getData("application/prototyper-asset")
+    if (projectData) {
+      try {
+        const { filePath, assetType, assetName } = JSON.parse(projectData) as {
+          filePath: string
+          assetType: MentionAsset["type"]
+          assetName: string
+        }
+        readFile(filePath)
+          .then((code) => onAddMention({ id: assetName, type: assetType, name: assetName, path: filePath, code }))
+          .catch(() => onAddMention({ id: assetName, type: assetType, name: assetName, path: filePath, code: "" }))
+      } catch {}
+      return
+    }
+
+    // Image file drop
+    Array.from(e.dataTransfer.files).forEach((file) => {
+      if (file.type.startsWith("image/")) processImageFile(file)
+    })
+  }
+
+  function handleFileInputChange(e: ChangeEvent<HTMLInputElement>) {
+    Array.from(e.target.files ?? []).forEach(processImageFile)
+    e.target.value = ""
+  }
+
+  const hasChips = attachments.length > 0 || mentions.length > 0
+
+  return (
+    <div className="relative">
+      {mentionQuery !== null && (
+        <MentionPicker
+          query={mentionQuery}
+          projectPath={projectPath}
+          onSelect={handleMentionSelect}
+          onClose={() => setMentionQuery(null)}
+        />
+      )}
+      <div
+        className={`rounded-lg border transition-colors ${
+          isDragOver ? "border-accent bg-accent/5" : "border-border bg-background"
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={handleDrop}
+      >
+        {hasChips && (
+          <div className="flex flex-wrap gap-1 border-b border-border px-2 py-1.5">
+            {mentions.map((m) => (
+              <MentionChip key={m.id} asset={m} onRemove={() => onRemoveMention(m.id)} />
+            ))}
+            {attachments.map((a, i) => (
+              <AttachmentChip key={i} file={a} onRemove={() => onRemoveAttachment(i)} />
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-1 p-1.5">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => handleChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+            style={{ maxHeight: "120px", overflowY: "auto" }}
+          />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              title="Attach image"
+              type="button"
+            >
+              <ImageIcon size={14} />
+            </button>
+            <button
+              onClick={onSend}
+              disabled={disabled || !value.trim()}
+              className="rounded bg-accent px-2 py-1 text-accent-foreground disabled:opacity-40 transition-opacity"
+              type="button"
+            >
+              <Send size={12} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      resolve(result.split(",")[1])
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
