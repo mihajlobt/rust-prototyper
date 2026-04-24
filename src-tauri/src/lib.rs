@@ -152,7 +152,8 @@ async fn bun_dev(cwd: String, port: u16, app: AppHandle) -> Result<u32, AppError
 #[tauri::command]
 async fn bun_build(cwd: String, app: AppHandle) -> Result<u32, AppError> {
     let cwd = resolve_cwd(&app, &cwd)?;
-    spawn_bun_command(&app, "bun", vec!["build".into()], cwd.to_string_lossy().to_string())
+    // The scaffolded Vite project uses "vite build", not "bun build"
+    spawn_bun_command(&app, "bun", vec!["run".into(), "build".into()], cwd.to_string_lossy().to_string())
 }
 
 #[tauri::command]
