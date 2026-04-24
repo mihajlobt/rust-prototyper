@@ -66,7 +66,7 @@ export function RunnerPanel() {
   const [fileContent, setFileContent] = useState("");
   const [terminalLines, setTerminalLines] = useState<Array<{ line: string; source: string }>>([]);
   const [running, setRunning] = useState(false);
-  const [previewReady, setPreviewReady] = useState(false);
+  const [devUrl, setDevUrl] = useState<string | null>(null);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [newFileName, setNewFileName] = useState("");
@@ -87,6 +87,7 @@ export function RunnerPanel() {
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const devUrlRef = useRef<string | null>(null);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -104,8 +105,20 @@ export function RunnerPanel() {
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       setTerminalLines((prev) => [...prev, { line: event.line, source: event.source }]);
-      if (event.line.includes("Local:")) {
-        setPreviewReady(true);
+      // Vite prints "  ➜  Local:   http://localhost:5173/" when dev server is ready
+      // Try strict match first (full URL after "Local:"), then loose (any localhost URL)
+      const localMatch = event.line.match(/Local:\s*(https?:\/\/\S+)/i);
+      if (localMatch) {
+        const url = localMatch[1];
+        devUrlRef.current = url;
+        setDevUrl(url);
+        return;
+      }
+      // Fallback: match any localhost URL in the output (covers partial chunks)
+      const looseMatch = event.line.match(/https?:\/\/localhost:\d+\S*/);
+      if (looseMatch && !devUrlRef.current) {
+        devUrlRef.current = looseMatch[0];
+        setDevUrl(looseMatch[0]);
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
@@ -165,6 +178,11 @@ export function RunnerPanel() {
 
   const handleRun = async () => {
     if (running && pidRef.current) {
+      // Remove iframe BEFORE killing the server — prevents WebKitGTK
+      // cascade reload when the iframe's Vite HMR client detects the dead server
+      devUrlRef.current = null;
+      setDevUrl(null);
+
       try {
         await killProcess(pidRef.current);
         await killAllProcesses();
@@ -174,7 +192,6 @@ export function RunnerPanel() {
       } finally {
         pidRef.current = null;
         setRunning(false);
-        setPreviewReady(false);
       }
       return;
     }
@@ -199,7 +216,8 @@ export function RunnerPanel() {
 
     setTerminalLines((prev) => [...prev, { line: "> bun dev", source: "stdout" }]);
     setRunning(true);
-    setPreviewReady(false);
+    devUrlRef.current = null;
+    setDevUrl(null);
     try {
       const pid = await bunDev(generatedDir, 5173);
       pidRef.current = pid;
@@ -379,12 +397,14 @@ export function RunnerPanel() {
   };
 
   const handleKillAll = async () => {
+    devUrlRef.current = null;
+    setDevUrl(null);
+
     try {
       await killAllProcesses();
       await killPort(DEV_PORT_RANGE);
       pidRef.current = null;
       setRunning(false);
-      setPreviewReady(false);
       notify.success("Killed all processes", "All active processes and ports 5173-5184 cleared");
     } catch (e) {
       notify.error("Kill all failed", e instanceof Error ? e.message : String(e));
@@ -561,14 +581,14 @@ export function RunnerPanel() {
                         <span className="text-xs font-medium">Preview</span>
                       </div>
                       <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
-                        {previewReady ? (
+                        {devUrl ? (
                           <div
                             className="h-full bg-background shadow-lg border border-border overflow-hidden"
                             style={{ width: deviceWidth[device], transform: fitPreview ? "none" : `scale(${deviceScale[device]})`, transformOrigin: "top center" }}
                           >
                             <iframe
                               ref={iframeRef}
-                              src="http://localhost:5173"
+                              src={devUrl}
                               className="w-full h-full"
                               sandbox="allow-scripts allow-same-origin allow-forms"
                               style={fitPreview ? { width: "100%", height: "100%" } : undefined}

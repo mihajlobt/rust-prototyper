@@ -73,8 +73,7 @@ async function waitForFile(path: string, timeoutMs = 30000, intervalMs = 500): P
  * 4. Wait for package.json to appear (runShellCommand returns immediately).
  * 5. Install dependencies.
  * 6. Restore Generated.tsx.
- * 7. Patch src/App.tsx to import Generated.
- * 8. Add icon library and run `bun install`.
+ * 7. Add icon library and run `bun install`.
  */
 export async function scaffoldGenerated(
   generatedDir: string,
@@ -113,18 +112,7 @@ export async function scaffoldGenerated(
     );
   }
 
-  // Step 7: Patch src/App.tsx to import our Generated component
-  const appTsx = `import Generated from './components/Generated';
-
-function App() {
-  return <Generated />;
-}
-
-export default App;
-`;
-  await writeFile(`${generatedDir}/src/App.tsx`, appTsx);
-
-  // Step 8: Add icon library if selected
+  // Step 7: Add icon library if selected
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg) {
     const pkgPath = `${generatedDir}/package.json`;

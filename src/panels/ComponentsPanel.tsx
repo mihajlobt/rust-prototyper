@@ -396,13 +396,13 @@ export function ComponentsPanel() {
                       <Code2 size={10} />
                     </Button>
                   )}
+                  <div className="flex-1" />
+                  {appliedIndices.has(i) && (
+                    <span className="text-[10px] text-muted-foreground">
+                      Code applied to editor
+                    </span>
+                  )}
                 </div>
-              )}
-              {/* Show code-applied badge when user explicitly clicked Apply */}
-              {appliedIndices.has(i) && (
-                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">
-                  Code applied to editor
-                </span>
               )}
             </div>
           );

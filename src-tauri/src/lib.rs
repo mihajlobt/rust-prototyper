@@ -198,54 +198,56 @@ async fn kill_all_processes(state: State<'_, AppState>) -> Result<(), AppError> 
 /// Uses lsof (unix) or netstat+taskkill (windows) to find and terminate the processes.
 #[tauri::command]
 async fn kill_port(ports: Vec<u16>) -> Result<(), AppError> {
-    for port in ports {
-        #[cfg(unix)]
-        {
-            let output = std::process::Command::new("lsof")
-                .args(["-t", &format!("-i:{}", port)])
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
-                .output();
+    tokio::task::spawn_blocking(move || {
+        for port in ports {
+            #[cfg(unix)]
+            {
+                let output = std::process::Command::new("lsof")
+                    .args(["-t", &format!("-i:{}", port)])
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::null())
+                    .output();
 
-            if let Ok(out) = output {
-                let pids = String::from_utf8_lossy(&out.stdout);
-                for pid in pids.lines() {
-                    let pid = pid.trim();
-                    if pid.is_empty() {
-                        continue;
-                    }
-                    let _ = std::process::Command::new("kill")
-                        .args(["-9", pid])
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .output();
-                }
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            let output = std::process::Command::new("cmd")
-                .args(["/C", &format!("netstat -ano | findstr :{}", port)])
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
-                .output();
-
-            if let Ok(out) = output {
-                let text = String::from_utf8_lossy(&out.stdout);
-                for line in text.lines() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if let Some(pid) = parts.last() {
-                        let _ = std::process::Command::new("taskkill")
-                            .args(["/PID", pid, "/F"])
+                if let Ok(out) = output {
+                    let pids = String::from_utf8_lossy(&out.stdout);
+                    for pid in pids.lines() {
+                        let pid = pid.trim();
+                        if pid.is_empty() {
+                            continue;
+                        }
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", pid])
                             .stdout(std::process::Stdio::null())
                             .stderr(std::process::Stdio::null())
                             .output();
                     }
                 }
             }
+
+            #[cfg(windows)]
+            {
+                let output = std::process::Command::new("cmd")
+                    .args(["/C", &format!("netstat -ano | findstr :{}", port)])
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::null())
+                    .output();
+
+                if let Ok(out) = output {
+                    let text = String::from_utf8_lossy(&out.stdout);
+                    for line in text.lines() {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if let Some(pid) = parts.last() {
+                            let _ = std::process::Command::new("taskkill")
+                                .args(["/PID", pid, "/F"])
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .output();
+                        }
+                    }
+                }
+            }
         }
-    }
+    }).await.map_err(|e| AppError::Process(format!("spawn_blocking error: {e}")))?;
 
     Ok(())
 }
