@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/select";
 import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readFile, readDir, exportProject, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -41,9 +42,9 @@ function modelSupportsVision(modelId: string) {
   return lower.includes("vision") || lower.includes("llava") || lower.includes("gpt-4o") || lower.includes("claude-3") || lower.includes("gemini");
 }
 
-export function ScreensPanel({ initialItem }: { initialItem?: string }) {
-  const { settings } = useSettings();
-  const [screenId, setScreenId] = useState(initialItem || "main");
+export function ScreensPanel() {
+  const { settings } = useAppStore();
+  const { activeScreen: screenId, openScreen: setScreenId } = useProjectStore();
   const [screens, setScreens] = useState<string[]>(["main"]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -88,13 +89,6 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
     })();
     return () => { cancelled = true; };
   }, [settings.project]);
-
-  // Sync screenId when navigating from sidebar / project explorer
-  useEffect(() => {
-    if (initialItem && initialItem !== screenId) {
-      setScreenId(initialItem);
-    }
-  }, [initialItem, screenId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -343,7 +337,7 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
                 <div className="h-full flex flex-col bg-card">
                   <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                     <span className="text-sm font-medium">Chat</span>
-                    <Select value={screenId} onValueChange={setScreenId}>
+                    <Select value={screenId ?? undefined} onValueChange={setScreenId}>
                       <SelectTrigger className="h-7 text-xs w-[120px]">
                         <SelectValue />
                       </SelectTrigger>
@@ -445,7 +439,7 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
                     {Math.ceil(messages.filter(m => m.role === "user").length)} turns
                   </span>
                 )}
-                <Select value={screenId} onValueChange={setScreenId}>
+                <Select value={screenId ?? undefined} onValueChange={setScreenId}>
                   <SelectTrigger className="h-7 text-xs w-[120px]">
                     <SelectValue />
                   </SelectTrigger>

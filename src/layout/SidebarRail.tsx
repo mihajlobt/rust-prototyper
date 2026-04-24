@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   Folder, FolderOpen, FileCode, ChevronRight, ChevronDown, Plus, RefreshCw,
 } from "lucide-react";
@@ -13,14 +13,12 @@ import {
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { createDir, writeFile, readDir, readFile, deleteDir, deleteFile, renameFile, type FileEntry } from "@/lib/ipc";
-import { useSettings } from "@/hooks/useSettings";
-
-interface SidebarRailProps {
-  onNavigateToItem?: (type: string, name: string) => void;
-  activeView?: string;
-  activeItem?: string;
-}
+import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, type FileEntry } from "@/lib/ipc";
+import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { useProjectTree } from "@/hooks/useProjectFiles";
+import { queryClient } from "@/lib/queryClient";
+import { projectKeys } from "@/lib/queryKeys";
 
 const DIR_LABELS: Record<string, string> = {
   screens: "Screens",
@@ -30,56 +28,36 @@ const DIR_LABELS: Record<string, string> = {
   apis: "APIs",
 };
 
-export function SidebarRail({ onNavigateToItem, activeView, activeItem }: SidebarRailProps) {
-  const { settings, setSettings } = useSettings();
+export function SidebarRail() {
+  const { settings, setSettings } = useAppStore();
+  const { activeView, activeComponent, activeScreen, activeTheme, activeWorkflow, openComponent, openScreen, openTheme, openWorkflow, setView } = useProjectStore();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
   const [creating, setCreating] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["screens", "components", "themes"]));
-  const [tree, setTree] = useState<Record<string, FileEntry[]>>({});
   const [renameTarget, setRenameTarget] = useState<{ section: string; name: string } | null>(null);
   const [renameTo, setRenameTo] = useState("");
 
-  const loadDir = useCallback(async (name: string) => {
-    try {
-      const entries = await readDir(`projects/${settings.project}/${name}`);
-      setTree((prev) => ({ ...prev, [name]: entries }));
-    } catch {
-      setTree((prev) => ({ ...prev, [name]: [] }));
-    }
-  }, [settings.project]);
+  const { data: screensTree } = useProjectTree(settings.project, "screens");
+  const { data: componentsTree } = useProjectTree(settings.project, "components");
+  const { data: themesTree } = useProjectTree(settings.project, "themes");
+  const { data: workflowsTree } = useProjectTree(settings.project, "workflows");
+  const { data: apisTree } = useProjectTree(settings.project, "apis");
 
-  useEffect(() => {
-    loadDir("screens");
-    loadDir("components");
-    loadDir("themes");
-    loadDir("workflows");
-    loadDir("apis");
-  }, [loadDir]);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { section?: string } | undefined;
-      if (detail?.section) {
-        loadDir(detail.section);
-      } else {
-        loadDir("screens");
-        loadDir("components");
-        loadDir("themes");
-        loadDir("workflows");
-        loadDir("apis");
-      }
-    };
-    window.addEventListener("prototyper:tree-changed", handler);
-    return () => window.removeEventListener("prototyper:tree-changed", handler);
-  }, [loadDir]);
+  const tree: Record<string, FileEntry[]> = {
+    screens: screensTree || [],
+    components: componentsTree || [],
+    themes: themesTree || [],
+    workflows: workflowsTree || [],
+    apis: apisTree || [],
+  };
 
   const toggle = (name: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
-      else { next.add(name); loadDir(name); }
+      else next.add(name);
       return next;
     });
   };
@@ -123,7 +101,7 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
       setShowNewDialog(false);
       setNewItemName("");
       const sectionMap: Record<string, string> = { screen: "screens", component: "components", theme: "themes", api: "apis" };
-      loadDir(sectionMap[newItemType]);
+      queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, sectionMap[newItemType]) });
     } catch (e) {
       alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -140,7 +118,7 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
-      loadDir(section);
+      queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
       alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -162,7 +140,7 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
       } else {
         await renameFile(`${base}/${section}/${name}`, `${base}/${section}/${newId}`);
       }
-      loadDir(section);
+      queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
       alert(`Rename failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -196,7 +174,7 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
         await writeFile(`${dir}/theme.css`, css);
         await writeFile(`${dir}/prompt.json`, meta);
       }
-      loadDir(section);
+      queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
       alert(`Duplicate failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -237,7 +215,7 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
             <ContextMenuItem onClick={() => openNewFor(sectionType[section])}>
               New {sectionType[section]}…
             </ContextMenuItem>
-            <ContextMenuItem onClick={() => loadDir(section)}>
+            <ContextMenuItem onClick={() => queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) })}>
               <RefreshCw size={12} className="mr-2" /> Refresh
             </ContextMenuItem>
           </ContextMenuContent>
@@ -249,7 +227,20 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
               <div className="text-[10px] text-muted-foreground px-2">Empty</div>
             )}
             {entries.map((entry) => {
-              const isActive = activeView === section && (activeItem === entry.name || activeItem === entry.name.replace(/\.json$/, ""));
+              const activeItemForSection =
+                section === "screens" ? activeScreen :
+                section === "components" ? activeComponent :
+                section === "themes" ? activeTheme :
+                section === "workflows" ? activeWorkflow :
+                null;
+              const isActive = activeView === section && (activeItemForSection === entry.name || activeItemForSection === entry.name.replace(/\.json$/, ""));
+              const navigate = () => {
+                if (section === "screens") openScreen(entry.name);
+                else if (section === "components") openComponent(entry.name);
+                else if (section === "themes") openTheme(entry.name);
+                else if (section === "workflows") openWorkflow(entry.name);
+                else if (section === "apis") setView("apis");
+              };
               return (
               <ContextMenu key={entry.path}>
                 <ContextMenuTrigger asChild>
@@ -260,14 +251,14 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted",
                     ].join(" ")}
-                    onClick={() => onNavigateToItem?.(section, entry.name)}
+                    onClick={navigate}
                   >
                     {entry.is_dir ? <Folder size={10} /> : <FileCode size={10} />}
                     <span className="truncate">{entry.name}</span>
                   </button>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
-                  <ContextMenuItem onClick={() => onNavigateToItem?.(section, entry.name)}>
+                  <ContextMenuItem onClick={navigate}>
                     Open
                   </ContextMenuItem>
                   {(section === "screens" || section === "components" || section === "themes") && (

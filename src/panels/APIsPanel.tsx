@@ -14,7 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { httpRequest, readFile, writeFile, createDir, type HttpResponse } from "@/lib/ipc";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
 import { notify } from "@/hooks/useToast";
 import YAML from "js-yaml";
 
@@ -117,7 +117,7 @@ function parseCurl(input: string): Partial<SavedApi> | null {
 }
 
 export function APIsPanel() {
-  const { settings } = useSettings();
+  const { settings } = useAppStore();
   const [apis, setApis] = useState<SavedApi[]>([]);
   const [selectedApiId, setSelectedApiId] = useState<string | null>(null);
   const [name, setName] = useState("");

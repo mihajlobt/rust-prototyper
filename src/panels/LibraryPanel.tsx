@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { readDir, readFile, writeFile, deleteDir, createDir, renameFile } from "@/lib/ipc";
 import { save } from "@tauri-apps/plugin-dialog";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
 
 interface LibraryItem {
@@ -17,12 +18,9 @@ interface LibraryItem {
   description?: string;
 }
 
-interface LibraryPanelProps {
-  onNavigateToItem?: (type: string, name: string) => void;
-}
-
-export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
-  const { settings } = useSettings();
+export function LibraryPanel() {
+  const { settings } = useAppStore();
+  const { openComponent, openScreen, openTheme, openWorkflow } = useProjectStore();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -261,7 +259,12 @@ export function LibraryPanel({ onNavigateToItem }: LibraryPanelProps) {
                     <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{item.description}</p>
                   )}
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Open in editor" onClick={() => onNavigateToItem?.(item.type, item.id)}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Open in editor" onClick={() => {
+                      if (item.type === "component") openComponent(item.id);
+                      else if (item.type === "screen") openScreen(item.id);
+                      else if (item.type === "theme") openTheme(item.id);
+                      else if (item.type === "api") openWorkflow(item.id);
+                    }}>
                       <ExternalLink size={12} />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingId(`${item.type}-${item.id}`); setEditName(item.name); }}>

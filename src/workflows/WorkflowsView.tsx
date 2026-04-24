@@ -34,7 +34,8 @@ import {
   type FileEntry, type CompletionEvent, type Message,
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
 import Frame from "react-frame-component";
 
@@ -147,8 +148,9 @@ function generateId() {
 
 // ─── Main view (needs ReactFlowProvider) ──────────────────────────────────
 
-function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
-  const { settings } = useSettings();
+function WorkflowCanvas() {
+  const { settings } = useAppStore();
+  const { activeWorkflow: initialWorkflow } = useProjectStore();
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): Node => ({
@@ -778,10 +780,10 @@ function WorkflowCanvas({ initialWorkflow }: { initialWorkflow?: string }) {
   );
 }
 
-export function WorkflowsView({ initialWorkflow }: { initialWorkflow?: string }) {
+export function WorkflowsView() {
   return (
     <ReactFlowProvider>
-      <WorkflowCanvas initialWorkflow={initialWorkflow} />
+      <WorkflowCanvas />
     </ReactFlowProvider>
   );
 }

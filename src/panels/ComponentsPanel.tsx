@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/select";
 import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readDir, readFile, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { useComponentCode, useComponentChat } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
@@ -29,8 +31,9 @@ interface ChatMessage {
   content: string;
 }
 
-export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
-  const { settings, setSettings } = useSettings();
+export function ComponentsPanel() {
+  const { settings, setSettings } = useAppStore();
+  const { activeComponent: selectedComponent, openComponent: setSelectedComponent } = useProjectStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [code, setCode] = useState("");
@@ -42,16 +45,8 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [themeCss, setThemeCss] = useState("");
-  const [selectedComponent, setSelectedComponent] = useState(initialItem || "");
   const [copiedIndices, setCopiedIndices] = useState<Set<number>>(new Set());
   const verticalAllotmentRef = useRef<AllotmentHandle>(null);
-
-  // Sync selectedComponent when navigating from sidebar / project explorer
-  useEffect(() => {
-    if (initialItem !== undefined && initialItem !== selectedComponent) {
-      setSelectedComponent(initialItem);
-    }
-  }, [initialItem]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const CODE_PANE_SIZE = 280;
   const CODE_HEADER = 28;
@@ -147,26 +142,17 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
     return () => { cancelled = true; };
   }, [selectedTheme, settings.project]);
 
-  // Load selected component code + chat
+  // Load selected component code + chat via TanStack Query
+  const { data: loadedCode } = useComponentCode(settings.project, selectedComponent);
+  const { data: loadedChat } = useComponentChat(settings.project, selectedComponent);
+
   useEffect(() => {
-    if (!selectedComponent) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const content = await readFile(`projects/${settings.project}/components/${selectedComponent}/component.tsx`);
-        if (!cancelled) setCode(content);
-      } catch {
-        // ignore
-      }
-      try {
-        const chatData = await readFile(`projects/${settings.project}/components/${selectedComponent}/chat.json`);
-        if (!cancelled) setMessages(JSON.parse(chatData));
-      } catch {
-        if (!cancelled) setMessages([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedComponent, settings.project]);
+    if (loadedCode !== undefined) setCode(loadedCode);
+  }, [loadedCode]);
+
+  useEffect(() => {
+    if (loadedChat !== undefined) setMessages(loadedChat);
+  }, [loadedChat]);
 
   const persistChat = useCallback(async (msgs: ChatMessage[]) => {
     if (!selectedComponent) return;

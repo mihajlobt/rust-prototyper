@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Save } from "lucide-react";
-import { writeFile, createDir } from "@/lib/ipc";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
+import { useSaveComponent } from "@/hooks/useProjectFiles";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -28,31 +28,23 @@ interface SaveComponentModalProps {
 }
 
 export function SaveComponentModal({ code, prompt, messages, trigger, onSaved }: SaveComponentModalProps) {
-  const { settings } = useSettings();
+  const { settings } = useAppStore();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
+  const saveMutation = useSaveComponent();
 
   const handleSave = async () => {
     if (!name.trim()) return;
-    setSaving(true);
-    try {
-      const id = name.toLowerCase().replace(/\s+/g, "-");
-      const base = `projects/${settings.project}/components/${id}`;
-      await createDir(base);
-      await writeFile(`${base}/component.tsx`, code);
-      await writeFile(`${base}/prompt.json`, JSON.stringify({ name, prompt, created: new Date().toISOString() }, null, 2));
-      if (messages && messages.length > 0) {
-        await writeFile(`${base}/chat.json`, JSON.stringify(messages, null, 2));
-      }
-      setOpen(false);
-      setName("");
-      onSaved?.(id);
-    } catch (e) {
-      alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setSaving(false);
-    }
+    const id = name.toLowerCase().replace(/\s+/g, "-");
+    await saveMutation.mutateAsync({
+      project: settings.project,
+      name: id,
+      code,
+      messages,
+    });
+    setOpen(false);
+    setName("");
+    onSaved?.(id);
   };
 
   return (
@@ -88,8 +80,8 @@ export function SaveComponentModal({ code, prompt, messages, trigger, onSaved }:
               className="min-h-[80px] text-sm"
             />
           </div>
-          <Button className="w-full" onClick={handleSave} disabled={saving || !name.trim()}>
-            {saving ? "Saving…" : "Save to Project"}
+          <Button className="w-full" onClick={handleSave} disabled={saveMutation.isPending || !name.trim()}>
+            {saveMutation.isPending ? "Saving…" : "Save to Project"}
           </Button>
         </div>
       </DialogContent>

@@ -11,17 +11,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readFile, type CompletionEvent, type Message } from "@/lib/ipc";
+import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, type CompletionEvent, type Message } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt } from "@/lib/prompts";
 import { getParentCss } from "@/lib/preview";
 import Frame from "react-frame-component";
 
-export function ThemesPanel({ initialItem }: { initialItem?: string }) {
-  const { settings } = useSettings();
+export function ThemesPanel() {
+  const { settings } = useAppStore();
+  const { activeTheme: selectedThemeDir, openTheme: setSelectedThemeDir } = useProjectStore();
   const [prompt, setPrompt] = useState("");
   const [css, setCss] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,14 +32,6 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
   const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
   const [darkLightSupport, setDarkLightSupport] = useState(true);
   const [darkPreview, setDarkPreview] = useState(false);
-  const [selectedThemeDir, setSelectedThemeDir] = useState(initialItem || "main");
-
-  // Sync selected theme when navigating from sidebar
-  useEffect(() => {
-    if (initialItem && initialItem !== selectedThemeDir) {
-      setSelectedThemeDir(initialItem);
-    }
-  }, [initialItem]);
   const [codeOpen, setCodeOpen] = useState(true);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
@@ -54,21 +49,12 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
     }
   };
 
-  // Load persisted theme on mount or when selectedThemeDir changes
+  // Load persisted theme via TanStack Query
+  const { data: loadedCss } = useThemeCss(settings.project, selectedThemeDir);
+
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const themeDir = selectedThemeDir || "main";
-        const cssPath = `projects/${settings.project}/themes/${themeDir}/theme.css`;
-        const saved = await readFile(cssPath);
-        if (!cancelled) setCss(saved);
-      } catch {
-        // no saved theme
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [settings.project, selectedThemeDir]);
+    if (loadedCss !== undefined) setCss(loadedCss);
+  }, [loadedCss]);
 
   const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
     try {
@@ -192,7 +178,7 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
                 <Send size={14} />
                 {loading ? "Generating…" : "Generate"}
               </Button>
-              <Button variant="outline" className="gap-1 text-sm" onClick={() => { setSaveDialogName(selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }} disabled={!css}>
+              <Button variant="outline" className="gap-1 text-sm" onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }} disabled={!css}>
                 <Save size={14} />
                 Save as…
               </Button>

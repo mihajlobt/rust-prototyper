@@ -49,11 +49,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
 import { notify } from "@/hooks/useToast";
 
 export function RunnerPanel() {
-  const { settings } = useSettings();
+  const { settings } = useAppStore();
   const generatedDir = `projects/${settings.project}/generated`;
 
   const [files, setFiles] = useState<FileEntry[]>([]);

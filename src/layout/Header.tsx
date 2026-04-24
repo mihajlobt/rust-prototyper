@@ -8,7 +8,7 @@ import {
   Terminal,
   PanelLeft,
 } from "lucide-react";
-import { useSettings } from "@/hooks/useSettings";
+import { useAppStore } from "@/stores/appStore";
 import { SettingsModal } from "@/modals/SettingsModal";
 import { ProjectManagerModal } from "@/modals/ProjectManagerModal";
 import { ExportModal } from "@/modals/ExportModal";
@@ -33,7 +33,7 @@ interface HeaderProps {
 }
 
 export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar }: HeaderProps) {
-  const { settings, setSettings } = useSettings();
+  const { settings, setSettings } = useAppStore();
 
   return (
     <header className="h-12 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
