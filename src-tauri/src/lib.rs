@@ -391,6 +391,8 @@ async fn http_request(
 struct Message {
     role: String,
     content: String,
+    #[serde(default)]
+    images: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -431,7 +433,13 @@ async fn chat_completion_ollama(
 ) -> Result<String, AppError> {
     let url = format!("{}/api/chat", host);
     let msgs: Vec<serde_json::Value> = messages.iter()
-        .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
+        .map(|m| {
+            if m.images.is_empty() {
+                serde_json::json!({"role": m.role, "content": m.content})
+            } else {
+                serde_json::json!({"role": m.role, "content": m.content, "images": m.images})
+            }
+        })
         .collect();
     let body = serde_json::json!({ "model": model, "messages": msgs, "stream": stream });
 
