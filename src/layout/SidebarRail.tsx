@@ -20,6 +20,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useProjectTree } from "@/hooks/useProjectFiles";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
+import { notify } from "@/hooks/useToast";
 
 const DIR_LABELS: Record<string, string> = {
   screens: "Screens",
@@ -114,14 +115,14 @@ export function SidebarRail() {
   const handleDelete = async (section: string, name: string) => {
     if (!(await confirm(`Delete "${name}"?`))) return;
     try {
-      if (section === "apis") {
-        await deleteFile(`${base}/apis/${name}`);
+      if (section === "apis" || section === "workflows") {
+        await deleteFile(`${base}/${section}/${name}`);
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
       queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
-      alert(`Delete failed: ${e instanceof Error ? e.message : String(e)}`);
+      notify.error("Delete failed", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -292,12 +293,29 @@ export function SidebarRail() {
     );
   };
 
+  const refreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, "screens") });
+    queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, "components") });
+    queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, "themes") });
+    queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, "workflows") });
+    queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, "apis") });
+  };
+
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
       <div className="flex-1 overflow-y-auto py-2">
         <div className="px-2 space-y-0.5">
-          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-2 mb-1">
-            Project
+          <div className="flex items-center justify-between px-2 mb-1">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              Project
+            </span>
+            <button
+              onClick={refreshAll}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={10} />
+            </button>
           </div>
           {renderDir("screens")}
           {renderDir("components")}
