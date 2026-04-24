@@ -47,6 +47,7 @@ export function ComponentsPanel() {
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [themeCss, setThemeCss] = useState("");
   const [copiedIndices, setCopiedIndices] = useState<Set<number>>(new Set());
+  const [appliedIndices, setAppliedIndices] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 2);
@@ -183,6 +184,11 @@ export function ComponentsPanel() {
       notify.error("Failed to apply generated code", e instanceof Error ? e.message : String(e));
     }
   }, [settings.project, selectedComponent]);
+
+  const handleApplyMessage = useCallback((index: number, extracted: string) => {
+    setAppliedIndices((prev) => new Set(prev).add(index));
+    applyCode(extracted);
+  }, [applyCode]);
 
   const handleCopyMessage = useCallback(async (index: number, text: string) => {
     try {
@@ -352,7 +358,7 @@ export function ComponentsPanel() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-5 text-[10px] gap-1 px-1.5"
-                                onClick={() => applyCode(inner)}
+                                onClick={() => handleApplyMessage(i, inner)}
                               >
                                 <Code2 size={10} />
                                 Apply
@@ -384,7 +390,7 @@ export function ComponentsPanel() {
                       variant="ghost"
                       size="icon"
                       className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                      onClick={() => applyCode(extracted)}
+                      onClick={() => handleApplyMessage(i, extracted)}
                       title="Apply to editor and preview"
                     >
                       <Code2 size={10} />
@@ -392,8 +398,8 @@ export function ComponentsPanel() {
                   )}
                 </div>
               )}
-              {/* Show code-applied badge on last assistant message with code (not streaming) */}
-              {!isStreaming && extracted && i === messages.length - 1 && (
+              {/* Show code-applied badge when user explicitly clicked Apply */}
+              {appliedIndices.has(i) && (
                 <span className="text-[10px] text-muted-foreground mt-0.5 px-1">
                   Code applied to editor
                 </span>
