@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import { Header } from "./layout/Header";
@@ -16,8 +16,10 @@ import { ToastProvider } from "./components/ToastProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { setupGlobalErrorHandlers } from "./lib/notifications";
 
+const LAYOUT_KEY = "app";
+
 export default function App() {
-  const { settings, loaded } = useAppStore();
+  const { settings, setSettings, loaded } = useAppStore();
   const { activeView, setView } = useProjectStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -52,6 +54,19 @@ export default function App() {
     document.documentElement.classList.toggle("amoled", settings.amoled);
   }, [settings.amoled]);
 
+  const savedSizes = settings.layout[LAYOUT_KEY];
+  const defaultSizes: number[] | undefined =
+    savedSizes && savedSizes.length > 0 ? savedSizes : undefined;
+
+  const handleLayoutChange = useCallback(
+    (sizes: number[]) => {
+      setSettings({
+        layout: { ...settings.layout, [LAYOUT_KEY]: sizes },
+      });
+    },
+    [settings.layout, setSettings]
+  );
+
   if (!loaded) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background text-foreground">
@@ -71,7 +86,7 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
         />
         <div className="flex-1 overflow-hidden">
-          <Allotment>
+          <Allotment onChange={handleLayoutChange} defaultSizes={defaultSizes}>
             {sidebarOpen && (
               <Allotment.Pane preferredSize={240} minSize={180} maxSize={320}>
                 <SidebarRail />

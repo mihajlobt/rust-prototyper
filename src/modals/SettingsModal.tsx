@@ -301,6 +301,20 @@ export function SettingsModal() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="border-t border-border pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setSettings({ layout: {} })}
+              >
+                Reset Layout
+              </Button>
+              <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+                Resets all panel positions to default
+              </p>
+            </div>
           </TabsContent>
 
           <TabsContent value="ai" className="flex-1 overflow-auto space-y-4 mt-4">

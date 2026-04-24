@@ -20,6 +20,7 @@ export interface Settings {
   glow: "off" | "subtle" | "full";
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
+  layout: Record<string, number[]>;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: Settings = {
   glow: "subtle",
   amoled: false,
   iconLibrary: "lucide",
+  layout: {},
 };
 
 // ─── Settings Slice ───
