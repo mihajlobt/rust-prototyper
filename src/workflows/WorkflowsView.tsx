@@ -152,7 +152,7 @@ function generateId() {
 function WorkflowCanvas() {
   const { settings } = useAppStore();
   const { activeWorkflow: initialWorkflow } = useProjectStore();
-  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 3);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): Node => ({
