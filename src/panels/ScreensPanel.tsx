@@ -89,6 +89,13 @@ export function ScreensPanel({ initialItem }: { initialItem?: string }) {
     return () => { cancelled = true; };
   }, [settings.project]);
 
+  // Sync screenId when navigating from sidebar / project explorer
+  useEffect(() => {
+    if (initialItem && initialItem !== screenId) {
+      setScreenId(initialItem);
+    }
+  }, [initialItem, screenId]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

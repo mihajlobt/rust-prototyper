@@ -14,13 +14,20 @@ import { Save } from "lucide-react";
 import { writeFile, createDir } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 interface SaveComponentModalProps {
   code: string;
   prompt: string;
+  messages?: ChatMessage[];
   trigger?: React.ReactNode;
+  onSaved?: (id: string) => void;
 }
 
-export function SaveComponentModal({ code, prompt, trigger }: SaveComponentModalProps) {
+export function SaveComponentModal({ code, prompt, messages, trigger, onSaved }: SaveComponentModalProps) {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -31,12 +38,16 @@ export function SaveComponentModal({ code, prompt, trigger }: SaveComponentModal
     setSaving(true);
     try {
       const id = name.toLowerCase().replace(/\s+/g, "-");
-      const base = `./projects/${settings.project}/components/${id}`;
+      const base = `projects/${settings.project}/components/${id}`;
       await createDir(base);
       await writeFile(`${base}/component.tsx`, code);
       await writeFile(`${base}/prompt.json`, JSON.stringify({ name, prompt, created: new Date().toISOString() }, null, 2));
+      if (messages && messages.length > 0) {
+        await writeFile(`${base}/chat.json`, JSON.stringify(messages, null, 2));
+      }
       setOpen(false);
       setName("");
+      onSaved?.(id);
     } catch (e) {
       alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

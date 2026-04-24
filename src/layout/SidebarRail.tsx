@@ -58,6 +58,23 @@ export function SidebarRail({ onNavigateToItem, activeView, activeItem }: Sideba
     loadDir("apis");
   }, [loadDir]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { section?: string } | undefined;
+      if (detail?.section) {
+        loadDir(detail.section);
+      } else {
+        loadDir("screens");
+        loadDir("components");
+        loadDir("themes");
+        loadDir("workflows");
+        loadDir("apis");
+      }
+    };
+    window.addEventListener("prototyper:tree-changed", handler);
+    return () => window.removeEventListener("prototyper:tree-changed", handler);
+  }, [loadDir]);
+
   const toggle = (name: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);

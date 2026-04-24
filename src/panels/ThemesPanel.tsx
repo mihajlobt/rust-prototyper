@@ -128,6 +128,7 @@ export function ThemesPanel({ initialItem }: { initialItem?: string }) {
     await persistTheme(css, prompt, slug);
     setShowSaveDialog(false);
     setSaveDialogName("");
+    window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
   };
 
   const deviceWidth = {

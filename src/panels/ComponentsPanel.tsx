@@ -42,10 +42,16 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [themeCss, setThemeCss] = useState("");
-  const [savedComponents, setSavedComponents] = useState<FileEntry[]>([]);
   const [selectedComponent, setSelectedComponent] = useState(initialItem || "");
   const [copiedIndices, setCopiedIndices] = useState<Set<number>>(new Set());
   const verticalAllotmentRef = useRef<AllotmentHandle>(null);
+
+  // Sync selectedComponent when navigating from sidebar / project explorer
+  useEffect(() => {
+    if (initialItem !== undefined && initialItem !== selectedComponent) {
+      setSelectedComponent(initialItem);
+    }
+  }, [initialItem]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const CODE_PANE_SIZE = 280;
   const CODE_HEADER = 28;
@@ -76,10 +82,15 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
     try {
       const genDir = `projects/${settings.project}/generated`;
       await writeFile(`${genDir}/src/components/Generated.tsx`, value);
+      if (selectedComponent) {
+        const compDir = `projects/${settings.project}/components/${selectedComponent}`;
+        await createDir(compDir);
+        await writeFile(`${compDir}/component.tsx`, value);
+      }
     } catch (e) {
       notify.error("Failed to save generated code", e instanceof Error ? e.message : String(e));
     }
-  }, [settings.project]);
+  }, [settings.project, selectedComponent]);
 
   const handleCodeChange = useCallback((value: string) => {
     setCode(value);
@@ -136,20 +147,6 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
     return () => { cancelled = true; };
   }, [selectedTheme, settings.project]);
 
-  // Load saved components
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const entries = await readDir(`projects/${settings.project}/components`);
-        if (!cancelled) setSavedComponents(entries.filter((e) => e.is_dir));
-      } catch {
-        if (!cancelled) setSavedComponents([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [settings.project]);
-
   // Load selected component code + chat
   useEffect(() => {
     if (!selectedComponent) return;
@@ -188,10 +185,15 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
       const genDir = `projects/${settings.project}/generated`;
       await createDir(`${genDir}/src/components`);
       await writeFile(`${genDir}/src/components/Generated.tsx`, extracted);
+      if (selectedComponent) {
+        const compDir = `projects/${settings.project}/components/${selectedComponent}`;
+        await createDir(compDir);
+        await writeFile(`${compDir}/component.tsx`, extracted);
+      }
     } catch (e) {
       notify.error("Failed to apply generated code", e instanceof Error ? e.message : String(e));
     }
-  }, [settings.project]);
+  }, [settings.project, selectedComponent]);
 
   const handleCopyMessage = useCallback(async (index: number, text: string) => {
     try {
@@ -289,16 +291,6 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
           </Button>
         )}
         <div className="flex items-center gap-1">
-          <Select value={selectedComponent} onValueChange={setSelectedComponent}>
-            <SelectTrigger className="h-6 text-xs w-[110px]">
-              <SelectValue placeholder="Load…" />
-            </SelectTrigger>
-            <SelectContent>
-              {savedComponents.map((c) => (
-                <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Select value={selectedTheme} onValueChange={(v) => { setSelectedTheme(v); setSettings({ stylePreset: v }); }}>
             <SelectTrigger className="h-6 text-xs w-[90px]">
               <SelectValue placeholder="Theme…" />
@@ -544,12 +536,21 @@ export function ComponentsPanel({ initialItem }: { initialItem?: string }) {
                 >
                   <span className="text-xs font-medium flex-1">Code</span>
                   <div className="flex items-center gap-1 mr-1">
-                    <SaveComponentModal code={code} prompt={messages.find(m => m.role === "user")?.content ?? ""} trigger={
-                      <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-1 px-1.5" onClick={(e) => e.stopPropagation()} disabled={!code}>
-                        <Save size={10} />
-                        Save
-                      </Button>
-                    } />
+                    <SaveComponentModal
+                      code={code}
+                      prompt={messages.find(m => m.role === "user")?.content ?? ""}
+                      messages={messages}
+                      onSaved={(id) => {
+                        setSelectedComponent(id);
+                        window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "components" } }));
+                      }}
+                      trigger={
+                        <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-1 px-1.5" onClick={(e) => e.stopPropagation()} disabled={!code}>
+                          <Save size={10} />
+                          Save
+                        </Button>
+                      }
+                    />
                     <ComponentExportModal componentId="Generated" trigger={
                       <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-1 px-1.5" onClick={(e) => e.stopPropagation()} disabled={!code}>
                         <Download size={10} />
