@@ -113,6 +113,7 @@ export async function httpRequest(
 export interface Message {
   role: string;
   content: string;
+  images?: string[];
 }
 
 export interface ModelInfo {
