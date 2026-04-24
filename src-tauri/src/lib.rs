@@ -458,6 +458,12 @@ async fn chat_completion_ollama(
 
     if stream {
         let mut full = String::new();
+        // Batch small tokens into larger IPC messages to reduce round-trip overhead.
+        // Flush when buffer hits 40 chars OR 30ms have elapsed since last flush.
+        let mut buf = String::new();
+        let mut last_flush = std::time::Instant::now();
+        let flush_interval = std::time::Duration::from_millis(30);
+
         let mut byte_stream = res.bytes_stream();
         while let Some(chunk_result) = byte_stream.next().await {
             let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
@@ -466,11 +472,22 @@ async fn chat_completion_ollama(
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
                     if let Some(content) = json["message"]["content"].as_str() {
                         full.push_str(content);
-                        if let Some(ev) = on_event {
-                            let _ = ev.send(CompletionEvent::Chunk { text: content.to_string() });
+                        buf.push_str(content);
+                        let now = std::time::Instant::now();
+                        if buf.len() >= 40 || now.duration_since(last_flush) >= flush_interval {
+                            if let Some(ev) = on_event {
+                                let _ = ev.send(CompletionEvent::Chunk { text: std::mem::take(&mut buf) });
+                            }
+                            last_flush = now;
                         }
                     }
                 }
+            }
+        }
+        // Flush any remaining buffered text
+        if !buf.is_empty() {
+            if let Some(ev) = on_event {
+                let _ = ev.send(CompletionEvent::Chunk { text: buf });
             }
         }
         if let Some(ev) = on_event {

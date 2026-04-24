@@ -27,10 +27,13 @@ import { getScreenNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
   const { activeScreen: screenId, openScreen: setScreenId } = useProjectStore();
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 2);
   const [screens, setScreens] = useState<string[]>(["main"]);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [previewHtml, setPreviewHtml] = useState("");
@@ -200,7 +203,11 @@ export function ScreensPanel() {
 
   const chatPane = (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList messages={messages} isStreaming={isStreaming} />
+      <MessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) setPreviewHtml(c); }}
+      />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput
           value={input}
@@ -234,10 +241,10 @@ export function ScreensPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <Allotment>
+      <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
           {showInspector ? (
-            <Allotment vertical>
+            <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
               <Allotment.Pane minSize={200}>
                 <div className="h-full flex flex-col bg-card">
                   <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">

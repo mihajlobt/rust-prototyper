@@ -177,9 +177,8 @@ export function useIconFontCss(iconLibrary: IconLibrary, project: string): strin
 }
 
 export function extractCode(text: string): string | null {
-  const fenced = text.match(
-    /```(?:tsx?|jsx?|javascript|typescript)?\n?([\s\S]*?)```/
-  );
+  // Match any language fence (html, tsx, css, etc.) or bare triple backticks
+  const fenced = text.match(/```\w*\s*\n([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
   const trimmed = text.trim();
   if (
@@ -187,7 +186,9 @@ export function extractCode(text: string): string | null {
     trimmed.startsWith("export ") ||
     trimmed.startsWith("function ") ||
     trimmed.startsWith("const ") ||
-    trimmed.startsWith("//")
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("<!DOCTYPE") ||
+    trimmed.startsWith("<html")
   ) {
     return trimmed;
   }

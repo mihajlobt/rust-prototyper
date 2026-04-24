@@ -221,7 +221,11 @@ export function ComponentsPanel() {
         </Button>
       </div>
 
-      <MessageList messages={messages} isStreaming={isStreaming} />
+      <MessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
+      />
       <ChatInput
         value={input}
         onChange={setInput}

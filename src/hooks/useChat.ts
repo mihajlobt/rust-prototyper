@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, type MutableRefObject } from "react"
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -11,6 +11,7 @@ import {
   type CompletionEvent,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
+import { notify } from "@/hooks/useToast"
 
 // Stable reference used as fallback when entity has no chat state yet.
 // Must be module-level so the reference is constant across renders —
@@ -27,6 +28,10 @@ interface UseChatOptions {
 export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatOptions) {
   const settings = useAppStore((s) => s.settings)
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
+
+  // Keep onOutput in a ref so sendMessage doesn't need it as a dep (avoids recreation on every render)
+  const onOutputRef = useRef(onOutput) as MutableRefObject<typeof onOutput>
+  useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
@@ -129,19 +134,24 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
         useChatStore.getState().setMessages(entityId, finalMessages)
         useChatStore.getState().setStreaming(entityId, false)
         writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        onOutput?.(accumulated)
+        onOutputRef.current?.(accumulated)
       } else if (msg.event === "Error") {
-        useChatStore.getState().setMessages(entityId, updatedMessages.slice(0, -1))
+        useChatStore.getState().setMessages(entityId, [
+          ...updatedMessages.slice(0, -1),
+          { role: "assistant", content: `⚠ ${msg.data.message}` },
+        ])
         useChatStore.getState().setStreaming(entityId, false)
+        notify.error("Generation failed", msg.data.message)
       }
     }
 
     try {
       await generateCompletionStream(modelId, apiMessages, resolvedHost, resolvedKey, channel)
-    } catch {
+    } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
+      notify.error("Generation failed", e instanceof Error ? e.message : String(e))
     }
-  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, onOutput])
+  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings])
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)

@@ -14,6 +14,7 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, type FileEntry } from "@/lib/ipc";
+import type { MentionAsset } from "@/types/chat";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -194,6 +195,20 @@ export function SidebarRail() {
     workflows: "workflow", apis: "api",
   };
 
+  const getSidebarAssetType = (section: string): MentionAsset["type"] | null => {
+    if (section === "components") return "component"
+    if (section === "themes") return "theme"
+    if (section === "screens") return "screen"
+    return null
+  }
+
+  const getSidebarFilePath = (section: string, entryName: string): string => {
+    if (section === "components") return `${base}/components/${entryName}/component.tsx`
+    if (section === "themes") return `${base}/themes/${entryName}/theme.css`
+    if (section === "screens") return `${base}/screens/${entryName}/screen.tsx`
+    return ""
+  }
+
   const renderDir = (section: string) => {
     const label = DIR_LABELS[section];
     const isExpanded = expanded.has(section);
@@ -254,6 +269,18 @@ export function SidebarRail() {
                         : "text-muted-foreground hover:text-foreground hover:bg-muted",
                     ].join(" ")}
                     onClick={navigate}
+                    draggable={getSidebarAssetType(section) !== null}
+                    onDragStart={(e) => {
+                      const assetType = getSidebarAssetType(section)
+                      const filePath = getSidebarFilePath(section, entry.name)
+                      if (assetType && filePath) {
+                        e.dataTransfer.setData(
+                          "application/prototyper-asset",
+                          JSON.stringify({ filePath, assetType, assetName: entry.name })
+                        )
+                        e.dataTransfer.effectAllowed = "copy"
+                      }
+                    }}
                   >
                     {entry.is_dir ? <Folder size={10} /> : <FileCode size={10} />}
                     <span className="truncate">{entry.name}</span>
