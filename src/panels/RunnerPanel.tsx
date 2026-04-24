@@ -40,6 +40,7 @@ import {
   bunInstall,
   killProcess,
   killAllProcesses,
+  killPort,
   runShellCommand,
   type FileEntry,
 } from "@/lib/ipc";
@@ -164,6 +165,8 @@ export function RunnerPanel() {
     if (running && pidRef.current) {
       try {
         await killProcess(pidRef.current);
+        await killAllProcesses();
+        await killPort(5173);
       } catch (e) {
         notify.error("Failed to stop process", e instanceof Error ? e.message : String(e));
       } finally {
@@ -376,10 +379,11 @@ export function RunnerPanel() {
   const handleKillAll = async () => {
     try {
       await killAllProcesses();
+      await killPort(5173);
       pidRef.current = null;
       setRunning(false);
       setPreviewReady(false);
-      notify.success("Killed all processes", "All active processes terminated");
+      notify.success("Killed all processes", "All active processes and port 5173 cleared");
     } catch (e) {
       notify.error("Kill all failed", e instanceof Error ? e.message : String(e));
     }

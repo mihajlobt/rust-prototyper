@@ -179,26 +179,7 @@ async fn run_shell_command(cwd: String, command: String, app: AppHandle) -> Resu
 async fn kill_process(pid: u32, state: State<'_, AppState>) -> Result<(), AppError> {
     let mut processes = state.active_processes.lock().unwrap();
     if let Some(child) = processes.remove(&pid) {
-        // Kill the main process
         let _ = child.kill();
-
-        // Kill the entire process tree (children + grandchildren)
-        #[cfg(unix)]
-        {
-            let _ = std::process::Command::new("pkill")
-                .args(["-9", "-P", &pid.to_string()])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .output();
-        }
-        #[cfg(windows)]
-        {
-            let _ = std::process::Command::new("taskkill")
-                .args(["/T", "/F", "/PID", &pid.to_string()])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .output();
-        }
     }
     Ok(())
 }
@@ -206,26 +187,63 @@ async fn kill_process(pid: u32, state: State<'_, AppState>) -> Result<(), AppErr
 #[tauri::command]
 async fn kill_all_processes(state: State<'_, AppState>) -> Result<(), AppError> {
     let mut processes = state.active_processes.lock().unwrap();
-    for (pid, child) in processes.drain() {
+    for (_, child) in processes.drain() {
         let _ = child.kill();
+    }
+    Ok(())
+}
 
-        #[cfg(unix)]
-        {
-            let _ = std::process::Command::new("pkill")
-                .args(["-9", "-P", &pid.to_string()])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .output();
-        }
-        #[cfg(windows)]
-        {
-            let _ = std::process::Command::new("taskkill")
-                .args(["/T", "/F", "/PID", &pid.to_string()])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .output();
+/// Kill any process listening on the given TCP port.
+/// Uses lsof (unix) or netstat+taskkill (windows) to find and terminate the process.
+#[tauri::command]
+async fn kill_port(port: u16) -> Result<(), AppError> {
+    #[cfg(unix)]
+    {
+        let output = std::process::Command::new("lsof")
+            .args(["-t", &format!("-i: {}", port)])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .output();
+
+        if let Ok(out) = output {
+            let pids = String::from_utf8_lossy(&out.stdout);
+            for pid in pids.lines() {
+                let pid = pid.trim();
+                if pid.is_empty() {
+                    continue;
+                }
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", pid])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .output();
+            }
         }
     }
+
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("cmd")
+            .args(["/C", &format!("netstat -ano | findstr :{}", port)])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .output();
+
+        if let Ok(out) = output {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if let Some(pid) = parts.last() {
+                    let _ = std::process::Command::new("taskkill")
+                        .args(["/PID", pid, "/F"])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .output();
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -883,7 +901,7 @@ pub fn run() {
             http_client,
         })
         .invoke_handler(tauri::generate_handler![
-            bun_dev, bun_build, bun_install, run_shell_command, kill_process, kill_all_processes,
+            bun_dev, bun_build, bun_install, run_shell_command, kill_process, kill_all_processes, kill_port,
             read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file, reveal_in_explorer,
             http_request,
             generate_completion, generate_completion_stream, list_ollama_models,
@@ -897,25 +915,26 @@ pub fn run() {
             if let WindowEvent::CloseRequested { .. } = event {
                 if let Some(state) = window.try_state::<AppState>() {
                     let mut processes = state.active_processes.lock().unwrap();
-                    for (pid, child) in processes.drain() {
+                    for (_, child) in processes.drain() {
                         let _ = child.kill();
-                        #[cfg(unix)]
-                        {
-                            let _ = std::process::Command::new("pkill")
-                                .args(["-9", "-P", &pid.to_string()])
-                                .stdout(std::process::Stdio::null())
-                                .stderr(std::process::Stdio::null())
-                                .output();
-                        }
-                        #[cfg(windows)]
-                        {
-                            let _ = std::process::Command::new("taskkill")
-                                .args(["/T", "/F", "/PID", &pid.to_string()])
-                                .stdout(std::process::Stdio::null())
-                                .stderr(std::process::Stdio::null())
-                                .output();
-                        }
                     }
+                }
+                // Ensure port 5173 is freed on app close
+                #[cfg(unix)]
+                {
+                    let _ = std::process::Command::new("sh")
+                        .args(["-c", "kill -9 $(lsof -t -i:5173) 2>/dev/null"])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .output();
+                }
+                #[cfg(windows)]
+                {
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :5173') do taskkill /PID %a /F"])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .output();
                 }
             }
         })

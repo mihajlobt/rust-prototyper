@@ -28,6 +28,10 @@ export async function killAllProcesses(): Promise<void> {
   return invoke("kill_all_processes");
 }
 
+export async function killPort(port: number): Promise<void> {
+  return invoke("kill_port", { port });
+}
+
 // ─── Terminal Output Event Listener (centralized) ───
 
 export interface TerminalOutputEvent {
