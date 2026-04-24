@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { Allotment, type AllotmentHandle } from "allotment";
+import { Allotment } from "allotment";
 import { Send, Smartphone, Tablet, Monitor, Save, Download, PackagePlus, ChevronUp, ChevronDown, Eye, Code2, Sun, Moon, Copy, Check } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -46,8 +47,10 @@ export function ComponentsPanel() {
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [themeCss, setThemeCss] = useState("");
   const [copiedIndices, setCopiedIndices] = useState<Set<number>>(new Set());
-  const verticalAllotmentRef = useRef<AllotmentHandle>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
+  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 2);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 2);
   const CODE_PANE_SIZE = 280;
   const CODE_HEADER = 28;
 
@@ -64,10 +67,10 @@ export function ComponentsPanel() {
 
   const toggleCode = () => {
     if (codeOpen) {
-      verticalAllotmentRef.current?.resize([9999, CODE_HEADER]);
+      codeRef.current?.resize([9999, CODE_HEADER]);
       setCodeOpen(false);
     } else {
-      verticalAllotmentRef.current?.resize([9999, CODE_PANE_SIZE]);
+      codeRef.current?.resize([9999, CODE_PANE_SIZE]);
       setCodeOpen(true);
     }
   };
@@ -426,10 +429,10 @@ export function ComponentsPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <Allotment>
+      <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
           {showInspector ? (
-            <Allotment vertical>
+            <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
               <Allotment.Pane minSize={200}>
                 {chatPane(true)}
               </Allotment.Pane>
@@ -450,7 +453,7 @@ export function ComponentsPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={verticalAllotmentRef}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">

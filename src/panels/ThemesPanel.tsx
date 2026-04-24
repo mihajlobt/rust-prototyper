@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Allotment, type AllotmentHandle } from "allotment";
+import { useState, useCallback, useEffect } from "react";
+import { Allotment } from "allotment";
 import { Send, Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt } from "@/lib/prompts";
 import { getParentCss } from "@/lib/preview";
 import Frame from "react-frame-component";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 export function ThemesPanel() {
   const { settings } = useAppStore();
@@ -35,16 +36,17 @@ export function ThemesPanel() {
   const [codeOpen, setCodeOpen] = useState(true);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
-  const verticalAllotmentRef = useRef<AllotmentHandle>(null);
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("themes", 2);
+  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("themes-code", 2);
   const CODE_PANE_SIZE = 280;
   const CODE_HEADER = 28;
 
   const toggleCode = () => {
     if (codeOpen) {
-      verticalAllotmentRef.current?.resize([9999, CODE_HEADER]);
+      codeRef.current?.resize([9999, CODE_HEADER]);
       setCodeOpen(false);
     } else {
-      verticalAllotmentRef.current?.resize([9999, CODE_PANE_SIZE]);
+      codeRef.current?.resize([9999, CODE_PANE_SIZE]);
       setCodeOpen(true);
     }
   };
@@ -127,7 +129,7 @@ export function ThemesPanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <Allotment>
+      <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
           <div className="h-full flex flex-col bg-card">
             <div className="border-b border-border shrink-0">
@@ -187,7 +189,7 @@ export function ThemesPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={verticalAllotmentRef}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">

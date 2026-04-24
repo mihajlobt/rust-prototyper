@@ -307,7 +307,10 @@ export function SettingsModal() {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => setSettings({ layout: {} })}
+                onClick={() => {
+                  setSettings({ layout: {} });
+                  window.dispatchEvent(new CustomEvent("prototyper:reset-layout"));
+                }}
               >
                 Reset Layout
               </Button>

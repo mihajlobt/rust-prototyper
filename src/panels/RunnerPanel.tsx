@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Allotment, type AllotmentHandle } from "allotment";
+import { Allotment } from "allotment";
 import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import {
   Play,
@@ -52,6 +52,7 @@ import {
 import { useAppStore } from "@/stores/appStore";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { notify } from "@/hooks/useToast";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
@@ -77,7 +78,9 @@ export function RunnerPanel() {
   const [renameTo, setRenameTo] = useState("");
   const [newFolderTarget, setNewFolderTarget] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
-  const verticalAllotmentRef = useRef<AllotmentHandle>(null);
+  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("runner", 2);
+  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 2);
+  const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -399,7 +402,7 @@ export function RunnerPanel() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
-        <Allotment>
+        <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
           {/* File Tree */}
           <Allotment.Pane preferredSize={200} minSize={150}>
             <div className="h-full overflow-auto p-2 bg-card border-r border-border">
@@ -459,9 +462,9 @@ export function RunnerPanel() {
           {/* Editor + Preview side by side */}
           <Allotment.Pane>
             <div className="h-full flex flex-col">
-            <Allotment vertical ref={verticalAllotmentRef} className="flex-1 min-h-0" >
+            <Allotment vertical ref={verticalRef} onDragEnd={verticalOnDragEnd} defaultSizes={verticalDefault} className="flex-1 min-h-0">
               <Allotment.Pane>
-                <Allotment>
+                <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault}>
                   {/* Editor */}
                   <Allotment.Pane minSize={200}>
                     {selectedFile ? (
@@ -552,7 +555,7 @@ export function RunnerPanel() {
                         setShowShellInput((v) => !v);
                         if (!terminalOpen) {
                           setTerminalOpen(true);
-                          verticalAllotmentRef.current?.resize([9999, 180]);
+                          verticalRef.current?.resize([9999, 180]);
                         }
                       }}
                     >
@@ -565,10 +568,10 @@ export function RunnerPanel() {
                       className="h-7 w-7"
                       onClick={() => {
                         if (terminalOpen) {
-                          verticalAllotmentRef.current?.resize([9999, 28]);
+                          verticalRef.current?.resize([9999, 28]);
                           setTerminalOpen(false);
                         } else {
-                          verticalAllotmentRef.current?.resize([9999, 180]);
+                          verticalRef.current?.resize([9999, 180]);
                           setTerminalOpen(true);
                         }
                       }}
