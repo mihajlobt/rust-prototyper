@@ -39,6 +39,7 @@ import {
   bunBuild,
   bunInstall,
   killProcess,
+  killAllProcesses,
   runShellCommand,
   type FileEntry,
 } from "@/lib/ipc";
@@ -165,10 +166,11 @@ export function RunnerPanel() {
         await killProcess(pidRef.current);
       } catch (e) {
         notify.error("Failed to stop process", e instanceof Error ? e.message : String(e));
+      } finally {
+        pidRef.current = null;
+        setRunning(false);
+        setPreviewReady(false);
       }
-      pidRef.current = null;
-      setRunning(false);
-      setPreviewReady(false);
       return;
     }
 
@@ -371,6 +373,18 @@ export function RunnerPanel() {
     setShowShellInput(false);
   };
 
+  const handleKillAll = async () => {
+    try {
+      await killAllProcesses();
+      pidRef.current = null;
+      setRunning(false);
+      setPreviewReady(false);
+      notify.success("Killed all processes", "All active processes terminated");
+    } catch (e) {
+      notify.error("Kill all failed", e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const handleRefreshPreview = () => {
     if (iframeRef.current) {
       iframeRef.current.src = iframeRef.current.src;
@@ -401,6 +415,10 @@ export function RunnerPanel() {
         <Button variant="outline" size="sm" className="gap-1 h-7 text-xs" onClick={handleInstall}>
           <Package size={12} />
           Install
+        </Button>
+        <Button variant="outline" size="sm" className="gap-1 h-7 text-xs" onClick={handleKillAll}>
+          <Square size={12} />
+          Kill All
         </Button>
         <div className="w-px h-4 bg-border mx-1" />
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefreshPreview}>

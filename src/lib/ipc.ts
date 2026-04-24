@@ -24,6 +24,10 @@ export async function killProcess(pid: number): Promise<void> {
   return invoke("kill_process", { pid });
 }
 
+export async function killAllProcesses(): Promise<void> {
+  return invoke("kill_all_processes");
+}
+
 // ─── Terminal Output Event Listener (centralized) ───
 
 export interface TerminalOutputEvent {
