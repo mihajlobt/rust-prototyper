@@ -201,7 +201,7 @@ async fn kill_port(ports: Vec<u16>) -> Result<(), AppError> {
         #[cfg(unix)]
         {
             let output = std::process::Command::new("lsof")
-                .args(["-t", &format!("-i: {}", port)])
+                .args(["-t", &format!("-i:{}", port)])
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .output();
@@ -925,7 +925,7 @@ pub fn run() {
                 #[cfg(unix)]
                 {
                     let _ = std::process::Command::new("sh")
-                        .args(["-c", "for port in $(seq 5173 5184); do kill -9 $(lsof -t -i:$port) 2>/dev/null; done"])
+                        .args(["-c", "for port in $(seq 5173 5184); do kill -9 $(lsof -t -i:${port}) 2>/dev/null; done"])
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
                         .output();
