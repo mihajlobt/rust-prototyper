@@ -12,6 +12,11 @@ import {
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 
+// Stable reference used as fallback when entity has no chat state yet.
+// Must be module-level so the reference is constant across renders —
+// Zustand's useSyncExternalStore requires the snapshot to be cached.
+const EMPTY_CHAT = { messages: [] as ChatMessage[], isStreaming: false }
+
 interface UseChatOptions {
   entityId: string
   chatPath: string
@@ -22,7 +27,7 @@ interface UseChatOptions {
 export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatOptions) {
   const store = useChatStore()
   const settings = useAppStore((s) => s.settings)
-  const chat = useChatStore((s) => s.chats[entityId] ?? { messages: [], isStreaming: false })
+  const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
