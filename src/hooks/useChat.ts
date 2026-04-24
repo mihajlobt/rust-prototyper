@@ -103,12 +103,23 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
 
     const channel = new Channel<CompletionEvent>()
     let accumulated = ""
+    // rAF batcher: buffer all chunks within one animation frame into a single store update
+    let rafId: number | null = null
 
     channel.onmessage = (msg) => {
       if (msg.event === "Chunk") {
         accumulated += msg.data.text
-        useChatStore.getState().appendChunk(entityId, msg.data.text)
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null
+            useChatStore.getState().setStreamingContent(entityId, accumulated)
+          })
+        }
       } else if (msg.event === "Done") {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId)
+          rafId = null
+        }
         const finalMessages: ChatMessage[] = [
           ...updatedMessages.slice(0, -1),
           { role: "assistant", content: accumulated },

@@ -12,6 +12,7 @@ interface ChatStore {
   setMessages: (id: string, messages: ChatMessage[]) => void
   setStreaming: (id: string, streaming: boolean) => void
   appendChunk: (id: string, chunk: string) => void
+  setStreamingContent: (id: string, content: string) => void
   clearChat: (id: string) => void
 }
 
@@ -40,6 +41,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const last = messages[messages.length - 1]
       if (last?.role === "assistant") {
         messages[messages.length - 1] = { ...last, content: last.content + chunk }
+      }
+      return { chats: { ...s.chats, [id]: { ...chat, messages } } }
+    }),
+
+  // Sets the last assistant message content directly — used by rAF batcher in useChat
+  setStreamingContent: (id, content) =>
+    set((s) => {
+      const chat = s.chats[id] ?? EMPTY
+      const messages = [...chat.messages]
+      const last = messages[messages.length - 1]
+      if (last?.role === "assistant") {
+        messages[messages.length - 1] = { ...last, content }
       }
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
     }),
