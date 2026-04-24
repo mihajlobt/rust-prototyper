@@ -25,7 +25,6 @@ interface UseChatOptions {
 }
 
 export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatOptions) {
-  const store = useChatStore()
   const settings = useAppStore((s) => s.settings)
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -40,17 +39,20 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
   useEffect(() => {
     if (loadedRef.current.has(entityId)) return
     loadedRef.current.add(entityId)
-    if (chat.messages.length > 0) return
+    if (useChatStore.getState().chats[entityId]?.messages.length) return
+    let cancelled = false
     readFile(chatPath)
       .then((raw) => {
+        if (cancelled) return
         try {
           const messages = JSON.parse(raw) as ChatMessage[]
           if (Array.isArray(messages) && messages.length > 0) {
-            store.setMessages(entityId, messages)
+            useChatStore.getState().setMessages(entityId, messages)
           }
         } catch {}
       })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [entityId, chatPath])
 
   const sendMessage = useCallback(async () => {
@@ -81,8 +83,8 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     const assistantPlaceholder: ChatMessage = { role: "assistant", content: "" }
     const updatedMessages: ChatMessage[] = [...currentChat.messages, userMessage, assistantPlaceholder]
 
-    store.setMessages(entityId, updatedMessages)
-    store.setStreaming(entityId, true)
+    useChatStore.getState().setMessages(entityId, updatedMessages)
+    useChatStore.getState().setStreaming(entityId, true)
     setInput("")
     setAttachments([])
     setMentions([])
@@ -142,7 +144,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
   }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, onOutput])
 
   const clearChat = useCallback(() => {
-    store.clearChat(entityId)
+    useChatStore.getState().clearChat(entityId)
     writeFile(chatPath, "[]").catch(() => {})
   }, [entityId, chatPath])
 
