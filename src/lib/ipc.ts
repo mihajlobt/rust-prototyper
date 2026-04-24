@@ -129,12 +129,20 @@ export function getApiKey(modelId: string, apiKeys: Record<string, string>): str
 }
 
 /** Determine the API host for a given model ID */
-export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?: ReadonlyArray<string>, ollamaApiKey?: string): string {
+export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?: ReadonlyArray<string>, _ollamaApiKey?: string): string {
   if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return "https://api.openai.com";
   if (modelId.startsWith("claude-")) return "https://api.anthropic.com";
-  // Cloud model by explicit list or by having an Ollama cloud key set
-  if (cloudModelIds?.includes(modelId) || ollamaApiKey) return "https://ollama.com";
+  // Only route to ollama.com when the model is explicitly in the cloud list
+  if (cloudModelIds?.includes(modelId)) return "https://ollama.com";
   return ollamaHost;
+}
+
+/** Detect if a model supports Ollama's native thinking API (think: true flag) */
+export function modelSupportsThinking(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes("qwen3") || lower.includes("qwq") ||
+    lower.includes("deepseek-r1") || lower.includes("r1-distill") ||
+    lower.includes("marco-o1") || lower.includes("-think");
 }
 
 /** Estimate context window size for a model */
@@ -167,9 +175,10 @@ export async function generateCompletionStream(
   messages: Message[],
   host: string,
   apiKey: string,
-  onEvent: Channel<CompletionEvent>
+  onEvent: Channel<CompletionEvent>,
+  think?: boolean
 ): Promise<void> {
-  return invoke("generate_completion_stream", { model, messages, host, apiKey, onEvent });
+  return invoke("generate_completion_stream", { model, messages, host, apiKey, onEvent, think: think ?? null });
 }
 
 export async function listOllamaModels(host: string, apiKey = ""): Promise<ModelInfo[]> {

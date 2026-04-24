@@ -8,6 +8,7 @@ import {
   writeFile,
   getApiKey,
   getModelHost,
+  modelSupportsThinking,
   type CompletionEvent,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
@@ -107,6 +108,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     const { modelId, host, ollamaCloudModels, apiKeys } = settings
     const resolvedHost = getModelHost(modelId, host, ollamaCloudModels, apiKeys["ollama"])
     const resolvedKey = getApiKey(modelId, apiKeys)
+    const useThinking = modelSupportsThinking(modelId)
 
     const channel = new Channel<CompletionEvent>()
     let accumulated = ""
@@ -146,7 +148,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     }
 
     try {
-      await generateCompletionStream(modelId, apiMessages, resolvedHost, resolvedKey, channel)
+      await generateCompletionStream(modelId, apiMessages, resolvedHost, resolvedKey, channel, useThinking || undefined)
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
