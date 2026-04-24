@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Send, Paperclip, ImageIcon, Smartphone, Tablet, Monitor, Eye, Plus, Download, X } from "lucide-react";
+import { Eye, Smartphone, Tablet, Monitor, Plus, Download } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -18,8 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateCompletionStream, getApiKey, getModelHost, writeFile, createDir, readFile, readDir, exportProject, type CompletionEvent, type Message } from "@/lib/ipc";
-import { Channel } from "@tauri-apps/api/core";
+import { writeFile, createDir, readFile, readDir, exportProject, getModelHost } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
@@ -27,47 +25,30 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-function wordCount(text: string) {
-  return text.trim() ? text.trim().split(/\s+/).length : 0;
-}
-
-function modelSupportsVision(modelId: string) {
-  const lower = modelId.toLowerCase();
-  return lower.includes("vision") || lower.includes("llava") || lower.includes("gpt-4o") || lower.includes("claude-3") || lower.includes("gemini");
-}
+import { useChat } from "@/hooks/useChat";
+import { MessageList, ChatInput } from "@/components/chat";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
   const { activeScreen: screenId, openScreen: setScreenId } = useProjectStore();
   const [screens, setScreens] = useState<string[]>(["main"]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [previewHtml, setPreviewHtml] = useState("");
   const [showInspector, setShowInspector] = useState(false);
   const [linkMode, setLinkMode] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [attachments, setAttachments] = useState<Array<{ path: string; name: string; size?: number }>>([]);
   const [updateExisting, setUpdateExisting] = useState(true);
   const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
   const [showNewScreenDialog, setShowNewScreenDialog] = useState(false);
   const [newScreenName, setNewScreenName] = useState("");
   const [themeCss, setThemeCss] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  const chatPath = `projects/${settings.project}/screens/${screenId}/chat.json`;
+  const chatPath = screenId
+    ? `projects/${settings.project}/screens/${screenId}/chat.json`
+    : "projects/__placeholder__/chat.json";
   const screenPath = `projects/${settings.project}/screens/${screenId}/screen.tsx`;
   const screenJsonPath = `projects/${settings.project}/screens/${screenId}/screen.json`;
-  const attachmentsDir = `projects/${settings.project}/screens/${screenId}/attachments`;
 
   const parentCss = getParentCss();
   const iconFontCss = useIconFontCss(settings.iconLibrary, settings.project);
@@ -75,6 +56,28 @@ export function ScreensPanel() {
     if (!previewHtml) return null;
     return createPreviewComponent(previewHtml, settings.iconLibrary);
   }, [previewHtml, settings.iconLibrary]);
+
+  const {
+    messages, isStreaming, input, setInput, sendMessage,
+    clearChat, attachments, addAttachment, removeAttachment,
+    mentions, addMention, removeMention,
+  } = useChat({
+    entityId: screenId ? `screen-${screenId}` : "screen-none",
+    chatPath,
+    systemPrompt: settings.prompts["screens-system"] || (
+      getScreenNewPrompt(settings.iconLibrary) +
+      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
+    ),
+    onOutput: (content) => {
+      const extracted = extractCode(content);
+      if (extracted) {
+        setPreviewHtml(extracted);
+        createDir(screenPath.replace("/screen.tsx", ""))
+          .then(() => writeFile(screenPath, extracted))
+          .catch(() => {});
+      }
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -94,12 +97,6 @@ export function ScreensPanel() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await readFile(chatPath);
-        if (!cancelled) setMessages(JSON.parse(data));
-      } catch {
-        if (!cancelled) setMessages([]);
-      }
-      try {
         const data = await readFile(screenJsonPath);
         const parsed = JSON.parse(data);
         if (!cancelled && parsed.links) setLinks(parsed.links);
@@ -108,7 +105,7 @@ export function ScreensPanel() {
       }
     })();
     return () => { cancelled = true; };
-  }, [settings.project, screenId, chatPath, screenJsonPath]);
+  }, [settings.project, screenId, screenJsonPath]);
 
   useEffect(() => {
     const selectedTheme = settings.stylePreset;
@@ -128,15 +125,6 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [settings.stylePreset, settings.project]);
 
-  const persistChat = useCallback(async (msgs: ChatMessage[]) => {
-    try {
-      await createDir(chatPath.replace("/chat.json", ""));
-      await writeFile(chatPath, JSON.stringify(msgs, null, 2));
-    } catch (e) {
-      notify.error("Failed to save chat", e instanceof Error ? e.message : String(e));
-    }
-  }, [chatPath]);
-
   const persistLinks = useCallback(async (newLinks: typeof links) => {
     try {
       await createDir(screenJsonPath.replace("/screen.json", ""));
@@ -146,127 +134,10 @@ export function ScreensPanel() {
     }
   }, [screenJsonPath]);
 
-  const sendMessage = useCallback(async () => {
-    if (!input.trim() || loading) return;
-    const userMsg: ChatMessage = { role: "user", content: input.trim() };
-    const nextMessages = [...messages, userMsg];
-    setMessages(nextMessages);
-    await persistChat(nextMessages);
-    setInput("");
-    setLoading(true);
-
-    const assistantMsg: ChatMessage = { role: "assistant", content: "" };
-    const streamingMessages = [...nextMessages, assistantMsg];
-    setMessages(streamingMessages);
-
-    try {
-      const defaultSystem = getScreenNewPrompt(settings.iconLibrary) +
-        (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
-      const systemContent = settings.prompts["screens-system"] || defaultSystem;
-      const msgs: Message[] = [{ role: "system", content: systemContent }];
-      for (const m of nextMessages) {
-        msgs.push({ role: m.role, content: m.content });
-      }
-      if (attachments.length > 0) {
-        const attachmentContext = `\n\n[User attached ${attachments.length} file(s): ${attachments.map((a) => a.name).join(", ")}]`;
-        msgs[msgs.length - 1].content += attachmentContext;
-      }
-
-      const channel = new Channel<CompletionEvent>();
-      let accumulated = "";
-      channel.onmessage = (msg: CompletionEvent) => {
-        if (msg.event === "Chunk") {
-          accumulated += msg.data.text;
-          setMessages([...nextMessages, { role: "assistant", content: accumulated }]);
-        }
-      };
-
-      await generateCompletionStream(
-        settings.modelId, msgs,
-        getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"]),
-        getApiKey(settings.modelId, settings.apiKeys),
-        channel
-      );
-
-      const assistantContent = accumulated || "No response";
-      const finalMessages = [...nextMessages, { role: "assistant" as const, content: assistantContent }];
-      setMessages(finalMessages);
-      await persistChat(finalMessages);
-      const extracted = extractCode(assistantContent);
-      const looksLikeCode = extracted !== null;
-      if (looksLikeCode && extracted) {
-        setPreviewHtml(extracted);
-        await createDir(screenPath.replace("/screen.tsx", ""));
-        await writeFile(screenPath, extracted);
-      }
-    } catch (e) {
-      const errMessages = [...nextMessages, { role: "assistant" as const, content: `Error: ${e instanceof Error ? e.message : String(e)}` }];
-      setMessages(errMessages);
-      await persistChat(errMessages);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, messages, settings.modelId, settings.project, settings.prompts, persistChat, attachments, screenPath]);
-
   const deviceWidth = {
     desktop: "100%",
     tablet: "768px",
     mobile: "375px",
-  };
-
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (!file) continue;
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result as string;
-          const filename = `paste-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
-          await createDir(attachmentsDir);
-          await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, { path: `${attachmentsDir}/${filename}`, name: filename, size: file.size }]);
-        };
-        reader.readAsDataURL(file);
-      }
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files);
-    for (const file of files) {
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result as string;
-          const filename = `drop-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
-          await createDir(attachmentsDir);
-          await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, { path: `${attachmentsDir}/${filename}`, name: file.name, size: file.size }]);
-        };
-        reader.readAsDataURL(file);
-      }
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    for (const file of files) {
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result as string;
-          const filename = `upload-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
-          await createDir(attachmentsDir);
-          await writeFile(`${attachmentsDir}/${filename}`, base64.split(',')[1]);
-          setAttachments((prev) => [...prev, { path: `${attachmentsDir}/${filename}`, name: file.name, size: file.size }]);
-        };
-        reader.readAsDataURL(file);
-      }
-    }
   };
 
   const handleExport = async () => {
@@ -327,6 +198,40 @@ export function ScreensPanel() {
     }
   };
 
+  const chatPane = (
+    <div className="flex-1 overflow-hidden flex flex-col">
+      <MessageList messages={messages} isStreaming={isStreaming} />
+      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSend={sendMessage}
+          disabled={isStreaming}
+          attachments={attachments}
+          onAddAttachment={addAttachment}
+          onRemoveAttachment={removeAttachment}
+          mentions={mentions}
+          onAddMention={addMention}
+          onRemoveMention={removeMention}
+          projectPath={`projects/${settings.project}`}
+          placeholder="Describe your screen..."
+        />
+        <div className="flex items-center gap-1.5">
+          <input
+            type="checkbox"
+            id="update-existing"
+            checked={updateExisting}
+            onChange={(e) => setUpdateExisting(e.target.checked)}
+            className="h-3 w-3 rounded"
+          />
+          <label htmlFor="update-existing" className="text-[11px] text-muted-foreground cursor-pointer select-none">
+            Update existing
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="h-full flex flex-col">
       <Allotment>
@@ -352,74 +257,11 @@ export function ScreensPanel() {
                       <Eye size={12} />
                       Hide Inspector
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setMessages([]); persistChat([]); }}>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
                       Clear
                     </Button>
                   </div>
-                  <div className="flex-1 overflow-auto p-3 space-y-3">
-                    {messages.length === 0 && (
-                      <div className="text-sm text-muted-foreground text-center mt-8">
-                        Describe the screen you want to build
-                      </div>
-                    )}
-                    {messages.map((msg, i) => (
-                      <div
-                        key={i}
-                        className={[
-                          "flex",
-                          msg.role === "user" ? "justify-end" : "justify-start",
-                        ].join(" ")}
-                      >
-                        <div
-                          className={[
-                            "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                            msg.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-foreground",
-                          ].join(" ")}
-                        >
-                          {loading && i === messages.length - 1 && msg.role === "assistant" && msg.content === "" ? (
-                            <span className="flex items-center gap-1 text-muted-foreground text-xs">
-                              <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                              <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                              <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                              <span className="ml-1">thinking</span>
-                            </span>
-                          ) : (
-                            <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={messagesEndRef} />
-                  </div>
-                  <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-                    <div className="flex items-end gap-2">
-                      <div className="flex gap-1">
-                        <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} multiple />
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
-                          <Paperclip size={14} />
-                        </Button>
-                      </div>
-                      <Textarea
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            sendMessage();
-                          }
-                        }}
-                        onPaste={handlePaste}
-                        placeholder="Describe your screen..."
-                        className="min-h-[40px] max-h-[120px] text-sm resize-none"
-                        rows={1}
-                      />
-                      <Button size="icon" className="h-8 w-8 shrink-0" onClick={sendMessage} disabled={loading}>
-                        <Send size={14} />
-                      </Button>
-                    </div>
-                  </div>
+                  {chatPane}
                 </div>
               </Allotment.Pane>
               <Allotment.Pane preferredSize={240} minSize={160}>
@@ -464,113 +306,11 @@ export function ScreensPanel() {
                   <Eye size={12} />
                   Inspector
                 </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setMessages([]); persistChat([]); }}>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
                   Clear
                 </Button>
               </div>
-              <div className="flex-1 overflow-auto p-3 space-y-3">
-                {messages.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center mt-8">
-                    Describe the screen you want to build
-                  </div>
-                )}
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={[
-                      "flex",
-                      msg.role === "user" ? "justify-end" : "justify-start",
-                    ].join(" ")}
-                  >
-                    <div
-                      className={[
-                        "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-foreground",
-                      ].join(" ")}
-                    >
-                      {loading && i === messages.length - 1 && msg.role === "assistant" && msg.content === "" ? (
-                        <span className="flex items-center gap-1 text-muted-foreground text-xs">
-                          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                          <span className="thinking-dot w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                          <span className="ml-1">thinking</span>
-                        </span>
-                      ) : (
-                        <pre className="whitespace-pre-wrap font-sans">{msg.content}</pre>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-              <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-                {attachments.length > 0 && (
-                  <div className="space-y-1">
-                    {attachments.map((att, i) => (
-                      <div key={i} className="flex items-center gap-2 bg-muted rounded px-2 py-1.5">
-                        <ImageIcon size={12} className="text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium truncate">{att.name}</div>
-                          {att.size && <div className="text-[10px] text-muted-foreground">{(att.size / 1024).toFixed(1)} KB</div>}
-                        </div>
-                        <button className="text-muted-foreground hover:text-foreground" onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}>
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                    {!modelSupportsVision(settings.modelId) && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
-                        <ImageIcon size={10} />
-                        Images ignored — <span className="font-medium">{settings.modelId.split(":")[0]}</span> doesn't support vision
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="flex items-end gap-2">
-                  <div className="flex gap-1">
-                    <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} multiple />
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
-                      <Paperclip size={14} />
-                    </Button>
-                  </div>
-                  <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage();
-                      }
-                    }}
-                    onPaste={handlePaste}
-                    placeholder="Describe your screen..."
-                    className="min-h-[40px] max-h-[120px] text-sm resize-none"
-                    rows={1}
-                  />
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <Button size="icon" className="h-8 w-8" onClick={sendMessage} disabled={loading}>
-                      <Send size={14} />
-                    </Button>
-                    {input.trim() && (
-                      <span className="text-[10px] text-muted-foreground">{wordCount(input)}w</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id="update-existing"
-                    checked={updateExisting}
-                    onChange={(e) => setUpdateExisting(e.target.checked)}
-                    className="h-3 w-3 rounded"
-                  />
-                  <label htmlFor="update-existing" className="text-[11px] text-muted-foreground cursor-pointer select-none">
-                    Update existing
-                  </label>
-                </div>
-              </div>
+              {chatPane}
             </div>
           )}
         </Allotment.Pane>
@@ -586,28 +326,13 @@ export function ScreensPanel() {
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setZoom((z) => Math.min(z + 0.1, 2))}>+</Button>
               </div>
               <div className="flex items-center gap-1">
-                <Button
-                  variant={device === "mobile" ? "secondary" : "ghost"}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setDevice("mobile")}
-                >
+                <Button variant={device === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setDevice("mobile")}>
                   <Smartphone size={12} />
                 </Button>
-                <Button
-                  variant={device === "tablet" ? "secondary" : "ghost"}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setDevice("tablet")}
-                >
+                <Button variant={device === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setDevice("tablet")}>
                   <Tablet size={12} />
                 </Button>
-                <Button
-                  variant={device === "desktop" ? "secondary" : "ghost"}
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setDevice("desktop")}
-                >
+                <Button variant={device === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setDevice("desktop")}>
                   <Monitor size={12} />
                 </Button>
               </div>
@@ -615,7 +340,6 @@ export function ScreensPanel() {
             <div
               ref={previewRef}
               className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center"
-              onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
               onClick={handlePreviewClick}
             >
