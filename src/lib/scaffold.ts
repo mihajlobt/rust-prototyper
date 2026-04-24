@@ -17,21 +17,50 @@ export async function hasViteScaffold(generatedDir: string): Promise<boolean> {
 /**
  * Recursively delete all files and directories inside `dir`,
  * but keep the `dir` itself.
+ *
+ * Throws if any entry cannot be deleted.
  */
 async function clearDirectory(dir: string): Promise<void> {
+  let entries: Awaited<ReturnType<typeof readDir>> = [];
   try {
-    const entries = await readDir(dir);
-    for (const entry of entries) {
-      const path = `${dir}/${entry.name}`;
-      if (entry.is_dir) {
-        await deleteDir(path);
-      } else {
-        await deleteFile(path);
-      }
-    }
+    entries = await readDir(dir);
   } catch {
-    // Directory might not exist yet
+    // Directory doesn't exist yet — nothing to clear
+    return;
   }
+
+  for (const entry of entries) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.is_dir) {
+      await deleteDir(path);
+    } else {
+      await deleteFile(path);
+    }
+  }
+
+  // Verify the directory is actually empty
+  const remaining = await readDir(dir);
+  if (remaining.length > 0) {
+    throw new Error(
+      `Failed to clear ${dir}. Remaining entries: ${remaining.map((e) => e.name).join(", ")}`
+    );
+  }
+}
+
+/**
+ * Poll until a file exists or timeout is reached.
+ */
+async function waitForFile(path: string, timeoutMs = 30000, intervalMs = 500): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await readFile(path);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+  throw new Error(`Timeout waiting for ${path} to appear after ${timeoutMs}ms`);
 }
 
 /**
@@ -41,10 +70,11 @@ async function clearDirectory(dir: string): Promise<void> {
  * 1. Save user's Generated.tsx if it exists.
  * 2. Clear the generated/ directory so bun create sees an empty dir.
  * 3. Run `bun create vite . --template react-ts`.
- * 4. Install dependencies.
- * 5. Restore Generated.tsx.
- * 6. Patch src/App.tsx to import Generated.
- * 7. Add icon library and run `bun install`.
+ * 4. Wait for package.json to appear (runShellCommand returns immediately).
+ * 5. Install dependencies.
+ * 6. Restore Generated.tsx.
+ * 7. Patch src/App.tsx to import Generated.
+ * 8. Add icon library and run `bun install`.
  */
 export async function scaffoldGenerated(
   generatedDir: string,
@@ -64,10 +94,14 @@ export async function scaffoldGenerated(
   // Step 3: Scaffold into the now-empty directory
   await runShellCommand(generatedDir, "bun create vite . --template react-ts");
 
-  // Step 4: Install dependencies
-  await bunInstall(generatedDir);
+  // Step 4: Wait for package.json to appear (runShellCommand spawns async)
+  await waitForFile(`${generatedDir}/package.json`);
 
-  // Step 5: Restore Generated.tsx
+  // Step 5: Install dependencies
+  await bunInstall(generatedDir);
+  await waitForFile(`${generatedDir}/node_modules/vite/package.json`);
+
+  // Step 6: Restore Generated.tsx
   await createDir(`${generatedDir}/src/components`);
   if (savedGenerated) {
     await writeFile(`${generatedDir}/src/components/Generated.tsx`, savedGenerated);
@@ -79,7 +113,7 @@ export async function scaffoldGenerated(
     );
   }
 
-  // Step 6: Patch src/App.tsx to import our Generated component
+  // Step 7: Patch src/App.tsx to import our Generated component
   const appTsx = `import Generated from './components/Generated';
 
 function App() {
@@ -90,7 +124,7 @@ export default App;
 `;
   await writeFile(`${generatedDir}/src/App.tsx`, appTsx);
 
-  // Step 7: Add icon library if selected
+  // Step 8: Add icon library if selected
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg) {
     const pkgPath = `${generatedDir}/package.json`;
@@ -101,5 +135,6 @@ export default App;
     pkg.dependencies = deps;
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
     await bunInstall(generatedDir);
+    await waitForFile(`${generatedDir}/node_modules/vite/package.json`);
   }
 }
