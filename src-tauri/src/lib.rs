@@ -193,52 +193,54 @@ async fn kill_all_processes(state: State<'_, AppState>) -> Result<(), AppError> 
     Ok(())
 }
 
-/// Kill any process listening on the given TCP port.
-/// Uses lsof (unix) or netstat+taskkill (windows) to find and terminate the process.
+/// Kill any processes listening on the given TCP ports.
+/// Uses lsof (unix) or netstat+taskkill (windows) to find and terminate the processes.
 #[tauri::command]
-async fn kill_port(port: u16) -> Result<(), AppError> {
-    #[cfg(unix)]
-    {
-        let output = std::process::Command::new("lsof")
-            .args(["-t", &format!("-i: {}", port)])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output();
+async fn kill_port(ports: Vec<u16>) -> Result<(), AppError> {
+    for port in ports {
+        #[cfg(unix)]
+        {
+            let output = std::process::Command::new("lsof")
+                .args(["-t", &format!("-i: {}", port)])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .output();
 
-        if let Ok(out) = output {
-            let pids = String::from_utf8_lossy(&out.stdout);
-            for pid in pids.lines() {
-                let pid = pid.trim();
-                if pid.is_empty() {
-                    continue;
-                }
-                let _ = std::process::Command::new("kill")
-                    .args(["-9", pid])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .output();
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        let output = std::process::Command::new("cmd")
-            .args(["/C", &format!("netstat -ano | findstr :{}", port)])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output();
-
-        if let Ok(out) = output {
-            let text = String::from_utf8_lossy(&out.stdout);
-            for line in text.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if let Some(pid) = parts.last() {
-                    let _ = std::process::Command::new("taskkill")
-                        .args(["/PID", pid, "/F"])
+            if let Ok(out) = output {
+                let pids = String::from_utf8_lossy(&out.stdout);
+                for pid in pids.lines() {
+                    let pid = pid.trim();
+                    if pid.is_empty() {
+                        continue;
+                    }
+                    let _ = std::process::Command::new("kill")
+                        .args(["-9", pid])
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
                         .output();
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            let output = std::process::Command::new("cmd")
+                .args(["/C", &format!("netstat -ano | findstr :{}", port)])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .output();
+
+            if let Ok(out) = output {
+                let text = String::from_utf8_lossy(&out.stdout);
+                for line in text.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if let Some(pid) = parts.last() {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/PID", pid, "/F"])
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .output();
+                    }
                 }
             }
         }
@@ -919,11 +921,11 @@ pub fn run() {
                         let _ = child.kill();
                     }
                 }
-                // Ensure port 5173 is freed on app close
+                // Ensure ports 5173-5184 are freed on app close
                 #[cfg(unix)]
                 {
                     let _ = std::process::Command::new("sh")
-                        .args(["-c", "kill -9 $(lsof -t -i:5173) 2>/dev/null"])
+                        .args(["-c", "for port in $(seq 5173 5184); do kill -9 $(lsof -t -i:$port) 2>/dev/null; done"])
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
                         .output();
@@ -931,7 +933,7 @@ pub fn run() {
                 #[cfg(windows)]
                 {
                     let _ = std::process::Command::new("cmd")
-                        .args(["/C", "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :5173') do taskkill /PID %a /F"])
+                        .args(["/C", "for %p in (5173 5174 5175 5176 5177 5178 5179 5180 5181 5182 5183 5184) do for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :%p') do taskkill /PID %a /F"])
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
                         .output();

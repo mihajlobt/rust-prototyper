@@ -161,12 +161,14 @@ export function RunnerPanel() {
     return () => { unlistenPromise.then((fn) => fn()); };
   }, [running]);
 
+  const DEV_PORT_RANGE = Array.from({ length: 12 }, (_, i) => 5173 + i); // 5173-5184
+
   const handleRun = async () => {
     if (running && pidRef.current) {
       try {
         await killProcess(pidRef.current);
         await killAllProcesses();
-        await killPort(5173);
+        await killPort(DEV_PORT_RANGE);
       } catch (e) {
         notify.error("Failed to stop process", e instanceof Error ? e.message : String(e));
       } finally {
@@ -379,11 +381,11 @@ export function RunnerPanel() {
   const handleKillAll = async () => {
     try {
       await killAllProcesses();
-      await killPort(5173);
+      await killPort(DEV_PORT_RANGE);
       pidRef.current = null;
       setRunning(false);
       setPreviewReady(false);
-      notify.success("Killed all processes", "All active processes and port 5173 cleared");
+      notify.success("Killed all processes", "All active processes and ports 5173-5184 cleared");
     } catch (e) {
       notify.error("Kill all failed", e instanceof Error ? e.message : String(e));
     }
