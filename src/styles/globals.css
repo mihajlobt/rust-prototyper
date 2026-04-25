@@ -297,6 +297,29 @@
   100% { opacity: 1; }
 }
 
+/* ─── Tooltip ─── */
+.tooltip-content {
+  z-index: 50;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.15);
+  animation: tooltip-in 0.12s ease-out;
+}
+@keyframes tooltip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.tooltip-arrow {
+  fill: var(--popover);
+  stroke: var(--border);
+  stroke-width: 2;
+}
+
 /* ─── Sonner Toast Overrides ─── */
 
 /* Toast entrance/exit animations */

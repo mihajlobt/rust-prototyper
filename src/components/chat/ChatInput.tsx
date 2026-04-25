@@ -183,18 +183,18 @@ export function ChatInput({
                 <Brain size={14} />
               </button>
             </PromptInputAction>
-            <FileUpload onFilesAdded={handleFileAdded} accept="image/*" multiple>
-              <FileUploadTrigger asChild>
-                <PromptInputAction tooltip="Attach image">
+            <PromptInputAction tooltip="Attach image">
+              <FileUpload onFilesAdded={handleFileAdded} accept="image/*" multiple>
+                <FileUploadTrigger asChild>
                   <button
                     className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                     type="button"
                   >
                     <ImageIcon size={14} />
                   </button>
-                </PromptInputAction>
-              </FileUploadTrigger>
-            </FileUpload>
+                </FileUploadTrigger>
+              </FileUpload>
+            </PromptInputAction>
             <PromptInputAction tooltip="Send">
               <button
                 onClick={onSend}
