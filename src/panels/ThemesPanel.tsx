@@ -72,13 +72,7 @@ export function ThemesPanel() {
   const CODE_HEADER = 28;
 
   const toggleCode = () => {
-    if (themesCodeOpen) {
-      codeRef.current?.resize([9999, CODE_HEADER]);
-      useUIStore.setState({ themesCodeOpen: false });
-    } else {
-      codeRef.current?.resize([9999, CODE_PANE_SIZE]);
-      useUIStore.setState({ themesCodeOpen: true });
-    }
+    useUIStore.setState({ themesCodeOpen: !themesCodeOpen });
   };
 
   // Load persisted theme via TanStack Query
@@ -367,7 +361,7 @@ body { margin: 0; font-family: sans-serif; }
               </div>
             </Allotment.Pane>
 
-            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
+            <Allotment.Pane preferredSize={themesCodeOpen ? CODE_PANE_SIZE : CODE_HEADER} minSize={CODE_HEADER}>
               <div className="h-full flex flex-col">
                 <div
                   className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"

@@ -12,21 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { httpRequest, readFile, writeFile, createDir, type HttpResponse } from "@/lib/ipc";
+import { httpRequest, readFile, writeFile, createDir } from "@/lib/ipc";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore, type ApiHistoryEntry } from "@/stores/uiStore";
 import { notify } from "@/hooks/useToast";
 import YAML from "js-yaml";
-
-interface ApiHistoryEntry {
-  timestamp: number;
-  method: string;
-  url: string;
-  status: number;
-  duration?: number;
-}
 
 interface SavedApi {
   id: string;
@@ -124,30 +117,36 @@ export function APIsPanel() {
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("apis", 2);
   const [apis, setApis] = useState<SavedApi[]>([]);
 
-  const [name, setName] = useState("");
-  const [method, setMethod] = useState("GET");
-  const [url, setUrl] = useState("");
-  const [headersText, setHeadersText] = useState("{}");
-  const [body, setBody] = useState("");
-  const [authType, setAuthType] = useState<"none" | "bearer" | "apikey" | "basic" | "oauth2">("none");
-  const [authToken, setAuthToken] = useState("");
-  const [authHeaderName, setAuthHeaderName] = useState("X-API-Key");
-  const [authUsername, setAuthUsername] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authTokenUrl, setAuthTokenUrl] = useState("");
-  const [authClientId, setAuthClientId] = useState("");
-  const [authClientSecret, setAuthClientSecret] = useState("");
+  // Persistent UI state from store
+  const name = useUIStore((s) => s.apisName);
+  const method = useUIStore((s) => s.apisMethod);
+  const url = useUIStore((s) => s.apisUrl);
+  const headersText = useUIStore((s) => s.apisHeadersText);
+  const body = useUIStore((s) => s.apisBody);
+  const authType = useUIStore((s) => s.apisAuthType);
+  const authToken = useUIStore((s) => s.apisAuthToken);
+  const authHeaderName = useUIStore((s) => s.apisAuthHeaderName);
+  const authUsername = useUIStore((s) => s.apisAuthUsername);
+  const authPassword = useUIStore((s) => s.apisAuthPassword);
+  const authTokenUrl = useUIStore((s) => s.apisAuthTokenUrl);
+  const authClientId = useUIStore((s) => s.apisAuthClientId);
+  const authClientSecret = useUIStore((s) => s.apisAuthClientSecret);
+  const response = useUIStore((s) => s.apisResponse);
+  const history = useUIStore((s) => s.apisHistory);
+  const envVars = useUIStore((s) => s.apisEnvVars);
+  const newEnvKey = useUIStore((s) => s.apisNewEnvKey);
+  const newEnvValue = useUIStore((s) => s.apisNewEnvValue);
+  const curlPaste = useUIStore((s) => s.apisCurlPaste);
+  const openapiPaste = useUIStore((s) => s.apisOpenapiPaste);
+
+  // Ephemeral UI state (not persisted across tab switches)
   const [oauthCode, setOauthCode] = useState("");
   const [showOauthDialog, setShowOauthDialog] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
-  const [response, setResponse] = useState<HttpResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [curlPaste, setCurlPaste] = useState("");
-  const [openapiPaste, setOpenapiPaste] = useState("");
-  const [history, setHistory] = useState<ApiHistoryEntry[]>([]);
-  const [envVars, setEnvVars] = useState<Record<string, string>>({});
-  const [newEnvKey, setNewEnvKey] = useState("");
-  const [newEnvValue, setNewEnvValue] = useState("");
+
+  // Shorthand setter
+  const setUI = useUIStore.setState;
 
   // Load from FS on project change
   useEffect(() => {
@@ -156,38 +155,43 @@ export function APIsPanel() {
       if (!cancelled) setApis(data);
     });
     loadEnvVars(settings.project).then((data) => {
-      if (!cancelled) setEnvVars(data);
+      if (!cancelled) setUI({ apisEnvVars: data });
     });
     return () => { cancelled = true; };
-  }, [settings.project]);
+  }, [settings.project, setUI]);
 
   // Save to FS on change
   useEffect(() => {
     saveApis(settings.project, apis);
   }, [apis, settings.project]);
 
+  // Save env vars to FS on change
   useEffect(() => {
     saveEnvVars(settings.project, envVars);
   }, [envVars, settings.project]);
 
   const selectApi = useCallback((api: SavedApi) => {
     openApi(api.id);
-    setName(api.name);
-    setMethod(api.method);
-    setUrl(api.url);
-    setHeadersText(api.headersText);
-    setBody(api.body);
-    setAuthType(api.authType);
-    setAuthToken(api.authToken);
-    setAuthHeaderName(api.authHeaderName || "X-API-Key");
-    setAuthUsername(api.authUsername || "");
-    setAuthPassword(api.authPassword || "");
-    setAuthTokenUrl(api.authTokenUrl || "");
-    setAuthClientId(api.authClientId || "");
-    setAuthClientSecret(api.authClientSecret || "");
-    setHistory(api.history || []);
-    setResponse(null);
-  }, [openApi]);
+    setUI({
+      apisName: api.name,
+      apisMethod: api.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+      apisUrl: api.url,
+      apisHeadersText: api.headersText,
+      apisBody: api.body,
+      apisAuthType: api.authType,
+      apisAuthToken: api.authToken,
+      apisAuthHeaderName: api.authHeaderName || "X-API-Key",
+      apisAuthUsername: api.authUsername || "",
+      apisAuthPassword: api.authPassword || "",
+      apisAuthTokenUrl: api.authTokenUrl || "",
+      apisAuthClientId: api.authClientId || "",
+      apisAuthClientSecret: api.authClientSecret || "",
+      apisHistory: api.history || [],
+      apisResponse: null,
+      apisCurlPaste: "",
+      apisOpenapiPaste: "",
+    });
+  }, [openApi, setUI]);
 
   function resolveEnvVars(text: string): string {
     return text.replace(/\{\{(\w+)\}\}/g, (_, key) => envVars[key] ?? `{{${key}}}`);
@@ -233,15 +237,23 @@ export function APIsPanel() {
     setApis((prev) => prev.filter((a) => a.id !== id));
     if (selectedApiId === id) {
       useProjectStore.setState({ activeApi: null });
-      setName("");
-      setMethod("GET");
-      setUrl("");
-      setHeadersText("{}");
-      setBody("");
-      setAuthType("none");
-      setAuthToken("");
-      setAuthHeaderName("X-API-Key");
-      setHistory([]);
+      setUI({
+        apisName: "",
+        apisMethod: "GET",
+        apisUrl: "",
+        apisHeadersText: "{}",
+        apisBody: "",
+        apisAuthType: "none",
+        apisAuthToken: "",
+        apisAuthHeaderName: "X-API-Key",
+        apisAuthUsername: "",
+        apisAuthPassword: "",
+        apisAuthTokenUrl: "",
+        apisAuthClientId: "",
+        apisAuthClientSecret: "",
+        apisHistory: [],
+        apisResponse: null,
+      });
     }
   };
 
@@ -249,12 +261,14 @@ export function APIsPanel() {
     if (!curlPaste.trim()) return;
     const parsed = parseCurl(curlPaste);
     if (parsed) {
-      if (parsed.method) setMethod(parsed.method);
-      if (parsed.url) setUrl(parsed.url);
-      if (parsed.headersText) setHeadersText(parsed.headersText);
-      if (parsed.body !== undefined) setBody(parsed.body);
+      setUI({
+        ...(parsed.method ? { apisMethod: parsed.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" } : {}),
+        ...(parsed.url ? { apisUrl: parsed.url } : {}),
+        ...(parsed.headersText ? { apisHeadersText: parsed.headersText } : {}),
+        ...(parsed.body !== undefined ? { apisBody: parsed.body } : {}),
+      });
     }
-    setCurlPaste("");
+    setUI({ apisCurlPaste: "" });
   };
 
   const applyOpenapi = () => {
@@ -297,7 +311,7 @@ export function APIsPanel() {
     } catch {
       // ignore parse errors
     }
-    setOpenapiPaste("");
+    setUI({ apisOpenapiPaste: "" });
   };
 
   function generateCodeVerifier(): string {
@@ -349,7 +363,7 @@ export function APIsPanel() {
       const data = JSON.parse(res.body);
       const token = data.access_token || data.token || "";
       if (token) {
-        setAuthToken(token);
+        setUI({ apisAuthToken: token });
       }
       setShowOauthDialog(false);
       setOauthCode("");
@@ -387,7 +401,6 @@ export function APIsPanel() {
         headers["Authorization"] = `Bearer ${authToken}`;
       }
       const res = await httpRequest(method, resolvedUrl, headers, resolvedBody || undefined);
-      setResponse(res);
       const entry: ApiHistoryEntry = {
         timestamp: Date.now(),
         method,
@@ -396,7 +409,7 @@ export function APIsPanel() {
         duration: Date.now() - start,
       };
       const nextHistory = [entry, ...history].slice(0, 50);
-      setHistory(nextHistory);
+      setUI({ apisResponse: res, apisHistory: nextHistory });
       if (selectedApiId) {
         setApis((prev) =>
           prev.map((a) => (a.id === selectedApiId ? { ...a, history: nextHistory } : a))
@@ -404,10 +417,12 @@ export function APIsPanel() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setResponse({
-        status: 0,
-        headers: {},
-        body: `Error: ${msg}`,
+      setUI({
+        apisResponse: {
+          status: 0,
+          headers: {},
+          body: `Error: ${msg}`,
+        },
       });
       notify.error("Request failed", msg);
     } finally {
@@ -493,12 +508,12 @@ export function APIsPanel() {
                   <Input
                     placeholder="API Name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => setUI({ apisName: e.target.value })}
                     className="h-8 text-sm"
                   />
 
                   <div className="flex gap-2">
-                    <Select value={method} onValueChange={setMethod}>
+                    <Select value={method} onValueChange={(v) => setUI({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
                       <SelectTrigger className="w-[100px]">
                         <SelectValue />
                       </SelectTrigger>
@@ -513,7 +528,7 @@ export function APIsPanel() {
                     <Input
                       placeholder="https://api.example.com/endpoint"
                       value={url}
-                      onChange={(e) => setUrl(e.target.value)}
+                      onChange={(e) => setUI({ apisUrl: e.target.value })}
                     />
                     <Button onClick={send} disabled={loading}>
                       <Send size={14} />
@@ -526,7 +541,7 @@ export function APIsPanel() {
                     <div className="flex gap-2">
                       <Input
                         value={curlPaste}
-                        onChange={(e) => setCurlPaste(e.target.value)}
+                        onChange={(e) => setUI({ apisCurlPaste: e.target.value })}
                         placeholder="curl -X GET https://api.example.com"
                         className="h-7 text-xs"
                       />
@@ -542,7 +557,7 @@ export function APIsPanel() {
                     <div className="flex gap-2">
                       <Input
                         value={openapiPaste}
-                        onChange={(e) => setOpenapiPaste(e.target.value)}
+                        onChange={(e) => setUI({ apisOpenapiPaste: e.target.value })}
                         placeholder="Paste OpenAPI spec..."
                         className="h-7 text-xs"
                       />
@@ -558,7 +573,7 @@ export function APIsPanel() {
                     <div className="flex gap-2">
                       <Select
                         value={authType}
-                        onValueChange={(v) => setAuthType(v as "none" | "bearer" | "apikey" | "basic" | "oauth2")}
+                        onValueChange={(v) => setUI({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}
                       >
                         <SelectTrigger className="w-[120px]">
                           <SelectValue />
@@ -572,32 +587,32 @@ export function APIsPanel() {
                         </SelectContent>
                       </Select>
                       {authType === "bearer" && (
-                        <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                       )}
                       {authType === "apikey" && (
                         <div className="flex gap-2">
-                          <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setAuthHeaderName(e.target.value)} className="h-8 text-xs w-[140px]" />
-                          <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                          <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setUI({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
+                          <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                         </div>
                       )}
                       {authType === "oauth2" && (
-                        <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                       )}
                     </div>
                     {authType === "basic" && (
                       <div className="flex gap-2">
-                        <Input placeholder="Username" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="h-8 text-xs" />
-                        <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="h-8 text-xs" />
+                        <Input placeholder="Username" value={authUsername} onChange={(e) => setUI({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setUI({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
                       </div>
                     )}
                     {authType === "oauth2" && (
                       <div className="space-y-2">
-                        <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setAuthTokenUrl(e.target.value)} className="h-8 text-xs" />
+                        <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setUI({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
                         <div className="flex gap-2">
-                          <Input placeholder="Client ID" value={authClientId} onChange={(e) => setAuthClientId(e.target.value)} className="h-8 text-xs" />
-                          <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setAuthClientSecret(e.target.value)} className="h-8 text-xs" />
+                          <Input placeholder="Client ID" value={authClientId} onChange={(e) => setUI({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
+                          <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setUI({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
                         </div>
-                        <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setAuthToken(e.target.value)} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>
                           Authorize
                         </Button>
@@ -608,7 +623,7 @@ export function APIsPanel() {
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">Headers (JSON)</label>
                     <div className="h-32 border rounded overflow-hidden">
-                      <CodeMirrorEditor value={headersText} onChange={setHeadersText} mode="json" />
+                      <CodeMirrorEditor value={headersText} onChange={(v) => setUI({ apisHeadersText: v })} mode="json" />
                     </div>
                   </div>
 
@@ -616,7 +631,7 @@ export function APIsPanel() {
                     <label className="text-xs font-medium text-muted-foreground">Body</label>
                     <Textarea
                       value={body}
-                      onChange={(e) => setBody(e.target.value)}
+                      onChange={(e) => setUI({ apisBody: e.target.value })}
                       placeholder="Request body... (use {{VAR_NAME}} for env vars)"
                       className="min-h-[120px] text-sm font-mono"
                     />
@@ -629,13 +644,13 @@ export function APIsPanel() {
                         <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded w-28 truncate">{key}</span>
                         <Input
                           value={value}
-                          onChange={(e) => setEnvVars((prev) => ({ ...prev, [key]: e.target.value }))}
+                          onChange={(e) => setUI({ apisEnvVars: { ...envVars, [key]: e.target.value } })}
                           className="h-7 text-xs flex-1"
                         />
                         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
                           const next = { ...envVars };
                           delete next[key];
-                          setEnvVars(next);
+                          setUI({ apisEnvVars: next });
                         }}>
                           <Trash2 size={10} />
                         </Button>
@@ -645,20 +660,22 @@ export function APIsPanel() {
                       <Input
                         placeholder="Key (e.g. BASE_URL)"
                         value={newEnvKey}
-                        onChange={(e) => setNewEnvKey(e.target.value)}
+                        onChange={(e) => setUI({ apisNewEnvKey: e.target.value })}
                         className="h-7 text-xs"
                       />
                       <Input
                         placeholder="Value"
                         value={newEnvValue}
-                        onChange={(e) => setNewEnvValue(e.target.value)}
+                        onChange={(e) => setUI({ apisNewEnvValue: e.target.value })}
                         className="h-7 text-xs flex-1"
                       />
                       <Button size="sm" className="h-7" onClick={() => {
                         if (!newEnvKey.trim()) return;
-                        setEnvVars((prev) => ({ ...prev, [newEnvKey.trim()]: newEnvValue }));
-                        setNewEnvKey("");
-                        setNewEnvValue("");
+                        setUI({
+                          apisEnvVars: { ...envVars, [newEnvKey.trim()]: newEnvValue },
+                          apisNewEnvKey: "",
+                          apisNewEnvValue: "",
+                        });
                       }} disabled={!newEnvKey.trim()}>
                         <Plus size={14} />
                       </Button>

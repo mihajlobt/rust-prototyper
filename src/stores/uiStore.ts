@@ -1,4 +1,13 @@
 import { create } from "zustand";
+import type { HttpResponse } from "@/lib/ipc";
+
+export interface ApiHistoryEntry {
+  timestamp: number;
+  method: string;
+  url: string;
+  status: number;
+  duration?: number;
+}
 
 interface UIState {
   // Screens
@@ -23,6 +32,26 @@ interface UIState {
 
   // APIs
   apisShowInspector: boolean;
+  apisName: string;
+  apisMethod: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  apisUrl: string;
+  apisHeadersText: string;
+  apisBody: string;
+  apisAuthType: "none" | "bearer" | "apikey" | "basic" | "oauth2";
+  apisAuthToken: string;
+  apisAuthHeaderName: string;
+  apisAuthUsername: string;
+  apisAuthPassword: string;
+  apisAuthTokenUrl: string;
+  apisAuthClientId: string;
+  apisAuthClientSecret: string;
+  apisResponse: HttpResponse | null;
+  apisHistory: ApiHistoryEntry[];
+  apisEnvVars: Record<string, string>;
+  apisNewEnvKey: string;
+  apisNewEnvValue: string;
+  apisCurlPaste: string;
+  apisOpenapiPaste: string;
 
   // Workflows
   workflowsShowPanel: boolean;
@@ -51,6 +80,26 @@ export const useUIStore = create<UIState>()(() => ({
 
   // APIs
   apisShowInspector: false,
+  apisName: "",
+  apisMethod: "GET",
+  apisUrl: "",
+  apisHeadersText: "{}",
+  apisBody: "",
+  apisAuthType: "none",
+  apisAuthToken: "",
+  apisAuthHeaderName: "X-API-Key",
+  apisAuthUsername: "",
+  apisAuthPassword: "",
+  apisAuthTokenUrl: "",
+  apisAuthClientId: "",
+  apisAuthClientSecret: "",
+  apisResponse: null,
+  apisHistory: [],
+  apisEnvVars: {},
+  apisNewEnvKey: "",
+  apisNewEnvValue: "",
+  apisCurlPaste: "",
+  apisOpenapiPaste: "",
 
   // Workflows
   workflowsShowPanel: false,

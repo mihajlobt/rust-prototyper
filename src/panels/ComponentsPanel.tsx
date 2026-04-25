@@ -62,9 +62,7 @@ export function ComponentsPanel() {
   }, [code, settings.iconLibrary]);
 
   const toggleCode = () => {
-    const next = !componentsCodeOpen;
-    useUIStore.setState({ componentsCodeOpen: next });
-    codeRef.current?.resize([9999, next ? CODE_PANE_SIZE : CODE_HEADER]);
+    useUIStore.setState({ componentsCodeOpen: !componentsCodeOpen });
   };
 
   const saveCode = useCallback(async (value: string) => {
@@ -341,7 +339,7 @@ export function ComponentsPanel() {
               </div>
             </Allotment.Pane>
 
-            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
+            <Allotment.Pane preferredSize={componentsCodeOpen ? CODE_PANE_SIZE : CODE_HEADER} minSize={CODE_HEADER}>
               <div className="h-full flex flex-col">
                 <div
                   className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"
@@ -373,9 +371,11 @@ export function ComponentsPanel() {
                   </div>
                   {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
-                </div>
+                {componentsCodeOpen && (
+                  <div className="flex-1 overflow-hidden">
+                    <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
+                  </div>
+                )}
               </div>
             </Allotment.Pane>
           </Allotment>
