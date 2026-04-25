@@ -316,10 +316,19 @@ export function ComponentsPanel() {
                       style={{ width: deviceWidth[componentsDevice] }}
                     >
                       <Frame
-                        head={<style>{parentCss + themeCss + iconFontCss}</style>}
+                        head={
+                          <style>{`${parentCss}\n${themeCss}\n${iconFontCss}\n.dark { color-scheme: dark; }\nbody { margin: 0; }`}</style>
+                        }
                         className="w-full h-full border-0"
                       >
-                        <div className={componentsDarkPreview ? "dark" : ""} style={{ minHeight: "100%" }}>
+                        <div
+                          className={componentsDarkPreview ? "dark" : ""}
+                          style={{
+                            minHeight: "100%",
+                            background: "var(--background, #fff)",
+                            color: "var(--foreground, #000)",
+                          }}
+                        >
                           {Preview ? <Preview /> : null}
                         </div>
                       </Frame>

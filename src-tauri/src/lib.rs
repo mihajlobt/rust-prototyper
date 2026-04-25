@@ -559,65 +559,53 @@ async fn generate_ollama_completion_stream(
     let ollama = build_ollama_client(host, api_key)?;
     let ollama_messages = to_ollama_messages(messages);
 
+    // Both tool mode and plain mode use streaming — this gives real-time thinking
+    // display and tool_calls in the final stream chunk.
+    let mut request = if output_path.is_some() {
+        ChatMessageRequest::new(model.to_string(), ollama_messages)
+            .tools(vec![write_file_tool_info()])
+    } else {
+        ChatMessageRequest::new(model.to_string(), ollama_messages)
+    };
+    if let Some(true) = think {
+        request = request.think(ThinkType::True);
+    }
+
+    let mut stream = ollama
+        .send_chat_messages_stream(request)
+        .await
+        .map_err(|e| AppError::Http(e.to_string()))?;
+
+    let mut last_tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
+
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(response) => {
+                // Capture tool_calls from the final chunk
+                if !response.message.tool_calls.is_empty() {
+                    last_tool_calls = response.message.tool_calls.clone();
+                }
+                let thinking = response.message.thinking.filter(|t| !t.is_empty());
+                let text = response.message.content;
+                if thinking.is_some() || !text.is_empty() {
+                    let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+                }
+            }
+            Err(_) => {
+                return Err(AppError::Http("Ollama stream error".into()));
+            }
+        }
+    }
+
+    // After stream ends, emit FileWritten if a write_file tool call was received
     if let Some(path) = output_path {
-        // Tool mode: single non-streaming turn with write_file tool definition.
-        // We don't use Coordinator because it only returns the FINAL response (the
-        // turn after tool execution), discarding the thinking from the first turn
-        // where the model actually reasons. A direct send_chat_messages call gives
-        // us thinking + tool_calls in the same response.
-        let mut request = ChatMessageRequest::new(model.to_string(), ollama_messages)
-            .tools(vec![write_file_tool_info()]);
-        if let Some(true) = think {
-            request = request.think(ThinkType::True);
-        }
-
-        let response = ollama
-            .send_chat_messages(request)
-            .await
-            .map_err(|e| AppError::Http(e.to_string()))?;
-
-        // Emit thinking from this same turn
-        if let Some(thinking) = response.message.thinking.filter(|t| !t.is_empty()) {
-            let _ = channel.send(CompletionEvent::Chunk { text: String::new(), thinking: Some(thinking) });
-        }
-        // Emit any accompanying text
-        if !response.message.content.is_empty() {
-            let _ = channel.send(CompletionEvent::Chunk { text: response.message.content, thinking: None });
-        }
-        // Deserialize the write_file tool call arguments into WriteFileParams
-        for call in &response.message.tool_calls {
+        for call in &last_tool_calls {
             if call.function.name == "write_file" {
                 if let Ok(params) = serde_json::from_value::<WriteFileParams>(call.function.arguments.clone()) {
                     let _ = channel.send(CompletionEvent::FileWritten {
                         path: path.to_string(),
                         content: params.content,
                     });
-                }
-            }
-        }
-    } else {
-        // Streaming mode (no tool)
-        let mut request = ChatMessageRequest::new(model.to_string(), ollama_messages);
-        if let Some(true) = think {
-            request = request.think(ThinkType::True);
-        }
-
-        let mut stream = ollama
-            .send_chat_messages_stream(request)
-            .await
-            .map_err(|e| AppError::Http(e.to_string()))?;
-
-        while let Some(result) = stream.next().await {
-            match result {
-                Ok(response) => {
-                    let thinking = response.message.thinking.filter(|t| !t.is_empty());
-                    let text = response.message.content;
-                    if thinking.is_some() || !text.is_empty() {
-                        let _ = channel.send(CompletionEvent::Chunk { text, thinking });
-                    }
-                }
-                Err(_) => {
-                    return Err(AppError::Http("Ollama stream error".into()));
                 }
             }
         }
