@@ -62,7 +62,9 @@ export function ComponentsPanel() {
   }, [code, settings.iconLibrary]);
 
   const toggleCode = () => {
-    useUIStore.setState({ componentsCodeOpen: !componentsCodeOpen });
+    const next = !componentsCodeOpen;
+    useUIStore.setState({ componentsCodeOpen: next });
+    codeRef.current?.resize([9999, next ? CODE_PANE_SIZE : CODE_HEADER]);
   };
 
   const saveCode = useCallback(async (value: string) => {
@@ -339,7 +341,7 @@ export function ComponentsPanel() {
               </div>
             </Allotment.Pane>
 
-            <Allotment.Pane preferredSize={componentsCodeOpen ? CODE_PANE_SIZE : CODE_HEADER} minSize={CODE_HEADER}>
+            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
               <div className="h-full flex flex-col">
                 <div
                   className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"
