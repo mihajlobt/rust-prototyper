@@ -588,7 +588,7 @@ async fn generate_ollama_completion_stream(
             coordinator = coordinator.think(ThinkType::True);
         }
 
-        coordinator
+        let final_response = coordinator
             .chat(ollama_messages)
             .await
             .map_err(|e| AppError::Http(e.to_string()))?;
@@ -608,6 +608,12 @@ async fn generate_ollama_completion_stream(
         let file_content = captured.lock().unwrap().take();
         if let Some(content) = file_content {
             let _ = channel.send(CompletionEvent::FileWritten { path: path.to_string(), content });
+        }
+
+        // Emit the coordinator's final response text (model's turn after tool execution)
+        // so the chat bubble shows what the model said about the generated file.
+        if !final_response.message.content.is_empty() {
+            let _ = channel.send(CompletionEvent::Chunk { text: final_response.message.content, thinking: None });
         }
     } else {
         // ── Plain streaming mode (no tool) ────────────────────────────────────

@@ -250,12 +250,15 @@ CORRECT — the content is the raw CSS itself, no fences, no wrappers:
   write_file(content=":root { --background: oklch(1 0 0); }")
 
 The file is saved as .css. Code fences are a syntax error. Never wrap the content.
-Briefly describe the theme you generated in your text response.
+Give a one-sentence description in your text response. Do NOT write a markdown summary or bullet list.
 
 CSS RULES:
 - Output only the CSS variable block(s) as instructed by the theme type below.
 - No selectors, no element styles, no @import — only custom property blocks (:root { }, .dark { }, etc.).
-- Every token must work together as a cohesive theme.`;
+- Every token must work together as a cohesive theme.
+- If you want to include a summary, write it as a CSS comment INSIDE the file, before the :root block.
+  Example: /* Halloween theme — pumpkin orange primary, deep violet secondary */
+- Do NOT append any markdown, bullet lists, or explanations after the CSS.`;
 
 export function getThemeSystemPrompt(themeType: string): string {
   const typeDocs = THEME_TYPE_DOCS[themeType] ?? THEME_TYPE_DOCS.generic;

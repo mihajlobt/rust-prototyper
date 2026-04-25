@@ -73,8 +73,14 @@ export function ThemesPanel() {
     ),
     outputPath: themeOutputPath,
     onOutput: (content) => {
-      setCss(content);
-      persistTheme(content, "").catch(() => {});
+      // Same extraction as the Apply button: strip fences, keep only the CSS block
+      const cleaned = content
+        .replace(/^```(?:css)?\s*/i, "")
+        .replace(/\s*```[\s\S]*$/i, "")  // strip closing fence + anything after it (summaries)
+        .trim();
+      const css = cleaned || content.trim();
+      setCss(css);
+      persistTheme(css, "").catch(() => {});
       useUIStore.setState({ themesCodeOpen: true });
     },
   });
