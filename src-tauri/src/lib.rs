@@ -397,6 +397,7 @@ struct Message {
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct OllamaModel {
     id: String,
     name: String,
@@ -407,6 +408,7 @@ struct OllamaModel {
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct OllamaModelDetails {
     capabilities: Vec<String>,
     family: String,
@@ -845,8 +847,9 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
     let state = app.state::<AppState>();
     let client = &state.http_client;
 
-    // Strip trailing slash to avoid double-slash URLs (e.g. http://host//api/show → 301 → POST becomes GET → 405)
-    let host = host.trim_end_matches('/');
+    // Default empty host to localhost, then strip trailing slash
+    // to avoid double-slash URLs (e.g. http://host//api/show → 301 → POST becomes GET → 405)
+    let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     // 1. Fetch model list from /api/tags
     let url = format!("{}/api/tags", host);

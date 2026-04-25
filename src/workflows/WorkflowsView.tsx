@@ -334,7 +334,7 @@ function WorkflowCanvas() {
         let output = "";
         const promptBase = d.prompt || d.label;
         const model = settings.modelId;
-        const host = getModelHost(model, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"]);
+        const host = getModelHost(model, settings.host, settings.ollamaCloudModels);
         const apiKey = getApiKey(model, settings.apiKeys);
         const customPrompts = settings.prompts;
 

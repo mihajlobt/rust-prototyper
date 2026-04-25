@@ -132,7 +132,7 @@ export function getApiKey(modelId: string, apiKeys: Record<string, string>): str
 }
 
 /** Determine the API host for a given model ID */
-export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?: ReadonlyArray<string>, _ollamaApiKey?: string): string {
+export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?: ReadonlyArray<string>): string {
   if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return "https://api.openai.com";
   if (modelId.startsWith("claude-")) return "https://api.anthropic.com";
   // Only route to ollama.com when the model is explicitly in the cloud list

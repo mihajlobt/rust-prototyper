@@ -268,7 +268,7 @@ export function ComponentsPanel() {
                     { role: "system", content: systemContent },
                     ...messages.map((m) => ({ role: m.role, content: m.content })),
                   ]}
-                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels, settings.apiKeys["ollama"])}
+                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
                 />
               </Allotment.Pane>
             </Allotment>

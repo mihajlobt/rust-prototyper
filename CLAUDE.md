@@ -150,6 +150,7 @@ bunx tsc --noEmit    # type-check
 
 ## Quality Standards
 - **NEVER compromise on the user's request.** Do not take the "simplest approach" or a shortcut just to get out of a difficult or long task. If the user asks for something, implement it properly.
+- **NEVER leave or hide or skip or ommit or ignore for any reason linting errors and NEVER use excuses like lint errors are pre existing and hide them from the user.**
 - **NEVER guess or hallucinate implementations.** When working with external libraries (e.g., `react-frame-component`), ALWAYS verify against official documentation or GitHub examples. Provide links to the examples/docs you followed.
 - **NEVER guess CLI flags or command behavior.** When using external CLI tools (e.g., `bun create vite`, `bun init`, `vite build`), ALWAYS check Context7 or official docs for the exact flags and behavior. Do NOT assume flags like `--force`, `--yes`, or `--non-interactive` exist without verification.
 - **Avoid hacky solutions.** If a proper solution requires more research (Context7, official docs), do the research. Do not patch around problems with workarounds.

@@ -118,7 +118,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     ]
 
     const { modelId, host, ollamaCloudModels, apiKeys } = settings
-    const resolvedHost = getModelHost(modelId, host, ollamaCloudModels, apiKeys["ollama"])
+    const resolvedHost = getModelHost(modelId, host, ollamaCloudModels)
     const resolvedKey = getApiKey(modelId, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
 
