@@ -126,5 +126,5 @@ Frontend:   FileWritten → stripFences → onOutput → editor + disk
 - Error feedback loop: Babel crash → send error back to AI for self-correction
 - Model-specific system prompt variants (qwen3 vs gemma4 vs cloud)
 - OpenAI + Anthropic as separate providers (not Ollama-proxied)
-- Streaming Coordinator turns — `coordinator.rs` only exposes `pub async fn chat()`, no stream variant; would need a custom implementation or a PR to ollama-rs
+- Streaming Coordinator turns — implemented as a manual loop using `send_chat_messages_stream` + tool execution + history management (same pattern as `chat_with_history_stream.rs` example)
 - Auto-install deps from AI-generated imports via `bun add`
