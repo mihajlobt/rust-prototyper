@@ -20,21 +20,23 @@ function parseMarkdownIntoBlocks(markdown: string): string[] {
 }
 
 // Override `pre` to handle ALL fenced code blocks (with or without a language tag).
-// react-markdown always routes block code through <pre><code>, so intercepting here
-// avoids the fragile position-based inline/block heuristic in the `code` component.
+// react-markdown routes block code as <pre><code className="language-*">...</code></pre>.
+// Intercepting `pre` is robust: it handles named fences (```tsx) and unnamed (```)
+// alike, without relying on node position heuristics.
 // Source: react-markdown README — "Use custom components (syntax highlight)"
 // https://github.com/remarkjs/react-markdown#use-custom-components-syntax-highlight
 const INITIAL_COMPONENTS: Partial<Components> = {
   pre: function PreComponent({ children }) {
-    const child = React.Children.only(children) as React.ReactElement<{
-      className?: string
-      children?: string
-    }>
-    const className = child?.props?.className ?? ""
-    const match = /language-(\w+)/.exec(className)
-    const language = match ? match[1] : "text"
-    // String() + trim trailing newline that react-markdown appends
-    const code = String(child?.props?.children ?? "").replace(/\n$/, "")
+    // Find the inner <code> element — use toArray to avoid throwing on edge cases
+    const codeEl = React.Children.toArray(children).find(
+      (c): c is React.ReactElement<{ className?: string; children?: string }> =>
+        React.isValidElement(c)
+    )
+    if (!codeEl) return <pre>{children}</pre>
+
+    const language = /language-(\w+)/.exec(codeEl.props.className ?? "")?.[1] ?? "text"
+    // String() handles ReactNode; strip the trailing newline react-markdown appends
+    const code = String(codeEl.props.children ?? "").replace(/\n$/, "")
     return (
       <CodeBlock>
         <CodeBlockHeader language={language} code={code} />
@@ -42,7 +44,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       </CodeBlock>
     )
   },
-  // Only inline code reaches this renderer now — block code is handled by pre above
+  // Only inline code reaches this renderer — block code is fully handled by pre
   code: function CodeComponent({ children, className }) {
     return (
       <span

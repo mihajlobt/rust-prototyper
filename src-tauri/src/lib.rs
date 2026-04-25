@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::io::Write;
@@ -9,7 +9,6 @@ use futures_util::StreamExt;
 use futures_util::future::join_all;
 use ollama_rs::{
     Ollama,
-    coordinator::Coordinator,
     generation::{
         chat::{
             ChatMessage as OllamaChatMessage,
@@ -17,10 +16,10 @@ use ollama_rs::{
         },
         images::Image,
         parameters::ThinkType,
-        tools::Tool,
+        tools::{Tool, ToolInfo, ToolType, ToolFunctionInfo},
     },
 };
-use schemars::JsonSchema;
+use schemars::{JsonSchema, generate::SchemaSettings};
 
 struct AppState {
     active_processes: Mutex<HashMap<u32, CommandChild>>,
@@ -506,39 +505,45 @@ fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
     }).collect()
 }
 
-// ─── WriteFileTool ───
+// ─── write_file tool schema ───
 
 #[derive(serde::Deserialize, JsonSchema)]
+#[allow(dead_code)]
 struct WriteFileParams {
     /// The complete file content to write
     content: String,
 }
 
-struct WriteFileTool {
-    captured: Arc<Mutex<Option<String>>>,
-}
+// Marker struct — only used for schema generation via Tool trait.
+// The actual tool call arguments are read directly from ChatMessageResponse.
+struct WriteFileTool;
 
 impl Tool for WriteFileTool {
     type Params = WriteFileParams;
-
-    fn name() -> &'static str {
-        "write_file"
-    }
-
+    fn name() -> &'static str { "write_file" }
     fn description() -> &'static str {
         "Write the generated code or CSS to the output file. Always call this tool with the complete file content."
     }
+    fn call(&mut self, _params: WriteFileParams) -> impl std::future::Future<Output = ollama_rs::generation::tools::Result<String>> + Send + Sync {
+        async { Ok(String::new()) }
+    }
+}
 
-    fn call(
-        &mut self,
-        parameters: WriteFileParams,
-    ) -> impl std::future::Future<Output = ollama_rs::generation::tools::Result<String>> + Send + Sync {
-        let content = parameters.content.clone();
-        let captured = Arc::clone(&self.captured);
-        async move {
-            *captured.lock().unwrap() = Some(content);
-            Ok("File written successfully.".to_string())
-        }
+/// Build a ToolInfo for write_file using the same SchemaSettings as ollama-rs internally.
+/// ToolInfo::new is pub(crate), so we replicate the schema construction here.
+/// Source: https://github.com/pepperoni21/ollama-rs/blob/master/ollama-rs/src/generation/tools/mod.rs
+fn write_file_tool_info() -> ToolInfo {
+    let mut settings = SchemaSettings::draft07();
+    settings.inline_subschemas = true;
+    let generator = settings.into_generator();
+    let parameters = generator.into_root_schema_for::<WriteFileParams>();
+    ToolInfo {
+        tool_type: ToolType::Function,
+        function: ToolFunctionInfo {
+            name: WriteFileTool::name().to_string(),
+            description: WriteFileTool::description().to_string(),
+            parameters,
+        },
     }
 }
 
@@ -557,31 +562,40 @@ async fn generate_ollama_completion_stream(
     let ollama_messages = to_ollama_messages(messages);
 
     if let Some(path) = output_path {
-        // Tool mode: Coordinator manages multi-turn until the write_file tool is called.
-        // Non-streaming — emits a single FileWritten event when done.
-        let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-        let tool = WriteFileTool { captured: Arc::clone(&captured) };
-
-        let history: Vec<OllamaChatMessage> = vec![];
-        let mut coordinator = Coordinator::new(ollama, model.to_string(), history).add_tool(tool);
+        // Tool mode: single non-streaming turn with write_file tool definition.
+        // We don't use Coordinator because it only returns the FINAL response (the
+        // turn after tool execution), discarding the thinking from the first turn
+        // where the model actually reasons. A direct send_chat_messages call gives
+        // us thinking + tool_calls in the same response.
+        let mut request = ChatMessageRequest::new(model.to_string(), ollama_messages)
+            .tools(vec![write_file_tool_info()]);
         if let Some(true) = think {
-            coordinator = coordinator.think(ThinkType::True);
+            request = request.think(ThinkType::True);
         }
 
-        let response = coordinator
-            .chat(ollama_messages)
+        let response = ollama
+            .send_chat_messages(request)
             .await
             .map_err(|e| AppError::Http(e.to_string()))?;
 
+        // Emit thinking from this same turn
         if let Some(thinking) = response.message.thinking.filter(|t| !t.is_empty()) {
             let _ = channel.send(CompletionEvent::Chunk { text: String::new(), thinking: Some(thinking) });
         }
+        // Emit any accompanying text
         if !response.message.content.is_empty() {
             let _ = channel.send(CompletionEvent::Chunk { text: response.message.content, thinking: None });
         }
-        let captured_content: Option<String> = captured.lock().unwrap().clone();
-        if let Some(file_content) = captured_content {
-            let _ = channel.send(CompletionEvent::FileWritten { path: path.to_string(), content: file_content });
+        // Extract the file content from the write_file tool call arguments
+        for call in &response.message.tool_calls {
+            if call.function.name == "write_file" {
+                if let Some(content) = call.function.arguments.get("content").and_then(|v| v.as_str()) {
+                    let _ = channel.send(CompletionEvent::FileWritten {
+                        path: path.to_string(),
+                        content: content.to_string(),
+                    });
+                }
+            }
         }
     } else {
         // Streaming mode (no tool)
