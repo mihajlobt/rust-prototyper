@@ -32,7 +32,7 @@ export type CodeBlockCodeProps = {
 
 function CodeBlockCode({
   code,
-  language = "tsx",
+  language = "text",
   theme = "github-light",
   className,
   ...props
@@ -45,9 +45,15 @@ function CodeBlockCode({
         setHighlightedHtml("<pre><code></code></pre>")
         return
       }
-
-      const html = await codeToHtml(code, { lang: language, theme })
-      setHighlightedHtml(html)
+      try {
+        // Shiki doesn't support "plaintext" — fall back to "text"
+        const lang = language === "plaintext" ? "text" : language
+        const html = await codeToHtml(code, { lang, theme })
+        setHighlightedHtml(html)
+      } catch {
+        // Unknown language — render plain
+        setHighlightedHtml(`<pre><code>${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>`)
+      }
     }
     highlight()
   }, [code, language, theme])

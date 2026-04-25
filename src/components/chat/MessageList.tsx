@@ -1,6 +1,5 @@
 import { memo } from "react"
 import { Copy, Code2, FileCode, RefreshCw } from "lucide-react"
-import { extractCode } from "@/lib/preview"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
@@ -68,7 +67,7 @@ const MessageBubble = memo(function MessageBubble({
   const hasThinking = isStreaming ? streamingThinking.length > 0 : !!message.thinking
   const thinkingText = isStreaming ? streamingThinking : (message.thinking ?? "")
 
-  const hasCode = !!extractCode(content)
+  const hasCode = content.includes("```")
 
   if (message.role === "user") {
     return (
