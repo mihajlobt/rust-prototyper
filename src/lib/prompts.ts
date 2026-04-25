@@ -59,9 +59,16 @@ export function getIconLibraryPromptSection(iconLibrary: IconLibrary): string {
 export const SCREEN_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer. Generate a complete, production-quality UI screen.
 
 TOOL USAGE — REQUIRED:
-- Call the write_file tool with the complete TSX code as the content argument.
-- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks.
-- Briefly describe what you built in your text response.
+You MUST call the write_file tool. The content argument is the raw source code written directly to a file.
+
+WRONG — do NOT do this:
+  content = three-backtick tsx ... three-backtick
+
+CORRECT — the content is the raw code itself, no fences, no wrappers:
+  write_file(content="function App() { return <div>Hello</div>; }")
+
+The file is saved as .tsx. Code fences are a syntax error. Never wrap the content.
+Briefly describe what you built in your text response.
 
 GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
 - React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
@@ -87,9 +94,17 @@ export const COMPONENT_NEW_PROMPT_BASE = `You are an expert React/TypeScript dev
 This is a COMPONENT preview — NOT a full-page app generator. The preview area is max 400px wide.
 
 TOOL USAGE — REQUIRED:
-- Call the write_file tool with the complete TSX code as the content argument.
-- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks, NOT a JSON envelope with a "code" field.
-- Briefly describe what you built in your text response.
+You MUST call the write_file tool. The content argument is the raw source code written directly to a file.
+
+WRONG — do NOT do this:
+  content = three-backtick tsx ... three-backtick
+  content = '{"code": "function App() {...}"}'
+
+CORRECT — the content is the raw code itself, no fences, no wrappers, no JSON:
+  write_file(content="function App() { return <div>Hello</div>; }")
+
+The file is saved as .tsx. Code fences or JSON wrappers are syntax errors. Never wrap the content.
+Briefly describe what you built in your text response.
 
 GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
 - React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
@@ -121,9 +136,11 @@ export const COMPONENT_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript 
 This is a COMPONENT preview — NOT a full-page app generator. Keep the component small and focused.
 
 TOOL USAGE — REQUIRED:
-- Call the write_file tool with the complete updated TSX code as the content argument.
-- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks.
-- Briefly describe what changed in your text response.
+You MUST call the write_file tool. The content is the raw updated TSX code — no fences, no wrappers.
+WRONG: content = three-backtick tsx ... three-backtick
+CORRECT: write_file(content="function App() { ... }")
+The file is saved as .tsx. Code fences are a syntax error.
+Briefly describe what changed in your text response.
 
 CODE RULES:
 - Output the COMPLETE updated function — do NOT patch or diff.
@@ -141,9 +158,11 @@ export function getComponentUpdatePrompt(iconLibrary: IconLibrary): string {
 export const SCREEN_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer making surgical edits to a TSX screen.
 
 TOOL USAGE — REQUIRED:
-- Call the write_file tool with the complete updated TSX code as the content argument.
-- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks.
-- Briefly describe what changed in your text response.
+You MUST call the write_file tool. The content is the raw updated TSX code — no fences, no wrappers.
+WRONG: content = three-backtick tsx ... three-backtick
+CORRECT: write_file(content="function App() { ... }")
+The file is saved as .tsx. Code fences are a syntax error.
+Briefly describe what changed in your text response.
 
 CODE RULES:
 - Output the COMPLETE updated function — do NOT patch or diff.
@@ -222,9 +241,16 @@ Use standard CSS values.`,
 export const THEME_SYSTEM_PROMPT_BASE = `You are a CSS design token expert. Generate a complete, production-ready theme as CSS custom properties.
 
 TOOL USAGE — REQUIRED:
-- Call the write_file tool with the complete CSS as the content argument.
-- The content must be raw CSS only — NOT JSON, NOT markdown, NOT wrapped in backticks or code fences.
-- Briefly describe the theme you generated in your text response.
+You MUST call the write_file tool. The content argument is raw CSS written directly to a .css file.
+
+WRONG — do NOT do this:
+  content = three-backtick css ... three-backtick
+
+CORRECT — the content is the raw CSS itself, no fences, no wrappers:
+  write_file(content=":root { --background: oklch(1 0 0); }")
+
+The file is saved as .css. Code fences are a syntax error. Never wrap the content.
+Briefly describe the theme you generated in your text response.
 
 CSS RULES:
 - Output only the CSS variable block(s) as instructed by the theme type below.
