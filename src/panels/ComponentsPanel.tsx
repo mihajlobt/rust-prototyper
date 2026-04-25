@@ -55,7 +55,7 @@ export function ComponentsPanel() {
   const iconFontCss = useIconFontCss(settings.iconLibrary, settings.project);
   const Preview = useMemo(() => {
     if (!code) return null;
-    return createPreviewComponent(code, settings.iconLibrary);
+    return createPreviewComponent(code);
   }, [code, settings.iconLibrary]);
 
   const saveCode = useCallback(async (value: string) => {

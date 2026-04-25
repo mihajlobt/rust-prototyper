@@ -44,7 +44,7 @@ export function ScreensPanel() {
   const iconFontCss = useIconFontCss(settings.iconLibrary, settings.project);
   const Preview = useMemo(() => {
     if (!previewHtml) return null;
-    return createPreviewComponent(previewHtml, settings.iconLibrary);
+    return createPreviewComponent(previewHtml);
   }, [previewHtml, settings.iconLibrary]);
 
   const {

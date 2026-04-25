@@ -14,7 +14,6 @@ export interface PreviewOptions {
 
 export function transformTsx(
   code: string,
-  iconLibrary: IconLibrary = "none"
 ): { js: string; error?: undefined } | { js?: undefined; error: string } {
   try {
     let stripped = code;
@@ -24,21 +23,19 @@ export function transformTsx(
       .replace(/^import\s+(?:type\s+)?.*?from\s+['"]react['"]\s*;?\s*$/gm, "")
       .replace(/^import\s+['"]react['"]\s*;?\s*$/gm, "");
 
-    // Handle lucide-react imports: rewrite to use global
-    if (iconLibrary === "lucide") {
-      stripped = stripped.replace(
-        /^import\s+\{([^}]+)\}\s+from\s+['"]lucide-react['"]\s*;?\s*$/gm,
-        (_, names: string) => {
-          // Convert "X as Y" to "X: Y" for valid destructuring syntax
-          const fixed = names.replace(/\b(\w+)\s+as\s+(\w+)\b/g, "$1: $2");
-          return `var { ${fixed} } = window.parent.__IconLib;`;
-        }
-      );
-      stripped = stripped.replace(
-        /^import\s+(\w+)\s+from\s+['"]lucide-react['"]\s*;?\s*$/gm,
-        (_, name) => `var ${name} = window.parent.__IconLib.${name};`
-      );
-    }
+    // Lucide icons are always available via window.parent.__IconLib (set in main.tsx)
+    // regardless of the selected iconLibrary setting — rewrite all lucide imports.
+    stripped = stripped.replace(
+      /^import\s+\{([^}]+)\}\s+from\s+['"]lucide-react['"]\s*;?\s*$/gm,
+      (_, names: string) => {
+        const fixed = names.replace(/\b(\w+)\s+as\s+(\w+)\b/g, "$1: $2");
+        return `var { ${fixed} } = window.parent.__IconLib;`;
+      }
+    );
+    stripped = stripped.replace(
+      /^import\s+(\w+)\s+from\s+['"]lucide-react['"]\s*;?\s*$/gm,
+      (_, name) => `var ${name} = window.parent.__IconLib.${name};`
+    );
 
     // Strip any remaining imports
     stripped = stripped
@@ -134,9 +131,8 @@ function extractComponent(js: string): React.ComponentType | null {
  */
 export function createPreviewComponent(
   code: string,
-  iconLibrary: IconLibrary = "none"
 ): React.ComponentType {
-  const { js, error } = transformTsx(code, iconLibrary);
+  const { js, error } = transformTsx(code);
 
   if (error || !js) {
     return function ErrorPreview() {
@@ -211,7 +207,7 @@ export async function buildPreviewDoc(
   iconLibrary: IconLibrary = "none",
   options: PreviewOptions = {}
 ): Promise<string> {
-  const { js, error } = transformTsx(code, iconLibrary);
+  const { js, error } = transformTsx(code);
   const cssText = getParentCss();
   const iconFontCss = options.project
     ? await getIconFontCss(iconLibrary, options.project)

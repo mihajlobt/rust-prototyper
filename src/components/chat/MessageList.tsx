@@ -1,5 +1,6 @@
 import { memo } from "react"
-import { Copy, Code2, FileCode, RefreshCw, Trash2, Wrench } from "lucide-react"
+import { Copy, Code2, RefreshCw, Trash2 } from "lucide-react"
+import { Tool } from "@/components/ui/tool"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
@@ -136,21 +137,26 @@ const MessageBubble = memo(function MessageBubble({
           </MessageContent>
         )}
 
-        {/* Tool call chips (finalized) */}
-        {message.toolCalls?.map((tc, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 w-fit bg-muted/30">
-            <FileCode size={12} />
-            <span>Wrote <code className="font-mono">{tc.path.split("/").pop()}</code></span>
-          </div>
+        {/* Tool usage — streaming (pending) or finalized (completed) */}
+        {isToolMode && (isStreaming ? (
+          !isEmpty && (
+            <Tool
+              toolPart={{ type: "write_file", state: "input-streaming" }}
+              defaultOpen
+            />
+          )
+        ) : (
+          message.toolCalls?.map((tc, i) => (
+            <Tool
+              key={i}
+              toolPart={{
+                type: "write_file",
+                state: "output-available",
+                output: { file: tc.path.split("/").pop() },
+              }}
+            />
+          ))
         ))}
-
-        {/* Tool-mode streaming indicator — shown AFTER thinking/content, never before */}
-        {isStreaming && !isEmpty && isToolMode && !message.toolCalls?.length && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground py-0.5">
-            <Wrench size={12} className="animate-pulse shrink-0" />
-            <Loader variant="loading-dots" size="sm" text="Using write_file" />
-          </div>
-        )}
 
         {/* Generating indicator — non-tool streaming */}
         {isStreaming && !isEmpty && !isToolMode && (

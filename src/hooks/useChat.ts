@@ -146,10 +146,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const finalize = (content: string, thinking: string) => {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+      // Preserve toolCalls attached by attachToolCall (which updated the store mid-stream)
+      const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
+      const currentLast = msgs[msgs.length - 1]
       const finalMessage: ChatMessage = {
         role: "assistant",
         content,
         ...(thinking ? { thinking } : {}),
+        ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
       }
       const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
       useChatStore.getState().setMessages(entityId, finalMessages)
@@ -171,8 +175,11 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
             })
           }
         }
-        // Handle content chunk
-        if (msg.data.text) {
+        // Handle content chunk.
+        // In tool mode, suppress content before FileWritten — it's the model echoing
+        // the tool call syntax as text (not useful to show). After FileWritten fires,
+        // contentAccumulated is cleared and second-turn content accumulates normally.
+        if (msg.data.text && (!outputPath || toolWritten)) {
           contentAccumulated += msg.data.text
         }
         if (rafId === null) {

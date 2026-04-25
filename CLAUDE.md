@@ -174,4 +174,5 @@ bunx tsc --noEmit    # type-check
 ## Dead Code
 
 - **NEVER leave dead code, unused variables, unused imports, or code "for legacy" / "compatibility".** If it's not used, delete it. If you need it back, use git history.
+- **NEVER prefix unused variables with underscore (`_foo`) to silence warnings.** If a variable is unused, remove it entirely — from the parameter list, destructuring, or declaration. Underscore prefixes are a suppression hack, not a fix.
 - **TypeScript errors are never "pre-existing".** If `tsc --noEmit` reports errors, fix them immediately. Do not skip or dismiss them.
