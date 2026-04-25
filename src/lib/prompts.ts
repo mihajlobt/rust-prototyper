@@ -59,18 +59,23 @@ export function getIconLibraryPromptSection(iconLibrary: IconLibrary): string {
 export const SCREEN_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer. Generate a complete, production-quality UI screen.
 
 TOOL USAGE — REQUIRED:
-- You MUST call the write_file tool with the complete TSX code as the content argument.
+- Call the write_file tool with the complete TSX code as the content argument.
+- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks.
 - Briefly describe what you built in your text response.
 
-CODE RULES (applies to the write_file content — TSX format):
-- Write TypeScript JSX (TSX). Use proper TypeScript types for props, state, and event handlers.
-- DO NOT include import statements. React and all hooks (useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext) are available as globals.
-- Define a function named App that returns JSX. No default export needed.
-- DESIGN FOR ALL SCREEN SIZES — responsive at 375px, 768px, and 1280px viewports.
-- Mobile-first: use Tailwind responsive prefixes (sm:, md:, lg:) for layout changes.
-- Use className for styling. Tailwind utility classes and CSS variables: var(--primary), var(--background), var(--foreground), var(--card), var(--border), var(--muted-foreground), var(--accent).
+GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
+- React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
+- Lucide icons: any icon from lucide-react (Home, User, Settings, Search, Mail, Bell, Star, Menu, X, Check, Plus, Trash2, Edit, ChevronRight, ArrowLeft, etc.) — use them directly, e.g. <Bell size={20} />
+
+CODE RULES:
+- NO import statements of any kind — they will break the runtime.
+- NO export keyword — just: function App() { ... }
+- TypeScript types for all props and state. Never use \`any\`.
+- DESIGN FOR ALL SCREEN SIZES — responsive at 375px, 768px, and 1280px.
+- Mobile-first Tailwind: use sm:, md:, lg: prefixes for layout changes.
+- Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
+- Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies correctly.
 - Generate realistic content — real names, real data, no "Lorem ipsum".
-- Use React hooks for interactivity and state.
 - Do NOT wrap in HTML, DOCTYPE, html, head, or body tags.`;
 
 export function getScreenNewPrompt(iconLibrary: IconLibrary): string {
@@ -79,30 +84,33 @@ export function getScreenNewPrompt(iconLibrary: IconLibrary): string {
 
 export const COMPONENT_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer generating focused, reusable UI components.
 
-This is a COMPONENT generator — NOT a screen/page/app generator.
+This is a COMPONENT preview — NOT a full-page app generator. The preview area is max 400px wide.
 
 TOOL USAGE — REQUIRED:
-- You MUST call the write_file tool with the complete TSX code as the content argument.
+- Call the write_file tool with the complete TSX code as the content argument.
+- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks, NOT a JSON envelope with a "code" field.
 - Briefly describe what you built in your text response.
 
-SIZE CONSTRAINTS:
-- Maximum width: 400px — this is a Storybook-style component preview, NOT a full screen.
+GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
+- React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
+- Lucide icons: any icon from lucide-react (Home, User, Settings, Search, Mail, Bell, Star, Menu, X, Check, Plus, Trash2, Edit, ChevronRight, ArrowLeft, etc.) — use directly, e.g. <Bell size={20} />
 
-CODE RULES (applies to the write_file content — TSX format):
-- Write TypeScript JSX (TSX). Use proper TypeScript types for props, state, and event handlers.
-- Generate a SINGLE focused component. Define a function named App that returns JSX.
-- DO NOT use import statements. React and all hooks are available as globals.
-- Use className for styling. Tailwind classes or CSS variables: var(--primary), var(--background), var(--foreground), var(--card), var(--border), var(--muted-foreground), var(--accent).
-- Keep it compact — must fit in a small preview area under 400px wide.
+CODE RULES:
+- NO import statements of any kind — they will break the runtime.
+- NO export keyword — just: function App() { ... }
+- TypeScript types for all props and state. Never use \`any\`. For icon props: React.ComponentType<{ size?: number; className?: string }>
+- Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
+- Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies.
+- Keep it compact — the component must fit within 400px width.
 
-GENERATE ONE FOCUSED COMPONENT:
+GENERATE ONE FOCUSED COMPONENT (not a full-page layout):
 - Button, badge, chip, toggle, switch, input field
 - Card (product, profile, stat, feature)
 - List item, menu item, navigation item, tab
 - Small form (login, search, contact)
 - Header section, sidebar section, modal content
 
-DO NOT GENERATE full pages, dashboards, multi-section layouts, or anything wider than 400px.`;
+DO NOT generate full pages, dashboards, multi-section layouts, or full-screen apps.`;
 
 export function getComponentNewPrompt(iconLibrary: IconLibrary): string {
   return `${COMPONENT_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
@@ -110,18 +118,21 @@ export function getComponentNewPrompt(iconLibrary: IconLibrary): string {
 
 export const COMPONENT_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer updating a focused UI component.
 
-This is a COMPONENT generator — NOT a screen/page/app generator. Keep the component small and focused.
+This is a COMPONENT preview — NOT a full-page app generator. Keep the component small and focused.
 
 TOOL USAGE — REQUIRED:
-- You MUST call the write_file tool with the complete updated TSX code as the content argument.
+- Call the write_file tool with the complete updated TSX code as the content argument.
+- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks.
 - Briefly describe what changed in your text response.
 
-CODE RULES (applies to the write_file content — TSX format):
+CODE RULES:
 - Output the COMPLETE updated function — do NOT patch or diff.
-- Preserve the component scope — do NOT expand into a full screen or page.
-- Keep the same function name (App). Maintain all existing hooks, state, and handlers.
-- Apply ONLY the requested changes. Use className, not class. No import statements.
-- TypeScript types where appropriate.`;
+- NO import statements of any kind. NO export keyword. Function must be named App.
+- Preserve the component scope — do NOT expand into a full-screen layout.
+- Keep all existing hooks, state, and handlers intact.
+- Apply ONLY the requested changes.
+- TypeScript types throughout. Never use \`any\`.
+- Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.`;
 
 export function getComponentUpdatePrompt(iconLibrary: IconLibrary): string {
   return `${COMPONENT_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
@@ -130,15 +141,18 @@ export function getComponentUpdatePrompt(iconLibrary: IconLibrary): string {
 export const SCREEN_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer making surgical edits to a TSX screen.
 
 TOOL USAGE — REQUIRED:
-- You MUST call the write_file tool with the complete updated TSX code as the content argument.
+- Call the write_file tool with the complete updated TSX code as the content argument.
+- The content must be pure TSX source code — NOT JSON, NOT markdown, NOT wrapped in backticks.
 - Briefly describe what changed in your text response.
 
-CODE RULES (applies to the write_file content — TSX format):
+CODE RULES:
 - Output the COMPLETE updated function — do NOT patch or diff.
-- Preserve ALL existing functionality and responsive design unless explicitly asked to change it.
-- Keep the function named App, all existing hooks, state, and handlers.
+- NO import statements. NO export keyword. Function must be named App.
+- Preserve ALL existing functionality and responsive design unless asked to change it.
+- Keep all existing hooks, state, and handlers intact.
 - Apply ONLY the requested changes.
-- Use className, not class. No import statements. TypeScript types where appropriate.`;
+- TypeScript types throughout. Never use \`any\`.
+- Use CSS variables for colors, not hardcoded hex/rgb values.`;
 
 export function getScreenUpdatePrompt(iconLibrary: IconLibrary): string {
   return `${SCREEN_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
@@ -208,13 +222,14 @@ Use standard CSS values.`,
 export const THEME_SYSTEM_PROMPT_BASE = `You are a CSS design token expert. Generate a complete, production-ready theme as CSS custom properties.
 
 TOOL USAGE — REQUIRED:
-- You MUST call the write_file tool with the complete CSS as the content argument.
+- Call the write_file tool with the complete CSS as the content argument.
+- The content must be raw CSS only — NOT JSON, NOT markdown, NOT wrapped in backticks or code fences.
 - Briefly describe the theme you generated in your text response.
 
-CSS RULES (applies to the write_file content):
+CSS RULES:
 - Output only the CSS variable block(s) as instructed by the theme type below.
-- Raw CSS only — no markdown, no backticks, no wrapper elements.
-- Keep values consistent — every token must work together as a cohesive theme.`;
+- No selectors, no element styles, no @import — only custom property blocks (:root { }, .dark { }, etc.).
+- Every token must work together as a cohesive theme.`;
 
 export function getThemeSystemPrompt(themeType: string): string {
   const typeDocs = THEME_TYPE_DOCS[themeType] ?? THEME_TYPE_DOCS.generic;
