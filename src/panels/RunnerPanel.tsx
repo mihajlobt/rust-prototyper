@@ -25,7 +25,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import {
   readDir,
@@ -86,7 +86,7 @@ export function RunnerPanel() {
   const [newFolderName, setNewFolderName] = useState("");
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("runner", 2);
-  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 2);
+  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
   const pidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -420,80 +420,77 @@ export function RunnerPanel() {
                   </Allotment>
                 </Allotment.Pane>
 
-                {/* Terminal / Logs / Network — shadcn Tabs */}
-                <Allotment.Pane preferredSize={180} minSize={28}>
-                  <div className="h-full flex flex-col">
-                    <Tabs value={runnerActiveTab} onValueChange={(v) => useUIStore.setState({ runnerActiveTab: v as "terminal" | "logs" | "network" })} className="flex-1 flex flex-col overflow-hidden">
-                      <div className="flex items-center border-b border-border shrink-0 bg-card">
-                        <TabsList variant="line" className="h-7">
-                          <TabsTrigger value="terminal" className="text-[11px] gap-1"><Terminal size={10} />Terminal</TabsTrigger>
-                          <TabsTrigger value="logs" className="text-[11px] gap-1"><ScrollText size={10} />Logs</TabsTrigger>
-                          <TabsTrigger value="network" className="text-[11px] gap-1"><Globe size={10} />Network</TabsTrigger>
-                        </TabsList>
-                        <div className="flex-1" />
-                        <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!runnerTerminalOpen) useUIStore.setState({ runnerTerminalOpen: true }); }}>
-                          <Terminal size={10} />Shell
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { useUIStore.setState({ runnerTerminalOpen: !runnerTerminalOpen }); }} title={runnerTerminalOpen ? "Collapse terminal" : "Expand terminal"}>
-                          {runnerTerminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
-                        </Button>
-                      </div>
-
-                      {showShellInput && (
-                        <div className="flex gap-1 px-2 py-1 border-b border-border bg-card shrink-0">
-                          <span className="text-xs text-muted-foreground self-center">$</span>
-                          <Input value={shellCommand} onChange={(e) => setShellCommand(e.target.value)} placeholder="Enter shell command..." className="h-6 text-xs" onKeyDown={(e) => { if (e.key === "Enter") handleNewShell(); if (e.key === "Escape") setShowShellInput(false); }} autoFocus />
-                        </div>
-                      )}
-
-                      {runnerTerminalOpen && (
-                        <div className="flex-1 overflow-hidden bg-black text-green-400 font-mono text-xs">
-                          <TabsContent value="terminal" className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
-                            <div ref={terminalRef} className="h-full overflow-auto p-2 space-y-0.5">
-                              {terminalLines.map((item, i) => (
-                                <div key={i} className={["break-all whitespace-pre-wrap", item.source === "stderr" ? "text-red-400" : ""].join(" ")}>
-                                  {item.line}
-                                </div>
-                              ))}
-                              {terminalLines.length === 0 && <div className="opacity-40">No output yet&#8230;</div>}
-                            </div>
-                          </TabsContent>
-
-                          <TabsContent value="logs" className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
-                            <div className="h-full overflow-auto p-2 space-y-0.5">
-                              {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
-                                <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : ""].join(" ")}>
-                                  {item.line}
-                                </div>
-                              ))}
-                              {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && <div className="opacity-40">No log events yet&#8230;</div>}
-                            </div>
-                          </TabsContent>
-
-                          <TabsContent value="network" className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
-                            <div className="h-full overflow-auto p-2 space-y-1">
-                              {(() => {
-                                const requests = terminalLines.map((item) => {
-                                  const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
-                                  if (match) return { method: match[1], path: match[2], status: parseInt(match[3]) };
-                                  const hmr = item.line.match(/hmr update\s+(\S+)/i);
-                                  if (hmr) return { method: "HMR", path: hmr[1], status: 0 };
-                                  return null;
-                                }).filter(Boolean) as Array<{ method: string; path: string; status: number }>;
-                                if (requests.length === 0) return <div className="opacity-40">No network requests logged yet&#8230;</div>;
-                                return requests.map((req, i) => (
-                                  <div key={i} className="flex items-center gap-2 text-xs">
-                                    <span className={["font-bold px-1 py-0.5 rounded", req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" : req.status >= 400 ? "bg-red-500/20 text-red-400" : req.method === "HMR" ? "bg-blue-500/20 text-blue-400" : "bg-muted text-muted-foreground"].join(" ")}>{req.method}</span>
-                                    <span className="truncate flex-1">{req.path}</span>
-                                    {req.status > 0 && <span className="text-muted-foreground">{req.status}</span>}
-                                  </div>
-                                ));
-                              })()}
-                            </div>
-                          </TabsContent>
-                        </div>
-                      )}
+                {/* Terminal header — always visible, locked height */}
+                <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+                  <div className="h-full flex items-center border-b border-border bg-card px-2">
+                    <Tabs value={runnerActiveTab} onValueChange={(v) => useUIStore.setState({ runnerActiveTab: v as "terminal" | "logs" | "network" })}>
+                      <TabsList variant="line" className="h-7">
+                        <TabsTrigger value="terminal" className="text-[11px] gap-1"><Terminal size={10} />Terminal</TabsTrigger>
+                        <TabsTrigger value="logs" className="text-[11px] gap-1"><ScrollText size={10} />Logs</TabsTrigger>
+                        <TabsTrigger value="network" className="text-[11px] gap-1"><Globe size={10} />Network</TabsTrigger>
+                      </TabsList>
                     </Tabs>
+                    <div className="flex-1" />
+                    <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!runnerTerminalOpen) useUIStore.setState({ runnerTerminalOpen: true }); }}>
+                      <Terminal size={10} />Shell
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { useUIStore.setState({ runnerTerminalOpen: !runnerTerminalOpen }); }} title={runnerTerminalOpen ? "Collapse terminal" : "Expand terminal"}>
+                      {runnerTerminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                    </Button>
+                  </div>
+                </Allotment.Pane>
+                {/* Terminal content — shown/hidden via allotment visible prop */}
+                <Allotment.Pane visible={runnerTerminalOpen} preferredSize={152} minSize={100}>
+                  <div className="h-full flex flex-col">
+                    {showShellInput && (
+                      <div className="flex gap-1 px-2 py-1 border-b border-border bg-card shrink-0">
+                        <span className="text-xs text-muted-foreground self-center">$</span>
+                        <Input value={shellCommand} onChange={(e) => setShellCommand(e.target.value)} placeholder="Enter shell command..." className="h-6 text-xs" onKeyDown={(e) => { if (e.key === "Enter") handleNewShell(); if (e.key === "Escape") setShowShellInput(false); }} autoFocus />
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-hidden bg-black text-green-400 font-mono text-xs">
+                      {runnerActiveTab === "terminal" && (
+                        <div ref={terminalRef} className="h-full overflow-auto p-2 space-y-0.5">
+                          {terminalLines.map((item, i) => (
+                            <div key={i} className={["break-all whitespace-pre-wrap", item.source === "stderr" ? "text-red-400" : ""].join(" ")}>
+                              {item.line}
+                            </div>
+                          ))}
+                          {terminalLines.length === 0 && <div className="opacity-40">No output yet&#8230;</div>}
+                        </div>
+                      )}
+                      {runnerActiveTab === "logs" && (
+                        <div className="h-full overflow-auto p-2 space-y-0.5">
+                          {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
+                            <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : ""].join(" ")}>
+                              {item.line}
+                            </div>
+                          ))}
+                          {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && <div className="opacity-40">No log events yet&#8230;</div>}
+                        </div>
+                      )}
+                      {runnerActiveTab === "network" && (
+                        <div className="h-full overflow-auto p-2 space-y-1">
+                          {(() => {
+                            const requests = terminalLines.map((item) => {
+                              const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
+                              if (match) return { method: match[1], path: match[2], status: parseInt(match[3]) };
+                              const hmr = item.line.match(/hmr update\s+(\S+)/i);
+                              if (hmr) return { method: "HMR", path: hmr[1], status: 0 };
+                              return null;
+                            }).filter(Boolean) as Array<{ method: string; path: string; status: number }>;
+                            if (requests.length === 0) return <div className="opacity-40">No network requests logged yet&#8230;</div>;
+                            return requests.map((req, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span className={["font-bold px-1 py-0.5 rounded", req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" : req.status >= 400 ? "bg-red-500/20 text-red-400" : req.method === "HMR" ? "bg-blue-500/20 text-blue-400" : "bg-muted text-muted-foreground"].join(" ")}>{req.method}</span>
+                                <span className="truncate flex-1">{req.path}</span>
+                                {req.status > 0 && <span className="text-muted-foreground">{req.status}</span>}
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Allotment.Pane>
               </Allotment>

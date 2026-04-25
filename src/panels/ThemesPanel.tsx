@@ -66,16 +66,8 @@ export function ThemesPanel() {
   });
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("themes", 2);
-  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("themes-code", 2);
+  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("themes-code", 3);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("themes-inspector", 2);
-  const CODE_PANE_SIZE = 280;
-  const CODE_HEADER = 28;
-
-  const toggleCode = () => {
-    const next = !themesCodeOpen;
-    useUIStore.setState({ themesCodeOpen: next });
-    codeRef.current?.resize([9999, next ? CODE_PANE_SIZE : CODE_HEADER]);
-  };
 
   // Load persisted theme via TanStack Query
   const { data: loadedCss } = useThemeCss(settings.project, selectedThemeDir);
@@ -363,22 +355,20 @@ body { margin: 0; font-family: sans-serif; }
               </div>
             </Allotment.Pane>
 
-            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
-              <div className="h-full flex flex-col">
-                <div
-                  className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"
-                  onClick={toggleCode}
-                >
-                  <FileCode size={12} className="mr-1.5" />
-                  <span className="text-xs font-medium">CSS Output</span>
-                  <div className="flex-1" />
-                  {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </div>
-                {themesCodeOpen && (
-                  <div className="flex-1 overflow-hidden">
-                    <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
-                  </div>
-                )}
+            <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+              <div
+                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
+                onClick={() => useUIStore.setState({ themesCodeOpen: !themesCodeOpen })}
+              >
+                <FileCode size={12} className="mr-1.5" />
+                <span className="text-xs font-medium">CSS Output</span>
+                <div className="flex-1" />
+                {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100}>
+              <div className="h-full overflow-hidden">
+                <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
               </div>
             </Allotment.Pane>
           </Allotment>

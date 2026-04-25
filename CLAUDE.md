@@ -156,3 +156,17 @@ bunx tsc --noEmit    # type-check
 - **Avoid hacky solutions.** If a proper solution requires more research (Context7, official docs), do the research. Do not patch around problems with workarounds.
 - **CRITICAL: NEVER use `setTimeout` or any other timing hack to "defer" rendering or "wait for mount" in React.** If code needs to wait for a component to mount, use the correct React pattern (effects with proper dependencies, state-driven rendering, refs with layout effects, or library-specific declarative APIs). Timing hacks are brittle, cause race conditions, and mask the real problem.
 - **CRITICAL: NEVER EVER redefine types or recreate interfaces when they already exist in external packages.** ALWAYS import and reuse types from the source package. Do not create local copies of library types just to "make TypeScript happy" — fix the root cause or use the library's exported types correctly.
+
+## Allotment (Split Pane Library)
+
+- **Use `visible` prop on `Allotment.Pane` for declarative show/hide.** Never use imperative `resize()` for collapse/expand toggles.
+- **Never use magic numbers like `9999` in `resize()` calls.** If you need a "fill remaining" pane, set `minSize` on other panes and let Allotment distribute space naturally.
+- **`resize()` is only safe in event handlers (click, drag).** NEVER call `resize()` in `useEffect` or `requestAnimationFrame` — it crashes with `TypeError: undefined is not an object (evaluating 'pane.minimumSize')` because panes haven't laid out yet.
+- **`preferredSize` is NOT reactive.** It only affects initial mount sizing and `reset()`. Do not set it dynamically based on state to try to resize panes — it won't work after mount.
+- **For collapse/expand patterns with a visible header:** Split into two `Allotment.Pane` elements — one locked-size header pane (`minSize={28} maxSize={28}`) and one content pane with `visible={isOpen}`. This is the proper documented pattern, not `resize([9999, size])`.
+- **`useAllotmentLayout` hook** persists pane sizes via `onDragEnd` and restores them via `defaultSizes`. When changing pane count, update the `paneCount` parameter accordingly.
+
+## Dead Code
+
+- **NEVER leave dead code, unused variables, unused imports, or code "for legacy" / "compatibility".** If it's not used, delete it. If you need it back, use git history.
+- **TypeScript errors are never "pre-existing".** If `tsc --noEmit` reports errors, fix them immediately. Do not skip or dismiss them.

@@ -45,10 +45,8 @@ export function ComponentsPanel() {
   const [themeCss, setThemeCss] = useState("");
   const componentId = selectedComponent;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
-  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 2);
+  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 2);
-  const CODE_PANE_SIZE = 280;
-  const CODE_HEADER = 28;
 
   const defaultSystem = getComponentNewPrompt(settings.iconLibrary) +
     (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
@@ -60,12 +58,6 @@ export function ComponentsPanel() {
     if (!code) return null;
     return createPreviewComponent(code, settings.iconLibrary);
   }, [code, settings.iconLibrary]);
-
-  const toggleCode = () => {
-    const next = !componentsCodeOpen;
-    useUIStore.setState({ componentsCodeOpen: next });
-    codeRef.current?.resize([9999, next ? CODE_PANE_SIZE : CODE_HEADER]);
-  };
 
   const saveCode = useCallback(async (value: string) => {
     if (!value) return;
@@ -341,43 +333,41 @@ export function ComponentsPanel() {
               </div>
             </Allotment.Pane>
 
-            <Allotment.Pane preferredSize={CODE_PANE_SIZE} minSize={CODE_HEADER}>
-              <div className="h-full flex flex-col">
-                <div
-                  className="h-7 border-b border-border flex items-center px-3 bg-card shrink-0 cursor-pointer select-none hover:bg-muted transition-colors"
-                  onClick={toggleCode}
-                >
-                  <span className="text-xs font-medium flex-1">Code</span>
-                  <div className="flex items-center gap-1 mr-1">
-                    <SaveComponentModal
-                      code={code}
-                      prompt={messages.find(m => m.role === "user")?.content ?? ""}
-                      messages={messages}
-                      onSaved={(id) => {
-                        setSelectedComponent(id);
-                        window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "components" } }));
-                      }}
-                      trigger={
-                        <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-1 px-1.5" onClick={(e) => e.stopPropagation()} disabled={!code}>
-                          <Save size={10} />
-                          Save
-                        </Button>
-                      }
-                    />
-                    <ComponentExportModal componentId="Generated" trigger={
+            <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+              <div
+                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
+                onClick={() => useUIStore.setState({ componentsCodeOpen: !componentsCodeOpen })}
+              >
+                <span className="text-xs font-medium flex-1">Code</span>
+                <div className="flex items-center gap-1 mr-1">
+                  <SaveComponentModal
+                    code={code}
+                    prompt={messages.find(m => m.role === "user")?.content ?? ""}
+                    messages={messages}
+                    onSaved={(id) => {
+                      setSelectedComponent(id);
+                      window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "components" } }));
+                    }}
+                    trigger={
                       <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-1 px-1.5" onClick={(e) => e.stopPropagation()} disabled={!code}>
-                        <Download size={10} />
-                        Export
+                        <Save size={10} />
+                        Save
                       </Button>
-                    } />
-                  </div>
-                  {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                    }
+                  />
+                  <ComponentExportModal componentId="Generated" trigger={
+                    <Button variant="ghost" size="sm" className="h-5 text-[10px] gap-1 px-1.5" onClick={(e) => e.stopPropagation()} disabled={!code}>
+                      <Download size={10} />
+                      Export
+                    </Button>
+                  } />
                 </div>
-                {componentsCodeOpen && (
-                  <div className="flex-1 overflow-hidden">
-                    <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
-                  </div>
-                )}
+                {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane visible={componentsCodeOpen} preferredSize={252} minSize={100}>
+              <div className="h-full overflow-hidden">
+                <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
               </div>
             </Allotment.Pane>
           </Allotment>
