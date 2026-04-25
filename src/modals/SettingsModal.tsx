@@ -159,11 +159,11 @@ export function SettingsModal() {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="general" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="bg-transparent h-7 p-0 gap-0">
-            <TabsTrigger value="general" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">General</TabsTrigger>
-            <TabsTrigger value="ai" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">AI</TabsTrigger>
-            <TabsTrigger value="styles" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Styles</TabsTrigger>
-            <TabsTrigger value="prompts" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Prompts</TabsTrigger>
+          <TabsList variant="line" className="h-7">
+            <TabsTrigger value="general" className="text-[11px]">General</TabsTrigger>
+            <TabsTrigger value="ai" className="text-[11px]">AI</TabsTrigger>
+            <TabsTrigger value="styles" className="text-[11px]">Styles</TabsTrigger>
+            <TabsTrigger value="prompts" className="text-[11px]">Prompts</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="flex-1 overflow-auto space-y-4 mt-4">

@@ -706,11 +706,11 @@ export function APIsPanel() {
                   )}
                 </div>
                 <Tabs defaultValue="body" className="flex-1 flex flex-col overflow-hidden">
-                  <TabsList className="bg-transparent h-7 p-0 gap-0">
-                    <TabsTrigger value="body" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Body</TabsTrigger>
-                    <TabsTrigger value="schema" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Schema</TabsTrigger>
-                    <TabsTrigger value="headers" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Headers</TabsTrigger>
-                    <TabsTrigger value="history" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">History</TabsTrigger>
+                  <TabsList variant="line" className="h-7">
+                    <TabsTrigger value="body" className="text-[11px]">Body</TabsTrigger>
+                    <TabsTrigger value="schema" className="text-[11px]">Schema</TabsTrigger>
+                    <TabsTrigger value="headers" className="text-[11px]">Headers</TabsTrigger>
+                    <TabsTrigger value="history" className="text-[11px]">History</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="body" className="flex-1 overflow-hidden mt-0">

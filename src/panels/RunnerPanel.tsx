@@ -425,10 +425,10 @@ export function RunnerPanel() {
                   <div className="h-full flex flex-col">
                     <Tabs value={runnerActiveTab} onValueChange={(v) => useUIStore.setState({ runnerActiveTab: v as "terminal" | "logs" | "network" })} className="flex-1 flex flex-col overflow-hidden">
                       <div className="flex items-center border-b border-border shrink-0 bg-card">
-                        <TabsList className="bg-transparent h-7 p-0 gap-0">
-                          <TabsTrigger value="terminal" className="h-7 px-2.5 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Terminal size={10} />Terminal</TabsTrigger>
-                          <TabsTrigger value="logs" className="h-7 px-2.5 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><ScrollText size={10} />Logs</TabsTrigger>
-                          <TabsTrigger value="network" className="h-7 px-2.5 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Globe size={10} />Network</TabsTrigger>
+                        <TabsList variant="line" className="h-7">
+                          <TabsTrigger value="terminal" className="text-[11px] gap-1"><Terminal size={10} />Terminal</TabsTrigger>
+                          <TabsTrigger value="logs" className="text-[11px] gap-1"><ScrollText size={10} />Logs</TabsTrigger>
+                          <TabsTrigger value="network" className="text-[11px] gap-1"><Globe size={10} />Network</TabsTrigger>
                         </TabsList>
                         <div className="flex-1" />
                         <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!runnerTerminalOpen) useUIStore.setState({ runnerTerminalOpen: true }); }}>

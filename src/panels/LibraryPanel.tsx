@@ -216,12 +216,12 @@ export function LibraryPanel() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="bg-transparent h-7 p-0 gap-0">
-          <TabsTrigger value="all" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><LayoutGrid size={10} />All</TabsTrigger>
-          <TabsTrigger value="component" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Box size={10} />Components</TabsTrigger>
-          <TabsTrigger value="theme" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Palette size={10} />Themes</TabsTrigger>
-          <TabsTrigger value="screen" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><LayoutGrid size={10} />Screens</TabsTrigger>
-          <TabsTrigger value="api" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Terminal size={10} />APIs</TabsTrigger>
+        <TabsList variant="line" className="h-7">
+          <TabsTrigger value="all" className="text-[11px] gap-1"><LayoutGrid size={10} />All</TabsTrigger>
+          <TabsTrigger value="component" className="text-[11px] gap-1"><Box size={10} />Components</TabsTrigger>
+          <TabsTrigger value="theme" className="text-[11px] gap-1"><Palette size={10} />Themes</TabsTrigger>
+          <TabsTrigger value="screen" className="text-[11px] gap-1"><LayoutGrid size={10} />Screens</TabsTrigger>
+          <TabsTrigger value="api" className="text-[11px] gap-1"><Terminal size={10} />APIs</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="flex-1 overflow-hidden mt-2">
