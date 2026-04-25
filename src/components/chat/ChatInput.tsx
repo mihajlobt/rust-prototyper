@@ -24,6 +24,7 @@ interface ChatInputProps {
   thinkEnabled?: boolean
   onToggleThink?: () => void
   canThink?: boolean
+  canVision?: boolean
   onStop?: () => void
 }
 
@@ -31,7 +32,7 @@ export function ChatInput({
   value, onChange, onSend, disabled,
   attachments, onAddAttachment, onRemoveAttachment,
   mentions, onAddMention, onRemoveMention,
-  thinkEnabled, onToggleThink, canThink, onStop,
+  thinkEnabled, onToggleThink, canThink, canVision, onStop,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -190,23 +191,25 @@ export function ChatInput({
               </Tooltip>
             </TooltipProvider>
 
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <FileUpload onFilesAdded={(files) => files.forEach((f) => { if (f.type.startsWith("image/")) processImageFile(f) })} accept="image/*" multiple>
-                    <FileUploadTrigger asChild>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        <ImageIcon size={13} />
-                      </button>
-                    </FileUploadTrigger>
-                  </FileUpload>
-                </TooltipTrigger>
-                <TooltipContent side="top">Attach image</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {canVision && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <FileUpload onFilesAdded={(files) => files.forEach((f) => { if (f.type.startsWith("image/")) processImageFile(f) })} accept="image/*" multiple>
+                      <FileUploadTrigger asChild>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          <ImageIcon size={13} />
+                        </button>
+                      </FileUploadTrigger>
+                    </FileUpload>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Attach image</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
 
           {disabled && onStop ? (

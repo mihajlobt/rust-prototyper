@@ -364,6 +364,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     thinkEnabled,
     toggleThink: () => setThinkEnabled((v) => !v),
     canThink: caps.thinking,
+    canVision: caps.vision,
     capsLoading: caps.loading,
   }
 }

@@ -61,7 +61,7 @@ export function ThemesPanel() {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
-    thinkEnabled, toggleThink, canThink,
+    thinkEnabled, toggleThink, canThink, canVision,
   } = useChat({
     entityId: selectedThemeDir ? `theme-${selectedThemeDir}` : "theme-none",
     chatPath,
@@ -140,6 +140,7 @@ export function ThemesPanel() {
           thinkEnabled={thinkEnabled}
           onToggleThink={toggleThink}
           canThink={canThink}
+          canVision={canVision}
           onStop={stopGeneration}
         />
       </div>
