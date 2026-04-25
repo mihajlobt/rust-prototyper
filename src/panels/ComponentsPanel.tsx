@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, Download, PackagePlus, ChevronUp, ChevronDown, Sun, Moon } from "lucide-react";
+import { Smartphone, Tablet, Monitor, Save, Download, ChevronUp, ChevronDown, Sun, Moon, Trash2 } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { writeFile, createDir, readDir, readFile, getModelHost } from "@/lib/ipc";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -22,7 +23,6 @@ import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
-import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
@@ -185,25 +185,16 @@ export function ComponentsPanel() {
           </span>
         )}
         <div className="flex-1" />
-        <div className="flex items-center gap-1">
-          <Select value={selectedTheme} onValueChange={(v) => { setSelectedTheme(v); setSettings({ stylePreset: v }); }}>
-            <SelectTrigger className="h-6 text-xs w-[90px]">
-              <SelectValue placeholder="Theme…" />
-            </SelectTrigger>
-            <SelectContent>
-              {themes.map((t) => (
-                <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <AddLibraryModal trigger={
-            <Button variant="ghost" size="icon" className="h-6 w-6">
-              <PackagePlus size={12} />
-            </Button>
-          } />
-        </div>
-        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
-          Clear
+        <Button
+          variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive"
+          onClick={async () => {
+            const ok = await confirm("Clear all chat messages?", { title: "Clear Chat", kind: "warning" });
+            if (ok) clearChat();
+          }}
+          disabled={messages.length === 0}
+          title="Clear chat"
+        >
+          <Trash2 size={13} />
         </Button>
       </div>
 
@@ -275,7 +266,17 @@ export function ComponentsPanel() {
                 <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
                   <span className="text-sm font-medium">Preview</span>
                   <div className="flex-1" />
-
+                  <Select value={selectedTheme} onValueChange={(v) => { setSelectedTheme(v); setSettings({ stylePreset: v }); }}>
+                    <SelectTrigger className="h-6 text-xs w-[90px]">
+                      <SelectValue placeholder="Theme…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {themes.map((t) => (
+                        <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="w-px h-4 bg-border" />
                   <Button
                     variant={componentsDarkPreview ? "secondary" : "ghost"}
                     size="icon" className="h-7 w-7"
@@ -316,6 +317,7 @@ export function ComponentsPanel() {
                       style={{ width: deviceWidth[componentsDevice] }}
                     >
                       <Frame
+                        key={selectedTheme}
                         head={
                           <style>{`${parentCss}\n${themeCss}\n${iconFontCss}\n.dark { color-scheme: dark; }\nbody { margin: 0; }`}</style>
                         }

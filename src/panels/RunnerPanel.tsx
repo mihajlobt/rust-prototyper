@@ -59,6 +59,8 @@ import type { MentionAsset } from "@/types/chat";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { hasViteScaffold, scaffoldGenerated } from "@/lib/scaffold";
+import { AddLibraryModal } from "@/modals/AddLibraryModal";
+import { PackagePlus } from "lucide-react";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
@@ -321,6 +323,11 @@ export function RunnerPanel() {
         <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleInstall}>
           <Package size={10} />Install
         </Button>
+        <AddLibraryModal trigger={
+          <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2">
+            <PackagePlus size={10} />Library
+          </Button>
+        } />
         <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleKillAll}>
           <Square size={10} />Kill All
         </Button>
