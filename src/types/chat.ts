@@ -6,14 +6,10 @@ export interface ToolCallRecord {
 export interface ChatMessage {
   role: "user" | "assistant"
   content: string
+  thinking?: string
   images?: string[]
-  blocks?: MessageBlock[]
   toolCalls?: ToolCallRecord[]
 }
-
-export type MessageBlock =
-  | { type: "thinking"; content: string; collapsed: boolean }
-  | { type: "text"; content: string }
 
 export interface MentionAsset {
   id: string

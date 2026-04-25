@@ -109,14 +109,12 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     setAttachments([])
     setMentions([])
 
-    // Build API messages (system + history without trailing placeholder).
-    // <think> tags in assistant messages are split back into thinking/content fields
-    // by to_ollama_messages() on the Rust side.
     const apiMessages = [
       { role: "system", content: systemPrompt },
       ...updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
         ...(m.images?.length ? { images: m.images } : {}),
       })),
     ]
@@ -166,20 +164,18 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           cancelAnimationFrame(rafId)
           rafId = null
         }
-        const finalContent = thinkingAccumulated
-          ? `<think>${thinkingAccumulated}</think>${contentAccumulated}`
-          : contentAccumulated
-        const finalMessages: ChatMessage[] = [
-          ...updatedMessages.slice(0, -1),
-          { role: "assistant", content: finalContent },
-        ]
+        const finalMessage: ChatMessage = {
+          role: "assistant",
+          content: contentAccumulated,
+          ...(thinkingAccumulated ? { thinking: thinkingAccumulated } : {}),
+        }
+        const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
         useChatStore.getState().setMessages(entityId, finalMessages)
         useChatStore.getState().setStreaming(entityId, false)
         useChatStore.getState().setStreamingThinking(entityId, "")
         writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        // Only call onOutput from accumulated content when no tool wrote the file
         if (!toolWritten) {
-          onOutputRef.current?.(finalContent)
+          onOutputRef.current?.(contentAccumulated)
         }
       } else if (msg.event === "Error") {
         useChatStore.getState().setMessages(entityId, [
@@ -235,6 +231,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       ...updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
         ...(m.images?.length ? { images: m.images } : {}),
       })),
     ]
@@ -275,15 +272,17 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
       } else if (msg.event === "Done") {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        const finalContent = thinkingAccumulated
-          ? `<think>${thinkingAccumulated}</think>${contentAccumulated}`
-          : contentAccumulated
-        const finalMessages = [...updatedMessages.slice(0, -1), { role: "assistant" as const, content: finalContent }]
+        const finalMessage: ChatMessage = {
+          role: "assistant",
+          content: contentAccumulated,
+          ...(thinkingAccumulated ? { thinking: thinkingAccumulated } : {}),
+        }
+        const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
         useChatStore.getState().setMessages(entityId, finalMessages)
         useChatStore.getState().setStreaming(entityId, false)
         useChatStore.getState().setStreamingThinking(entityId, "")
         writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        if (!toolWrittenRegen) onOutputRef.current?.(finalContent)
+        if (!toolWrittenRegen) onOutputRef.current?.(contentAccumulated)
       } else if (msg.event === "Error") {
         useChatStore.getState().setMessages(entityId, [...updatedMessages.slice(0, -1), { role: "assistant" as const, content: `⚠ ${msg.data.message}` }])
         useChatStore.getState().setStreaming(entityId, false)

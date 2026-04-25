@@ -1,6 +1,5 @@
 import { memo } from "react"
 import { Copy, Code2, FileCode, RefreshCw } from "lucide-react"
-import { stripThinking } from "@/lib/chat-utils"
 import { extractCode } from "@/lib/preview"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
@@ -9,16 +8,6 @@ import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage } from "@/types/chat"
 
-// Extract thinking from final content WITH tags
-function getThinking(content: string): string {
-  const match = content.match(/<think>([\s\S]*?)<\/think>/)
-  return match ? match[1].trim() : ""
-}
-
-// Extract response from final content (without thinking tags) - just use the same logic as stripThinking
-function getResponse(content: string): string {
-  return stripThinking(content)
-}
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -76,23 +65,10 @@ const MessageBubble = memo(function MessageBubble({
   const content = message.content
   const isEmpty = isStreaming && content === "" && !streamingThinking
 
-  // During streaming: check streamingThinking prop. After: check tags in content.
-  const hasThinking = isStreaming
-    ? streamingThinking.length > 0
-    : content.includes("<think>")
+  const hasThinking = isStreaming ? streamingThinking.length > 0 : !!message.thinking
+  const thinkingText = isStreaming ? streamingThinking : (message.thinking ?? "")
 
-  const hasCode = !!extractCode(stripThinking(content))
-
-  // Render thinking content
-  const renderThinking = () => {
-    if (isStreaming) {
-      // During streaming: raw text from store (no markdown - it's mid-stream)
-      return streamingThinking
-    } else {
-      // After finalize: extract from tags with markdown
-      return getThinking(content)
-    }
-  }
+  const hasCode = !!extractCode(content)
 
   if (message.role === "user") {
     return (
@@ -118,11 +94,11 @@ const MessageBubble = memo(function MessageBubble({
                 Thinking
               </ReasoningTrigger>
               <ReasoningContent markdown={!isStreaming} className="text-xs">
-                {renderThinking()}
+                {thinkingText}
               </ReasoningContent>
             </Reasoning>
             <MessageContent markdown isStreaming={isStreaming} className="text-sm">
-              {isStreaming ? content : getResponse(content)}
+              {content}
             </MessageContent>
           </>
         ) : (

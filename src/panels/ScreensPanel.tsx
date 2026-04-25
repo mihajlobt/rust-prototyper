@@ -12,7 +12,6 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
-import { stripThinking } from "@/lib/chat-utils";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -181,7 +180,7 @@ export function ScreensPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setPreviewHtml(c); }}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) setPreviewHtml(c); }}
         onRegenerate={regenerate}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">

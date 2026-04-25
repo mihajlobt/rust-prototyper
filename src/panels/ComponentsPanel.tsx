@@ -26,7 +26,6 @@ import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
-import { stripThinking } from "@/lib/chat-utils";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
@@ -212,7 +211,7 @@ export function ComponentsPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) applyCode(c); }}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
         onRegenerate={regenerate}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">

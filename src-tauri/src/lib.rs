@@ -407,6 +407,7 @@ async fn http_request(
 struct Message {
     role: String,
     content: String,
+    thinking: Option<String>,
     #[serde(default)]
     images: Vec<String>,
 }
@@ -488,19 +489,6 @@ fn build_ollama_client(host: &str, api_key: &str) -> Result<Ollama, AppError> {
     }
 }
 
-/// Extract `<think>...</think>` from assistant message content.
-/// Returns (thinking_text, response_text). If no think block, thinking_text is empty.
-fn split_thinking(content: &str) -> (String, String) {
-    if let Some(start) = content.find("<think>") {
-        if let Some(end) = content.find("</think>") {
-            let thinking = content[start + 7..end].to_string();
-            let response = content[end + 8..].trim_start().to_string();
-            return (thinking, response);
-        }
-    }
-    (String::new(), content.to_string())
-}
-
 fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
     messages.iter().map(|m| {
         let role = match m.role.as_str() {
@@ -513,19 +501,12 @@ fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
         } else {
             Some(m.images.iter().map(|b| Image::from_base64(b.clone())).collect())
         };
-        // For assistant messages, split persisted <think>...</think> tags back into
-        // separate thinking/content fields so Ollama handles history correctly.
-        let (thinking, content) = if role == MessageRole::Assistant {
-            split_thinking(&m.content)
-        } else {
-            (String::new(), m.content.clone())
-        };
         OllamaChatMessage {
             role,
-            content,
+            content: m.content.clone(),
             images,
             tool_calls: vec![],
-            thinking: if thinking.is_empty() { None } else { Some(thinking) },
+            thinking: m.thinking.clone(),
         }
     }).collect()
 }
