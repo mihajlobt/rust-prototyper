@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState, useCallback, type MutableRefObject, type RefObject } from "react"
+
+/** Strip markdown code fences a model may have wrapped around file content. */
+function stripFences(content: string): string {
+  return content
+    .replace(/^```[\w]*\r?\n?/, "")
+    .replace(/\r?\n?```\s*$/, "")
+    .trim()
+}
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -174,9 +182,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           })
         }
       } else if (msg.event === "FileWritten") {
-        // AI called the write_file tool — deliver clean content directly to the panel
         toolWritten = true
-        onOutputRef.current?.(msg.data.content)
+        onOutputRef.current?.(stripFences(msg.data.content))
         useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
       } else if (msg.event === "Done") {
         finalize(contentAccumulated, thinkingAccumulated)
