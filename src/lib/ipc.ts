@@ -116,10 +116,13 @@ export interface Message {
   images?: string[];
 }
 
-export interface ModelInfo {
+export interface OllamaModel {
   id: string;
   name: string;
-  context_length?: number;
+  capabilities: string[];
+  family: string;
+  families: string[];
+  contextLength?: number;
 }
 
 export function getApiKey(modelId: string, apiKeys: Record<string, string>): string {
@@ -137,21 +140,10 @@ export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?
   return ollamaHost;
 }
 
-/** Detect if a model supports Ollama's native thinking API (think: true flag) */
-export function modelSupportsThinking(modelId: string): boolean {
-  const lower = modelId.toLowerCase();
-  return lower.includes("qwen3") || lower.includes("qwq") ||
-    lower.includes("deepseek-r1") || lower.includes("r1-distill") ||
-    lower.includes("marco-o1") || lower.includes("-think");
-}
-
-/** Estimate context window size for a model */
-export function getContextWindow(modelId: string): number {
-  if (modelId.includes("32b") || modelId.includes("14b")) return 32768;
-  if (modelId.includes("72b") || modelId.includes("70b")) return 32768;
-  if (modelId.includes("gpt-4") || modelId.includes("claude")) return 128000;
-  if (modelId.includes("gpt-3.5")) return 16384;
-  return 8192;
+export function isOllamaModel(modelId: string): boolean {
+  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return false;
+  if (modelId.startsWith("claude-")) return false;
+  return true;
 }
 
 export type CompletionEvent =
@@ -181,7 +173,8 @@ export async function generateCompletionStream(
   return invoke("generate_completion_stream", { model, messages, host, apiKey, onEvent, think: think ?? null });
 }
 
-export async function listOllamaModels(host: string, apiKey = ""): Promise<ModelInfo[]> {
+/** List all local Ollama models, including capabilities & context_length from /api/show */
+export async function listOllamaModels(host: string, apiKey = ""): Promise<OllamaModel[]> {
   return invoke("list_ollama_models", { host, apiKey });
 }
 

@@ -22,7 +22,7 @@ import { Settings, Plus, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide
 import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/hooks/useToast";
-import { listOllamaModels, type ModelInfo, readFile, writeFile, bunInstall } from "@/lib/ipc";
+import { listOllamaModels, type OllamaModel, readFile, writeFile, bunInstall } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
 import { OPENAI_MODELS, ANTHROPIC_MODELS } from "@/lib/models";
 import { ICON_LIBRARY_PACKAGES, type IconLibrary } from "@/lib/prompts";
@@ -34,8 +34,8 @@ export function SettingsModal() {
   const [newPresetValue, setNewPresetValue] = useState("");
   const [newPromptName, setNewPromptName] = useState("");
   const [newPromptValue, setNewPromptValue] = useState("");
-  const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
-  const [cloudModels, setCloudModels] = useState<ModelInfo[]>([]);
+  const [localModels, setLocalModels] = useState<OllamaModel[]>([]);
+  const [cloudModels, setCloudModels] = useState<OllamaModel[]>([]);
   const [localStatus, setLocalStatus] = useState<"online" | "offline" | "loading">("loading");
   const [cloudStatus, setCloudStatus] = useState<"online" | "offline" | "loading">("loading");
 

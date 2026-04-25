@@ -2,7 +2,7 @@ import {
   useRef, useState,
   type KeyboardEvent, type DragEvent, type ClipboardEvent, type ChangeEvent,
 } from "react"
-import { Send, ImageIcon } from "lucide-react"
+import { Send, ImageIcon, Brain } from "lucide-react"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
 import { AttachmentChip } from "./AttachmentChip"
@@ -22,12 +22,16 @@ interface ChatInputProps {
   onRemoveMention: (id: string) => void
   projectPath: string
   placeholder?: string
+  thinkEnabled?: boolean
+  onToggleThink?: () => void
+  canThink?: boolean
 }
 
 export function ChatInput({
   value, onChange, onSend, disabled,
   attachments, onAddAttachment, onRemoveAttachment,
   mentions, onAddMention, onRemoveMention,
+  thinkEnabled, onToggleThink, canThink,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
@@ -165,6 +169,23 @@ export function ChatInput({
             style={{ maxHeight: "120px", overflowY: "auto" }}
           />
           <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={canThink ? onToggleThink : undefined}
+              className={`p-1 rounded transition-colors ${
+                canThink
+                  ? thinkEnabled
+                    ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
+                    : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground/30 cursor-not-allowed"
+              }`}
+              title={canThink
+                ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
+                : "Model does not support thinking"
+              }
+              type="button"
+            >
+              <Brain size={14} />
+            </button>
             <input
               ref={fileInputRef}
               type="file"

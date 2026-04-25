@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
+import { Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -42,6 +42,7 @@ export function ThemesPanel() {
     messages, isStreaming, input, setInput, sendMessage,
     attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
+    thinkEnabled, toggleThink, canThink,
   } = useChat({
     entityId: selectedThemeDir ? `theme-${selectedThemeDir}` : "theme-none",
     chatPath,
@@ -118,50 +119,62 @@ export function ThemesPanel() {
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
           <div className="h-full flex flex-col bg-card">
-            <div className="border-b border-border shrink-0">
-              <div className="h-10 flex items-center px-3 gap-2">
-                <span className="text-sm font-medium">{selectedThemeDir}</span>
-                <div className="flex-1" />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
-                  disabled={!css}
-                  title="Save as…"
-                >
-                  <Save size={14} />
-                </Button>
-              </div>
-              <div className="flex items-center gap-1 px-3 pb-2">
-                <span className="text-[10px] text-muted-foreground mr-1">Framework</span>
-                {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFramework(f)}
-                    className={[
-                      "px-2.5 py-0.5 rounded text-[11px] border transition-colors capitalize",
-                      framework === f
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
-                    ].join(" ")}
-                  >
-                    {f}
-                  </button>
-                ))}
-                <div className="w-px h-4 bg-border mx-1" />
+            <div className="h-9 border-b border-border flex items-center gap-1 px-2 shrink-0">
+              {/* Framework pills */}
+              {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
                 <button
-                  onClick={() => setDarkLightSupport(!darkLightSupport)}
+                  key={f}
+                  onClick={() => setFramework(f)}
                   className={[
-                    "px-2.5 py-0.5 rounded text-[11px] border transition-colors",
-                    darkLightSupport
+                    "px-1.5 py-0.5 rounded text-[10px] border transition-colors",
+                    framework === f
                       ? "bg-primary text-primary-foreground border-primary"
                       : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
                   ].join(" ")}
                 >
-                  <span className="flex items-center gap-1"><Sun size={10} /><Moon size={10} /> Dark+Light</span>
+                  {f === "bootstrap" ? "BS" : f === "generic" ? "Gen" : f === "shadcn" ? "shadcn" : "Daisy"}
                 </button>
-              </div>
+              ))}
+              <div className="w-px h-3.5 bg-border mx-0.5" />
+              {/* Dark + Light toggle */}
+              <button
+                onClick={() => setDarkLightSupport(!darkLightSupport)}
+                className={[
+                  "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors",
+                  darkLightSupport
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+                title="Generate dark + light mode variants"
+              >
+                <Sun size={9} /><Moon size={9} />
+              </button>
+              <div className="flex-1" />
+              {/* Thinking toggle — always visible, disabled when model doesn't support thinking */}
+              <button
+                onClick={canThink ? toggleThink : undefined}
+                className={`p-1 rounded border transition-colors ${
+                  canThink
+                    ? thinkEnabled
+                      ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                    : "border-border text-muted-foreground/30 cursor-not-allowed"
+                }`}
+                title={canThink ? (thinkEnabled ? "Thinking on" : "Thinking off") : "Model does not support thinking"}
+              >
+                <Brain size={12} />
+                </button>
+              {/* Save */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
+                disabled={!css}
+                title="Save as…"
+              >
+                <Save size={12} />
+              </Button>
             </div>
             <div className="flex-1 overflow-auto p-3 flex flex-col gap-2" style={{ minHeight: 0 }}>
               <MessageList messages={messages} isStreaming={isStreaming} />
@@ -178,6 +191,9 @@ export function ThemesPanel() {
                 onRemoveMention={removeMention}
                 projectPath={`projects/${settings.project}`}
                 placeholder="Describe the theme you want…"
+                thinkEnabled={thinkEnabled}
+                onToggleThink={toggleThink}
+                canThink={canThink}
               />
             </div>
           </div>

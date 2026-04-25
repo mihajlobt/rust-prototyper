@@ -149,6 +149,7 @@ export function ComponentsPanel() {
   const {
     messages, isStreaming, input, setInput, sendMessage,
     clearChat, attachments, addAttachment, removeAttachment,
+    thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
   } = useChat({
     entityId: componentId ? `component-${componentId}` : "component-none",
@@ -244,6 +245,9 @@ export function ComponentsPanel() {
         onAddMention={addMention}
         onRemoveMention={removeMention}
         projectPath={`projects/${settings.project}`}
+        thinkEnabled={thinkEnabled}
+        onToggleThink={toggleThink}
+        canThink={canThink}
       />
     </div>
   );

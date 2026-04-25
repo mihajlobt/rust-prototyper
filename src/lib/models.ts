@@ -11,13 +11,13 @@ export const OPENAI_MODELS: StaticModel[] = [
 ];
 
 export const ANTHROPIC_MODELS: StaticModel[] = [
-  { id: "claude-opus-4-7",          name: "Claude Opus 4.7" },
-  { id: "claude-sonnet-4-6",        name: "Claude Sonnet 4.6" },
+  { id: "claude-opus-4-7",           name: "Claude Opus 4.7" },
+  { id: "claude-sonnet-4-6",         name: "Claude Sonnet 4.6" },
   { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
 ];
 
 export function getProviderIcon(modelId: string): "server" | "cloud" | "openai" | "anthropic" | "unknown" {
   if (modelId.startsWith("gpt-") || modelId.startsWith("o1") || modelId.startsWith("o3")) return "openai";
   if (modelId.startsWith("claude-")) return "anthropic";
-  return "unknown"; // resolved at runtime based on cloud model list
+  return "unknown";
 }

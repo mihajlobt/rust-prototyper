@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State, RunEvent, WindowEvent, ipc::Chan
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use futures_util::StreamExt;
+use futures_util::future::join_all;
 
 struct AppState {
     active_processes: Mutex<HashMap<u32, CommandChild>>,
@@ -396,9 +397,20 @@ struct Message {
 }
 
 #[derive(serde::Serialize)]
-struct ModelInfo {
+struct OllamaModel {
     id: String,
     name: String,
+    capabilities: Vec<String>,
+    family: String,
+    families: Vec<String>,
+    context_length: Option<u64>,
+}
+
+#[derive(serde::Serialize)]
+struct OllamaModelDetails {
+    capabilities: Vec<String>,
+    family: String,
+    families: Vec<String>,
     context_length: Option<u64>,
 }
 
@@ -736,10 +748,107 @@ async fn generate_completion_stream(
     Ok(())
 }
 
+/// Parse /api/show response (non-verbose) into OllamaModelDetails.
+/// Extracts capabilities, family, families, and context_length from model_info.
+fn parse_show_response(json: &serde_json::Value) -> OllamaModelDetails {
+    let capabilities = json["capabilities"].as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let details = &json["details"];
+    let family = details["family"].as_str().unwrap_or("").to_string();
+    let families = details["families"].as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    // Extract context_length from model_info — try primary family, then others, then scan
+    let context_length = {
+        let mi = json.get("model_info");
+        let mut found: Option<u64> = None;
+
+        if !family.is_empty() {
+            let key = format!("{}.context_length", family);
+            found = mi.and_then(|m| m.get(&key)).and_then(|v| v.as_u64());
+        }
+
+        if found.is_none() {
+            for f in &families {
+                if f == &family { continue; }
+                let key = format!("{}.context_length", f);
+                found = mi.and_then(|m| m.get(&key)).and_then(|v| v.as_u64());
+                if found.is_some() { break; }
+            }
+        }
+
+        if found.is_none() {
+            if let Some(mi_obj) = mi.and_then(|v| v.as_object()) {
+                for (key, val) in mi_obj {
+                    if key.ends_with(".context_length") {
+                        if let Some(n) = val.as_u64() {
+                            found = Some(n);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        found
+    };
+
+    OllamaModelDetails { capabilities, family, families, context_length }
+}
+
+/// Fetch /api/show for a single model and return parsed details.
+/// Per docs/api/ollama-openapi.yaml: verbose is optional; even without it,
+/// the response includes capabilities, details.family, and model_info (with context_length).
+/// Fetch /api/show for a single model and return parsed details.
+/// Per docs/api/ollama-openapi.yaml: the default (non-verbose) response includes
+/// capabilities, details.family, details.families, and model_info (with context_length).
+async fn fetch_model_details(
+    client: &reqwest::Client,
+    host: &str,
+    api_key: &str,
+    model_name: &str,
+) -> Result<OllamaModelDetails, AppError> {
+    let url = format!("{}/api/show", host);
+    let body = serde_json::json!({ "model": model_name });
+
+    let mut req = client.post(&url).json(&body);
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
+    let res = req.send().await.map_err(|e| {
+        AppError::Http(format!("/api/show request failed for {}: {}", model_name, e))
+    })?;
+    let status = res.status();
+
+    if !status.is_success() {
+        let status_code = status.as_u16();
+        let err_body = res.text().await.unwrap_or_default();
+        return Err(AppError::Http(format!("Ollama /api/show returned HTTP {} for model {}: {}", status_code, model_name, &err_body[..err_body.len().min(200)])));
+    }
+
+    // Use .text() + serde_json::from_str() instead of .json() for better error diagnostics.
+    // .json() uses serde_json::from_reader which gives generic "error decoding response body".
+    let resp_body = res.text().await.map_err(|e| {
+        AppError::Http(format!("/api/show body read failed for {}: {}", model_name, e))
+    })?;
+    let json: serde_json::Value = serde_json::from_str(&resp_body).map_err(|e| {
+        AppError::Http(format!("/api/show JSON parse failed for {}: {}", model_name, e))
+    })?;
+    Ok(parse_show_response(&json))
+}
+
 #[tauri::command]
-async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Result<Vec<ModelInfo>, AppError> {
+async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Result<Vec<OllamaModel>, AppError> {
     let state = app.state::<AppState>();
     let client = &state.http_client;
+
+    // Strip trailing slash to avoid double-slash URLs (e.g. http://host//api/show → 301 → POST becomes GET → 405)
+    let host = host.trim_end_matches('/');
+
+    // 1. Fetch model list from /api/tags
     let url = format!("{}/api/tags", host);
     let mut req = client.get(&url);
     if !api_key.is_empty() {
@@ -747,15 +856,55 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
     }
     let res = req.send().await.map_err(|e| AppError::Http(e.to_string()))?;
     let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
-    let models = json["models"].as_array()
+
+    let model_names: Vec<String> = json["models"].as_array()
         .map(|arr| arr.iter()
-            .filter_map(|m| Some(ModelInfo {
-                id: m["name"].as_str()?.to_string(),
-                name: m["name"].as_str()?.to_string(),
-                context_length: m["context_length"].as_u64(),
-            }))
+            .filter_map(|m| m["name"].as_str().map(String::from))
             .collect())
         .unwrap_or_default();
+
+    if model_names.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // 2. Fetch /api/show for each model concurrently
+    let client_clone = client.clone();
+    let host_owned = host.to_string(); // own the trimmed &str for async move
+    let detail_futures: Vec<_> = model_names.iter().map(|name| {
+        let name = name.clone();
+        let host = host_owned.clone();
+        let api_key = api_key.clone();
+        let client = client_clone.clone();
+        async move {
+            let detail = fetch_model_details(&client, &host, &api_key, &name).await;
+            (name, detail)
+        }
+    }).collect();
+
+    let results = join_all(detail_futures).await;
+
+    // 3. Merge list + details into OllamaModel structs
+    let models: Vec<OllamaModel> = results.into_iter().map(|(name, detail_result)| {
+        match detail_result {
+            Ok(details) => OllamaModel {
+                id: name.clone(),
+                name,
+                capabilities: details.capabilities,
+                family: details.family,
+                families: details.families,
+                context_length: details.context_length,
+            },
+            Err(_) => OllamaModel {
+                    id: name.clone(),
+                    name,
+                    capabilities: vec![],
+                    family: String::new(),
+                    families: vec![],
+                    context_length: None,
+                },
+        }
+    }).collect();
+
     Ok(models)
 }
 

@@ -64,6 +64,7 @@ export function ScreensPanel() {
   const {
     messages, isStreaming, input, setInput, sendMessage,
     clearChat, attachments, addAttachment, removeAttachment,
+    thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
   } = useChat({
     entityId: screenId ? `screen-${screenId}` : "screen-none",
@@ -223,6 +224,9 @@ export function ScreensPanel() {
           onRemoveMention={removeMention}
           projectPath={`projects/${settings.project}`}
           placeholder="Describe your screen..."
+          thinkEnabled={thinkEnabled}
+          onToggleThink={toggleThink}
+          canThink={canThink}
         />
         <div className="flex items-center gap-1.5">
           <input

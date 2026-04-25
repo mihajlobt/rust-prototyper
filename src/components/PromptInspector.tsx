@@ -1,12 +1,13 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { encodingForModel } from "js-tiktoken";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Copy, Eye } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-import { getContextWindow, listOllamaModels } from "@/lib/ipc";
+import { isOllamaModel } from "@/lib/ipc";
 import type { Message } from "@/lib/ipc";
+import { useModelCapabilities } from "@/hooks/useModelCapabilities";
 
 interface PromptInspectorProps {
   model: string;
@@ -28,66 +29,15 @@ function countTokens(text: string, model: string): number {
   }
 }
 
-interface ModelPricing {
-  inputPer1k: number;
-  outputPer1k: number;
-}
-
-const modelPricing: Record<string, ModelPricing> = {
-  "gpt-4": { inputPer1k: 0.03, outputPer1k: 0.06 },
-  "gpt-3.5": { inputPer1k: 0.001, outputPer1k: 0.002 },
-  "claude": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "ollama": { inputPer1k: 0, outputPer1k: 0 },
-};
-
-function getModelPricing(model: string): ModelPricing {
-  if (model.startsWith("gpt-4")) return modelPricing["gpt-4"];
-  if (model.startsWith("gpt-3.5")) return modelPricing["gpt-3.5"];
-  if (model.startsWith("claude-")) return modelPricing["claude"];
-  return modelPricing["ollama"];
-}
-
 export function PromptInspector({ model, messages, host }: PromptInspectorProps) {
-  const [copiedTab, setCopiedTab] = useState<string | null>(null);
-  const [fetchedContextWindow, setFetchedContextWindow] = useState<number | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await listOllamaModels(host);
-        const found = list.find((m) => m.id === model || m.name === model);
-        if (!cancelled && found && found.context_length && found.context_length > 0) {
-          setFetchedContextWindow(found.context_length);
-        } else {
-          setFetchedContextWindow(null);
-        }
-      } catch {
-        if (!cancelled) setFetchedContextWindow(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [model, host]);
+  const caps = useModelCapabilities(model);
+  const contextWindow = caps.contextLength ?? 8192;
 
   const assembled = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
   const tokenCount = useMemo(() => countTokens(assembled, model), [assembled, model]);
-  const heuristicContextWindow = getContextWindow(model);
-  const contextWindow = fetchedContextWindow ?? heuristicContextWindow;
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
-  const pricing = getModelPricing(model);
-  const estimatedCost = (tokenCount / 1000) * pricing.inputPer1k;
 
-  const payload = JSON.stringify(
-    {
-      model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: false,
-    },
-    null,
-    2
-  );
-
-  const isOllama = !model.startsWith("gpt-") && !model.startsWith("o1-") && !model.startsWith("o3-") && !model.startsWith("claude-");
+  const isOllama = isOllamaModel(model);
 
   const curl = isOllama
     ? `curl -X POST ${host}/api/chat \\
@@ -114,6 +64,18 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
       model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     })}'`;
+
+  const payload = JSON.stringify(
+    {
+      model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      stream: false,
+    },
+    null,
+    2
+  );
+
+  const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
   const handleCopy = async (text: string, tab: string) => {
     await writeText(text);
@@ -143,11 +105,6 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
           <span className="text-xs text-muted-foreground">
             ~{tokenCount} / {contextWindow.toLocaleString()} tokens ({usagePercent}%)
           </span>
-          {pricing.inputPer1k > 0 && (
-            <span className="text-xs text-muted-foreground">
-              ~${estimatedCost < 0.001 ? estimatedCost.toFixed(4) : estimatedCost.toFixed(3)}
-            </span>
-          )}
         </div>
       </div>
       <Tabs defaultValue="assembled" className="flex-1 flex flex-col overflow-hidden">

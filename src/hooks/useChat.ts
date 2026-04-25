@@ -8,11 +8,11 @@ import {
   writeFile,
   getApiKey,
   getModelHost,
-  modelSupportsThinking,
   type CompletionEvent,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
+import { useModelCapabilities } from "@/hooks/useModelCapabilities"
 
 // Stable reference used as fallback when entity has no chat state yet.
 // Must be module-level so the reference is constant across renders —
@@ -30,13 +30,25 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
   const settings = useAppStore((s) => s.settings)
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
-  // Keep onOutput in a ref so sendMessage doesn't need it as a dep (avoids recreation on every render)
   const onOutputRef = useRef(onOutput) as MutableRefObject<typeof onOutput>
   useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [mentions, setMentions] = useState<MentionAsset[]>([])
+
+  const caps = useModelCapabilities(settings.modelId)
+
+  const [thinkEnabled, setThinkEnabled] = useState(false)
+  const prevCanThinkRef = useRef(false)
+  useEffect(() => {
+    if (caps.thinking && !prevCanThinkRef.current) {
+      setThinkEnabled(true)
+    } else if (!caps.thinking) {
+      setThinkEnabled(false)
+    }
+    prevCanThinkRef.current = caps.thinking
+  }, [caps.thinking])
 
   // Track which entityIds we've already loaded from disk
   const loadedRef = useRef<Set<string>>(new Set())
@@ -108,7 +120,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     const { modelId, host, ollamaCloudModels, apiKeys } = settings
     const resolvedHost = getModelHost(modelId, host, ollamaCloudModels, apiKeys["ollama"])
     const resolvedKey = getApiKey(modelId, apiKeys)
-    const useThinking = modelSupportsThinking(modelId)
+    const useThinking = thinkEnabled && caps.thinking
 
     const channel = new Channel<CompletionEvent>()
     let accumulated = ""
@@ -194,5 +206,9 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     mentions,
     addMention,
     removeMention,
+    thinkEnabled,
+    toggleThink: () => setThinkEnabled((v) => !v),
+    canThink: caps.thinking,
+    capsLoading: caps.loading,
   }
 }
