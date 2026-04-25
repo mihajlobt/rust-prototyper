@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
-import { Server, Cloud, Zap, Bot, ChevronDown, Check, RefreshCw } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Server, Cloud, Zap, Bot, ChevronDown, Check } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
