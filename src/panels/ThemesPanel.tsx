@@ -45,6 +45,18 @@ export function ThemesPanel() {
     ? `projects/${settings.project}/themes/${selectedThemeDir}/theme.css`
     : undefined;
 
+  const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
+    try {
+      const themeDir = dirOverride || selectedThemeDir || "main";
+      const base = `projects/${settings.project}/themes/${themeDir}`;
+      await createDir(base);
+      await writeFile(`${base}/theme.css`, content);
+      await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
+    } catch (e) {
+      notify.error("Failed to save theme", e instanceof Error ? e.message : String(e));
+    }
+  }, [settings.project, selectedThemeDir]);
+
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, attachments, addAttachment, removeAttachment,
@@ -62,6 +74,8 @@ export function ThemesPanel() {
     outputPath: themeOutputPath,
     onOutput: (content) => {
       setCss(content);
+      persistTheme(content, "").catch(() => {});
+      useUIStore.setState({ themesCodeOpen: true });
     },
   });
 
@@ -75,18 +89,6 @@ export function ThemesPanel() {
   useEffect(() => {
     if (loadedCss !== undefined) setCss(loadedCss);
   }, [loadedCss]);
-
-  const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
-    try {
-      const themeDir = dirOverride || selectedThemeDir || "main";
-      const base = `projects/${settings.project}/themes/${themeDir}`;
-      await createDir(base);
-      await writeFile(`${base}/theme.css`, content);
-      await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
-    } catch (e) {
-      notify.error("Failed to save theme", e instanceof Error ? e.message : String(e));
-    }
-  }, [settings.project, selectedThemeDir]);
 
   const handleSaveConfirm = async () => {
     if (!saveDialogName.trim()) return;

@@ -153,6 +153,7 @@ export function ComponentsPanel() {
 
   const applyCode = useCallback(async (extracted: string) => {
     setCode(extracted);
+    useUIStore.setState({ componentsCodeOpen: true });
     try {
       const genDir = `projects/${settings.project}/generated`;
       await createDir(`${genDir}/src/components`);
@@ -161,7 +162,6 @@ export function ComponentsPanel() {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;
         await createDir(compDir);
         await writeFile(`${compDir}/component.tsx`, extracted);
-        // Invalidate cache so useComponentCode reloads on next mount
         queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
       }
     } catch (e) {
