@@ -33,7 +33,7 @@ const DIR_LABELS: Record<string, string> = {
 
 export function SidebarRail() {
   const { settings, setSettings } = useAppStore();
-  const { activeView, activeComponent, activeScreen, activeTheme, activeWorkflow, openComponent, openScreen, openTheme, openWorkflow, setView } = useProjectStore();
+  const { activeView, activeComponent, activeScreen, activeTheme, activeWorkflow, activeApi, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectStore();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -249,6 +249,7 @@ export function SidebarRail() {
                 section === "components" ? activeComponent :
                 section === "themes" ? activeTheme :
                 section === "workflows" ? activeWorkflow :
+                section === "apis" ? activeApi :
                 null;
               const isActive = activeView === section && (activeItemForSection === entry.name || activeItemForSection === entry.name.replace(/\.json$/, ""));
               const navigate = () => {
@@ -256,7 +257,7 @@ export function SidebarRail() {
                 else if (section === "components") openComponent(entry.name);
                 else if (section === "themes") openTheme(entry.name);
                 else if (section === "workflows") openWorkflow(entry.name);
-                else if (section === "apis") setView("apis");
+                else if (section === "apis") openApi(entry.name);
               };
               return (
               <ContextMenu key={entry.path}>

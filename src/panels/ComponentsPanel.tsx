@@ -13,6 +13,7 @@ import {
 import { getModelHost, writeFile, createDir, readDir, readFile } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useComponentCode } from "@/hooks/useProjectFiles";
 import { useQueryClient } from "@tanstack/react-query";
 import { projectKeys } from "@/lib/queryKeys";
@@ -35,10 +36,10 @@ export function ComponentsPanel() {
   const { activeComponent: selectedComponent, openComponent: setSelectedComponent } = useProjectStore();
   const queryClient = useQueryClient();
   const [code, setCode] = useState("");
-  const [showInspector, setShowInspector] = useState(false);
-  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [darkPreview, setDarkPreview] = useState(settings.dark ?? false);
-  const [codeOpen, setCodeOpen] = useState(true);
+  const componentsShowInspector = useUIStore((s) => s.componentsShowInspector);
+  const componentsDevice = useUIStore((s) => s.componentsDevice);
+  const componentsDarkPreview = useUIStore((s) => s.componentsDarkPreview);
+  const componentsCodeOpen = useUIStore((s) => s.componentsCodeOpen);
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [selectedTheme, setSelectedTheme] = useState(settings.stylePreset || "");
   const [themeCss, setThemeCss] = useState("");
@@ -61,13 +62,9 @@ export function ComponentsPanel() {
   }, [code, settings.iconLibrary]);
 
   const toggleCode = () => {
-    if (codeOpen) {
-      codeRef.current?.resize([9999, CODE_HEADER]);
-      setCodeOpen(false);
-    } else {
-      codeRef.current?.resize([9999, CODE_PANE_SIZE]);
-      setCodeOpen(true);
-    }
+    const next = !componentsCodeOpen;
+    useUIStore.setState({ componentsCodeOpen: next });
+    codeRef.current?.resize([9999, next ? CODE_PANE_SIZE : CODE_HEADER]);
   };
 
   const saveCode = useCallback(async (value: string) => {
@@ -195,13 +192,13 @@ export function ComponentsPanel() {
           </span>
         )}
         <div className="flex-1" />
-        {hideInspector ? (
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(false)}>
+{hideInspector ? (
+          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ componentsShowInspector: false })}>
             <Eye size={12} />
             Hide Inspector
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(true)}>
+          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ componentsShowInspector: true })}>
             <Eye size={12} />
             Inspector
           </Button>
@@ -258,7 +255,7 @@ export function ComponentsPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          {showInspector ? (
+          {componentsShowInspector ? (
             <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
               <Allotment.Pane minSize={200}>
                 {chatPane(true)}
@@ -288,33 +285,33 @@ export function ComponentsPanel() {
                   <div className="flex-1" />
 
                   <Button
-                    variant={darkPreview ? "secondary" : "ghost"}
+                    variant={componentsDarkPreview ? "secondary" : "ghost"}
                     size="icon" className="h-7 w-7"
-                    onClick={() => setDarkPreview((d) => !d)}
-                    title={darkPreview ? "Light preview" : "Dark preview"}
+                    onClick={() => useUIStore.setState({ componentsDarkPreview: !componentsDarkPreview })}
+                    title={componentsDarkPreview ? "Light preview" : "Dark preview"}
                   >
-                    {darkPreview ? <Moon size={12} /> : <Sun size={12} />}
+                    {componentsDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
                   </Button>
                   <div className="w-px h-4 bg-border" />
                   <div className="flex items-center gap-1">
                     <Button
-                      variant={device === "mobile" ? "secondary" : "ghost"}
+                      variant={componentsDevice === "mobile" ? "secondary" : "ghost"}
                       size="icon" className="h-7 w-7"
-                      onClick={() => setDevice("mobile")}
+                      onClick={() => useUIStore.setState({ componentsDevice: "mobile" })}
                     >
                       <Smartphone size={12} />
                     </Button>
                     <Button
-                      variant={device === "tablet" ? "secondary" : "ghost"}
+                      variant={componentsDevice === "tablet" ? "secondary" : "ghost"}
                       size="icon" className="h-7 w-7"
-                      onClick={() => setDevice("tablet")}
+                      onClick={() => useUIStore.setState({ componentsDevice: "tablet" })}
                     >
                       <Tablet size={12} />
                     </Button>
                     <Button
-                      variant={device === "desktop" ? "secondary" : "ghost"}
+                      variant={componentsDevice === "desktop" ? "secondary" : "ghost"}
                       size="icon" className="h-7 w-7"
-                      onClick={() => setDevice("desktop")}
+                      onClick={() => useUIStore.setState({ componentsDevice: "desktop" })}
                     >
                       <Monitor size={12} />
                     </Button>
@@ -324,13 +321,13 @@ export function ComponentsPanel() {
                   {code ? (
                     <div
                       className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                      style={{ width: deviceWidth[device] }}
+                      style={{ width: deviceWidth[componentsDevice] }}
                     >
                       <Frame
                         head={<style>{parentCss + themeCss + iconFontCss}</style>}
                         className="w-full h-full border-0"
                       >
-                        <div className={darkPreview ? "dark" : ""} style={{ minHeight: "100%" }}>
+                        <div className={componentsDarkPreview ? "dark" : ""} style={{ minHeight: "100%" }}>
                           {Preview ? <Preview /> : null}
                         </div>
                       </Frame>
@@ -374,7 +371,7 @@ export function ComponentsPanel() {
                       </Button>
                     } />
                   </div>
-                  {codeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                  {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />

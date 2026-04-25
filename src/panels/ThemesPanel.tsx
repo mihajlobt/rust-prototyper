@@ -15,6 +15,7 @@ import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -28,12 +29,12 @@ export function ThemesPanel() {
   const { settings } = useAppStore();
   const { activeTheme: selectedThemeDir, openTheme: setSelectedThemeDir } = useProjectStore();
   const [css, setCss] = useState("");
-  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [framework, setFramework] = useState<"shadcn" | "daisy" | "bootstrap" | "generic">("generic");
-  const [darkLightSupport, setDarkLightSupport] = useState(true);
-  const [darkPreview, setDarkPreview] = useState(false);
-  const [codeOpen, setCodeOpen] = useState(true);
-  const [showInspector, setShowInspector] = useState(false);
+  const themesDevice = useUIStore((s) => s.themesDevice);
+  const themesFramework = useUIStore((s) => s.themesFramework);
+  const themesDarkLightSupport = useUIStore((s) => s.themesDarkLightSupport);
+  const themesDarkPreview = useUIStore((s) => s.themesDarkPreview);
+  const themesCodeOpen = useUIStore((s) => s.themesCodeOpen);
+  const themesShowInspector = useUIStore((s) => s.themesShowInspector);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
   const chatPath = selectedThemeDir
@@ -49,8 +50,8 @@ export function ThemesPanel() {
     entityId: selectedThemeDir ? `theme-${selectedThemeDir}` : "theme-none",
     chatPath,
     systemPrompt: settings.prompts["themes-system"] || (
-      getThemeSystemPrompt(framework) +
-      (darkLightSupport
+      getThemeSystemPrompt(themesFramework) +
+      (themesDarkLightSupport
         ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block."
         : "")
     ),
@@ -71,12 +72,12 @@ export function ThemesPanel() {
   const CODE_HEADER = 28;
 
   const toggleCode = () => {
-    if (codeOpen) {
+    if (themesCodeOpen) {
       codeRef.current?.resize([9999, CODE_HEADER]);
-      setCodeOpen(false);
+      useUIStore.setState({ themesCodeOpen: false });
     } else {
       codeRef.current?.resize([9999, CODE_PANE_SIZE]);
-      setCodeOpen(true);
+      useUIStore.setState({ themesCodeOpen: true });
     }
   };
 
@@ -147,10 +148,10 @@ export function ThemesPanel() {
       {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
         <button
           key={f}
-          onClick={() => setFramework(f)}
+          onClick={() => useUIStore.setState({ themesFramework: f })}
           className={[
             "px-1.5 py-0.5 rounded text-[10px] border transition-colors",
-            framework === f
+            themesFramework === f
               ? "bg-primary text-primary-foreground border-primary"
               : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
           ].join(" ")}
@@ -160,10 +161,10 @@ export function ThemesPanel() {
       ))}
       <div className="w-px h-3.5 bg-border mx-0.5" />
       <button
-        onClick={() => setDarkLightSupport(!darkLightSupport)}
+        onClick={() => useUIStore.setState({ themesDarkLightSupport: !themesDarkLightSupport })}
         className={[
           "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors",
-          darkLightSupport
+          themesDarkLightSupport
             ? "bg-primary text-primary-foreground border-primary"
             : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
         ].join(" ")}
@@ -178,14 +179,14 @@ export function ThemesPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          {showInspector ? (
+          {themesShowInspector ? (
             <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
               <Allotment.Pane minSize={200}>
                 <div className="h-full flex flex-col bg-card">
                   <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                     {frameworkPills}
                     <div className="flex-1" />
-                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(false)}>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ themesShowInspector: false })}>
                       <Eye size={12} />
                       Hide Inspector
                     </Button>
@@ -206,7 +207,7 @@ export function ThemesPanel() {
               <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                 {frameworkPills}
                 <div className="flex-1" />
-                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(true)}>
+                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ themesShowInspector: true })}>
                   <Eye size={12} />
                   Inspector
                 </Button>
@@ -235,46 +236,46 @@ export function ThemesPanel() {
                   <div className="flex-1" />
                   <div className="flex items-center gap-1">
                     <Button
-                      variant={device === "mobile" ? "secondary" : "ghost"}
+                      variant={themesDevice === "mobile" ? "secondary" : "ghost"}
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => setDevice("mobile")}
+                      onClick={() => useUIStore.setState({ themesDevice: "mobile" })}
                     >
                       <Smartphone size={12} />
                     </Button>
                     <Button
-                      variant={device === "tablet" ? "secondary" : "ghost"}
+                      variant={themesDevice === "tablet" ? "secondary" : "ghost"}
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => setDevice("tablet")}
+                      onClick={() => useUIStore.setState({ themesDevice: "tablet" })}
                     >
                       <Tablet size={12} />
                     </Button>
                     <Button
-                      variant={device === "desktop" ? "secondary" : "ghost"}
+                      variant={themesDevice === "desktop" ? "secondary" : "ghost"}
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => setDevice("desktop")}
+                      onClick={() => useUIStore.setState({ themesDevice: "desktop" })}
                     >
                       <Monitor size={12} />
                     </Button>
                   </div>
                   <div className="w-px h-4 bg-border mx-1" />
                   <Button
-                    variant={darkPreview ? "secondary" : "ghost"}
+                    variant={themesDarkPreview ? "secondary" : "ghost"}
                     size="icon"
                     className="h-7 w-7"
-                    onClick={() => setDarkPreview(!darkPreview)}
-                    title={darkPreview ? "Light preview" : "Dark preview"}
+                    onClick={() => useUIStore.setState({ themesDarkPreview: !themesDarkPreview })}
+                    title={themesDarkPreview ? "Light preview" : "Dark preview"}
                   >
-                    {darkPreview ? <Moon size={12} /> : <Sun size={12} />}
+                    {themesDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
                   </Button>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
                   {css ? (
                     <div
                       className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                      style={{ width: deviceWidth[device] }}
+                      style={{ width: deviceWidth[themesDevice] }}
                     >
                       <Frame
                         key={selectedThemeDir}
@@ -290,7 +291,7 @@ body { margin: 0; font-family: sans-serif; }
                         }
                       >
                         <div
-                          className={darkPreview ? "dark" : ""}
+                          className={themesDarkPreview ? "dark" : ""}
                           style={{
                             minHeight: "100%",
                             padding: 16,
@@ -375,9 +376,9 @@ body { margin: 0; font-family: sans-serif; }
                   <FileCode size={12} className="mr-1.5" />
                   <span className="text-xs font-medium">CSS Output</span>
                   <div className="flex-1" />
-                  {codeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </div>
-                {codeOpen && (
+                {themesCodeOpen && (
                   <div className="flex-1 overflow-hidden">
                     <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
                   </div>

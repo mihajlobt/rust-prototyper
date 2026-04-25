@@ -16,6 +16,7 @@ import { httpRequest, readFile, writeFile, createDir, type HttpResponse } from "
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { useAppStore } from "@/stores/appStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { notify } from "@/hooks/useToast";
 import YAML from "js-yaml";
 
@@ -119,9 +120,10 @@ function parseCurl(input: string): Partial<SavedApi> | null {
 
 export function APIsPanel() {
   const { settings } = useAppStore();
+  const { activeApi: selectedApiId, openApi } = useProjectStore();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("apis", 2);
   const [apis, setApis] = useState<SavedApi[]>([]);
-  const [selectedApiId, setSelectedApiId] = useState<string | null>(null);
+
   const [name, setName] = useState("");
   const [method, setMethod] = useState("GET");
   const [url, setUrl] = useState("");
@@ -169,7 +171,7 @@ export function APIsPanel() {
   }, [envVars, settings.project]);
 
   const selectApi = useCallback((api: SavedApi) => {
-    setSelectedApiId(api.id);
+    openApi(api.id);
     setName(api.name);
     setMethod(api.method);
     setUrl(api.url);
@@ -185,7 +187,7 @@ export function APIsPanel() {
     setAuthClientSecret(api.authClientSecret || "");
     setHistory(api.history || []);
     setResponse(null);
-  }, []);
+  }, [openApi]);
 
   function resolveEnvVars(text: string): string {
     return text.replace(/\{\{(\w+)\}\}/g, (_, key) => envVars[key] ?? `{{${key}}}`);
@@ -230,7 +232,7 @@ export function APIsPanel() {
   const deleteApi = (id: string) => {
     setApis((prev) => prev.filter((a) => a.id !== id));
     if (selectedApiId === id) {
-      setSelectedApiId(null);
+      useProjectStore.setState({ activeApi: null });
       setName("");
       setMethod("GET");
       setUrl("");
