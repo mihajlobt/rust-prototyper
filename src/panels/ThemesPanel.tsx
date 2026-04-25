@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon, Brain } from "lucide-react";
+import { Eye, Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { writeFile, createDir } from "@/lib/ipc";
+import { writeFile, createDir, getModelHost } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
@@ -20,6 +20,7 @@ import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt } from "@/lib/prompts";
 import { getParentCss } from "@/lib/preview";
+import { PromptInspector } from "@/components/PromptInspector";
 import Frame from "react-frame-component";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
@@ -32,6 +33,7 @@ export function ThemesPanel() {
   const [darkLightSupport, setDarkLightSupport] = useState(true);
   const [darkPreview, setDarkPreview] = useState(false);
   const [codeOpen, setCodeOpen] = useState(true);
+  const [showInspector, setShowInspector] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
   const chatPath = selectedThemeDir
@@ -64,6 +66,7 @@ export function ThemesPanel() {
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("themes", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("themes-code", 2);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("themes-inspector", 2);
   const CODE_PANE_SIZE = 280;
   const CODE_HEADER = 28;
 
@@ -114,89 +117,113 @@ export function ThemesPanel() {
 
   const parentCss = getParentCss();
 
+  const chatPane = (
+    <div className="flex-1 overflow-hidden flex flex-col">
+      <MessageList messages={messages} isStreaming={isStreaming} />
+      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSend={sendMessage}
+          disabled={isStreaming}
+          attachments={attachments}
+          onAddAttachment={addAttachment}
+          onRemoveAttachment={removeAttachment}
+          mentions={mentions}
+          onAddMention={addMention}
+          onRemoveMention={removeMention}
+          projectPath={`projects/${settings.project}`}
+          placeholder="Describe the theme you want…"
+          thinkEnabled={thinkEnabled}
+          onToggleThink={toggleThink}
+          canThink={canThink}
+        />
+      </div>
+    </div>
+  );
+
+  const frameworkPills = (
+    <>
+      {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
+        <button
+          key={f}
+          onClick={() => setFramework(f)}
+          className={[
+            "px-1.5 py-0.5 rounded text-[10px] border transition-colors",
+            framework === f
+              ? "bg-primary text-primary-foreground border-primary"
+              : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
+          ].join(" ")}
+        >
+          {f === "bootstrap" ? "BS" : f === "generic" ? "Gen" : f === "shadcn" ? "shadcn" : "Daisy"}
+        </button>
+      ))}
+      <div className="w-px h-3.5 bg-border mx-0.5" />
+      <button
+        onClick={() => setDarkLightSupport(!darkLightSupport)}
+        className={[
+          "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors",
+          darkLightSupport
+            ? "bg-primary text-primary-foreground border-primary"
+            : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
+        ].join(" ")}
+        title="Generate dark + light mode variants"
+      >
+        <Sun size={9} /><Moon size={9} />
+      </button>
+    </>
+  );
+
   return (
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <div className="h-full flex flex-col bg-card">
-            <div className="h-9 border-b border-border flex items-center gap-1 px-2 shrink-0">
-              {/* Framework pills */}
-              {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFramework(f)}
-                  className={[
-                    "px-1.5 py-0.5 rounded text-[10px] border transition-colors",
-                    framework === f
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
-                  ].join(" ")}
+          {showInspector ? (
+            <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
+              <Allotment.Pane minSize={200}>
+                <div className="h-full flex flex-col bg-card">
+                  <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                    {frameworkPills}
+                    <div className="flex-1" />
+                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(false)}>
+                      <Eye size={12} />
+                      Hide Inspector
+                    </Button>
+                  </div>
+                  {chatPane}
+                </div>
+              </Allotment.Pane>
+              <Allotment.Pane preferredSize={240} minSize={160}>
+                <PromptInspector
+                  model={settings.modelId}
+                  messages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
+                />
+              </Allotment.Pane>
+            </Allotment>
+          ) : (
+            <div className="h-full flex flex-col bg-card">
+              <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                {frameworkPills}
+                <div className="flex-1" />
+                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(true)}>
+                  <Eye size={12} />
+                  Inspector
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
+                  disabled={!css}
+                  title="Save as…"
                 >
-                  {f === "bootstrap" ? "BS" : f === "generic" ? "Gen" : f === "shadcn" ? "shadcn" : "Daisy"}
-                </button>
-              ))}
-              <div className="w-px h-3.5 bg-border mx-0.5" />
-              {/* Dark + Light toggle */}
-              <button
-                onClick={() => setDarkLightSupport(!darkLightSupport)}
-                className={[
-                  "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors",
-                  darkLightSupport
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-                title="Generate dark + light mode variants"
-              >
-                <Sun size={9} /><Moon size={9} />
-              </button>
-              <div className="flex-1" />
-              {/* Thinking toggle — always visible, disabled when model doesn't support thinking */}
-              <button
-                onClick={canThink ? toggleThink : undefined}
-                className={`p-1 rounded border transition-colors ${
-                  canThink
-                    ? thinkEnabled
-                      ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                    : "border-border text-muted-foreground/30 cursor-not-allowed"
-                }`}
-                title={canThink ? (thinkEnabled ? "Thinking on" : "Thinking off") : "Model does not support thinking"}
-              >
-                <Brain size={12} />
-                </button>
-              {/* Save */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
-                disabled={!css}
-                title="Save as…"
-              >
-                <Save size={12} />
-              </Button>
+                  <Save size={12} />
+                </Button>
+              </div>
+              {chatPane}
             </div>
-            <div className="flex-1 overflow-auto p-3 flex flex-col gap-2" style={{ minHeight: 0 }}>
-              <MessageList messages={messages} isStreaming={isStreaming} />
-              <ChatInput
-                value={input}
-                onChange={setInput}
-                onSend={sendMessage}
-                disabled={isStreaming}
-                attachments={attachments}
-                onAddAttachment={addAttachment}
-                onRemoveAttachment={removeAttachment}
-                mentions={mentions}
-                onAddMention={addMention}
-                onRemoveMention={removeMention}
-                projectPath={`projects/${settings.project}`}
-                placeholder="Describe the theme you want…"
-                thinkEnabled={thinkEnabled}
-                onToggleThink={toggleThink}
-                canThink={canThink}
-              />
-            </div>
-          </div>
+          )}
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>

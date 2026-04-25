@@ -233,22 +233,24 @@ export function ComponentsPanel() {
         isStreaming={isStreaming}
         onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) applyCode(c); }}
       />
-      <ChatInput
-        value={input}
-        onChange={setInput}
-        onSend={sendMessage}
-        disabled={isStreaming}
-        attachments={attachments}
-        onAddAttachment={addAttachment}
-        onRemoveAttachment={removeAttachment}
-        mentions={mentions}
-        onAddMention={addMention}
-        onRemoveMention={removeMention}
-        projectPath={`projects/${settings.project}`}
-        thinkEnabled={thinkEnabled}
-        onToggleThink={toggleThink}
-        canThink={canThink}
-      />
+      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSend={sendMessage}
+          disabled={isStreaming}
+          attachments={attachments}
+          onAddAttachment={addAttachment}
+          onRemoveAttachment={removeAttachment}
+          mentions={mentions}
+          onAddMention={addMention}
+          onRemoveMention={removeMention}
+          projectPath={`projects/${settings.project}`}
+          thinkEnabled={thinkEnabled}
+          onToggleThink={toggleThink}
+          canThink={canThink}
+        />
+      </div>
     </div>
   );
 

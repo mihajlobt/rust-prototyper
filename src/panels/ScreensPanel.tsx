@@ -41,7 +41,7 @@ export function ScreensPanel() {
   const [showInspector, setShowInspector] = useState(false);
   const [linkMode, setLinkMode] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [updateExisting, setUpdateExisting] = useState(true);
+
   const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
   const [showNewScreenDialog, setShowNewScreenDialog] = useState(false);
   const [newScreenName, setNewScreenName] = useState("");
@@ -228,18 +228,7 @@ export function ScreensPanel() {
           onToggleThink={toggleThink}
           canThink={canThink}
         />
-        <div className="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            id="update-existing"
-            checked={updateExisting}
-            onChange={(e) => setUpdateExisting(e.target.checked)}
-            className="h-3 w-3 rounded"
-          />
-          <label htmlFor="update-existing" className="text-[11px] text-muted-foreground cursor-pointer select-none">
-            Update existing
-          </label>
-        </div>
+
       </div>
     </div>
   );
