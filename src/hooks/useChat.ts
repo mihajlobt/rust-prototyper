@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type MutableRefObject } from "react"
+import { useEffect, useRef, useState, useCallback, type MutableRefObject, type RefObject } from "react"
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -33,6 +33,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const onOutputRef = useRef(onOutput) as MutableRefObject<typeof onOutput>
   useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
+
+  // Shared stop flag — set to true to abort the current stream mid-flight
+  const stopRef = useRef(false) as RefObject<boolean>
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
@@ -114,6 +117,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       ...updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
         ...(m.images?.length ? { images: m.images } : {}),
       })),
     ]
@@ -127,11 +131,27 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     let contentAccumulated = ""
     let thinkingAccumulated = ""
     let toolWritten = false
-    // rAF batcher: buffer all chunks within one animation frame into a single store update
     let rafId: number | null = null
-    let rafThinkingId: number | null = null  // Separate rAF for thinking updates
+    let rafThinkingId: number | null = null
+    ;(stopRef as MutableRefObject<boolean>).current = false
+
+    const finalize = (content: string, thinking: string) => {
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+      if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+      const finalMessage: ChatMessage = {
+        role: "assistant",
+        content,
+        ...(thinking ? { thinking } : {}),
+      }
+      const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
+      useChatStore.getState().setMessages(entityId, finalMessages)
+      useChatStore.getState().setStreaming(entityId, false)
+      useChatStore.getState().setStreamingThinking(entityId, "")
+      writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
+    }
 
     channel.onmessage = (msg) => {
+      if ((stopRef as MutableRefObject<boolean>).current) return
       if (msg.event === "Chunk") {
         // Handle thinking chunk (sent separately from content)
         if (msg.data.thinking) {
@@ -159,30 +179,10 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         onOutputRef.current?.(msg.data.content)
         useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
       } else if (msg.event === "Done") {
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId)
-          rafId = null
-        }
-        const finalMessage: ChatMessage = {
-          role: "assistant",
-          content: contentAccumulated,
-          ...(thinkingAccumulated ? { thinking: thinkingAccumulated } : {}),
-        }
-        const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
-        useChatStore.getState().setMessages(entityId, finalMessages)
-        useChatStore.getState().setStreaming(entityId, false)
-        useChatStore.getState().setStreamingThinking(entityId, "")
-        writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        if (!toolWritten) {
-          onOutputRef.current?.(contentAccumulated)
-        }
+        finalize(contentAccumulated, thinkingAccumulated)
+        if (!toolWritten) onOutputRef.current?.(contentAccumulated)
       } else if (msg.event === "Error") {
-        useChatStore.getState().setMessages(entityId, [
-          ...updatedMessages.slice(0, -1),
-          { role: "assistant", content: `⚠ ${msg.data.message}` },
-        ])
-        useChatStore.getState().setStreaming(entityId, false)
-        useChatStore.getState().setStreamingThinking(entityId, "")
+        finalize(`⚠ ${msg.data.message}`, "")
         notify.error("Generation failed", msg.data.message)
       }
     }
@@ -203,6 +203,12 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     useChatStore.getState().clearChat(entityId)
     writeFile(chatPath, "[]").catch(() => {})
   }, [entityId, chatPath])
+
+  const stopGeneration = useCallback(() => {
+    ;(stopRef as MutableRefObject<boolean>).current = true
+    useChatStore.getState().setStreaming(entityId, false)
+    useChatStore.getState().setStreamingThinking(entityId, "")
+  }, [entityId])
 
   const regenerate = useCallback(async () => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -230,6 +236,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       ...updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
         ...(m.images?.length ? { images: m.images } : {}),
       })),
     ]
@@ -329,6 +336,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     input,
     setInput,
     sendMessage,
+    stopGeneration,
     regenerate,
     clearChat,
     attachments,

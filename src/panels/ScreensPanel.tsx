@@ -49,7 +49,7 @@ export function ScreensPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    regenerate, clearChat, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, clearChat, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
   } = useChat({
@@ -200,6 +200,7 @@ export function ScreensPanel() {
           thinkEnabled={thinkEnabled}
           onToggleThink={toggleThink}
           canThink={canThink}
+          onStop={stopGeneration}
         />
 
       </div>

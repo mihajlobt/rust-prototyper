@@ -403,9 +403,11 @@ async fn http_request(
 // ─── AI Generation ───
 
 #[derive(serde::Deserialize, Clone)]
+#[allow(dead_code)]
 struct Message {
     role: String,
     content: String,
+    thinking: Option<String>,
     #[serde(default)]
     images: Vec<String>,
 }
@@ -489,16 +491,18 @@ fn build_ollama_client(host: &str, api_key: &str) -> Result<Ollama, AppError> {
 
 fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
     messages.iter().map(|m| {
-        let msg = match m.role.as_str() {
+        let mut msg = match m.role.as_str() {
             "assistant" => OllamaChatMessage::assistant(m.content.clone()),
             "system" => OllamaChatMessage::system(m.content.clone()),
             _ => OllamaChatMessage::user(m.content.clone()),
         };
-        if m.images.is_empty() {
-            msg
-        } else {
-            msg.with_images(m.images.iter().map(|b| Image::from_base64(b.clone())).collect())
+        // Per Ollama API docs, thinking is part of the message schema and must be
+        // included for assistant history messages so thinking continues on subsequent turns.
+        msg.thinking = m.thinking.clone();
+        if !m.images.is_empty() {
+            msg = msg.with_images(m.images.iter().map(|b| Image::from_base64(b.clone())).collect());
         }
+        msg
     }).collect()
 }
 

@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
-import { Send, ImageIcon, Brain } from "lucide-react"
+import { Send, Square, ImageIcon, Brain } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
@@ -24,13 +24,14 @@ interface ChatInputProps {
   thinkEnabled?: boolean
   onToggleThink?: () => void
   canThink?: boolean
+  onStop?: () => void
 }
 
 export function ChatInput({
   value, onChange, onSend, disabled,
   attachments, onAddAttachment, onRemoveAttachment,
   mentions, onAddMention, onRemoveMention,
-  thinkEnabled, onToggleThink, canThink,
+  thinkEnabled, onToggleThink, canThink, onStop,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -208,14 +209,24 @@ export function ChatInput({
             </TooltipProvider>
           </div>
 
-          <button
-            type="button"
-            onClick={onSend}
-            disabled={disabled || !value.trim()}
-            className="flex items-center justify-center rounded-md bg-primary px-2.5 py-1 text-primary-foreground disabled:opacity-30 hover:opacity-90 transition-opacity"
-          >
-            <Send size={12} />
-          </button>
+          {disabled && onStop ? (
+            <button
+              type="button"
+              onClick={onStop}
+              className="flex items-center justify-center rounded-md bg-destructive/80 hover:bg-destructive px-2.5 py-1 text-white transition-colors"
+            >
+              <Square size={12} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSend}
+              disabled={disabled || !value.trim()}
+              className="flex items-center justify-center rounded-md bg-primary px-2.5 py-1 text-primary-foreground disabled:opacity-30 hover:opacity-90 transition-opacity"
+            >
+              <Send size={12} />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -47,7 +47,7 @@ export function ThemesPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    regenerate, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink,
   } = useChat({
@@ -136,6 +136,7 @@ export function ThemesPanel() {
           thinkEnabled={thinkEnabled}
           onToggleThink={toggleThink}
           canThink={canThink}
+          onStop={stopGeneration}
         />
       </div>
     </div>
