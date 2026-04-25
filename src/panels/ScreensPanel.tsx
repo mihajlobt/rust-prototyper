@@ -49,7 +49,7 @@ export function ScreensPanel() {
   }, [previewHtml, settings.iconLibrary]);
 
   const {
-    messages, isStreaming, input, setInput, sendMessage,
+    messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     clearChat, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
@@ -182,6 +182,7 @@ export function ScreensPanel() {
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
+        thinkingContent={thinkingContent}
         onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setPreviewHtml(c); }}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">

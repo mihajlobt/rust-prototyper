@@ -147,7 +147,7 @@ export function isOllamaModel(modelId: string): boolean {
 }
 
 export type CompletionEvent =
-  | { event: "Chunk"; data: { text: string } }
+  | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "Done"; data: null }
   | { event: "Error"; data: { message: string } };
 

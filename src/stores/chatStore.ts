@@ -4,6 +4,7 @@ import type { ChatMessage } from "@/types/chat"
 interface ChatState {
   messages: ChatMessage[]
   isStreaming: boolean
+  thinkingContent: string  // Accumulated thinking during streaming (separate field)
 }
 
 interface ChatStore {
@@ -13,10 +14,11 @@ interface ChatStore {
   setStreaming: (id: string, streaming: boolean) => void
   appendChunk: (id: string, chunk: string) => void
   setStreamingContent: (id: string, content: string) => void
+  setStreamingThinking: (id: string, thinking: string) => void  // NEW: track thinking separately
   clearChat: (id: string) => void
 }
 
-const EMPTY: ChatState = { messages: [], isStreaming: false }
+const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "" }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   chats: {},
@@ -56,6 +58,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
     }),
+
+  // NEW: track thinking content separately during streaming
+  setStreamingThinking: (id, thinking) =>
+    set((s) => ({
+      chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), thinkingContent: thinking } },
+    })),
 
   clearChat: (id) =>
     set((s) => ({ chats: { ...s.chats, [id]: EMPTY } })),

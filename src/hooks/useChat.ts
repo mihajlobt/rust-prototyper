@@ -103,6 +103,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
 
     useChatStore.getState().setMessages(entityId, updatedMessages)
     useChatStore.getState().setStreaming(entityId, true)
+    useChatStore.getState().setStreamingThinking(entityId, "")  // Clear previous thinking
     setInput("")
     setAttachments([])
     setMentions([])
@@ -123,18 +124,34 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     const useThinking = thinkEnabled && caps.thinking
 
     const channel = new Channel<CompletionEvent>()
-    let accumulated = ""
+    let contentAccumulated = ""
+    let thinkingAccumulated = ""
     // rAF batcher: buffer all chunks within one animation frame into a single store update
     let rafId: number | null = null
+    let rafThinkingId: number | null = null  // Separate rAF for thinking updates
 
     channel.onmessage = (msg) => {
       if (msg.event === "Chunk") {
-        accumulated += msg.data.text
-        // Update the last assistant message directly in the store — streams progressively to UI
+        // Handle thinking chunk (sent separately from content)
+        if (msg.data.thinking) {
+          thinkingAccumulated += msg.data.thinking
+          // Update thinking content immediately (separate from content, for Reasoning component)
+          if (rafThinkingId === null) {
+            rafThinkingId = requestAnimationFrame(() => {
+              rafThinkingId = null
+              useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
+            })
+          }
+        }
+        // Handle content chunk
+        if (msg.data.text) {
+          contentAccumulated += msg.data.text
+        }
+        // Combined for content display during streaming (not for Reasoning - that's separate)
         if (rafId === null) {
           rafId = requestAnimationFrame(() => {
             rafId = null
-            useChatStore.getState().setStreamingContent(entityId, accumulated)
+            useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
           })
         }
       } else if (msg.event === "Done") {
@@ -142,20 +159,26 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
           cancelAnimationFrame(rafId)
           rafId = null
         }
+        // Combine thinking and content WITH tags for persistence
+        const finalContent = thinkingAccumulated 
+          ? `<think>${thinkingAccumulated}</think>${contentAccumulated}`
+          : contentAccumulated
         const finalMessages: ChatMessage[] = [
           ...updatedMessages.slice(0, -1),
-          { role: "assistant", content: accumulated },
+          { role: "assistant", content: finalContent },
         ]
         useChatStore.getState().setMessages(entityId, finalMessages)
         useChatStore.getState().setStreaming(entityId, false)
+        useChatStore.getState().setStreamingThinking(entityId, "")
         writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        onOutputRef.current?.(accumulated)
+        onOutputRef.current?.(finalContent)
       } else if (msg.event === "Error") {
         useChatStore.getState().setMessages(entityId, [
           ...updatedMessages.slice(0, -1),
           { role: "assistant", content: `⚠ ${msg.data.message}` },
         ])
         useChatStore.getState().setStreaming(entityId, false)
+        useChatStore.getState().setStreamingThinking(entityId, "")
         notify.error("Generation failed", msg.data.message)
       }
     }
@@ -164,6 +187,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
       await generateCompletionStream(modelId, apiMessages, resolvedHost, resolvedKey, channel, useThinking || undefined)
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
+      useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
     }
   }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking])
@@ -197,6 +221,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
   return {
     messages: chat.messages,
     isStreaming: chat.isStreaming,
+    thinkingContent: chat.thinkingContent,
     input,
     setInput,
     sendMessage,

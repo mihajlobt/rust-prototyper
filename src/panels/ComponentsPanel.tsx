@@ -136,7 +136,7 @@ export function ComponentsPanel() {
     : "projects/__placeholder__/chat.json";
 
   const {
-    messages, isStreaming, input, setInput, sendMessage,
+    messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     clearChat, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
@@ -209,6 +209,7 @@ export function ComponentsPanel() {
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
+        thinkingContent={thinkingContent}
         onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) applyCode(c); }}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">

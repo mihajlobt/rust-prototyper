@@ -43,7 +43,7 @@ export function ThemesPanel() {
     : "projects/__placeholder__/chat.json";
 
   const {
-    messages, isStreaming, input, setInput, sendMessage,
+    messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink,
@@ -109,7 +109,7 @@ export function ThemesPanel() {
 
   const chatPane = (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList messages={messages} isStreaming={isStreaming} onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setCss(c); }} />
+      <MessageList messages={messages} isStreaming={isStreaming} thinkingContent={thinkingContent} onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setCss(c); }} />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput
           value={input}

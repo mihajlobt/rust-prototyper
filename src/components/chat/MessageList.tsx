@@ -1,5 +1,7 @@
 import { memo } from "react"
 import { Copy, Code2 } from "lucide-react"
+import { stripThinking } from "@/lib/chat-utils"
+import { extractCode } from "@/lib/preview"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
@@ -7,24 +9,26 @@ import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage } from "@/types/chat"
 
-// Extract thinking content from <think>...</think> tags
+// Extract thinking from final content WITH tags
 function getThinking(content: string): string {
   const match = content.match(/<think>([\s\S]*?)<\/think>/)
   return match ? match[1].trim() : ""
 }
 
-// Extract response content without thinking tags
+// Extract response from final content (without thinking tags) - just use the same logic as stripThinking
 function getResponse(content: string): string {
-  return content.replace(/<think>[\s\S]*?<\/?think>/g, "").trim()
+  return stripThinking(content)
 }
 
 interface MessageListProps {
   messages: ChatMessage[]
   isStreaming: boolean
+  /** Accumulated thinking text during streaming (empty string when not streaming or no thinking) */
+  thinkingContent: string
   onApplyCode?: (content: string) => void
 }
 
-export function MessageList({ messages, isStreaming, onApplyCode }: MessageListProps) {
+export function MessageList({ messages, isStreaming, thinkingContent, onApplyCode }: MessageListProps) {
   return (
     <div className="relative flex-1 min-h-0">
       <ChatContainerRoot className="h-full">
@@ -34,6 +38,8 @@ export function MessageList({ messages, isStreaming, onApplyCode }: MessageListP
               key={`${msg.role}-${i}`}
               message={msg}
               isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
+              // Only pass thinking for the last streaming assistant message
+              streamingThinking={isStreaming && i === messages.length - 1 && msg.role === "assistant" ? thinkingContent : ""}
               onApplyCode={onApplyCode}
             />
           ))}
@@ -50,18 +56,37 @@ export function MessageList({ messages, isStreaming, onApplyCode }: MessageListP
 interface MessageBubbleProps {
   message: ChatMessage
   isStreaming: boolean
+  /** Thinking text from store, only for the currently-streaming message */
+  streamingThinking: string
   onApplyCode?: (content: string) => void
 }
 
 const MessageBubble = memo(function MessageBubble({
   message,
   isStreaming,
+  streamingThinking,
   onApplyCode,
 }: MessageBubbleProps) {
   const content = message.content
-  const isEmpty = isStreaming && content === ""
-  const hasThinking = content.includes("<think>")
-  const hasCode = content.includes("```")
+  const isEmpty = isStreaming && content === "" && !streamingThinking
+
+  // During streaming: check streamingThinking prop. After: check tags in content.
+  const hasThinking = isStreaming
+    ? streamingThinking.length > 0
+    : content.includes("<think>")
+
+  const hasCode = !!extractCode(stripThinking(content))
+
+  // Render thinking content
+  const renderThinking = () => {
+    if (isStreaming) {
+      // During streaming: raw text from store (no markdown - it's mid-stream)
+      return streamingThinking
+    } else {
+      // After finalize: extract from tags with markdown
+      return getThinking(content)
+    }
+  }
 
   if (message.role === "user") {
     return (
@@ -86,12 +111,13 @@ const MessageBubble = memo(function MessageBubble({
               <ReasoningTrigger className="text-xs text-muted-foreground">
                 Reasoning
               </ReasoningTrigger>
-              <ReasoningContent markdown className="text-xs">
-                {getThinking(content)}
+              {/* During streaming: no markdown (raw text). After: markdown */}
+              <ReasoningContent markdown={!isStreaming} className="text-xs">
+                {renderThinking()}
               </ReasoningContent>
             </Reasoning>
             <MessageContent markdown className="text-sm">
-              {getResponse(content)}
+              {isStreaming ? content : getResponse(content)}
             </MessageContent>
           </>
         ) : (
@@ -131,5 +157,6 @@ const MessageBubble = memo(function MessageBubble({
 }, (prev, next) =>
   prev.message.content === next.message.content &&
   prev.isStreaming === next.isStreaming &&
+  prev.streamingThinking === next.streamingThinking &&
   prev.onApplyCode === next.onApplyCode
 )

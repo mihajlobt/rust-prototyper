@@ -419,7 +419,7 @@ struct OllamaModelDetails {
 #[derive(Clone, serde::Serialize)]
 #[serde(tag = "event", content = "data")]
 enum CompletionEvent {
-    Chunk { text: String },
+    Chunk { text: String, thinking: Option<String> },
     Done,
     Error { message: String },
 }
@@ -476,24 +476,6 @@ async fn chat_completion_ollama(
 
     if stream {
         let mut full = String::new();
-        // Batch small tokens into larger IPC messages (flush at 40 chars or 30ms).
-        let mut buf = String::new();
-        let mut last_flush = std::time::Instant::now();
-        let flush_interval = std::time::Duration::from_millis(30);
-
-        // Native thinking support: track whether we are inside a thinking block.
-        // When message.thinking arrives we open <think>, when message.content arrives
-        // we close </think> — frontend parseBlocks handles the tags.
-        let mut in_thinking = false;
-
-        let flush = |buf: &mut String, last: &mut std::time::Instant, ev: Option<&Channel<CompletionEvent>>| {
-            if !buf.is_empty() {
-                if let Some(ch) = ev {
-                    let _ = ch.send(CompletionEvent::Chunk { text: std::mem::take(buf) });
-                }
-                *last = std::time::Instant::now();
-            }
-        };
 
         let mut byte_stream = res.bytes_stream();
         while let Some(chunk_result) = byte_stream.next().await {
@@ -501,39 +483,28 @@ async fn chat_completion_ollama(
             for line in String::from_utf8_lossy(&chunk).lines() {
                 if line.is_empty() { continue; }
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-                    // ── Native thinking chunk (message.thinking field) ──
+                    // Send thinking SEPARATELY from content
                     if let Some(thinking) = json["message"]["thinking"].as_str() {
                         if !thinking.is_empty() {
-                            if !in_thinking {
-                                in_thinking = true;
-                                full.push_str("<think>");
-                                buf.push_str("<think>");
-                            }
                             full.push_str(thinking);
-                            buf.push_str(thinking);
-                            let now = std::time::Instant::now();
-                            if buf.len() >= 40 || now.duration_since(last_flush) >= flush_interval {
-                                flush(&mut buf, &mut last_flush, on_event);
+                            if let Some(ch) = on_event {
+                                let _ = ch.send(CompletionEvent::Chunk { 
+                                    text: String::new(), 
+                                    thinking: Some(thinking.to_string()) 
+                                });
                             }
                         }
                     }
 
-                    // ── Content chunk (message.content field) ──
+                    // Send content (may come when thinking is done)
                     if let Some(content) = json["message"]["content"].as_str() {
                         if !content.is_empty() {
-                            // Close the thinking block before the first content token
-                            if in_thinking {
-                                in_thinking = false;
-                                full.push_str("</think>");
-                                buf.push_str("</think>");
-                                // Flush immediately so thinking and content appear as separate events
-                                flush(&mut buf, &mut last_flush, on_event);
-                            }
                             full.push_str(content);
-                            buf.push_str(content);
-                            let now = std::time::Instant::now();
-                            if buf.len() >= 40 || now.duration_since(last_flush) >= flush_interval {
-                                flush(&mut buf, &mut last_flush, on_event);
+                            if let Some(ch) = on_event {
+                                let _ = ch.send(CompletionEvent::Chunk { 
+                                    text: content.to_string(), 
+                                    thinking: None 
+                                });
                             }
                         }
                     }
@@ -541,17 +512,7 @@ async fn chat_completion_ollama(
             }
         }
 
-        // Close unclosed think block (model finished thinking without generating content)
-        if in_thinking {
-            full.push_str("</think>");
-            buf.push_str("</think>");
-        }
-        // Final flush
-        if !buf.is_empty() {
-            if let Some(ev) = on_event {
-                let _ = ev.send(CompletionEvent::Chunk { text: buf });
-            }
-        }
+        // Done streaming
         if let Some(ev) = on_event {
             let _ = ev.send(CompletionEvent::Done);
         }
@@ -602,7 +563,7 @@ async fn chat_completion_openai(
                     if let Some(content) = json["choices"][0]["delta"]["content"].as_str() {
                         full.push_str(content);
                         if let Some(ev) = on_event {
-                            let _ = ev.send(CompletionEvent::Chunk { text: content.to_string() });
+                            let _ = ev.send(CompletionEvent::Chunk { text: content.to_string(), thinking: None });
                         }
                     }
                 }
@@ -663,7 +624,7 @@ async fn chat_completion_claude(
                     if let Some(text) = json["delta"]["text"].as_str() {
                         full.push_str(text);
                         if let Some(ev) = on_event {
-                            let _ = ev.send(CompletionEvent::Chunk { text: text.to_string() });
+                            let _ = ev.send(CompletionEvent::Chunk { text: text.to_string(), thinking: None });
                         }
                     }
                 }
