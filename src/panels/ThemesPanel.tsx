@@ -59,7 +59,7 @@ export function ThemesPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    stopGeneration, regenerate, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink,
   } = useChat({
@@ -114,12 +114,14 @@ export function ThemesPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
+        isToolMode={isToolMode}
         onApplyCode={(content) => {
           const stripped = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
           const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
           if (cleaned) setCss(cleaned);
         }}
         onRegenerate={regenerate}
+        onDeleteFrom={deleteFrom}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

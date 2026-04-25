@@ -140,7 +140,7 @@ export function ComponentsPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    stopGeneration, regenerate, clearChat, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, clearChat, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
   } = useChat({
@@ -202,8 +202,10 @@ export function ComponentsPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
+        isToolMode={isToolMode}
         onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
         onRegenerate={regenerate}
+        onDeleteFrom={deleteFrom}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

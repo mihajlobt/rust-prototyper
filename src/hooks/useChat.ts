@@ -211,6 +211,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     writeFile(chatPath, "[]").catch(() => {})
   }, [entityId, chatPath])
 
+  const deleteFrom = useCallback((index: number) => {
+    const current = useChatStore.getState().chats[entityId]?.messages ?? []
+    const trimmed = current.slice(0, index)
+    useChatStore.getState().setMessages(entityId, trimmed)
+    writeFile(chatPath, JSON.stringify(trimmed, null, 2)).catch(() => {})
+  }, [entityId, chatPath])
+
   const stopGeneration = useCallback(() => {
     ;(stopRef as MutableRefObject<boolean>).current = true
     useChatStore.getState().setStreaming(entityId, false)
@@ -346,6 +353,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     stopGeneration,
     regenerate,
     clearChat,
+    deleteFrom,
+    isToolMode: !!outputPath,
     attachments,
     addAttachment,
     removeAttachment,
