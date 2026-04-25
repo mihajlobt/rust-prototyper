@@ -123,6 +123,11 @@ bunx tsc --noEmit    # type-check
 
 ## Coding Rules
 
+## CRITICAL — DO NOT SUBSTITUTE LIBRARIES
+- **NEVER assume a library is broken and switch to a workaround or alternative without consulting the user first.**
+- If a library behaves unexpectedly, investigate the root cause (read docs, check source, search online). Do not silently replace it with a different approach.
+- Always consult the user before changing libraries, APIs, or fundamental implementation strategies.
+
 ## CRITICAL — NEVER USE TEMP DIRECTORIES FOR SCAFFOLDING
 - **DO NOT USE TEMP DIRECTORIES and then move files to `generated/`. THAT IS NEVER EVER GOING TO BE A GOOD SOLUTION.**
 - Temp directories create race conditions, permission issues, and stale file problems.
