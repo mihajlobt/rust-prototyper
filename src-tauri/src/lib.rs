@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::io::Write;
@@ -9,17 +9,20 @@ use futures_util::StreamExt;
 use futures_util::future::join_all;
 use ollama_rs::{
     Ollama,
+    coordinator::Coordinator,
     generation::{
         chat::{
             ChatMessage as OllamaChatMessage,
+            MessageRole,
             request::ChatMessageRequest,
         },
         images::Image,
         parameters::ThinkType,
-        tools::{Tool, ToolInfo, ToolType, ToolFunctionInfo},
+        tools::Tool,
     },
+    history::ChatHistory,
 };
-use schemars::{JsonSchema, generate::SchemaSettings};
+use schemars::JsonSchema;
 
 struct AppState {
     active_processes: Mutex<HashMap<u32, CommandChild>>,
@@ -504,7 +507,7 @@ fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
     }).collect()
 }
 
-// ─── write_file tool schema ───
+// ─── write_file tool ───
 
 #[derive(serde::Deserialize, JsonSchema)]
 struct WriteFileParams {
@@ -512,36 +515,45 @@ struct WriteFileParams {
     content: String,
 }
 
-// Marker struct — only used for schema generation via Tool trait.
-// The actual tool call arguments are read directly from ChatMessageResponse.
-struct WriteFileTool;
+/// Real Tool implementation — captures file content so Coordinator can execute it.
+/// Pattern from ollama-rs docs: https://github.com/pepperoni21/ollama-rs
+struct WriteFileTool {
+    captured: Arc<Mutex<Option<String>>>,
+}
 
 impl Tool for WriteFileTool {
     type Params = WriteFileParams;
+
     fn name() -> &'static str { "write_file" }
+
     fn description() -> &'static str {
         "Write the generated code or CSS to the output file. Always call this tool with the complete file content."
     }
-    fn call(&mut self, _params: WriteFileParams) -> impl std::future::Future<Output = ollama_rs::generation::tools::Result<String>> + Send + Sync {
-        async { Ok(String::new()) }
+
+    fn call(
+        &mut self,
+        params: WriteFileParams,
+    ) -> impl std::future::Future<Output = ollama_rs::generation::tools::Result<String>> + Send + Sync {
+        let captured = Arc::clone(&self.captured);
+        async move {
+            *captured.lock().unwrap() = Some(params.content);
+            Ok("File written successfully.".to_string())
+        }
     }
 }
 
-/// Build a ToolInfo for write_file using the same SchemaSettings as ollama-rs internally.
-/// ToolInfo::new is pub(crate), so we replicate the schema construction here.
-/// Source: https://github.com/pepperoni21/ollama-rs/blob/master/ollama-rs/src/generation/tools/mod.rs
-fn write_file_tool_info() -> ToolInfo {
-    let mut settings = SchemaSettings::draft07();
-    settings.inline_subschemas = true;
-    let generator = settings.into_generator();
-    let parameters = generator.into_root_schema_for::<WriteFileParams>();
-    ToolInfo {
-        tool_type: ToolType::Function,
-        function: ToolFunctionInfo {
-            name: WriteFileTool::name().to_string(),
-            description: WriteFileTool::description().to_string(),
-            parameters,
-        },
+/// SharedHistory lets us read the full message history after the Coordinator finishes,
+/// so we can extract thinking from the first assistant turn.
+struct SharedHistory {
+    inner: Arc<Mutex<Vec<OllamaChatMessage>>>,
+}
+
+impl ChatHistory for SharedHistory {
+    fn push(&mut self, message: OllamaChatMessage) {
+        self.inner.lock().unwrap().push(message);
+    }
+    fn messages(&self) -> std::borrow::Cow<'_, [OllamaChatMessage]> {
+        std::borrow::Cow::Owned(self.inner.lock().unwrap().clone())
     }
 }
 
@@ -559,53 +571,67 @@ async fn generate_ollama_completion_stream(
     let ollama = build_ollama_client(host, api_key)?;
     let ollama_messages = to_ollama_messages(messages);
 
-    // Both tool mode and plain mode use streaming — this gives real-time thinking
-    // display and tool_calls in the final stream chunk.
-    let mut request = if output_path.is_some() {
-        ChatMessageRequest::new(model.to_string(), ollama_messages)
-            .tools(vec![write_file_tool_info()])
-    } else {
-        ChatMessageRequest::new(model.to_string(), ollama_messages)
-    };
-    if let Some(true) = think {
-        request = request.think(ThinkType::True);
-    }
-
-    let mut stream = ollama
-        .send_chat_messages_stream(request)
-        .await
-        .map_err(|e| AppError::Http(e.to_string()))?;
-
-    let mut last_tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
-
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok(response) => {
-                // Capture tool_calls from the final chunk
-                if !response.message.tool_calls.is_empty() {
-                    last_tool_calls = response.message.tool_calls.clone();
-                }
-                let thinking = response.message.thinking.filter(|t| !t.is_empty());
-                let text = response.message.content;
-                if thinking.is_some() || !text.is_empty() {
-                    let _ = channel.send(CompletionEvent::Chunk { text, thinking });
-                }
-            }
-            Err(_) => {
-                return Err(AppError::Http("Ollama stream error".into()));
-            }
-        }
-    }
-
-    // After stream ends, emit FileWritten if a write_file tool call was received
     if let Some(path) = output_path {
-        for call in &last_tool_calls {
-            if call.function.name == "write_file" {
-                if let Ok(params) = serde_json::from_value::<WriteFileParams>(call.function.arguments.clone()) {
-                    let _ = channel.send(CompletionEvent::FileWritten {
-                        path: path.to_string(),
-                        content: params.content,
-                    });
+        // ── Tool mode: use Coordinator as per ollama-rs docs ──────────────────
+        // The Coordinator handles the multi-turn loop: model decides to call
+        // write_file → Coordinator executes the tool → sends result back to model.
+        // We use SharedHistory to recover the thinking from the first assistant turn.
+        let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let history_data: Arc<Mutex<Vec<OllamaChatMessage>>> = Arc::new(Mutex::new(vec![]));
+
+        let tool = WriteFileTool { captured: Arc::clone(&captured) };
+        let history = SharedHistory { inner: Arc::clone(&history_data) };
+
+        let mut coordinator = Coordinator::new(ollama, model.to_string(), history)
+            .add_tool(tool);
+        if let Some(true) = think {
+            coordinator = coordinator.think(ThinkType::True);
+        }
+
+        coordinator
+            .chat(ollama_messages)
+            .await
+            .map_err(|e| AppError::Http(e.to_string()))?;
+
+        // Extract thinking from the first assistant turn in history (before tool execution)
+        let history = history_data.lock().unwrap();
+        if let Some(thinking) = history
+            .iter()
+            .find(|m| m.role == MessageRole::Assistant && m.thinking.as_deref().is_some_and(|t| !t.is_empty()))
+            .and_then(|m| m.thinking.clone())
+        {
+            let _ = channel.send(CompletionEvent::Chunk { text: String::new(), thinking: Some(thinking) });
+        }
+        drop(history);
+
+        // Emit file content captured by the tool
+        let file_content = captured.lock().unwrap().take();
+        if let Some(content) = file_content {
+            let _ = channel.send(CompletionEvent::FileWritten { path: path.to_string(), content });
+        }
+    } else {
+        // ── Plain streaming mode (no tool) ────────────────────────────────────
+        let mut request = ChatMessageRequest::new(model.to_string(), ollama_messages);
+        if let Some(true) = think {
+            request = request.think(ThinkType::True);
+        }
+
+        let mut stream = ollama
+            .send_chat_messages_stream(request)
+            .await
+            .map_err(|e| AppError::Http(e.to_string()))?;
+
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(response) => {
+                    let thinking = response.message.thinking.filter(|t| !t.is_empty());
+                    let text = response.message.content;
+                    if thinking.is_some() || !text.is_empty() {
+                        let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+                    }
+                }
+                Err(_) => {
+                    return Err(AppError::Http("Ollama stream error".into()));
                 }
             }
         }
