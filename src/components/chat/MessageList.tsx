@@ -113,15 +113,7 @@ const MessageBubble = memo(function MessageBubble({
       <MessageAvatar src="" alt="AI" fallback="AI" />
       <div className="flex flex-col gap-1 max-w-[85%]">
         {isEmpty ? (
-          isToolMode ? (
-            // Tool-mode pending: model is writing the file
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-              <Wrench size={13} className="animate-pulse" />
-              <Loader variant="loading-dots" size="sm" text="Using write_file" />
-            </div>
-          ) : (
-            <Loader variant="typing" size="sm" />
-          )
+          <Loader variant="typing" size="sm" />
         ) : hasThinking ? (
           <>
             <Reasoning isStreaming={isStreaming}>
@@ -132,9 +124,11 @@ const MessageBubble = memo(function MessageBubble({
                 {thinkingText}
               </ReasoningContent>
             </Reasoning>
-            <MessageContent markdown isStreaming={isStreaming} className="text-sm">
-              {content}
-            </MessageContent>
+            {content && (
+              <MessageContent markdown isStreaming={isStreaming} className="text-sm">
+                {content}
+              </MessageContent>
+            )}
           </>
         ) : (
           <MessageContent markdown isStreaming={isStreaming} className="text-sm">
@@ -142,7 +136,7 @@ const MessageBubble = memo(function MessageBubble({
           </MessageContent>
         )}
 
-        {/* Tool call chips */}
+        {/* Tool call chips (finalized) */}
         {message.toolCalls?.map((tc, i) => (
           <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 w-fit bg-muted/30">
             <FileCode size={12} />
@@ -150,8 +144,16 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         ))}
 
-        {/* Generating indicator (non-empty, still streaming) */}
-        {isStreaming && !isEmpty && (
+        {/* Tool-mode streaming indicator — shown AFTER thinking/content, never before */}
+        {isStreaming && !isEmpty && isToolMode && !message.toolCalls?.length && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-0.5">
+            <Wrench size={12} className="animate-pulse shrink-0" />
+            <Loader variant="loading-dots" size="sm" text="Using write_file" />
+          </div>
+        )}
+
+        {/* Generating indicator — non-tool streaming */}
+        {isStreaming && !isEmpty && !isToolMode && (
           <Loader variant="loading-dots" size="sm" text="Generating" />
         )}
 
