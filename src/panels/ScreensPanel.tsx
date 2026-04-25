@@ -1,22 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Eye, Smartphone, Tablet, Monitor, Plus, Download } from "lucide-react";
+import { Eye, Smartphone, Tablet, Monitor, Download } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { writeFile, createDir, readFile, readDir, exportProject, getModelHost } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -43,8 +29,8 @@ export function ScreensPanel() {
   const [zoom, setZoom] = useState(1);
 
   const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
-  const [showNewScreenDialog, setShowNewScreenDialog] = useState(false);
-  const [newScreenName, setNewScreenName] = useState("");
+
+
   const [themeCss, setThemeCss] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -158,19 +144,6 @@ export function ScreensPanel() {
     }
   };
 
-  const handleCreateScreen = async () => {
-    if (!newScreenName.trim()) return;
-    const id = newScreenName.toLowerCase().replace(/\s+/g, "-");
-    const dir = `projects/${settings.project}/screens/${id}`;
-    await createDir(dir);
-    await writeFile(`${dir}/chat.json`, "[]");
-    await writeFile(`${dir}/screen.tsx`, `// ${newScreenName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newScreenName}</div>;\n}\n`);
-    setScreens((prev) => [...prev, id]);
-    setScreenId(id);
-    setShowNewScreenDialog(false);
-    setNewScreenName("");
-  };
-
   const handlePreviewClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     const tagName = target.tagName.toLowerCase();
@@ -243,16 +216,6 @@ export function ScreensPanel() {
                 <div className="h-full flex flex-col bg-card">
                   <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
                     <span className="text-sm font-medium">Chat</span>
-                    <Select value={screenId ?? undefined} onValueChange={setScreenId}>
-                      <SelectTrigger className="h-7 text-xs w-[120px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {screens.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <div className="flex-1" />
                     <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => setShowInspector(false)}>
                       <Eye size={12} />
@@ -282,19 +245,6 @@ export function ScreensPanel() {
                     {Math.ceil(messages.filter(m => m.role === "user").length)} turns
                   </span>
                 )}
-                <Select value={screenId ?? undefined} onValueChange={setScreenId}>
-                  <SelectTrigger className="h-7 text-xs w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {screens.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowNewScreenDialog(true)}>
-                  <Plus size={12} />
-                </Button>
                 <div className="flex-1" />
                 <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleExport}>
                   <Download size={12} />
@@ -365,28 +315,6 @@ export function ScreensPanel() {
           </div>
         </Allotment.Pane>
       </Allotment>
-
-      <Dialog open={showNewScreenDialog} onOpenChange={setShowNewScreenDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>New Screen</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              value={newScreenName}
-              onChange={(e) => setNewScreenName(e.target.value)}
-              placeholder="Screen name..."
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreateScreen();
-              }}
-              autoFocus
-            />
-            <Button className="w-full" onClick={handleCreateScreen} disabled={!newScreenName.trim()}>
-              Create
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
