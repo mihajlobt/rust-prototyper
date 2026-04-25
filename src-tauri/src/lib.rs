@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::io::Write;
@@ -7,6 +7,21 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use futures_util::StreamExt;
 use futures_util::future::join_all;
+use ollama_rs::{
+    Ollama,
+    coordinator::Coordinator,
+    generation::{
+        chat::{
+            ChatMessage as OllamaChatMessage,
+            MessageRole,
+            request::ChatMessageRequest,
+        },
+        images::Image,
+        parameters::ThinkType,
+        tools::Tool,
+    },
+};
+use schemars::JsonSchema;
 
 struct AppState {
     active_processes: Mutex<HashMap<u32, CommandChild>>,
@@ -420,6 +435,7 @@ struct OllamaModelDetails {
 #[serde(tag = "event", content = "data")]
 enum CompletionEvent {
     Chunk { text: String, thinking: Option<String> },
+    FileWritten { path: String, content: String },
     Done,
     Error { message: String },
 }
@@ -436,92 +452,191 @@ fn detect_provider(model: &str) -> &str {
     }
 }
 
-async fn chat_completion_ollama(
-    client: &reqwest::Client,
+// ─── ollama-rs helpers ───
+
+/// Parse "http://host:port" or "https://host:port" into (base_url, port).
+fn parse_ollama_host(raw: &str) -> (String, u16) {
+    let (scheme, rest) = if let Some(s) = raw.strip_prefix("https://") {
+        ("https", s)
+    } else if let Some(s) = raw.strip_prefix("http://") {
+        ("http", s)
+    } else {
+        ("http", raw)
+    };
+    if let Some(colon) = rest.rfind(':') {
+        let host_part = &rest[..colon];
+        if let Ok(port) = rest[colon + 1..].parse::<u16>() {
+            return (format!("{}://{}", scheme, host_part), port);
+        }
+    }
+    let default_port = if scheme == "https" { 443u16 } else { 11434u16 };
+    (format!("{}://{}", scheme, rest), default_port)
+}
+
+fn build_ollama_client(host: &str, api_key: &str) -> Result<Ollama, AppError> {
+    let (base_url, port) = parse_ollama_host(host);
+    if !api_key.is_empty() {
+        use ollama_rs::headers::{HeaderMap, AUTHORIZATION};
+        let mut headers = HeaderMap::new();
+        let header_val = format!("Bearer {}", api_key)
+            .parse()
+            .map_err(|_| AppError::Http("Invalid API key format".into()))?;
+        headers.insert(AUTHORIZATION, header_val);
+        Ok(Ollama::new_with_request_headers(base_url, port, headers))
+    } else {
+        Ok(Ollama::new(base_url, port))
+    }
+}
+
+/// Extract `<think>...</think>` from assistant message content.
+/// Returns (thinking_text, response_text). If no think block, thinking_text is empty.
+fn split_thinking(content: &str) -> (String, String) {
+    if let Some(start) = content.find("<think>") {
+        if let Some(end) = content.find("</think>") {
+            let thinking = content[start + 7..end].to_string();
+            let response = content[end + 8..].trim_start().to_string();
+            return (thinking, response);
+        }
+    }
+    (String::new(), content.to_string())
+}
+
+fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
+    messages.iter().map(|m| {
+        let role = match m.role.as_str() {
+            "assistant" => MessageRole::Assistant,
+            "system" => MessageRole::System,
+            _ => MessageRole::User,
+        };
+        let images: Option<Vec<Image>> = if m.images.is_empty() {
+            None
+        } else {
+            Some(m.images.iter().map(|b| Image::from_base64(b.clone())).collect())
+        };
+        // For assistant messages, split persisted <think>...</think> tags back into
+        // separate thinking/content fields so Ollama handles history correctly.
+        let (thinking, content) = if role == MessageRole::Assistant {
+            split_thinking(&m.content)
+        } else {
+            (String::new(), m.content.clone())
+        };
+        OllamaChatMessage {
+            role,
+            content,
+            images,
+            tool_calls: vec![],
+            thinking: if thinking.is_empty() { None } else { Some(thinking) },
+        }
+    }).collect()
+}
+
+// ─── WriteFileTool ───
+
+#[derive(serde::Deserialize, JsonSchema)]
+struct WriteFileParams {
+    /// The complete file content to write
+    content: String,
+}
+
+struct WriteFileTool {
+    captured: Arc<Mutex<Option<String>>>,
+}
+
+impl Tool for WriteFileTool {
+    type Params = WriteFileParams;
+
+    fn name() -> &'static str {
+        "write_file"
+    }
+
+    fn description() -> &'static str {
+        "Write the generated code or CSS to the output file. Always call this tool with the complete file content."
+    }
+
+    fn call(
+        &mut self,
+        parameters: WriteFileParams,
+    ) -> impl std::future::Future<Output = ollama_rs::generation::tools::Result<String>> + Send + Sync {
+        let content = parameters.content.clone();
+        let captured = Arc::clone(&self.captured);
+        async move {
+            *captured.lock().unwrap() = Some(content);
+            Ok("File written successfully.".to_string())
+        }
+    }
+}
+
+// ─── Ollama streaming via ollama-rs ───
+
+async fn generate_ollama_completion_stream(
     host: &str,
     model: &str,
     messages: &[Message],
     api_key: &str,
     think: Option<bool>,
-    stream: bool,
-    on_event: Option<&Channel<CompletionEvent>>,
-) -> Result<String, AppError> {
-    let url = format!("{}/api/chat", host);
-    let msgs: Vec<serde_json::Value> = messages.iter()
-        .map(|m| {
-            if m.images.is_empty() {
-                serde_json::json!({"role": m.role, "content": m.content})
-            } else {
-                serde_json::json!({"role": m.role, "content": m.content, "images": m.images})
-            }
-        })
-        .collect();
-    let mut body = serde_json::json!({ "model": model, "messages": msgs, "stream": stream });
-    if let Some(t) = think {
-        body["think"] = serde_json::json!(t);
-    }
+    output_path: Option<&str>,
+    channel: &Channel<CompletionEvent>,
+) -> Result<(), AppError> {
+    let ollama = build_ollama_client(host, api_key)?;
+    let ollama_messages = to_ollama_messages(messages);
 
-    let mut req = client.post(&url).json(&body);
-    if !api_key.is_empty() {
-        req = req.header("Authorization", format!("Bearer {}", api_key));
-    }
-    let res = req.send().await.map_err(|e| AppError::Http(e.to_string()))?;
-    if !res.status().is_success() {
-        let err_body = res.text().await.unwrap_or_default();
-        let msg = serde_json::from_str::<serde_json::Value>(&err_body)
-            .ok().and_then(|v| v["error"].as_str().map(String::from))
-            .unwrap_or(err_body);
-        return Err(AppError::Http(msg));
-    }
+    if let Some(path) = output_path {
+        // Tool mode: Coordinator manages multi-turn until the write_file tool is called.
+        // Non-streaming — emits a single FileWritten event when done.
+        let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let tool = WriteFileTool { captured: Arc::clone(&captured) };
 
-    if stream {
-        let mut full = String::new();
+        let history: Vec<OllamaChatMessage> = vec![];
+        let mut coordinator = Coordinator::new(ollama, model.to_string(), history).add_tool(tool);
+        if let Some(true) = think {
+            coordinator = coordinator.think(ThinkType::True);
+        }
 
-        let mut byte_stream = res.bytes_stream();
-        while let Some(chunk_result) = byte_stream.next().await {
-            let chunk = chunk_result.map_err(|e| AppError::Http(e.to_string()))?;
-            for line in String::from_utf8_lossy(&chunk).lines() {
-                if line.is_empty() { continue; }
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-                    // Send thinking SEPARATELY from content
-                    if let Some(thinking) = json["message"]["thinking"].as_str() {
-                        if !thinking.is_empty() {
-                            full.push_str(thinking);
-                            if let Some(ch) = on_event {
-                                let _ = ch.send(CompletionEvent::Chunk { 
-                                    text: String::new(), 
-                                    thinking: Some(thinking.to_string()) 
-                                });
-                            }
-                        }
+        let response = coordinator
+            .chat(ollama_messages)
+            .await
+            .map_err(|e| AppError::Http(e.to_string()))?;
+
+        if let Some(thinking) = response.message.thinking.filter(|t| !t.is_empty()) {
+            let _ = channel.send(CompletionEvent::Chunk { text: String::new(), thinking: Some(thinking) });
+        }
+        if !response.message.content.is_empty() {
+            let _ = channel.send(CompletionEvent::Chunk { text: response.message.content, thinking: None });
+        }
+        let captured_content: Option<String> = captured.lock().unwrap().clone();
+        if let Some(file_content) = captured_content {
+            let _ = channel.send(CompletionEvent::FileWritten { path: path.to_string(), content: file_content });
+        }
+    } else {
+        // Streaming mode (no tool)
+        let mut request = ChatMessageRequest::new(model.to_string(), ollama_messages);
+        if let Some(true) = think {
+            request = request.think(ThinkType::True);
+        }
+
+        let mut stream = ollama
+            .send_chat_messages_stream(request)
+            .await
+            .map_err(|e| AppError::Http(e.to_string()))?;
+
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(response) => {
+                    let thinking = response.message.thinking.filter(|t| !t.is_empty());
+                    let text = response.message.content;
+                    if thinking.is_some() || !text.is_empty() {
+                        let _ = channel.send(CompletionEvent::Chunk { text, thinking });
                     }
-
-                    // Send content (may come when thinking is done)
-                    if let Some(content) = json["message"]["content"].as_str() {
-                        if !content.is_empty() {
-                            full.push_str(content);
-                            if let Some(ch) = on_event {
-                                let _ = ch.send(CompletionEvent::Chunk { 
-                                    text: content.to_string(), 
-                                    thinking: None 
-                                });
-                            }
-                        }
-                    }
+                }
+                Err(_) => {
+                    return Err(AppError::Http("Ollama stream error".into()));
                 }
             }
         }
-
-        // Done streaming
-        if let Some(ev) = on_event {
-            let _ = ev.send(CompletionEvent::Done);
-        }
-        Ok(full)
-    } else {
-        let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
-        let content = json["message"]["content"].as_str().unwrap_or("").to_string();
-        Ok(content)
     }
+
+    let _ = channel.send(CompletionEvent::Done);
+    Ok(())
 }
 
 async fn chat_completion_openai(
@@ -655,7 +770,14 @@ async fn generate_completion(
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     match provider {
-        "ollama" => chat_completion_ollama(client, &host, &model, &messages, &api_key, None, false, None).await,
+        "ollama" => {
+            let ollama = build_ollama_client(&host, &api_key)?;
+            let ollama_messages = to_ollama_messages(&messages);
+            let request = ChatMessageRequest::new(model.clone(), ollama_messages);
+            let response = ollama.send_chat_messages(request).await
+                .map_err(|e| AppError::Http(e.to_string()))?;
+            Ok(response.message.content)
+        }
         "openai" => {
             if api_key.is_empty() {
                 return Err(AppError::Http("OpenAI API key required".into()));
@@ -680,6 +802,7 @@ async fn generate_completion_stream(
     api_key: String,
     on_event: Channel<CompletionEvent>,
     think: Option<bool>,
+    output_path: Option<String>,
     app: AppHandle,
 ) -> Result<(), AppError> {
     let state = app.state::<AppState>();
@@ -688,7 +811,12 @@ async fn generate_completion_stream(
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
     let result = match provider {
-        "ollama" => chat_completion_ollama(client, &host, &model, &messages, &api_key, think, true, Some(&on_event)).await,
+        "ollama" => {
+            generate_ollama_completion_stream(
+                &host, &model, &messages, &api_key,
+                think, output_path.as_deref(), &on_event,
+            ).await.map(|_| String::new())
+        }
         "openai" => {
             if api_key.is_empty() {
                 return Err(AppError::Http("OpenAI API key required".into()));
@@ -808,24 +936,12 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
     let state = app.state::<AppState>();
     let client = &state.http_client;
 
-    // Default empty host to localhost, then strip trailing slash
-    // to avoid double-slash URLs (e.g. http://host//api/show → 301 → POST becomes GET → 405)
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
-    // 1. Fetch model list from /api/tags
-    let url = format!("{}/api/tags", host);
-    let mut req = client.get(&url);
-    if !api_key.is_empty() {
-        req = req.header("Authorization", format!("Bearer {}", api_key));
-    }
-    let res = req.send().await.map_err(|e| AppError::Http(e.to_string()))?;
-    let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
-
-    let model_names: Vec<String> = json["models"].as_array()
-        .map(|arr| arr.iter()
-            .filter_map(|m| m["name"].as_str().map(String::from))
-            .collect())
-        .unwrap_or_default();
+    // 1. Fetch model list via ollama-rs
+    let ollama = build_ollama_client(&host, &api_key)?;
+    let local_models = ollama.list_local_models().await.map_err(|e| AppError::Http(e.to_string()))?;
+    let model_names: Vec<String> = local_models.iter().map(|m| m.name.clone()).collect();
 
     if model_names.is_empty() {
         return Ok(vec![]);

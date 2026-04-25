@@ -20,8 +20,7 @@ import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt } from "@/lib/prompts";
-import { getParentCss, extractCode } from "@/lib/preview";
-import { stripThinking } from "@/lib/chat-utils";
+import { getParentCss } from "@/lib/preview";
 import { PromptInspector } from "@/components/PromptInspector";
 import Frame from "react-frame-component";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -42,9 +41,13 @@ export function ThemesPanel() {
     ? `projects/${settings.project}/themes/${selectedThemeDir}/chat.json`
     : "projects/__placeholder__/chat.json";
 
+  const themeOutputPath = selectedThemeDir
+    ? `projects/${settings.project}/themes/${selectedThemeDir}/theme.css`
+    : undefined;
+
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    attachments, addAttachment, removeAttachment,
+    regenerate, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink,
   } = useChat({
@@ -56,13 +59,9 @@ export function ThemesPanel() {
         ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block."
         : "")
     ),
+    outputPath: themeOutputPath,
     onOutput: (content) => {
-      const cleaned = content
-        .replace(/^```css\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/i, "")
-        .trim();
-      setCss(cleaned);
+      setCss(content);
     },
   });
 
@@ -109,7 +108,17 @@ export function ThemesPanel() {
 
   const chatPane = (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList messages={messages} isStreaming={isStreaming} thinkingContent={thinkingContent} onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setCss(c); }} />
+      <MessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        thinkingContent={thinkingContent}
+        onApplyCode={(content) => {
+          const stripped = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+          const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
+          if (cleaned) setCss(cleaned);
+        }}
+        onRegenerate={regenerate}
+      />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput
           value={input}

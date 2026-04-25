@@ -148,6 +148,7 @@ export function isOllamaModel(modelId: string): boolean {
 
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
+  | { event: "FileWritten"; data: { path: string; content: string } }
   | { event: "Done"; data: null }
   | { event: "Error"; data: { message: string } };
 
@@ -161,16 +162,21 @@ export async function generateCompletion(
   return invoke("generate_completion", { model, messages, host, apiKey });
 }
 
-/** Streaming completion — emits Chunk/Done/Error events via Channel */
+/** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel */
 export async function generateCompletionStream(
   model: string,
   messages: Message[],
   host: string,
   apiKey: string,
   onEvent: Channel<CompletionEvent>,
-  think?: boolean
+  think?: boolean,
+  outputPath?: string
 ): Promise<void> {
-  return invoke("generate_completion_stream", { model, messages, host, apiKey, onEvent, think: think ?? null });
+  return invoke("generate_completion_stream", {
+    model, messages, host, apiKey, onEvent,
+    think: think ?? null,
+    outputPath: outputPath ?? null,
+  });
 }
 
 /** List all local Ollama models, including capabilities & context_length from /api/show */

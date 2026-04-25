@@ -14,7 +14,8 @@ interface ChatStore {
   setStreaming: (id: string, streaming: boolean) => void
   appendChunk: (id: string, chunk: string) => void
   setStreamingContent: (id: string, content: string) => void
-  setStreamingThinking: (id: string, thinking: string) => void  // NEW: track thinking separately
+  setStreamingThinking: (id: string, thinking: string) => void
+  attachToolCall: (id: string, tool: string, path: string) => void
   clearChat: (id: string) => void
 }
 
@@ -64,6 +65,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((s) => ({
       chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), thinkingContent: thinking } },
     })),
+
+  attachToolCall: (id, tool, path) =>
+    set((s) => {
+      const chat = s.chats[id] ?? EMPTY
+      const messages = [...chat.messages]
+      const last = messages[messages.length - 1]
+      if (last?.role === "assistant") {
+        const prev = last.toolCalls ?? []
+        messages[messages.length - 1] = { ...last, toolCalls: [...prev, { tool, path }] }
+      }
+      return { chats: { ...s.chats, [id]: { ...chat, messages } } }
+    }),
 
   clearChat: (id) =>
     set((s) => ({ chats: { ...s.chats, [id]: EMPTY } })),

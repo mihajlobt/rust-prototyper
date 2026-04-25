@@ -50,7 +50,7 @@ export function ScreensPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    clearChat, attachments, addAttachment, removeAttachment,
+    regenerate, clearChat, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
   } = useChat({
@@ -60,14 +60,12 @@ export function ScreensPanel() {
       getScreenNewPrompt(settings.iconLibrary) +
       (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
     ),
+    outputPath: screenId ? screenPath : undefined,
     onOutput: (content) => {
-      const extracted = extractCode(stripThinking(content));
-      if (extracted) {
-        setPreviewHtml(extracted);
-        createDir(screenPath.replace("/screen.tsx", ""))
-          .then(() => writeFile(screenPath, extracted))
-          .catch(() => {});
-      }
+      setPreviewHtml(content);
+      createDir(screenPath.replace("/screen.tsx", ""))
+        .then(() => writeFile(screenPath, content))
+        .catch(() => {});
     },
   });
 
@@ -184,6 +182,7 @@ export function ScreensPanel() {
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
         onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setPreviewHtml(c); }}
+        onRegenerate={regenerate}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

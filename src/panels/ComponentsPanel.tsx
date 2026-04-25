@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getModelHost, writeFile, createDir, readDir, readFile } from "@/lib/ipc";
+import { writeFile, createDir, readDir, readFile, getModelHost } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -135,19 +135,21 @@ export function ComponentsPanel() {
     ? `projects/${settings.project}/components/${componentId}/chat.json`
     : "projects/__placeholder__/chat.json";
 
+  const componentOutputPath = componentId
+    ? `projects/${settings.project}/components/${componentId}/component.tsx`
+    : undefined;
+
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    clearChat, attachments, addAttachment, removeAttachment,
+    regenerate, clearChat, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink,
     mentions, addMention, removeMention,
   } = useChat({
     entityId: componentId ? `component-${componentId}` : "component-none",
     chatPath,
     systemPrompt: systemContent,
-    onOutput: (content) => {
-      const extracted = extractCode(stripThinking(content));
-      if (extracted) applyCode(extracted);
-    },
+    outputPath: componentOutputPath,
+    onOutput: (content) => applyCode(content),
   });
 
   const applyCode = useCallback(async (extracted: string) => {
@@ -211,6 +213,7 @@ export function ComponentsPanel() {
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
         onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) applyCode(c); }}
+        onRegenerate={regenerate}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

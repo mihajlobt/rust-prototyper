@@ -4,12 +4,13 @@ import { memo, useId, useMemo } from "react"
 import ReactMarkdown, { Components } from "react-markdown"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
-import { CodeBlock, CodeBlockCode } from "./code-block"
+import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "./code-block"
 
 export type MarkdownProps = {
   children: string
   id?: string
   className?: string
+  isStreaming?: boolean
   components?: Partial<Components>
 }
 
@@ -48,6 +49,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
 
     return (
       <CodeBlock className={className}>
+        <CodeBlockHeader language={language} code={children as string} />
         <CodeBlockCode code={children as string} language={language} />
       </CodeBlock>
     )
@@ -85,11 +87,17 @@ function MarkdownComponent({
   children,
   id,
   className,
+  isStreaming,
   components = INITIAL_COMPONENTS,
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
-  const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children])
+  // During streaming skip the block-split (marked.lexer breaks on unclosed fences).
+  // A single ReactMarkdown pass handles partial markdown gracefully.
+  const blocks = useMemo(
+    () => (isStreaming ? [children] : parseMarkdownIntoBlocks(children)),
+    [children, isStreaming]
+  )
 
   return (
     <div className={className}>

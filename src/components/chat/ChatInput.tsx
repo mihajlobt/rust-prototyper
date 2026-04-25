@@ -1,13 +1,10 @@
-import {
-  useState,
-  type DragEvent, type ClipboardEvent,
-} from "react"
+import { useRef, useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
 import { Send, ImageIcon, Brain } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
 import { AttachmentChip } from "./AttachmentChip"
 import { MentionChip } from "./MentionChip"
-import { PromptInput, PromptInputTextarea, PromptInputActions, PromptInputAction } from "@/components/ui/prompt-input"
 import { FileUpload, FileUploadTrigger } from "@/components/ui/file-upload"
 import type { AttachmentFile, MentionAsset } from "@/types/chat"
 
@@ -36,11 +33,19 @@ export function ChatInput({
   thinkEnabled, onToggleThink, canThink,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
   function handleChange(text: string) {
     onChange(text)
+    // Auto-resize
+    const el = textareaRef.current
+    if (el) {
+      el.style.height = "auto"
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+    }
+    // Mention detection
     const lastAt = text.lastIndexOf("@")
     if (lastAt !== -1) {
       const before = text[lastAt - 1]
@@ -53,6 +58,14 @@ export function ChatInput({
       }
     }
     setMentionQuery(null)
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Escape") { setMentionQuery(null); return }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      if (!disabled && value.trim()) onSend()
+    }
   }
 
   function handleMentionSelect(asset: Omit<MentionAsset, "code">) {
@@ -71,8 +84,7 @@ export function ChatInput({
   }
 
   function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    const items = Array.from(e.clipboardData.items)
-    const imageItem = items.find((item) => item.type.startsWith("image/"))
+    const imageItem = Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"))
     if (imageItem) {
       e.preventDefault()
       const file = imageItem.getAsFile()
@@ -88,33 +100,19 @@ export function ChatInput({
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDragOver(false)
-
-    // Project file drag from RunnerPanel
     const projectData = e.dataTransfer.getData("application/prototyper-asset")
     if (projectData) {
       try {
         const { filePath, assetType, assetName } = JSON.parse(projectData) as {
-          filePath: string
-          assetType: MentionAsset["type"]
-          assetName: string
+          filePath: string; assetType: MentionAsset["type"]; assetName: string
         }
         readFile(filePath)
           .then((code) => onAddMention({ id: assetName, type: assetType, name: assetName, path: filePath, code }))
           .catch(() => onAddMention({ id: assetName, type: assetType, name: assetName, path: filePath, code: "" }))
-      } catch { /* invalid drop data */ }
+      } catch { /* invalid drop */ }
       return
     }
-
-    // Image file drop
-    Array.from(e.dataTransfer.files).forEach((file) => {
-      if (file.type.startsWith("image/")) processImageFile(file)
-    })
-  }
-
-  function handleFileAdded(files: File[]) {
-    files.forEach((file) => {
-      if (file.type.startsWith("image/")) processImageFile(file)
-    })
+    Array.from(e.dataTransfer.files).forEach((f) => { if (f.type.startsWith("image/")) processImageFile(f) })
   }
 
   const hasChips = attachments.length > 0 || mentions.length > 0
@@ -129,16 +127,16 @@ export function ChatInput({
           onClose={() => setMentionQuery(null)}
         />
       )}
+
       <div
-        className={`rounded-lg border transition-colors ${
-          isDragOver ? "border-accent bg-accent/5" : "border-border bg-background"
-        }`}
+        className={`rounded-lg border transition-colors ${isDragOver ? "border-accent bg-accent/5" : "border-border bg-background"}`}
         onDragOver={handleDragOver}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
       >
+        {/* Chips row */}
         {hasChips && (
-          <div className="flex flex-wrap gap-1 border-b border-border px-2 py-1.5">
+          <div className="flex flex-wrap gap-1 border-b border-border px-2 pt-2 pb-1.5">
             {mentions.map((m) => (
               <MentionChip key={m.id} asset={m} onRemove={() => onRemoveMention(m.id)} />
             ))}
@@ -147,66 +145,78 @@ export function ChatInput({
             ))}
           </div>
         )}
-        <PromptInput
+
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
           value={value}
-          onValueChange={handleChange}
-          onSubmit={onSend}
+          onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          placeholder={placeholder}
           disabled={disabled}
-          maxHeight={120}
-          className="border-0 shadow-none rounded-lg"
-        >
-          <PromptInputTextarea
-            placeholder={placeholder}
-            onPaste={handlePaste}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setMentionQuery(null)
-            }}
-          />
-          <PromptInputActions>
-            <PromptInputAction
-              tooltip={canThink
-                ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
-                : "Model does not support thinking"
-              }
-            >
-              <button
-                onClick={canThink ? onToggleThink : undefined}
-                className={`p-1 rounded transition-colors ${
-                  canThink
-                    ? thinkEnabled
-                      ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
-                      : "text-muted-foreground hover:text-foreground"
-                    : "text-muted-foreground/30 cursor-not-allowed"
-                }`}
-                type="button"
-              >
-                <Brain size={14} />
-              </button>
-            </PromptInputAction>
-            <PromptInputAction tooltip="Attach image">
-              <FileUpload onFilesAdded={handleFileAdded} accept="image/*" multiple>
-                <FileUploadTrigger asChild>
+          rows={1}
+          className="w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+          style={{ minHeight: 36, maxHeight: 160 }}
+        />
+
+        {/* Actions row */}
+        <div className="flex items-center justify-between px-2 pb-2">
+          <div className="flex items-center gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <button
-                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                     type="button"
+                    onClick={canThink ? onToggleThink : undefined}
+                    className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition-colors ${
+                      canThink
+                        ? thinkEnabled
+                          ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        : "text-muted-foreground/30 cursor-not-allowed"
+                    }`}
                   >
-                    <ImageIcon size={14} />
+                    <Brain size={13} />
+                    {thinkEnabled && canThink && <span>Thinking</span>}
                   </button>
-                </FileUploadTrigger>
-              </FileUpload>
-            </PromptInputAction>
-            <PromptInputAction tooltip="Send">
-              <button
-                onClick={onSend}
-                disabled={disabled || !value.trim()}
-                className="rounded bg-accent px-2 py-1 text-accent-foreground disabled:opacity-40 transition-opacity"
-                type="button"
-              >
-                <Send size={12} />
-              </button>
-            </PromptInputAction>
-          </PromptInputActions>
-        </PromptInput>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {canThink
+                    ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
+                    : "Model does not support thinking"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <FileUpload onFilesAdded={(files) => files.forEach((f) => { if (f.type.startsWith("image/")) processImageFile(f) })} accept="image/*" multiple>
+                    <FileUploadTrigger asChild>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <ImageIcon size={13} />
+                      </button>
+                    </FileUploadTrigger>
+                  </FileUpload>
+                </TooltipTrigger>
+                <TooltipContent side="top">Attach image</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={disabled || !value.trim()}
+            className="flex items-center justify-center rounded-md bg-primary px-2.5 py-1 text-primary-foreground disabled:opacity-30 hover:opacity-90 transition-opacity"
+          >
+            <Send size={12} />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -215,10 +225,7 @@ export function ChatInput({
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result.split(",")[1])
-    }
+    reader.onload = () => resolve((reader.result as string).split(",")[1])
     reader.onerror = reject
     reader.readAsDataURL(file)
   })

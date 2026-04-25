@@ -47,6 +47,7 @@ const MessageAvatar = ({
 export type MessageContentProps = {
   children: React.ReactNode
   markdown?: boolean
+  isStreaming?: boolean
   className?: string
 } & React.ComponentProps<typeof Markdown> &
   React.HTMLProps<HTMLDivElement>
@@ -54,6 +55,7 @@ export type MessageContentProps = {
 const MessageContent = ({
   children,
   markdown = false,
+  isStreaming,
   className,
   ...props
 }: MessageContentProps) => {
@@ -63,7 +65,7 @@ const MessageContent = ({
   )
 
   return markdown ? (
-    <Markdown className={classNames} {...props}>
+    <Markdown className={classNames} isStreaming={isStreaming} {...props}>
       {children as string}
     </Markdown>
   ) : (

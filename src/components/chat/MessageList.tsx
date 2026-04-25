@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Copy, Code2 } from "lucide-react"
+import { Copy, Code2, FileCode, RefreshCw } from "lucide-react"
 import { stripThinking } from "@/lib/chat-utils"
 import { extractCode } from "@/lib/preview"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
@@ -26,9 +26,10 @@ interface MessageListProps {
   /** Accumulated thinking text during streaming (empty string when not streaming or no thinking) */
   thinkingContent: string
   onApplyCode?: (content: string) => void
+  onRegenerate?: () => void
 }
 
-export function MessageList({ messages, isStreaming, thinkingContent, onApplyCode }: MessageListProps) {
+export function MessageList({ messages, isStreaming, thinkingContent, onApplyCode, onRegenerate }: MessageListProps) {
   return (
     <div className="relative flex-1 min-h-0">
       <ChatContainerRoot className="h-full">
@@ -38,9 +39,10 @@ export function MessageList({ messages, isStreaming, thinkingContent, onApplyCod
               key={`${msg.role}-${i}`}
               message={msg}
               isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
-              // Only pass thinking for the last streaming assistant message
               streamingThinking={isStreaming && i === messages.length - 1 && msg.role === "assistant" ? thinkingContent : ""}
+              isLastAssistant={!isStreaming && i === messages.length - 1 && msg.role === "assistant"}
               onApplyCode={onApplyCode}
+              onRegenerate={onRegenerate}
             />
           ))}
           <ChatContainerScrollAnchor />
@@ -58,14 +60,18 @@ interface MessageBubbleProps {
   isStreaming: boolean
   /** Thinking text from store, only for the currently-streaming message */
   streamingThinking: string
+  isLastAssistant: boolean
   onApplyCode?: (content: string) => void
+  onRegenerate?: () => void
 }
 
 const MessageBubble = memo(function MessageBubble({
   message,
   isStreaming,
   streamingThinking,
+  isLastAssistant,
   onApplyCode,
+  onRegenerate,
 }: MessageBubbleProps) {
   const content = message.content
   const isEmpty = isStreaming && content === "" && !streamingThinking
@@ -109,22 +115,28 @@ const MessageBubble = memo(function MessageBubble({
           <>
             <Reasoning isStreaming={isStreaming}>
               <ReasoningTrigger className="text-xs text-muted-foreground">
-                Reasoning
+                Thinking
               </ReasoningTrigger>
-              {/* During streaming: no markdown (raw text). After: markdown */}
               <ReasoningContent markdown={!isStreaming} className="text-xs">
                 {renderThinking()}
               </ReasoningContent>
             </Reasoning>
-            <MessageContent markdown className="text-sm">
+            <MessageContent markdown isStreaming={isStreaming} className="text-sm">
               {isStreaming ? content : getResponse(content)}
             </MessageContent>
           </>
         ) : (
-          <MessageContent markdown className="text-sm">
+          <MessageContent markdown isStreaming={isStreaming} className="text-sm">
             {content}
           </MessageContent>
         )}
+        {/* Tool call chips */}
+        {message.toolCalls?.map((tc, i) => (
+          <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 w-fit bg-muted/30">
+            <FileCode size={12} />
+            <span>Wrote <code className="font-mono">{tc.path.split("/").pop()}</code></span>
+          </div>
+        ))}
         {isStreaming && !isEmpty && (
           <Loader variant="loading-dots" size="sm" text="Generating" />
         )}
@@ -151,12 +163,24 @@ const MessageBubble = memo(function MessageBubble({
             )}
           </MessageActions>
         )}
+        {isLastAssistant && onRegenerate && (
+          <button
+            onClick={onRegenerate}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5 opacity-0 group-hover:opacity-100"
+          >
+            <RefreshCw size={12} />
+            Regenerate
+          </button>
+        )}
       </div>
     </Message>
   )
 }, (prev, next) =>
   prev.message.content === next.message.content &&
+  prev.message.toolCalls === next.message.toolCalls &&
   prev.isStreaming === next.isStreaming &&
+  prev.isLastAssistant === next.isLastAssistant &&
   prev.streamingThinking === next.streamingThinking &&
-  prev.onApplyCode === next.onApplyCode
+  prev.onApplyCode === next.onApplyCode &&
+  prev.onRegenerate === next.onRegenerate
 )

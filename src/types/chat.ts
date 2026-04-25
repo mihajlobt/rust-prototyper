@@ -1,8 +1,14 @@
+export interface ToolCallRecord {
+  tool: string
+  path: string
+}
+
 export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   images?: string[]
   blocks?: MessageBlock[]
+  toolCalls?: ToolCallRecord[]
 }
 
 export type MessageBlock =

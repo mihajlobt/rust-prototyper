@@ -23,10 +23,11 @@ interface UseChatOptions {
   entityId: string
   chatPath: string
   systemPrompt: string
+  outputPath?: string
   onOutput?: (content: string) => void
 }
 
-export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput }: UseChatOptions) {
   const settings = useAppStore((s) => s.settings)
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -108,7 +109,9 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     setAttachments([])
     setMentions([])
 
-    // Build API messages (system + history without trailing placeholder)
+    // Build API messages (system + history without trailing placeholder).
+    // <think> tags in assistant messages are split back into thinking/content fields
+    // by to_ollama_messages() on the Rust side.
     const apiMessages = [
       { role: "system", content: systemPrompt },
       ...updatedMessages.slice(0, -1).map((m) => ({
@@ -126,6 +129,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     const channel = new Channel<CompletionEvent>()
     let contentAccumulated = ""
     let thinkingAccumulated = ""
+    let toolWritten = false
     // rAF batcher: buffer all chunks within one animation frame into a single store update
     let rafId: number | null = null
     let rafThinkingId: number | null = null  // Separate rAF for thinking updates
@@ -135,7 +139,6 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
         // Handle thinking chunk (sent separately from content)
         if (msg.data.thinking) {
           thinkingAccumulated += msg.data.thinking
-          // Update thinking content immediately (separate from content, for Reasoning component)
           if (rafThinkingId === null) {
             rafThinkingId = requestAnimationFrame(() => {
               rafThinkingId = null
@@ -147,20 +150,23 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
         if (msg.data.text) {
           contentAccumulated += msg.data.text
         }
-        // Combined for content display during streaming (not for Reasoning - that's separate)
         if (rafId === null) {
           rafId = requestAnimationFrame(() => {
             rafId = null
             useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
           })
         }
+      } else if (msg.event === "FileWritten") {
+        // AI called the write_file tool — deliver clean content directly to the panel
+        toolWritten = true
+        onOutputRef.current?.(msg.data.content)
+        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
       } else if (msg.event === "Done") {
         if (rafId !== null) {
           cancelAnimationFrame(rafId)
           rafId = null
         }
-        // Combine thinking and content WITH tags for persistence
-        const finalContent = thinkingAccumulated 
+        const finalContent = thinkingAccumulated
           ? `<think>${thinkingAccumulated}</think>${contentAccumulated}`
           : contentAccumulated
         const finalMessages: ChatMessage[] = [
@@ -171,7 +177,10 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
         useChatStore.getState().setStreaming(entityId, false)
         useChatStore.getState().setStreamingThinking(entityId, "")
         writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        onOutputRef.current?.(finalContent)
+        // Only call onOutput from accumulated content when no tool wrote the file
+        if (!toolWritten) {
+          onOutputRef.current?.(finalContent)
+        }
       } else if (msg.event === "Error") {
         useChatStore.getState().setMessages(entityId, [
           ...updatedMessages.slice(0, -1),
@@ -184,7 +193,10 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     }
 
     try {
-      await generateCompletionStream(modelId, apiMessages, resolvedHost, resolvedKey, channel, useThinking || undefined)
+      await generateCompletionStream(
+        modelId, apiMessages, resolvedHost, resolvedKey,
+        channel, useThinking || undefined, outputPath,
+      )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
@@ -196,6 +208,101 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     useChatStore.getState().clearChat(entityId)
     writeFile(chatPath, "[]").catch(() => {})
   }, [entityId, chatPath])
+
+  const regenerate = useCallback(async () => {
+    const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
+    if (currentChat.isStreaming) return
+    const msgs = currentChat.messages
+    // Find the last user message index (messages end with assistant reply)
+    let lastUserIdx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "user") { lastUserIdx = i; break }
+    }
+    if (lastUserIdx === -1) return
+    // Trim back to just before that user message, then replay
+    const trimmed = msgs.slice(0, lastUserIdx)
+    const userMsg = msgs[lastUserIdx]
+    useChatStore.getState().setMessages(entityId, trimmed)
+
+    const assistantPlaceholder: ChatMessage = { role: "assistant", content: "" }
+    const updatedMessages: ChatMessage[] = [...trimmed, userMsg, assistantPlaceholder]
+    useChatStore.getState().setMessages(entityId, updatedMessages)
+    useChatStore.getState().setStreaming(entityId, true)
+    useChatStore.getState().setStreamingThinking(entityId, "")
+
+    const apiMessages = [
+      { role: "system", content: systemPrompt },
+      ...updatedMessages.slice(0, -1).map((m) => ({
+        role: m.role,
+        content: m.content,
+        ...(m.images?.length ? { images: m.images } : {}),
+      })),
+    ]
+
+    const { modelId, host, ollamaCloudModels, apiKeys } = settings
+    const resolvedHost = getModelHost(modelId, host, ollamaCloudModels)
+    const resolvedKey = getApiKey(modelId, apiKeys)
+    const useThinking = thinkEnabled && caps.thinking
+
+    const channel = new Channel<CompletionEvent>()
+    let contentAccumulated = ""
+    let thinkingAccumulated = ""
+    let toolWrittenRegen = false
+    let rafId: number | null = null
+    let rafThinkingId: number | null = null
+
+    channel.onmessage = (msg) => {
+      if (msg.event === "Chunk") {
+        if (msg.data.thinking) {
+          thinkingAccumulated += msg.data.thinking
+          if (rafThinkingId === null) {
+            rafThinkingId = requestAnimationFrame(() => {
+              rafThinkingId = null
+              useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
+            })
+          }
+        }
+        if (msg.data.text) contentAccumulated += msg.data.text
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null
+            useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
+          })
+        }
+      } else if (msg.event === "FileWritten") {
+        toolWrittenRegen = true
+        onOutputRef.current?.(msg.data.content)
+        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
+      } else if (msg.event === "Done") {
+        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        const finalContent = thinkingAccumulated
+          ? `<think>${thinkingAccumulated}</think>${contentAccumulated}`
+          : contentAccumulated
+        const finalMessages = [...updatedMessages.slice(0, -1), { role: "assistant" as const, content: finalContent }]
+        useChatStore.getState().setMessages(entityId, finalMessages)
+        useChatStore.getState().setStreaming(entityId, false)
+        useChatStore.getState().setStreamingThinking(entityId, "")
+        writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
+        if (!toolWrittenRegen) onOutputRef.current?.(finalContent)
+      } else if (msg.event === "Error") {
+        useChatStore.getState().setMessages(entityId, [...updatedMessages.slice(0, -1), { role: "assistant" as const, content: `⚠ ${msg.data.message}` }])
+        useChatStore.getState().setStreaming(entityId, false)
+        useChatStore.getState().setStreamingThinking(entityId, "")
+        notify.error("Generation failed", msg.data.message)
+      }
+    }
+
+    try {
+      await generateCompletionStream(
+        modelId, apiMessages, resolvedHost, resolvedKey,
+        channel, useThinking || undefined, outputPath,
+      )
+    } catch (e) {
+      useChatStore.getState().setStreaming(entityId, false)
+      useChatStore.getState().setStreamingThinking(entityId, "")
+      notify.error("Generation failed", e instanceof Error ? e.message : String(e))
+    }
+  }, [entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath])
 
   const addAttachment = useCallback((file: AttachmentFile) => {
     setAttachments((prev) => [...prev, file])
@@ -225,6 +332,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     input,
     setInput,
     sendMessage,
+    regenerate,
     clearChat,
     attachments,
     addAttachment,

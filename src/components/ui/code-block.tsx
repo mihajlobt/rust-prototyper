@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
 import React, { useEffect, useState } from "react"
 import { codeToHtml } from "shiki"
+import { Copy, Check } from "lucide-react"
 
 export type CodeBlockProps = {
   children?: React.ReactNode
@@ -89,4 +90,40 @@ function CodeBlockGroup({
   )
 }
 
-export { CodeBlockGroup, CodeBlockCode, CodeBlock }
+export type CodeBlockHeaderProps = {
+  language?: string
+  code: string
+  className?: string
+}
+
+function CodeBlockHeader({ language, code, className }: CodeBlockHeaderProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between px-4 py-1.5 border-b border-border",
+        "text-xs text-muted-foreground bg-muted/40",
+        className
+      )}
+    >
+      <span className="font-mono">{language && language !== "plaintext" ? language : ""}</span>
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  )
+}
+
+export { CodeBlockGroup, CodeBlockCode, CodeBlock, CodeBlockHeader }

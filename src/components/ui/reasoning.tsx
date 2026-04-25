@@ -42,8 +42,9 @@ function Reasoning({
   onOpenChange,
   isStreaming,
 }: ReasoningProps) {
-  const [internalOpen, setInternalOpen] = useState(false)
-  const [wasAutoOpened, setWasAutoOpened] = useState(false)
+  // Initialize open immediately if streaming — avoids one-render-cycle closed flash
+  const [internalOpen, setInternalOpen] = useState(() => isStreaming === true)
+  const [wasAutoOpened, setWasAutoOpened] = useState(() => isStreaming === true)
 
   const isControlled = open !== undefined
   const isOpen = isControlled ? open : internalOpen
@@ -131,17 +132,18 @@ function ReasoningContent({
   useEffect(() => {
     if (!contentRef.current || !innerRef.current) return
 
-    const observer = new ResizeObserver(() => {
-      if (contentRef.current && innerRef.current && isOpen) {
-        contentRef.current.style.maxHeight = `${innerRef.current.scrollHeight}px`
+    const update = () => {
+      if (contentRef.current && innerRef.current) {
+        contentRef.current.style.maxHeight = isOpen
+          ? `${innerRef.current.scrollHeight}px`
+          : "0px"
       }
-    })
-
-    observer.observe(innerRef.current)
-
-    if (isOpen) {
-      contentRef.current.style.maxHeight = `${innerRef.current.scrollHeight}px`
     }
+
+    update()
+
+    const observer = new ResizeObserver(update)
+    observer.observe(innerRef.current)
 
     return () => observer.disconnect()
   }, [isOpen])
@@ -159,9 +161,7 @@ function ReasoningContent({
         "overflow-hidden transition-[max-height] duration-150 ease-out",
         className
       )}
-      style={{
-        maxHeight: isOpen ? contentRef.current?.scrollHeight : "0px",
-      }}
+      style={{ maxHeight: "0px" }}
       {...props}
     >
       <div
