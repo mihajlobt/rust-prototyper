@@ -1,10 +1,22 @@
-import { useEffect, useRef, memo } from "react"
-import ReactMarkdown from "react-markdown"
+import { memo } from "react"
 import { Copy, Code2 } from "lucide-react"
-import { parseBlocks, stripThinking } from "@/lib/chat-utils"
-import { extractCode } from "@/lib/preview"
-import { ThinkingBlock } from "./ThinkingBlock"
+import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
+import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
+import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
+import { Loader } from "@/components/ui/loader"
+import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage } from "@/types/chat"
+
+// Extract thinking content from <think>...</think> tags
+function getThinking(content: string): string {
+  const match = content.match(/<think>([\s\S]*?)<\/think>/)
+  return match ? match[1].trim() : ""
+}
+
+// Extract response content without thinking tags
+function getResponse(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/?think>/g, "").trim()
+}
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -13,23 +25,24 @@ interface MessageListProps {
 }
 
 export function MessageList({ messages, isStreaming, onApplyCode }: MessageListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
-
   return (
-    <div className="flex flex-col gap-3 overflow-y-auto p-3 h-full">
-      {messages.map((msg, i) => (
-        <MessageBubble
-          key={i}
-          message={msg}
-          isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
-          onApplyCode={onApplyCode}
-        />
-      ))}
-      <div ref={bottomRef} />
+    <div className="relative flex-1 min-h-0">
+      <ChatContainerRoot className="h-full">
+        <ChatContainerContent className="gap-3 p-3">
+          {messages.map((msg, i) => (
+            <MessageBubble
+              key={`${msg.role}-${i}`}
+              message={msg}
+              isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
+              onApplyCode={onApplyCode}
+            />
+          ))}
+          <ChatContainerScrollAnchor />
+        </ChatContainerContent>
+        <div className="absolute right-4 bottom-4 z-10">
+          <ScrollButton />
+        </div>
+      </ChatContainerRoot>
     </div>
   )
 }
@@ -40,115 +53,80 @@ interface MessageBubbleProps {
   onApplyCode?: (content: string) => void
 }
 
-const MessageBubble = memo(function MessageBubble({ message, isStreaming, onApplyCode }: MessageBubbleProps) {
-  const blocks = parseBlocks(message.content)
-  const isEmpty = isStreaming && message.content === ""
-  const hasCode = !!extractCode(stripThinking(message.content))
+const MessageBubble = memo(function MessageBubble({
+  message,
+  isStreaming,
+  onApplyCode,
+}: MessageBubbleProps) {
+  const content = message.content
+  const isEmpty = isStreaming && content === ""
+  const hasThinking = content.includes("<think>")
+  const hasCode = content.includes("```")
+
+  if (message.role === "user") {
+    return (
+      <Message className="justify-end">
+        <MessageAvatar src="" alt="User" fallback="U" />
+        <MessageContent className="text-sm">
+          {content}
+        </MessageContent>
+      </Message>
+    )
+  }
 
   return (
-    <div className={`group flex flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"}`}>
-      {message.images && message.images.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-1">
-          {message.images.map((img, i) => (
-            <img
-              key={i}
-              src={`data:image/jpeg;base64,${img}`}
-              alt="attachment"
-              className="h-16 w-16 rounded object-cover border border-border"
-            />
-          ))}
-        </div>
-      )}
-
-      <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-          message.role === "user"
-            ? "bg-accent/20 text-foreground"
-            : "bg-muted text-foreground"
-        }`}
-      >
-        {message.role === "assistant" ? (
+    <Message>
+      <MessageAvatar src="" alt="AI" fallback="AI" />
+      <div className="flex flex-col gap-1 max-w-[85%]">
+        {isEmpty ? (
+          <Loader variant="typing" size="sm" />
+        ) : hasThinking ? (
           <>
-            {isEmpty ? (
-              <span className="streaming-cursor">▋</span>
-            ) : (
-              <>
-                {blocks.map((block, i) =>
-                  block.type === "thinking" ? (
-                    <ThinkingBlock key={i} block={block} />
-                  ) : (
-                    <div key={i} className="prose prose-sm dark:prose-invert max-w-none">
-                      <ReactMarkdown
-                        components={{
-                          code({ className, children }) {
-                            const code = String(children).replace(/\n$/, "")
-                            const isInline = !className && !code.includes("\n")
-                            if (isInline) {
-                              return <code className="bg-muted-foreground/20 rounded px-1 py-0.5 text-xs font-mono">{children}</code>
-                            }
-                            return (
-                              <div className="relative group/code my-1">
-                                <pre className="bg-background border border-border rounded p-3 overflow-x-auto text-xs font-mono">
-                                  <code>{code}</code>
-                                </pre>
-                                <button
-                                  className="absolute top-1.5 right-1.5 opacity-0 group-hover/code:opacity-100 transition-opacity p-1 rounded bg-muted hover:bg-muted-foreground/20"
-                                  onClick={() => navigator.clipboard.writeText(code)}
-                                  title="Copy code"
-                                >
-                                  <Copy size={11} />
-                                </button>
-                              </div>
-                            )
-                          },
-                          p({ children }) {
-                            return <p className="mb-1 last:mb-0 leading-relaxed">{children}</p>
-                          },
-                          ul({ children }) {
-                            return <ul className="list-disc list-inside mb-1 space-y-0.5">{children}</ul>
-                          },
-                          ol({ children }) {
-                            return <ol className="list-decimal list-inside mb-1 space-y-0.5">{children}</ol>
-                          },
-                        }}
-                      >
-                        {block.content}
-                      </ReactMarkdown>
-                    </div>
-                  )
-                )}
-                {isStreaming && <span className="streaming-cursor">▋</span>}
-              </>
-            )}
+            <Reasoning isStreaming={isStreaming}>
+              <ReasoningTrigger className="text-xs text-muted-foreground">
+                Reasoning
+              </ReasoningTrigger>
+              <ReasoningContent markdown className="text-xs">
+                {getThinking(content)}
+              </ReasoningContent>
+            </Reasoning>
+            <MessageContent markdown className="text-sm">
+              {getResponse(content)}
+            </MessageContent>
           </>
         ) : (
-          <span className="whitespace-pre-wrap">{message.content}</span>
+          <MessageContent markdown className="text-sm">
+            {content}
+          </MessageContent>
+        )}
+        {isStreaming && !isEmpty && (
+          <Loader variant="loading-dots" size="sm" text="Generating" />
+        )}
+        {!isStreaming && content && (
+          <MessageActions className="opacity-0 group-hover:opacity-100 transition-opacity">
+            <MessageAction tooltip="Copy message">
+              <button
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                onClick={() => navigator.clipboard.writeText(content)}
+              >
+                <Copy size={14} />
+              </button>
+            </MessageAction>
+            {onApplyCode && hasCode && (
+              <MessageAction tooltip="Apply code">
+                <button
+                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 text-xs"
+                  onClick={() => onApplyCode(content)}
+                >
+                  <Code2 size={14} />
+                  Apply
+                </button>
+              </MessageAction>
+            )}
+          </MessageActions>
         )}
       </div>
-
-      {/* Hover action bar — shown on completed assistant messages */}
-      {message.role === "assistant" && !isStreaming && message.content && (
-        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            onClick={() => navigator.clipboard.writeText(message.content)}
-            title="Copy message"
-          >
-            <Copy size={11} />
-          </button>
-          {onApplyCode && hasCode && (
-            <button
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 text-[10px]"
-              onClick={() => onApplyCode(message.content)}
-              title="Apply code"
-            >
-              <Code2 size={11} />
-              Apply
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+    </Message>
   )
 }, (prev, next) =>
   prev.message.content === next.message.content &&

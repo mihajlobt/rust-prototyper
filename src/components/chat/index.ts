@@ -1,5 +1,4 @@
 export { MessageList } from "./MessageList"
-export { ThinkingBlock } from "./ThinkingBlock"
 export { ChatInput } from "./ChatInput"
 export { MentionPicker } from "./MentionPicker"
 export { AttachmentChip } from "./AttachmentChip"

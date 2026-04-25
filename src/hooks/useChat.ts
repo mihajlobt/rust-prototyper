@@ -130,6 +130,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
     channel.onmessage = (msg) => {
       if (msg.event === "Chunk") {
         accumulated += msg.data.text
+        // Update the last assistant message directly in the store — streams progressively to UI
         if (rafId === null) {
           rafId = requestAnimationFrame(() => {
             rafId = null

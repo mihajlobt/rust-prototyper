@@ -1,12 +1,14 @@
 import {
-  useRef, useState,
-  type KeyboardEvent, type DragEvent, type ClipboardEvent, type ChangeEvent,
+  useState,
+  type DragEvent, type ClipboardEvent,
 } from "react"
 import { Send, ImageIcon, Brain } from "lucide-react"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
 import { AttachmentChip } from "./AttachmentChip"
 import { MentionChip } from "./MentionChip"
+import { PromptInput, PromptInputTextarea, PromptInputActions, PromptInputAction } from "@/components/ui/prompt-input"
+import { FileUpload, FileUploadTrigger } from "@/components/ui/file-upload"
 import type { AttachmentFile, MentionAsset } from "@/types/chat"
 
 interface ChatInputProps {
@@ -36,8 +38,6 @@ export function ChatInput({
 }: ChatInputProps) {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   function handleChange(text: string) {
     onChange(text)
@@ -62,15 +62,6 @@ export function ChatInput({
     readFile(asset.path)
       .then((code) => onAddMention({ ...asset, code }))
       .catch(() => onAddMention({ ...asset, code: "" }))
-    textareaRef.current?.focus()
-  }
-
-  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey && mentionQuery === null) {
-      e.preventDefault()
-      if (!disabled && value.trim()) onSend()
-    }
-    if (e.key === "Escape") setMentionQuery(null)
   }
 
   async function processImageFile(file: File) {
@@ -120,9 +111,10 @@ export function ChatInput({
     })
   }
 
-  function handleFileInputChange(e: ChangeEvent<HTMLInputElement>) {
-    Array.from(e.target.files ?? []).forEach(processImageFile)
-    e.target.value = ""
+  function handleFileAdded(files: File[]) {
+    files.forEach((file) => {
+      if (file.type.startsWith("image/")) processImageFile(file)
+    })
   }
 
   const hasChips = attachments.length > 0 || mentions.length > 0
@@ -155,63 +147,66 @@ export function ChatInput({
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1 p-1.5">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => handleChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
+        <PromptInput
+          value={value}
+          onValueChange={handleChange}
+          onSubmit={onSend}
+          disabled={disabled}
+          maxHeight={120}
+          className="border-0 shadow-none rounded-lg"
+        >
+          <PromptInputTextarea
             placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-            style={{ maxHeight: "120px", overflowY: "auto" }}
+            onPaste={handlePaste}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setMentionQuery(null)
+            }}
           />
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={canThink ? onToggleThink : undefined}
-              className={`p-1 rounded transition-colors ${
-                canThink
-                  ? thinkEnabled
-                    ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
-                    : "text-muted-foreground hover:text-foreground"
-                  : "text-muted-foreground/30 cursor-not-allowed"
-              }`}
-              title={canThink
+          <PromptInputActions>
+            <PromptInputAction
+              tooltip={canThink
                 ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
                 : "Model does not support thinking"
               }
-              type="button"
             >
-              <Brain size={14} />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={handleFileInputChange}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-              title="Attach image"
-              type="button"
-            >
-              <ImageIcon size={14} />
-            </button>
-            <button
-              onClick={onSend}
-              disabled={disabled || !value.trim()}
-              className="rounded bg-accent px-2 py-1 text-accent-foreground disabled:opacity-40 transition-opacity"
-              type="button"
-            >
-              <Send size={12} />
-            </button>
-          </div>
-        </div>
+              <button
+                onClick={canThink ? onToggleThink : undefined}
+                className={`p-1 rounded transition-colors ${
+                  canThink
+                    ? thinkEnabled
+                      ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
+                      : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground/30 cursor-not-allowed"
+                }`}
+                type="button"
+              >
+                <Brain size={14} />
+              </button>
+            </PromptInputAction>
+            <FileUpload onFilesAdded={handleFileAdded} accept="image/*" multiple>
+              <FileUploadTrigger asChild>
+                <PromptInputAction tooltip="Attach image">
+                  <button
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    type="button"
+                  >
+                    <ImageIcon size={14} />
+                  </button>
+                </PromptInputAction>
+              </FileUploadTrigger>
+            </FileUpload>
+            <PromptInputAction tooltip="Send">
+              <button
+                onClick={onSend}
+                disabled={disabled || !value.trim()}
+                className="rounded bg-accent px-2 py-1 text-accent-foreground disabled:opacity-40 transition-opacity"
+                type="button"
+              >
+                <Send size={12} />
+              </button>
+            </PromptInputAction>
+          </PromptInputActions>
+        </PromptInput>
       </div>
     </div>
   )
