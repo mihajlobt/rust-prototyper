@@ -365,7 +365,7 @@ export function APIsPanel() {
     try {
       const resolvedUrl = resolveEnvVars(url);
       const resolvedBody = body ? resolveEnvVars(body) : undefined;
-      let headers: Record<string, string> = {};
+      const headers: Record<string, string> = {};
       try {
         const parsedHeaders = JSON.parse(headersText);
         for (const [key, value] of Object.entries(parsedHeaders)) {

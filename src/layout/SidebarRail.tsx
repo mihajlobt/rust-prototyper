@@ -396,7 +396,7 @@ export function SidebarRail() {
       <Dialog open={!!renameTarget} onOpenChange={(o) => !o && setRenameTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Rename "{renameTarget?.name}"</DialogTitle>
+            <DialogTitle>Rename &ldquo;{renameTarget?.name}&rdquo;</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Input

@@ -145,7 +145,7 @@ export function SettingsModal() {
       }
     })();
     return () => { cancelled = true; };
-  }, [open, settings.apiKeys]);
+  }, [open, settings.apiKeys, setSettings]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

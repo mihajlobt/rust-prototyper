@@ -110,7 +110,7 @@ export function ChatInput({
         readFile(filePath)
           .then((code) => onAddMention({ id: assetName, type: assetType, name: assetName, path: filePath, code }))
           .catch(() => onAddMention({ id: assetName, type: assetType, name: assetName, path: filePath, code: "" }))
-      } catch {}
+      } catch { /* invalid drop data */ }
       return
     }
 

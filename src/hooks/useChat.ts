@@ -67,7 +67,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
           if (Array.isArray(messages) && messages.length > 0) {
             useChatStore.getState().setMessages(entityId, messages)
           }
-        } catch {}
+        } catch { /* ignore corrupt chat file */ }
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -165,7 +165,7 @@ export function useChat({ entityId, chatPath, systemPrompt, onOutput }: UseChatO
       useChatStore.getState().setStreaming(entityId, false)
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
     }
-  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings])
+  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking])
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)

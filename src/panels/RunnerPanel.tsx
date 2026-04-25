@@ -169,7 +169,7 @@ export function RunnerPanel() {
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       if (running && iframeRef.current && (event.line.includes("updated") || event.line.includes("hmr") || event.line.includes("HMR"))) {
-        iframeRef.current.src = iframeRef.current.src;
+        iframeRef.current.contentWindow?.location.reload();
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
@@ -414,7 +414,7 @@ export function RunnerPanel() {
 
   const handleRefreshPreview = () => {
     if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
+      iframeRef.current.contentWindow?.location.reload();
     }
   };
 
@@ -737,7 +737,7 @@ export function RunnerPanel() {
       <Dialog open={!!renameTarget} onOpenChange={(o) => !o && setRenameTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Rename "{renameTarget?.name}"</DialogTitle>
+            <DialogTitle>Rename &ldquo;{renameTarget?.name}&rdquo;</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Input

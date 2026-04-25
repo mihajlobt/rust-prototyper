@@ -276,7 +276,7 @@ function WorkflowCanvas() {
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); if (e.shiftKey) { handleRedo(); } else { handleUndo(); } }
       if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId && !["INPUT","TEXTAREA"].includes((e.target as HTMLElement).tagName)) deleteSelected();
       if (e.key === "Escape") setCtxMenu(null);
     };
@@ -361,7 +361,7 @@ function WorkflowCanvas() {
           case "custom":       output = await ai(d.prompt || "Process the input.", prevOut || promptBase); break;
           case "bash": { await runShellCommand(".", d.command || "echo hello"); output = `Ran: ${d.command}`; break; }
           case "fetch": {
-            let headers: Record<string, string> = {}; try { headers = JSON.parse(d.headers || "{}"); } catch {}
+            let headers: Record<string, string> = {}; try { headers = JSON.parse(d.headers || "{}"); } catch { /* invalid JSON headers */ }
             const res = await httpRequest(d.method || "GET", d.url || "https://api.github.com", headers, d.body || undefined);
             output = `Status: ${res.status}\n${res.body.slice(0, 2000)}`; break;
           }
@@ -370,7 +370,7 @@ function WorkflowCanvas() {
             else { await writeFile(d.path || "./test.txt", d.content || ""); output = `Wrote to ${d.path}`; } break;
           }
           case "auth": {
-            let h: Record<string, string> = {};
+            const h: Record<string, string> = {};
             if (d.authScheme === "apikey") h[d.authHeaderName || "X-API-Key"] = d.authToken || "";
             else if (d.authScheme === "basic") h["Authorization"] = `Basic ${btoa(d.authToken || "")}`;
             else h["Authorization"] = `Bearer ${d.authToken || ""}`;

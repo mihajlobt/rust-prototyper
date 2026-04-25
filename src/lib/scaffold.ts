@@ -21,7 +21,7 @@ export async function hasViteScaffold(generatedDir: string): Promise<boolean> {
  * Throws if any entry cannot be deleted.
  */
 async function clearDirectory(dir: string): Promise<void> {
-  let entries: Awaited<ReturnType<typeof readDir>> = [];
+  let entries: Awaited<ReturnType<typeof readDir>>;
   try {
     entries = await readDir(dir);
   } catch {

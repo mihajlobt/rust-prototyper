@@ -273,7 +273,7 @@ body { margin: 0; font-family: sans-serif; }
                         >
                           <div className="p-4 space-y-4 max-w-lg">
                           <h1 className="text-2xl font-bold" style={{ color: 'var(--foreground, #000)' }}>Theme Preview</h1>
-                          <p className="text-sm" style={{ color: 'var(--muted-foreground, #666)' }}>A visual overview of your theme's tokens.</p>
+                          <p className="text-sm" style={{ color: 'var(--muted-foreground, #666)' }}>{"A visual overview of your theme\u2019s tokens."}</p>
 
                           <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
                           <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Buttons</p>
