@@ -53,6 +53,12 @@ interface UIState {
   apisCurlPaste: string;
   apisOpenapiPaste: string;
 
+  // Runner
+  runnerDevice: "desktop" | "tablet" | "mobile";
+  runnerZoom: number;
+  runnerTerminalOpen: boolean;
+  runnerActiveTab: "terminal" | "logs" | "network";
+
   // Workflows
   workflowsShowPanel: boolean;
 }
@@ -100,6 +106,12 @@ export const useUIStore = create<UIState>()(() => ({
   apisNewEnvValue: "",
   apisCurlPaste: "",
   apisOpenapiPaste: "",
+
+  // Runner
+  runnerDevice: "desktop",
+  runnerZoom: 1,
+  runnerTerminalOpen: true,
+  runnerActiveTab: "terminal",
 
   // Workflows
   workflowsShowPanel: false,

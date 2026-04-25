@@ -159,11 +159,11 @@ export function SettingsModal() {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="general" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="ai">AI</TabsTrigger>
-            <TabsTrigger value="styles">Styles</TabsTrigger>
-            <TabsTrigger value="prompts">Prompts</TabsTrigger>
+          <TabsList className="bg-transparent h-7 p-0 gap-0">
+            <TabsTrigger value="general" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">General</TabsTrigger>
+            <TabsTrigger value="ai" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">AI</TabsTrigger>
+            <TabsTrigger value="styles" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Styles</TabsTrigger>
+            <TabsTrigger value="prompts" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Prompts</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="flex-1 overflow-auto space-y-4 mt-4">

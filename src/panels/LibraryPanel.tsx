@@ -216,15 +216,15 @@ export function LibraryPanel() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="all" className="gap-1.5 text-xs"><LayoutGrid size={12} />All</TabsTrigger>
-          <TabsTrigger value="component" className="gap-1.5 text-xs"><Box size={12} />Components</TabsTrigger>
-          <TabsTrigger value="theme" className="gap-1.5 text-xs"><Palette size={12} />Themes</TabsTrigger>
-          <TabsTrigger value="screen" className="gap-1.5 text-xs"><LayoutGrid size={12} />Screens</TabsTrigger>
-          <TabsTrigger value="api" className="gap-1.5 text-xs"><Terminal size={12} />APIs</TabsTrigger>
+        <TabsList className="bg-transparent h-7 p-0 gap-0">
+          <TabsTrigger value="all" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><LayoutGrid size={10} />All</TabsTrigger>
+          <TabsTrigger value="component" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Box size={10} />Components</TabsTrigger>
+          <TabsTrigger value="theme" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Palette size={10} />Themes</TabsTrigger>
+          <TabsTrigger value="screen" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><LayoutGrid size={10} />Screens</TabsTrigger>
+          <TabsTrigger value="api" className="h-7 px-2 text-[11px] gap-1 data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground"><Terminal size={10} />APIs</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="flex-1 overflow-hidden mt-4">
+        <TabsContent value={activeTab} className="flex-1 overflow-hidden mt-2">
           <ScrollArea className="h-full">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {filtered.map((item) => (

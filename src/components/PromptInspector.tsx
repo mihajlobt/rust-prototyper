@@ -108,10 +108,10 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
         </div>
       </div>
       <Tabs defaultValue="assembled" className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="grid w-full grid-cols-3 shrink-0">
-          <TabsTrigger value="assembled">Assembled</TabsTrigger>
-          <TabsTrigger value="json">JSON Payload</TabsTrigger>
-          <TabsTrigger value="curl">cURL</TabsTrigger>
+        <TabsList className="bg-transparent h-7 p-0 gap-0">
+          <TabsTrigger value="assembled" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">Assembled</TabsTrigger>
+          <TabsTrigger value="json" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">JSON</TabsTrigger>
+          <TabsTrigger value="curl" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-muted rounded-none border-b-2 border-transparent data-[state=active]:border-foreground">cURL</TabsTrigger>
         </TabsList>
 
         <TabsContent value="assembled" className="flex-1 overflow-hidden mt-0 relative">
