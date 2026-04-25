@@ -191,10 +191,10 @@ export function ChatInput({
               </Tooltip>
             </TooltipProvider>
 
-            {canVision && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {canVision ? (
                     <FileUpload onFilesAdded={(files) => files.forEach((f) => { if (f.type.startsWith("image/")) processImageFile(f) })} accept="image/*" multiple>
                       <FileUploadTrigger asChild>
                         <button
@@ -205,11 +205,21 @@ export function ChatInput({
                         </button>
                       </FileUploadTrigger>
                     </FileUpload>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Attach image</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="rounded p-1 text-muted-foreground/30 cursor-not-allowed"
+                    >
+                      <ImageIcon size={13} />
+                    </button>
+                  )}
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {canVision ? "Attach image" : "Model does not support vision"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {disabled && onStop ? (
