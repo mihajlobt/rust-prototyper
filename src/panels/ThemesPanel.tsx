@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { Eye, Smartphone, Tablet, Monitor, Save, ChevronUp, ChevronDown, FileCode, Sun, Moon } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Save, FileCode, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,7 +20,8 @@ import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt } from "@/lib/prompts";
-import { getParentCss } from "@/lib/preview";
+import { getParentCss, extractCode } from "@/lib/preview";
+import { stripThinking } from "@/lib/chat-utils";
 import { PromptInspector } from "@/components/PromptInspector";
 import Frame from "react-frame-component";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -67,7 +68,7 @@ export function ThemesPanel() {
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("themes", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("themes-code", 3);
-  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("themes-inspector", 2);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("themes-inspector", 3);
 
   // Load persisted theme via TanStack Query
   const { data: loadedCss } = useThemeCss(settings.project, selectedThemeDir);
@@ -108,7 +109,7 @@ export function ThemesPanel() {
 
   const chatPane = (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList messages={messages} isStreaming={isStreaming} />
+      <MessageList messages={messages} isStreaming={isStreaming} onApplyCode={(content) => { const c = extractCode(stripThinking(content)); if (c) setCss(c); }} />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput
           value={input}
@@ -167,52 +168,45 @@ export function ThemesPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          {themesShowInspector ? (
-            <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
-              <Allotment.Pane minSize={200}>
-                <div className="h-full flex flex-col bg-card">
-                  <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
-                    {frameworkPills}
-                    <div className="flex-1" />
-                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ themesShowInspector: false })}>
-                      <Eye size={12} />
-                      Hide Inspector
-                    </Button>
-                  </div>
-                  {chatPane}
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
+            <Allotment.Pane minSize={200}>
+              <div className="h-full flex flex-col bg-card">
+                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                  {frameworkPills}
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
+                    disabled={!css}
+                    title="Save as…"
+                  >
+                    <Save size={12} />
+                  </Button>
                 </div>
-              </Allotment.Pane>
-              <Allotment.Pane preferredSize={240} minSize={160}>
+                {chatPane}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+              <div
+                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
+                onClick={() => useUIStore.setState({ themesShowInspector: !themesShowInspector })}
+              >
+                <span className="text-xs font-medium flex-1">Inspector</span>
+                {themesShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane visible={themesShowInspector} preferredSize={240} minSize={160}>
+              {themesShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
                   messages={messages.map((m) => ({ role: m.role, content: m.content }))}
                   host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
                 />
-              </Allotment.Pane>
-            </Allotment>
-          ) : (
-            <div className="h-full flex flex-col bg-card">
-              <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
-                {frameworkPills}
-                <div className="flex-1" />
-                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ themesShowInspector: true })}>
-                  <Eye size={12} />
-                  Inspector
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
-                  disabled={!css}
-                  title="Save as…"
-                >
-                  <Save size={12} />
-                </Button>
-              </div>
-              {chatPane}
-            </div>
-          )}
+              )}
+            </Allotment.Pane>
+          </Allotment>
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Eye, Smartphone, Tablet, Monitor, Download } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
 import { writeFile, createDir, readFile, readDir, exportProject, getModelHost } from "@/lib/ipc";
@@ -25,7 +25,7 @@ export function ScreensPanel() {
   const screensLinkMode = useUIStore((s) => s.screensLinkMode);
   const screensZoom = useUIStore((s) => s.screensZoom);
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
-  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 2);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3);
   const [screens, setScreens] = useState<string[]>(["main"]);
   const [previewHtml, setPreviewHtml] = useState("");
 
@@ -211,60 +211,50 @@ export function ScreensPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          {screensShowInspector ? (
-            <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
-              <Allotment.Pane minSize={200}>
-                <div className="h-full flex flex-col bg-card">
-                  <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
-                    <span className="text-sm font-medium">Chat</span>
-                    <div className="flex-1" />
-                    <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ screensShowInspector: false })}>
-                      <Eye size={12} />
-                      Hide Inspector
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
-                      Clear
-                    </Button>
-                  </div>
-                  {chatPane}
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
+            <Allotment.Pane minSize={200}>
+              <div className="h-full flex flex-col bg-card">
+                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                  <span className="text-sm font-medium">Chat</span>
+                  {messages.length > 0 && (
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                      {Math.ceil(messages.filter(m => m.role === "user").length)} turns
+                    </span>
+                  )}
+                  <div className="flex-1" />
+                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleExport}>
+                    <Download size={12} />
+                    Export
+                  </Button>
+                  <Button variant={screensLinkMode ? "default" : "ghost"} size="sm" className="h-6 text-xs" onClick={() => useUIStore.setState({ screensLinkMode: !screensLinkMode })}>
+                    {screensLinkMode ? "Linking…" : "Link Mode"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
+                    Clear
+                  </Button>
                 </div>
-              </Allotment.Pane>
-              <Allotment.Pane preferredSize={240} minSize={160}>
+                {chatPane}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+              <div
+                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
+                onClick={() => useUIStore.setState({ screensShowInspector: !screensShowInspector })}
+              >
+                <span className="text-xs font-medium flex-1">Inspector</span>
+                {screensShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160}>
+              {screensShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
                   messages={messages.map((m) => ({ role: m.role, content: m.content }))}
                   host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
                 />
-              </Allotment.Pane>
-            </Allotment>
-          ) : (
-            <div className="h-full flex flex-col bg-card">
-              <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
-                <span className="text-sm font-medium">Chat</span>
-                {messages.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                    {Math.ceil(messages.filter(m => m.role === "user").length)} turns
-                  </span>
-                )}
-                <div className="flex-1" />
-                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleExport}>
-                  <Download size={12} />
-                  Export
-                </Button>
-                <Button variant={screensLinkMode ? "default" : "ghost"} size="sm" className="h-6 text-xs" onClick={() => useUIStore.setState({ screensLinkMode: !screensLinkMode })}>
-                  {screensLinkMode ? "Linking…" : "Link Mode"}
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ screensShowInspector: true })}>
-                  <Eye size={12} />
-                  Inspector
-                </Button>
-                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
-                  Clear
-                </Button>
-              </div>
-              {chatPane}
-            </div>
-          )}
+              )}
+            </Allotment.Pane>
+          </Allotment>
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>

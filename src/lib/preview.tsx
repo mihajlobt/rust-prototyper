@@ -188,7 +188,16 @@ export function extractCode(text: string): string | null {
     trimmed.startsWith("const ") ||
     trimmed.startsWith("//") ||
     trimmed.startsWith("<!DOCTYPE") ||
-    trimmed.startsWith("<html")
+    trimmed.startsWith("<html") ||
+    // CSS content: selectors, at-rules, or property declarations
+    trimmed.startsWith(":root") ||
+    trimmed.startsWith(".dark") ||
+    trimmed.match(/^\.[a-zA-Z_-]/) !== null ||
+    trimmed.startsWith("@") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("body") ||
+    trimmed.startsWith("html {") ||
+    trimmed.match(/^[a-zA-Z-]+\s*[{:]/) !== null
   ) {
     return trimmed;
   }

@@ -74,13 +74,13 @@ export const useUIStore = create<UIState>()(() => ({
   componentsDevice: "desktop",
   componentsDarkPreview: false,
   componentsShowInspector: false,
-  componentsCodeOpen: true,
+  componentsCodeOpen: false,
 
   // Themes
   themesDevice: "desktop",
   themesDarkPreview: false,
   themesShowInspector: false,
-  themesCodeOpen: true,
+  themesCodeOpen: false,
   themesFramework: "generic",
   themesDarkLightSupport: true,
 

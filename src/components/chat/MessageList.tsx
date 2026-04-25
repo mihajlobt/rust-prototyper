@@ -1,7 +1,7 @@
 import { useEffect, useRef, memo } from "react"
 import ReactMarkdown from "react-markdown"
 import { Copy, Code2 } from "lucide-react"
-import { parseBlocks } from "@/lib/chat-utils"
+import { parseBlocks, stripThinking } from "@/lib/chat-utils"
 import { extractCode } from "@/lib/preview"
 import { ThinkingBlock } from "./ThinkingBlock"
 import type { ChatMessage } from "@/types/chat"
@@ -43,7 +43,7 @@ interface MessageBubbleProps {
 const MessageBubble = memo(function MessageBubble({ message, isStreaming, onApplyCode }: MessageBubbleProps) {
   const blocks = parseBlocks(message.content)
   const isEmpty = isStreaming && message.content === ""
-  const hasCode = !!extractCode(message.content)
+  const hasCode = !!extractCode(stripThinking(message.content))
 
   return (
     <div className={`group flex flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"}`}>

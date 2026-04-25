@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, Download, PackagePlus, ChevronUp, ChevronDown, Eye, Sun, Moon } from "lucide-react";
+import { Smartphone, Tablet, Monitor, Save, Download, PackagePlus, ChevronUp, ChevronDown, Sun, Moon } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +46,7 @@ export function ComponentsPanel() {
   const componentId = selectedComponent;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3);
-  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 2);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3);
 
   const defaultSystem = getComponentNewPrompt(settings.iconLibrary) +
     (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
@@ -174,7 +174,7 @@ export function ComponentsPanel() {
     mobile: "375px",
   };
 
-  const chatPane = (hideInspector: boolean) => (
+  const chatPane = (
     <div className="h-full flex flex-col bg-card">
       <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
         <span className="text-sm font-medium">Chat</span>
@@ -184,17 +184,6 @@ export function ComponentsPanel() {
           </span>
         )}
         <div className="flex-1" />
-{hideInspector ? (
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ componentsShowInspector: false })}>
-            <Eye size={12} />
-            Hide Inspector
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => useUIStore.setState({ componentsShowInspector: true })}>
-            <Eye size={12} />
-            Inspector
-          </Button>
-        )}
         <div className="flex items-center gap-1">
           <Select value={selectedTheme} onValueChange={(v) => { setSelectedTheme(v); setSettings({ stylePreset: v }); }}>
             <SelectTrigger className="h-6 text-xs w-[90px]">
@@ -247,12 +236,21 @@ export function ComponentsPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          {componentsShowInspector ? (
-            <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
-              <Allotment.Pane minSize={200}>
-                {chatPane(true)}
-              </Allotment.Pane>
-              <Allotment.Pane preferredSize={240} minSize={160}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
+            <Allotment.Pane minSize={200}>
+              {chatPane}
+            </Allotment.Pane>
+            <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+              <div
+                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
+                onClick={() => useUIStore.setState({ componentsShowInspector: !componentsShowInspector })}
+              >
+                <span className="text-xs font-medium flex-1">Inspector</span>
+                {componentsShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              </div>
+            </Allotment.Pane>
+            <Allotment.Pane visible={componentsShowInspector} preferredSize={240} minSize={160}>
+              {componentsShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
                   messages={[
@@ -261,11 +259,9 @@ export function ComponentsPanel() {
                   ]}
                   host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
                 />
-              </Allotment.Pane>
-            </Allotment>
-          ) : (
-            chatPane(false)
-          )}
+              )}
+            </Allotment.Pane>
+          </Allotment>
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
