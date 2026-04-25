@@ -183,6 +183,11 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         }
       } else if (msg.event === "FileWritten") {
         toolWritten = true
+        // Clear accumulated content — it's the raw tool call syntax the model echoed
+        // as text. Only the confirmation text from the next stream turn is useful.
+        contentAccumulated = ""
+        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        useChatStore.getState().setStreamingContent(entityId, "")
         onOutputRef.current?.(stripFences(msg.data.content))
         useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
       } else if (msg.event === "Done") {
