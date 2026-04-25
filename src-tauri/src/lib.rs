@@ -402,7 +402,6 @@ async fn http_request(
 // ─── AI Generation ───
 
 #[derive(serde::Deserialize, Clone)]
-#[allow(dead_code)]
 struct Message {
     role: String,
     content: String,
@@ -508,7 +507,6 @@ fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
 // ─── write_file tool schema ───
 
 #[derive(serde::Deserialize, JsonSchema)]
-#[allow(dead_code)]
 struct WriteFileParams {
     /// The complete file content to write
     content: String,
@@ -586,13 +584,13 @@ async fn generate_ollama_completion_stream(
         if !response.message.content.is_empty() {
             let _ = channel.send(CompletionEvent::Chunk { text: response.message.content, thinking: None });
         }
-        // Extract the file content from the write_file tool call arguments
+        // Deserialize the write_file tool call arguments into WriteFileParams
         for call in &response.message.tool_calls {
             if call.function.name == "write_file" {
-                if let Some(content) = call.function.arguments.get("content").and_then(|v| v.as_str()) {
+                if let Ok(params) = serde_json::from_value::<WriteFileParams>(call.function.arguments.clone()) {
                     let _ = channel.send(CompletionEvent::FileWritten {
                         path: path.to_string(),
-                        content: content.to_string(),
+                        content: params.content,
                     });
                 }
             }
