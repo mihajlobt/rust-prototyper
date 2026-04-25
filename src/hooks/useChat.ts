@@ -114,7 +114,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       ...updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
         ...(m.images?.length ? { images: m.images } : {}),
       })),
     ]
@@ -231,7 +230,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       ...updatedMessages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
         ...(m.images?.length ? { images: m.images } : {}),
       })),
     ]

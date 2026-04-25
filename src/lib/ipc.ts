@@ -113,7 +113,6 @@ export async function httpRequest(
 export interface Message {
   role: string;
   content: string;
-  thinking?: string;
   images?: string[];
 }
 

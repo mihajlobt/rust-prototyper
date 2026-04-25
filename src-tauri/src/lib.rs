@@ -13,7 +13,6 @@ use ollama_rs::{
     generation::{
         chat::{
             ChatMessage as OllamaChatMessage,
-            MessageRole,
             request::ChatMessageRequest,
         },
         images::Image,
@@ -407,7 +406,6 @@ async fn http_request(
 struct Message {
     role: String,
     content: String,
-    thinking: Option<String>,
     #[serde(default)]
     images: Vec<String>,
 }
@@ -491,22 +489,15 @@ fn build_ollama_client(host: &str, api_key: &str) -> Result<Ollama, AppError> {
 
 fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
     messages.iter().map(|m| {
-        let role = match m.role.as_str() {
-            "assistant" => MessageRole::Assistant,
-            "system" => MessageRole::System,
-            _ => MessageRole::User,
+        let msg = match m.role.as_str() {
+            "assistant" => OllamaChatMessage::assistant(m.content.clone()),
+            "system" => OllamaChatMessage::system(m.content.clone()),
+            _ => OllamaChatMessage::user(m.content.clone()),
         };
-        let images: Option<Vec<Image>> = if m.images.is_empty() {
-            None
+        if m.images.is_empty() {
+            msg
         } else {
-            Some(m.images.iter().map(|b| Image::from_base64(b.clone())).collect())
-        };
-        OllamaChatMessage {
-            role,
-            content: m.content.clone(),
-            images,
-            tool_calls: vec![],
-            thinking: m.thinking.clone(),
+            msg.with_images(m.images.iter().map(|b| Image::from_base64(b.clone())).collect())
         }
     }).collect()
 }
