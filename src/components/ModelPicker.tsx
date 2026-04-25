@@ -128,7 +128,6 @@ function SectionHeader({
 
 export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelPickerProps) {
   const settings = useAppStore((s) => s.settings);
-  const queryClient = useQueryClient();
   const [manualValue, setManualValue] = useState("");
   const [showManual, setShowManual] = useState(false);
   const manualRef = useRef<HTMLInputElement>(null);
