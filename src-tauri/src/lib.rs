@@ -557,79 +557,70 @@ async fn generate_ollama_completion_stream(
     let ollama_messages = to_ollama_messages(messages);
 
     if let Some(path) = output_path {
-        // ── Tool mode: streaming loop with manual tool execution ───────────────
-        // Use send_chat_messages_stream (same as plain mode) with a tools definition.
-        // When the model calls write_file, we execute it, push the result to history,
-        // and stream again — giving real-time thinking AND proper tool-calling.
-        // Pattern: chat_with_history_stream.rs example from ollama-rs 0.3.4
+        // ── Tool mode: send_chat_messages_with_history_stream ─────────────────
+        // Pattern from chat_with_history_stream.rs example:
         // https://github.com/pepperoni21/ollama-rs/tree/0.3.4/ollama-rs/examples
+        // Arc<Mutex<Vec<>>> history is passed to each stream call; the library
+        // automatically appends incoming messages to history after each turn.
+        let history: Arc<Mutex<Vec<OllamaChatMessage>>> = Arc::new(Mutex::new(vec![]));
 
-        let mut history: Vec<OllamaChatMessage> = ollama_messages;
+        // First turn: stream with tools, passing initial messages
+        let mut request = ChatMessageRequest::new(model.to_string(), ollama_messages)
+            .tools(vec![write_file_tool_info()]);
+        if let Some(true) = think {
+            request = request.think(ThinkType::True);
+        }
 
-        loop {
-            let mut request = ChatMessageRequest::new(model.to_string(), history.clone())
-                .tools(vec![write_file_tool_info()]);
-            if let Some(true) = think {
-                request = request.think(ThinkType::True);
+        let mut last_tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
+
+        let mut stream = ollama
+            .send_chat_messages_with_history_stream(history.clone(), request)
+            .await
+            .map_err(|e| AppError::Http(e.to_string()))?;
+
+        while let Some(result) = stream.next().await {
+            let response = result.map_err(|_| AppError::Http("Ollama stream error".into()))?;
+            if !response.message.tool_calls.is_empty() {
+                last_tool_calls = response.message.tool_calls.clone();
             }
+            let thinking = response.message.thinking.filter(|t| !t.is_empty());
+            let text = response.message.content;
+            if thinking.is_some() || !text.is_empty() {
+                let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+            }
+        }
 
-            let mut stream = ollama
-                .send_chat_messages_stream(request)
+        // Library has pushed assistant response to history.
+        // Execute write_file, push tool result, then stream confirmation turn.
+        let mut any_written = false;
+        for call in &last_tool_calls {
+            if call.function.name == "write_file" {
+                if let Ok(params) = serde_json::from_value::<WriteFileParams>(call.function.arguments.clone()) {
+                    let _ = channel.send(CompletionEvent::FileWritten {
+                        path: path.to_string(),
+                        content: params.content,
+                    });
+                    history.lock().unwrap().push(OllamaChatMessage::tool("File written successfully.".to_string()));
+                    any_written = true;
+                }
+            }
+        }
+
+        // Second turn: model confirms / describes what it generated
+        if any_written {
+            let confirm_request = ChatMessageRequest::new(model.to_string(), vec![]);
+            let mut confirm_stream = ollama
+                .send_chat_messages_with_history_stream(history.clone(), confirm_request)
                 .await
                 .map_err(|e| AppError::Http(e.to_string()))?;
 
-            let mut content_acc = String::new();
-            let mut thinking_acc = String::new();
-            let mut last_tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
-
-            while let Some(result) = stream.next().await {
-                match result {
-                    Ok(response) => {
-                        if !response.message.tool_calls.is_empty() {
-                            last_tool_calls = response.message.tool_calls.clone();
-                        }
-                        let thinking = response.message.thinking.filter(|t| !t.is_empty());
-                        let text = response.message.content;
-                        if let Some(ref t) = thinking { thinking_acc.push_str(t); }
-                        content_acc.push_str(&text);
-                        if thinking.is_some() || !text.is_empty() {
-                            let _ = channel.send(CompletionEvent::Chunk { text, thinking });
-                        }
-                    }
-                    Err(_) => return Err(AppError::Http("Ollama stream error".into())),
+            while let Some(result) = confirm_stream.next().await {
+                let response = result.map_err(|_| AppError::Http("Ollama stream error".into()))?;
+                let text = response.message.content;
+                if !text.is_empty() {
+                    let _ = channel.send(CompletionEvent::Chunk { text, thinking: None });
                 }
             }
-
-            // Push assistant response (with thinking) to history
-            let mut assistant_msg = OllamaChatMessage::assistant(content_acc);
-            if !thinking_acc.is_empty() {
-                assistant_msg.thinking = Some(thinking_acc);
-            }
-            history.push(assistant_msg);
-
-            if last_tool_calls.is_empty() {
-                break; // No tool call — done
-            }
-
-            // Execute write_file calls, emit FileWritten, push tool result to history
-            let mut any_written = false;
-            for call in &last_tool_calls {
-                if call.function.name == "write_file" {
-                    if let Ok(params) = serde_json::from_value::<WriteFileParams>(call.function.arguments.clone()) {
-                        let _ = channel.send(CompletionEvent::FileWritten {
-                            path: path.to_string(),
-                            content: params.content,
-                        });
-                        history.push(OllamaChatMessage::tool("File written successfully.".to_string()));
-                        any_written = true;
-                    }
-                }
-            }
-
-            if !any_written {
-                break;
-            }
-            // Loop: model responds with confirmation after seeing tool result
         }
     } else {
         // ── Plain streaming mode (no tool) ────────────────────────────────────
