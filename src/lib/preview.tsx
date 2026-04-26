@@ -23,8 +23,11 @@ export function transformTsx(
       .replace(/^import\s+(?:type\s+)?.*?from\s+['"]react['"]\s*;?\s*$/gm, "")
       .replace(/^import\s+['"]react['"]\s*;?\s*$/gm, "");
 
-    // Lucide icons are always available via window.parent.__IconLib (set in main.tsx)
-    // regardless of the selected iconLibrary setting — rewrite all lucide imports.
+    // Rewrite lucide-react imports to window.parent.__IconLib (__IconLib = Lucide
+    // is always set in main.tsx). Do this when iconLibrary is "lucide" (expected),
+    // or as a fallback when the model included lucide imports despite a different
+    // library being selected — silently failing ("Can't find variable: Home") is
+    // worse than resolving them.
     stripped = stripped.replace(
       /^import\s+\{([^}]+)\}\s+from\s+['"]lucide-react['"]\s*;?\s*$/gm,
       (_, names: string) => {
