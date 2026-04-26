@@ -212,53 +212,53 @@ export function ProjectManagerModal() {
                   <div className="flex items-start gap-3">
                     {/* Main info */}
                     <button className="flex-1 text-left min-w-0" onClick={() => switchProject(project.id)}>
-                      <div className="flex items-center gap-2 mb-1">
-                        {active && <CheckCircle2 size={13} className="text-primary shrink-0" />}
-                        <span className="text-sm font-semibold truncate">{project.name}</span>
+                      <div className="flex items-center gap-2 mb-2">
+                        {active && <CheckCircle2 size={15} className="text-primary shrink-0" />}
+                        <span className="text-base font-semibold truncate">{project.name}</span>
                         {project.name !== project.id && (
-                          <span className="text-[10px] text-muted-foreground font-mono truncate">{project.id}</span>
+                          <span className="text-xs text-muted-foreground font-mono truncate">{project.id}</span>
                         )}
                         {active && (
-                          <span className="ml-auto text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                          <span className="ml-auto text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-medium shrink-0">
                             active
                           </span>
                         )}
                       </div>
 
                       {/* Asset counts */}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
                         {total === 0 ? (
                           <span>Empty project</span>
                         ) : (
                           <>
                             {project.counts.screens > 0 && (
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <Layout size={10} />
+                              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Layout size={12} />
                                 {project.counts.screens} screen{project.counts.screens !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.components > 0 && (
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <Box size={10} />
+                              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Box size={12} />
                                 {project.counts.components} component{project.counts.components !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.themes > 0 && (
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <Palette size={10} />
+                              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Palette size={12} />
                                 {project.counts.themes} theme{project.counts.themes !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.workflows > 0 && (
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <Workflow size={10} />
-                                {project.counts.workflows}
+                              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Workflow size={12} />
+                                {project.counts.workflows} workflow{project.counts.workflows !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.apis > 0 && (
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <Globe size={10} />
-                                {project.counts.apis}
+                              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                <Globe size={12} />
+                                {project.counts.apis} API{project.counts.apis !== 1 ? "s" : ""}
                               </span>
                             )}
                           </>
@@ -267,7 +267,7 @@ export function ProjectManagerModal() {
 
                       {/* Dates */}
                       {project.created && (
-                        <div className="text-[10px] text-muted-foreground/70 mt-1">
+                        <div className="text-xs text-muted-foreground/60 mt-1.5">
                           Created {formatDate(project.created)}
                           {project.updated && project.updated !== project.created && (
                             <> · Updated {formatDate(project.updated)}</>
