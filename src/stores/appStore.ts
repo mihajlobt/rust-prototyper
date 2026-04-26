@@ -23,6 +23,12 @@ export interface Settings {
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
   layout: Record<string, number[]>;
+  /** Output paths for generated assets, relative to projects/{project}/generated/ */
+  directories: {
+    themes: string;
+    components: string;
+    screens: string;
+  };
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -43,6 +49,11 @@ const DEFAULT_SETTINGS: Settings = {
   amoled: false,
   iconLibrary: "lucide",
   layout: {},
+  directories: {
+    themes: "src/styles/themes",
+    components: "src/components",
+    screens: "src/screens",
+  },
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

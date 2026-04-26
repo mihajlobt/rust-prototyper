@@ -82,7 +82,7 @@ export const useUIStore = create<UIState>()(() => ({
   themesDarkPreview: false,
   themesShowInspector: false,
   themesCodeOpen: false,
-  themesFramework: "generic",
+  themesFramework: "shadcn",
   themesDarkLightSupport: true,
 
   // APIs

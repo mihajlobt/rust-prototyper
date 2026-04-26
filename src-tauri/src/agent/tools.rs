@@ -3,8 +3,6 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct WriteFileArgs {
-    /// Relative file path within the project (e.g. "src/Button.tsx"). If omitted, writes to the main output file.
-    pub path: Option<String>,
     /// The complete raw source code to write. Must be raw code — NOT a JSON object, NOT wrapped in an envelope. Just the raw code.
     pub content: String,
 }
@@ -33,7 +31,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "write_file".to_string(),
-                description: "Write raw source code to a file. The content must be raw code — NOT a JSON object, NOT wrapped in an envelope with code/commentary keys. Just the raw code itself.".to_string(),
+                description: "Write raw source code to the output file. Pass only the content parameter — the destination path is fixed by the system. The content must be raw code — NOT a JSON object, NOT wrapped in an envelope with code/commentary keys. Just the raw code itself.".to_string(),
                 parameters: make_schema::<WriteFileArgs>(),
             },
         },

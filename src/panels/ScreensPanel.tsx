@@ -38,7 +38,10 @@ export function ScreensPanel() {
   const chatPath = screenId
     ? `projects/${settings.project}/screens/${screenId}/chat.json`
     : "projects/__placeholder__/chat.json";
-  const screenPath = `projects/${settings.project}/screens/${screenId}/screen.tsx`;
+  const generatedScreenDir = settings.directories.screens;
+  const screenPath = screenId
+    ? `projects/${settings.project}/generated/${generatedScreenDir}/${screenId}.tsx`
+    : `projects/${settings.project}/screens/__placeholder__/screen.tsx`;
   const screenJsonPath = `projects/${settings.project}/screens/${screenId}/screen.json`;
 
   const parentCss = getParentCss();
@@ -71,7 +74,8 @@ export function ScreensPanel() {
     outputPath: screenId ? screenPath : undefined,
     onOutput: (content) => {
       setPreviewHtml(content);
-      createDir(screenPath.replace("/screen.tsx", ""))
+      const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
+      createDir(parentDir)
         .then(() => writeFile(screenPath, content))
         .catch(() => {});
     },

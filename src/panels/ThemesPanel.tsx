@@ -37,13 +37,11 @@ export function ThemesPanel() {
   const themesShowInspector = useUIStore((s) => s.themesShowInspector);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
-  const chatPath = selectedThemeDir
-    ? `projects/${settings.project}/themes/${selectedThemeDir}/chat.json`
-    : "projects/__placeholder__/chat.json";
+  const chatPath = `projects/${settings.project}/themes/${selectedThemeDir || "main"}/chat.json`;
 
-  const themeOutputPath = selectedThemeDir
-    ? `projects/${settings.project}/themes/${selectedThemeDir}/theme.css`
-    : undefined;
+  const themeDir = selectedThemeDir || "main";
+  const generatedThemeDir = settings.directories.themes;
+  const themeOutputPath = `projects/${settings.project}/generated/${generatedThemeDir}/${themeDir}.css`;
 
   const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
     try {
@@ -64,7 +62,7 @@ export function ThemesPanel() {
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
   } = useChat({
-    entityId: selectedThemeDir ? `theme-${selectedThemeDir}` : "theme-none",
+    entityId: `theme-${themeDir}`,
     chatPath,
     systemPrompt: settings.prompts["themes-system"] || (
       getThemeSystemPrompt(themesFramework) +
@@ -158,7 +156,7 @@ export function ThemesPanel() {
 
   const frameworkPills = (
     <>
-      {(["generic", "shadcn", "daisy", "bootstrap"] as const).map((f) => (
+      {(["shadcn", "daisy", "bootstrap", "generic"] as const).map((f) => (
         <button
           key={f}
           onClick={() => useUIStore.setState({ themesFramework: f })}

@@ -45,7 +45,10 @@ async fn execute_write_file(
         },
     };
 
-    let rel_path = parsed.path.as_deref().unwrap_or(output_path);
+    // Always use the output_path configured by the caller — the model must not
+    // decide where to write, as it hallucinates filenames (e.g. "candy-pastel-theme.css"
+    // in the app data root instead of the correct project path).
+    let rel_path = output_path;
 
     if rel_path.contains("..") {
         return ToolExecutionResult {

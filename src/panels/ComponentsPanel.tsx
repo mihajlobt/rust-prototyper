@@ -141,8 +141,9 @@ export function ComponentsPanel() {
     ? `projects/${settings.project}/components/${componentId}/chat.json`
     : "projects/__placeholder__/chat.json";
 
+  const generatedComponentDir = settings.directories.components;
   const componentOutputPath = componentId
-    ? `projects/${settings.project}/components/${componentId}/component.tsx`
+    ? `projects/${settings.project}/generated/${generatedComponentDir}/${componentId}.tsx`
     : undefined;
 
   const {

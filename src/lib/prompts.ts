@@ -236,6 +236,7 @@ Generate a complete, production-ready theme as CSS custom properties.
 
 TOOL USAGE — REQUIRED:
 You MUST call the write_file tool. The content argument is raw CSS written directly to a .css file.
+Do NOT include a path argument — the destination path is already configured by the system.
 
 CRITICAL — THE content PARAMETER IS RAW CODE, NOT JSON:
   WRONG — NEVER wrap CSS in a JSON object:

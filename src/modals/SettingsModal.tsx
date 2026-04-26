@@ -120,6 +120,7 @@ export function SettingsModal() {
           <TabsList variant="line" className="h-7">
             <TabsTrigger value="general" className="text-[11px]">General</TabsTrigger>
             <TabsTrigger value="ai" className="text-[11px]">AI</TabsTrigger>
+            <TabsTrigger value="directories" className="text-[11px]">Directories</TabsTrigger>
             <TabsTrigger value="styles" className="text-[11px]">Styles</TabsTrigger>
             <TabsTrigger value="prompts" className="text-[11px]">Prompts</TabsTrigger>
           </TabsList>
@@ -371,6 +372,58 @@ export function SettingsModal() {
               </p>
             </div>
 
+          </TabsContent>
+
+          <TabsContent value="directories" className="flex-1 overflow-auto space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">
+              Paths where generated files are written inside the Runner project, relative to{" "}
+              <code className="text-[11px] bg-muted px-1 py-0.5 rounded">generated/</code>.
+              The directory is created automatically if it does not exist.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="dir-themes">Themes</Label>
+              <Input
+                id="dir-themes"
+                value={settings.directories.themes}
+                onChange={(e) => setSettings({ directories: { ...settings.directories, themes: e.target.value } })}
+                placeholder="src/styles/themes"
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">e.g. <code>src/styles/themes</code> → <code>generated/src/styles/themes/my-theme.css</code></p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dir-components">Components</Label>
+              <Input
+                id="dir-components"
+                value={settings.directories.components}
+                onChange={(e) => setSettings({ directories: { ...settings.directories, components: e.target.value } })}
+                placeholder="src/components"
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">e.g. <code>src/components</code> → <code>generated/src/components/my-component.tsx</code></p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dir-screens">Screens</Label>
+              <Input
+                id="dir-screens"
+                value={settings.directories.screens}
+                onChange={(e) => setSettings({ directories: { ...settings.directories, screens: e.target.value } })}
+                placeholder="src/screens"
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">e.g. <code>src/screens</code> → <code>generated/src/screens/my-screen.tsx</code></p>
+            </div>
+            <div className="border-t border-border pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSettings({
+                  directories: { themes: "src/styles/themes", components: "src/components", screens: "src/screens" },
+                })}
+              >
+                Reset to defaults
+              </Button>
+            </div>
           </TabsContent>
 
           <TabsContent value="styles" className="flex-1 overflow-auto space-y-4 mt-4">
