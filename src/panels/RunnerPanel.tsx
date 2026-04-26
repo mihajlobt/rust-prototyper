@@ -69,6 +69,7 @@ export function RunnerPanel() {
   const runnerZoom = useUIStore((s) => s.runnerZoom);
   const runnerTerminalOpen = useUIStore((s) => s.runnerTerminalOpen);
   const runnerActiveTab = useUIStore((s) => s.runnerActiveTab);
+  const fileTreeNonce = useUIStore((s) => s.runnerFileTreeNonce);
 
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -111,6 +112,7 @@ export function RunnerPanel() {
   }, [generatedDir]);
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
+  useEffect(() => { if (fileTreeNonce > 0) loadFiles(); }, [fileTreeNonce, loadFiles]);
 
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {

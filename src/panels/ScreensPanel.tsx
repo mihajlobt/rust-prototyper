@@ -60,7 +60,7 @@ export function ScreensPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    stopGeneration, regenerate, clearChat, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, clearChat, deleteFrom, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
@@ -189,7 +189,6 @@ export function ScreensPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        isToolMode={isToolMode}
         onApplyCode={(content) => { const c = extractCode(content); if (c) setPreviewHtml(c); }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}

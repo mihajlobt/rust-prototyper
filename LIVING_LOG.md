@@ -20,20 +20,36 @@
 - `thinking?: string` stored as a separate `ChatMessage` field — not XML tags in content
 - Image attach visible but disabled (with tooltip) for non-vision models
 
-### Tool-Based File Generation
-AI calls `write_file(content=...)` using ollama-rs streaming with manual tool-calling loop.
+### Agent Tool Loop (Rust — `src-tauri/src/agent/`)
+
+Three-tool agentic loop: `write_file`, `read_file`, `bash`. Modular Rust module structure:
+
+```
+src-tauri/src/agent/
+  mod.rs         — re-exports
+  tools.rs       — build_tools() returning Vec<ToolInfo> via schemars + ollama-rs types
+  executor.rs    — execute_tool() — fs write/read + tokio::process bash (30s timeout)
+  agent_loop.rs  — run_agent_loop() — multi-turn loop with closing-turn termination
+```
 
 **Flow (tool mode):**
-1. `useChat` passes `outputPath` → Rust calls `send_chat_messages_with_history_stream` with `write_file` tool schema
-2. Model streams thinking + calls tool — thinking arrives in real time
-3. `FileWritten { path, content }` emitted; `contentAccumulated` cleared (drops raw tool echo text)
-4. Second stream turn: model confirms — confirmation text becomes the message content
-5. Frontend `useChat`: `stripFences()` + `onOutput(clean)` → panel writes to disk and opens editor
-6. `finalize()` reads current store state to preserve `toolCalls` set mid-stream by `attachToolCall`
+1. `useChat` passes `outputPath` → Rust calls `agent::run_agent_loop()`
+2. Turn 1 WITH tools: model streams thinking + calls tool(s)
+3. For each tool call: emit `ToolCall` (pending) → execute → emit `ToolResult` (success/failure)
+4. `write_file` → execute writes to disk → `ToolResult` carries `path` + `content` → `onOutput()` triggers Runner
+5. After write_file: closing turn WITHOUT tools → model produces text → loop breaks
+6. Non-write_file tools (read_file, bash): loop continues with tools available for chaining
+7. `Done` emitted after closing turn or when model produces text-only response
 
-**Tool UX:** prompt-kit `Tool` component — `input-streaming` (Loader2 spinner) while running, `output-available` (CheckCircle) after `FileWritten`.
+**Closing-turn pattern:** After write_file, the next request omits `.tools()`. The model has nothing to call and produces a text confirmation. This was confirmed in testing against both gemma4 (local) and minimax-m2.7 (cloud).
+
+**Tool UX:** `Tool` component — `input-streaming` (Loader2) while pending, `output-available` (CheckCircle) after result, `output-error` (XCircle) on failure. All three tool types render: `write_file` shows filename, `read_file` shows file contents (truncated), `bash` shows command + stdout.
 
 **Panels:** Screens → `.tsx`, Components → `.tsx` + `generated/`, Themes → `.css`
+
+**Channel events (Rust → TS):**
+- `ToolCall { tool, args }` — fires before execution, sets `pending: true` in store
+- `ToolResult { tool, success, output, path?, content? }` — fires after execution, clears pending, triggers `onOutput` for write_file
 
 ### Chat UX
 - Streaming markdown — `pre` override for code blocks (not position heuristic); Shiki with error fallback
@@ -62,16 +78,18 @@ AI calls `write_file(content=...)` using ollama-rs streaming with manual tool-ca
 
 | Issue | Fix |
 |-------|-----|
-| Raw tool call text (`write_file content="..."`) shown in chat | Suppress content accumulation before `FileWritten` in tool mode |
+| Raw tool call text (`write_file content="..."`) shown in chat | Suppress content accumulation before `ToolResult` in tool mode |
 | `toolCalls` lost after streaming ends | `finalize()` reads current store state to preserve `toolCalls` set by `attachToolCall` |
 | `Home` / lucide icons undefined in preview | `transformTsx` always rewrites lucide imports — no `iconLibrary === "lucide"` guard |
 | Coordinator non-streaming (no real-time thinking) | Replaced with `send_chat_messages_with_history_stream` + manual tool loop |
-| Raw tool call echo visible before FileWritten | Content not accumulated in tool mode until after FileWritten fires |
 | CSS Output wrong after generation | `onOutput` strips fences + everything after closing fence; same as Apply button |
 | `toolCalls` chip disappeared after Done | `finalize()` was using stale `updatedMessages` snapshot — now reads from store |
 | `thinking` sent to non-thinking models | Known issue (not yet fixed) |
 | Tool indicator showing before thinking | Only render after `!isEmpty` — never as empty-state replacement |
 | Model wraps content in fences | `stripFences()` in useChat before `onOutput` |
+| Agent loop never terminates (model loops on write_file) | Closing turn after write_file sent without `.tools()` — forces text response |
+| Single `write_file` tool, no bash or read_file | Agent module with 3 tools: write_file, read_file, bash |
+| `FileWritten` event — no pending state, no failure state | Replaced with `ToolCall` (pending) + `ToolResult` (success/failure/output) pair |
 
 ---
 
@@ -107,20 +125,33 @@ All panels use `write_file` tool mode. Prompts:
 ## Architecture Snapshot
 
 ```
-Tool mode:  send_chat_messages_with_history_stream (turn 1, with tools)
-            → real-time thinking + content chunks (content suppressed until FileWritten)
-            → FileWritten { path, content } emitted → contentAccumulated cleared
-            → tool result pushed to history
-            → send_chat_messages_with_history_stream (turn 2, confirmation)
-            → confirmation chunks → Done
+Tool mode:  agent::run_agent_loop()
+              Turn N WITH tools:
+                send_chat_messages_with_history_stream
+                → Chunk{text, thinking}... (content suppressed until ToolResult write_file)
+                → ToolCall{tool, args} emitted → pending spinner in UI
+                → execute_tool() → ToolResult{tool, success, output, path?, content?}
+                → tool result pushed to history
+              If write_file called:
+                Closing turn WITHOUT tools
+                → Chunk{text}... → Done
+              Else (read_file/bash only):
+                Loop back with tools for chaining
 
 Plain mode: send_chat_messages_with_history_stream (no tools)
             → Chunk{text, thinking}... → Done
 
-Frontend:   FileWritten → stripFences → onOutput → editor + disk
+Frontend:   ToolCall  → attachToolCall(pending:true) → Tool card with spinner
+            ToolResult → updateLastToolResult → Tool card with result/error
+            ToolResult(write_file) → patchLastToolCallPath + stripFences + onOutput → editor + disk
             thinking → thinkingContent store → Reasoning component
-            toolCalls → preserved in finalize via store read → Tool chip (prompt-kit)
+            toolCalls → preserved in finalize via store read → Tool chip
 ```
+
+**Model notes (from agent testing):**
+- gemma4-26b-128k: write_file ✓, bash ✓, read_file ✗ (uses bash instead), loop terminates ✓
+- minimax-m2.7 (cloud): write_file ✓, bash ✓, read_file ✓, loop terminates ✓
+- Both confirmed: closing turn without tools reliably stops the loop on first write_file
 
 ---
 
@@ -142,3 +173,4 @@ Frontend:   FileWritten → stripFences → onOutput → editor + disk
 - Model-specific system prompt variants (qwen3 vs gemma4 vs cloud)
 - OpenAI + Anthropic as separate provider integrations
 - Auto-install deps from AI-generated imports via `bun add`
+- Phase 2 UI: Tool card visual differentiation — bash shows `$ command` + stdout, read_file shows file path + contents preview, write_file shows filename (all rendering via `toolPartFromRecord` in MessageList)

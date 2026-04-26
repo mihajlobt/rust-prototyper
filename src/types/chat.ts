@@ -2,6 +2,9 @@ export interface ToolCallRecord {
   tool: string
   path: string
   arguments: Record<string, unknown>
+  result?: string
+  success?: boolean
+  pending?: boolean
 }
 
 export interface ChatMessage {

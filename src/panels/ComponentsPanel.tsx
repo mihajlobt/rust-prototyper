@@ -147,7 +147,7 @@ export function ComponentsPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    stopGeneration, regenerate, clearChat, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, clearChat, deleteFrom, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
@@ -166,6 +166,7 @@ export function ComponentsPanel() {
       const genDir = `projects/${settings.project}/generated`;
       await createDir(`${genDir}/src/components`);
       await writeFile(`${genDir}/src/components/Generated.tsx`, extracted);
+      useUIStore.setState((s) => ({ runnerFileTreeNonce: s.runnerFileTreeNonce + 1 }));
       if (selectedComponent) {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;
         await createDir(compDir);
@@ -210,7 +211,6 @@ export function ComponentsPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        isToolMode={isToolMode}
         onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}

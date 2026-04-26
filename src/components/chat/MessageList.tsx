@@ -1,25 +1,68 @@
 import { memo } from "react"
 import { Copy, Code2, RefreshCw, Trash2 } from "lucide-react"
 import { Tool } from "@/components/ui/tool"
+import type { ToolPart } from "@/components/ui/tool"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
 import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
-import type { ChatMessage } from "@/types/chat"
+import type { ChatMessage, ToolCallRecord } from "@/types/chat"
+
+function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
+  const state = tc.pending
+    ? "input-streaming"
+    : tc.success === false
+    ? "output-error"
+    : "output-available"
+
+  const filename = tc.path ? tc.path.split("/").pop() : undefined
+
+  switch (tc.tool) {
+    case "write_file":
+      return {
+        type: "write_file",
+        state,
+        input: filename ? { file: filename } : tc.arguments,
+        output: tc.result ? { written: filename ?? "file" } : undefined,
+      }
+    case "read_file":
+      return {
+        type: "read_file",
+        state,
+        input: { path: (tc.arguments.path as string) ?? tc.path },
+        output: tc.result ? { contents: tc.result.slice(0, 500) + (tc.result.length > 500 ? "…" : "") } : undefined,
+        errorText: tc.success === false ? tc.result : undefined,
+      }
+    case "bash":
+      return {
+        type: "bash",
+        state,
+        input: { command: tc.arguments.command as string },
+        output: tc.result ? { output: tc.result } : undefined,
+        errorText: tc.success === false ? tc.result : undefined,
+      }
+    default:
+      return {
+        type: tc.tool,
+        state,
+        input: tc.arguments,
+        output: tc.result ? { result: tc.result } : undefined,
+      }
+  }
+}
 
 interface MessageListProps {
   messages: ChatMessage[]
   isStreaming: boolean
   thinkingContent: string
-  isToolMode?: boolean
   onApplyCode?: (content: string) => void
   onRegenerate?: () => void
   onDeleteFrom?: (index: number) => void
 }
 
 export function MessageList({
-  messages, isStreaming, thinkingContent, isToolMode,
+  messages, isStreaming, thinkingContent,
   onApplyCode, onRegenerate, onDeleteFrom,
 }: MessageListProps) {
   return (
@@ -34,7 +77,6 @@ export function MessageList({
               isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
               streamingThinking={isStreaming && i === messages.length - 1 && msg.role === "assistant" ? thinkingContent : ""}
               isLastAssistant={!isStreaming && i === messages.length - 1 && msg.role === "assistant"}
-              isToolMode={isToolMode}
               onApplyCode={onApplyCode}
               onRegenerate={onRegenerate}
               onDeleteFrom={onDeleteFrom}
@@ -56,7 +98,6 @@ interface MessageBubbleProps {
   isStreaming: boolean
   streamingThinking: string
   isLastAssistant: boolean
-  isToolMode?: boolean
   onApplyCode?: (content: string) => void
   onRegenerate?: () => void
   onDeleteFrom?: (index: number) => void
@@ -64,7 +105,7 @@ interface MessageBubbleProps {
 
 const MessageBubble = memo(function MessageBubble({
   message, index, isStreaming, streamingThinking, isLastAssistant,
-  isToolMode, onApplyCode, onRegenerate, onDeleteFrom,
+  onApplyCode, onRegenerate, onDeleteFrom,
 }: MessageBubbleProps) {
   const content = message.content
   const isEmpty = isStreaming && content === "" && !streamingThinking
@@ -137,24 +178,19 @@ const MessageBubble = memo(function MessageBubble({
           </MessageContent>
         )}
 
-        {/* Tool usage — only show after the model actually called the tool (FileWritten fired) */}
-        {isToolMode && message.toolCalls?.length ? (
+        {/* Tool cards — pending spinner while executing, result when done */}
+        {message.toolCalls?.length ? (
           message.toolCalls.map((tc, i) => (
             <Tool
               key={i}
-              toolPart={{
-                type: tc.tool,
-                state: message.toolCalls?.length ? "output-available" : "input-streaming",
-                input: tc.arguments,
-                output: { file: tc.path.split("/").pop() },
-              }}
+              toolPart={toolPartFromRecord(tc)}
               defaultOpen
             />
           ))
         ) : null}
 
-        {/* Generating indicator — streaming without tool call yet, or non-tool mode */}
-        {isStreaming && !isEmpty && !(isToolMode && message.toolCalls?.length) && (
+        {/* Generating indicator — streaming with no tool calls yet */}
+        {isStreaming && !isEmpty && !message.toolCalls?.length && (
           <Loader variant="loading-dots" size="sm" text="Generating" />
         )}
 
@@ -202,7 +238,6 @@ const MessageBubble = memo(function MessageBubble({
   prev.message.thinking === next.message.thinking &&
   prev.isStreaming === next.isStreaming &&
   prev.isLastAssistant === next.isLastAssistant &&
-  prev.isToolMode === next.isToolMode &&
   prev.streamingThinking === next.streamingThinking &&
   prev.onApplyCode === next.onApplyCode &&
   prev.onRegenerate === next.onRegenerate &&

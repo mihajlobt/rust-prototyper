@@ -196,13 +196,20 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
             useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
           })
         }
-      } else if (msg.event === "FileWritten") {
-        toolWritten = true
-        contentAccumulated = ""
-        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        useChatStore.getState().setStreamingContent(entityId, "")
-        onOutputRef.current?.(stripFences(msg.data.content))
-        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path, { content: msg.data.content })
+      } else if (msg.event === "ToolCall") {
+        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+      } else if (msg.event === "ToolResult") {
+        const { tool, success, output, path, content } = msg.data
+        useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
+        if (tool === "write_file" && content) {
+          toolWritten = true
+          contentAccumulated = ""
+          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+          useChatStore.getState().setStreamingContent(entityId, "")
+          onOutputRef.current?.(stripFences(content))
+          // patch path onto the tool call record now that we have it
+          useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
+        }
       } else if (msg.event === "Done") {
         finalize(contentAccumulated, thinkingAccumulated)
         if (!toolWritten) onOutputRef.current?.(contentAccumulated)
@@ -305,19 +312,28 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
             useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
           })
         }
-      } else if (msg.event === "FileWritten") {
-        toolWrittenRegen = true
-        contentAccumulated = ""
-        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        useChatStore.getState().setStreamingContent(entityId, "")
-        onOutputRef.current?.(stripFences(msg.data.content))
-        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path, { content: msg.data.content })
+      } else if (msg.event === "ToolCall") {
+        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+      } else if (msg.event === "ToolResult") {
+        const { tool, success, output, path, content } = msg.data
+        useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
+        if (tool === "write_file" && content) {
+          toolWrittenRegen = true
+          contentAccumulated = ""
+          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+          useChatStore.getState().setStreamingContent(entityId, "")
+          onOutputRef.current?.(stripFences(content))
+          useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
+        }
       } else if (msg.event === "Done") {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
+        const currentLast = msgs[msgs.length - 1]
         const finalMessage: ChatMessage = {
           role: "assistant",
           content: contentAccumulated,
           ...(thinkingAccumulated ? { thinking: thinkingAccumulated } : {}),
+          ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
         }
         const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
         useChatStore.getState().setMessages(entityId, finalMessages)
@@ -378,7 +394,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     regenerate,
     clearChat,
     deleteFrom,
-    isToolMode: !!outputPath && toolsEnabled,
     attachments,
     addAttachment,
     removeAttachment,

@@ -59,7 +59,7 @@ export function ThemesPanel() {
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    stopGeneration, regenerate, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, deleteFrom, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
@@ -121,7 +121,6 @@ export function ThemesPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        isToolMode={isToolMode}
         onApplyCode={(content) => {
           const stripped = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
           const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Prototyper — AI-powered app generator"
 authors = ["you"]
 edition = "2021"
+default-run = "prototyper"
 
 [lib]
 name = "app_lib"

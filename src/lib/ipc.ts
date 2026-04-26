@@ -160,7 +160,8 @@ export function getApiKeyForProvider(provider: Provider, apiKeys: Record<string,
 
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
-  | { event: "FileWritten"; data: { path: string; content: string } }
+  | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
+  | { event: "ToolResult"; data: { tool: string; success: boolean; output: string; path?: string; content?: string } }
   | { event: "Done"; data: null }
   | { event: "Error"; data: { message: string } };
 

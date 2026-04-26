@@ -58,6 +58,7 @@ interface UIState {
   runnerZoom: number;
   runnerTerminalOpen: boolean;
   runnerActiveTab: "terminal" | "logs" | "network";
+  runnerFileTreeNonce: number;
 
   // Workflows
   workflowsShowPanel: boolean;
@@ -112,6 +113,7 @@ export const useUIStore = create<UIState>()(() => ({
   runnerZoom: 1,
   runnerTerminalOpen: true,
   runnerActiveTab: "terminal",
+  runnerFileTreeNonce: 0,
 
   // Workflows
   workflowsShowPanel: false,
