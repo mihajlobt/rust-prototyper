@@ -110,7 +110,7 @@ export function SettingsModal() {
           <Settings size={14} />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>

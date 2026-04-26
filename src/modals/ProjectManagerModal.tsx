@@ -165,7 +165,7 @@ export function ProjectManagerModal() {
           {settings.project || "default"}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Projects</DialogTitle>
         </DialogHeader>
@@ -226,37 +226,37 @@ export function ProjectManagerModal() {
                       </div>
 
                       {/* Asset counts */}
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                         {total === 0 ? (
                           <span>Empty project</span>
                         ) : (
                           <>
                             {project.counts.screens > 0 && (
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Layout size={10} />
                                 {project.counts.screens} screen{project.counts.screens !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.components > 0 && (
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Box size={10} />
                                 {project.counts.components} component{project.counts.components !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.themes > 0 && (
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Palette size={10} />
                                 {project.counts.themes} theme{project.counts.themes !== 1 ? "s" : ""}
                               </span>
                             )}
                             {project.counts.workflows > 0 && (
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Workflow size={10} />
                                 {project.counts.workflows}
                               </span>
                             )}
                             {project.counts.apis > 0 && (
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 whitespace-nowrap">
                                 <Globe size={10} />
                                 {project.counts.apis}
                               </span>
