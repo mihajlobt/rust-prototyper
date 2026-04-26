@@ -7,10 +7,12 @@ import {
   type FileEntry,
 } from "@/lib/ipc";
 import { projectKeys } from "@/lib/queryKeys";
+import { useExplorerStore } from "@/stores/explorerStore";
 
 // ─── Queries ───
 
-export function useProjectTree(project: string, section: string) {
+/** Flat per-section listing — used by panels for dropdowns/lists and sidebar tree */
+export function useFlatProjectTree(project: string, section: string) {
   return useQuery({
     queryKey: projectKeys.tree(project, section),
     queryFn: async () => {
@@ -136,6 +138,8 @@ export function useSaveComponent() {
       queryClient.invalidateQueries({
         queryKey: projectKeys.componentChat(variables.project, variables.name),
       });
+      // Bump treeVersion so explorer auto-refreshes
+      useExplorerStore.getState().refresh();
     },
   });
 }
@@ -165,6 +169,8 @@ export function useSaveTheme() {
       queryClient.invalidateQueries({
         queryKey: projectKeys.themeCss(variables.project, variables.name),
       });
+      // Bump treeVersion so explorer auto-refreshes
+      useExplorerStore.getState().refresh();
     },
   });
 }

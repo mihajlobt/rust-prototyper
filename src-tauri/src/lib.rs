@@ -50,7 +50,7 @@ impl serde::Serialize for AppError {
 // ─── Path Security ───
 
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
-    app.path().app_data_dir().map_err(|e| AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+    app.path().app_data_dir().map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))
 }
 
 fn normalize_path(path: &std::path::Path) -> std::path::PathBuf {
@@ -110,7 +110,7 @@ fn is_private_url(url: &str) -> bool {
         if let Some(rest) = lower.strip_prefix(protocol) {
             if let Some(octet) = rest.split('.').next() {
                 if let Ok(n) = octet.parse::<u8>() {
-                    if n >= 16 && n <= 31 { return true; }
+                    if (16..=31).contains(&n) { return true; }
                 }
             }
         }
@@ -903,7 +903,7 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
 // ─── Export ───
 
 fn zip_err(e: zip::result::ZipError) -> AppError {
-    AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    AppError::Io(std::io::Error::other(e.to_string()))
 }
 
 fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
