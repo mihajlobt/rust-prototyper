@@ -86,7 +86,7 @@ function FileIcon({ name }: { name: string }) {
 // AssetIcon and FileIcon are used in rendering
 
 interface ProjectExplorerProps {
-  onSelectAsset: (section: SectionName, name: string, path: string) => void;
+  onSelectAsset: (section: SectionName, name: string) => void;
   onRename: (section: SectionName, name: string) => void;
   onDelete: (section: SectionName, name: string) => void;
   onDuplicate: (section: SectionName, name: string) => void;
@@ -148,6 +148,14 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
     return lookup;
   }, [project, sectionQueries]);
 
+  // Keep refs always pointing to the latest data so async dataLoader callbacks
+  // read fresh values even after headless-tree has cached old results.
+  const dataLookupRef = useRef(dataLookup);
+  dataLookupRef.current = dataLookup;
+
+  const sectionQueriesRef = useRef(sectionQueries);
+  sectionQueriesRef.current = sectionQueries;
+
   // Track which sections have been expanded programmatically
   const sectionsExpandedRef = useRef<Set<SectionName>>(new Set());
 
@@ -157,37 +165,45 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
     isItemFolder: (item) => item.getItemData()?.hasChildren ?? false,
     dataLoader: {
       getItem: async (itemId) => {
-        // __root__ is a virtual root — never rendered, but needs valid data
         if (itemId === "__root__") {
           return { name: "", path: "", hasChildren: true, section: null, assetType: null };
         }
-        // Return from lookup if present; otherwise placeholder until data loads
-        return dataLookup[itemId] ?? { name: itemId, path: itemId, hasChildren: false, section: null, assetType: null };
+        return dataLookupRef.current[itemId] ?? { name: itemId, path: itemId, hasChildren: false, section: null, assetType: null };
       },
       getChildren: async (itemId) => {
-        // Root children are section ids
         if (itemId === "__root__") {
           return [...SECTION_NAMES];
         }
-
-        // Section folder: return asset itemIds
-        if (itemId in dataLookup) {
-          const entries = (sectionQueries[itemId as SectionName]?.data || []) as TreeEntry[];
+        if ((SECTION_NAMES as readonly string[]).includes(itemId)) {
+          const entries = (sectionQueriesRef.current[itemId as SectionName]?.data ?? []) as TreeEntry[];
           return entries.map((e) => e.path);
         }
-
         return [];
       },
     },
     features: [asyncDataLoaderFeature, hotkeysCoreFeature],
   });
 
-  // Programmatically expand section headers when data loads
+  // When TanStack Query refetches a section, tell headless-tree its cache is stale.
+  // dataUpdatedAt changes on every successful fetch, making it a reliable dependency.
+  useEffect(() => {
+    for (const sectionName of SECTION_NAMES) {
+      tree.getItemInstance(sectionName)?.invalidateChildrenIds();
+    }
+  }, [
+    screensTree.dataUpdatedAt,
+    componentsTree.dataUpdatedAt,
+    themesTree.dataUpdatedAt,
+    workflowsTree.dataUpdatedAt,
+    apisTree.dataUpdatedAt,
+    tree,
+  ]);
+
+  // Programmatically expand section headers when data first loads
   useEffect(() => {
     const loading = Object.values(sectionQueries).some((q) => q.isLoading);
     if (loading) return;
 
-    // Only expand sections that have data
     for (const sectionName of SECTION_NAMES) {
       if (sectionsExpandedRef.current.has(sectionName)) continue;
       const entries = sectionQueries[sectionName].data;
@@ -261,6 +277,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
                   className="w-full flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors text-left"
                   style={{ paddingLeft: `${indent}px` }}
                   {...item.getProps()}
+                  onDoubleClick={() => section && onSelectAsset(section, itemData.name)}
                   draggable={assetType !== null}
                   onDragStart={(e) => {
                     if (assetType) {
@@ -278,7 +295,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
               </ContextMenuTrigger>
               <ContextMenuContent>
                 {section && (
-                  <ContextMenuItem onClick={() => onSelectAsset(section, itemData.name, itemData.path)}>
+                  <ContextMenuItem onClick={() => onSelectAsset(section, itemData.name)}>
                     Open
                   </ContextMenuItem>
                 )}

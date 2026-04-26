@@ -10,10 +10,10 @@ import {
 } from "@/components/ui/select";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
+import { projectKeys } from "@/lib/queryKeys";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { useExplorerStore } from "@/stores/explorerStore";
 import { notify } from "@/hooks/useToast";
 import { ProjectExplorer } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
@@ -21,7 +21,6 @@ import type { SectionName } from "@/components/ProjectExplorer";
 export function SidebarRail() {
   const { settings } = useAppStore();
   const { openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectStore();
-  const refresh = useExplorerStore((s) => s.refresh);
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -32,7 +31,7 @@ export function SidebarRail() {
   const base = `projects/${settings.project}`;
 
   // --- Navigation ---
-  const handleSelectAsset = (section: SectionName, name: string, _path: string) => {
+  const handleSelectAsset = (section: SectionName, name: string) => {
     if (section === "screens") openScreen(name);
     else if (section === "components") openComponent(name);
     else if (section === "themes") openTheme(name);
@@ -45,6 +44,15 @@ export function SidebarRail() {
     setNewItemType(type);
     setNewItemName("");
     setShowNewDialog(true);
+  };
+
+  // Map item type to the section name used in query keys
+  const typeToSection: Record<string, string> = {
+    screen: "screens",
+    component: "components",
+    theme: "themes",
+    workflow: "workflows",
+    api: "apis",
   };
 
   // --- Create ---
@@ -86,11 +94,12 @@ export function SidebarRail() {
           break;
         }
       }
-      // Also invalidate the queries to force refetch
-      queryClient.invalidateQueries({ queryKey: ["project-tree", settings.project] });
-      refresh();
+      const section = typeToSection[newItemType];
+      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      setShowNewDialog(false);
+      setNewItemName("");
     } catch (e) {
-      alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`);
+      notify.error("Create failed", e instanceof Error ? e.message : String(e));
     } finally {
       setCreating(false);
     }
@@ -101,12 +110,11 @@ export function SidebarRail() {
     if (!(await confirm(`Delete "${name}"?`))) return;
     try {
       if (section === "apis" || section === "workflows") {
-        await deleteFile(`${base}/${section}/${name}`);
+        await deleteFile(`${base}/${section}/${name}.json`);
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
-      queryClient.invalidateQueries({ queryKey: ["project-tree", settings.project] });
-      refresh();
+      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
       notify.error("Delete failed", e instanceof Error ? e.message : String(e));
     }
@@ -123,18 +131,15 @@ export function SidebarRail() {
     const { section, name } = renameTarget;
     const newId = renameTo.trim().toLowerCase().replace(/\s+/g, "-");
     try {
-      if (section === "apis") {
-        await renameFile(`${base}/apis/${name}`, `${base}/apis/${newId}.json`);
-      } else if (section === "workflows") {
-        await renameFile(`${base}/workflows/${name}`, `${base}/workflows/${newId}.json`);
+      if (section === "apis" || section === "workflows") {
+        await renameFile(`${base}/${section}/${name}.json`, `${base}/${section}/${newId}.json`);
       } else {
         await renameFile(`${base}/${section}/${name}`, `${base}/${section}/${newId}`);
       }
-      refresh();
-    } catch (e) {
-      alert(`Rename failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
+      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
       setRenameTarget(null);
+    } catch (e) {
+      notify.error("Rename failed", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -164,14 +169,18 @@ export function SidebarRail() {
         await writeFile(`${dir}/theme.css`, css);
         await writeFile(`${dir}/prompt.json`, meta);
       }
-      refresh();
+      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
-      alert(`Duplicate failed: ${e instanceof Error ? e.message : String(e)}`);
+      notify.error("Duplicate failed", e instanceof Error ? e.message : String(e));
     }
   };
 
   // --- Refresh ---
-  const refreshAll = () => refresh();
+  const refreshAll = () => {
+    for (const section of ["screens", "components", "themes", "workflows", "apis"]) {
+      queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">

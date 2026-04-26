@@ -7,7 +7,6 @@ import {
   type FileEntry,
 } from "@/lib/ipc";
 import { projectKeys } from "@/lib/queryKeys";
-import { useExplorerStore } from "@/stores/explorerStore";
 
 // ─── Queries ───
 
@@ -138,8 +137,6 @@ export function useSaveComponent() {
       queryClient.invalidateQueries({
         queryKey: projectKeys.componentChat(variables.project, variables.name),
       });
-      // Bump treeVersion so explorer auto-refreshes
-      useExplorerStore.getState().refresh();
     },
   });
 }
@@ -169,8 +166,6 @@ export function useSaveTheme() {
       queryClient.invalidateQueries({
         queryKey: projectKeys.themeCss(variables.project, variables.name),
       });
-      // Bump treeVersion so explorer auto-refreshes
-      useExplorerStore.getState().refresh();
     },
   });
 }
