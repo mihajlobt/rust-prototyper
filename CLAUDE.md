@@ -123,6 +123,11 @@ bunx tsc --noEmit    # type-check
 
 ## Coding Rules
 
+## CRITICAL — NEVER REMOVE EXISTING FUNCTIONALITY
+- **NEVER remove, disable, or silently drop existing functionality without explicit user approval or a direct bug fix that requires it.**
+- This applies especially when implementing new features, migrating old code, or executing long plans — do not quietly discard working behaviour as a side effect.
+- If a refactor requires removing something, stop and ask the user first.
+
 ## CRITICAL — DO NOT SUBSTITUTE LIBRARIES
 - **NEVER assume a library is broken and switch to a workaround or alternative without consulting the user first.**
 - If a library behaves unexpectedly, investigate the root cause (read docs, check source, search online). Do not silently replace it with a different approach.
