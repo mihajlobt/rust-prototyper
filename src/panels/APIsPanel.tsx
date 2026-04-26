@@ -16,7 +16,7 @@ import { httpRequest, readFile, writeFile, createDir } from "@/lib/ipc";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { useAppStore } from "@/stores/appStore";
-import { useProjectStore } from "@/stores/projectStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useUIStore, type ApiHistoryEntry } from "@/stores/uiStore";
 import { notify } from "@/hooks/useToast";
 import YAML from "js-yaml";
@@ -113,24 +113,27 @@ function parseCurl(input: string): Partial<SavedApi> | null {
 
 export function APIsPanel() {
   const { settings } = useAppStore();
-  const { activeApi: selectedApiId, openApi } = useProjectStore();
+  const { ps, setPs, openApi } = useProjectSettingsStore();
+  const selectedApiId = ps.activeApi;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("apis", 2);
   const [apis, setApis] = useState<SavedApi[]>([]);
 
-  // Persistent UI state from store
-  const name = useUIStore((s) => s.apisName);
-  const method = useUIStore((s) => s.apisMethod);
-  const url = useUIStore((s) => s.apisUrl);
-  const headersText = useUIStore((s) => s.apisHeadersText);
-  const body = useUIStore((s) => s.apisBody);
-  const authType = useUIStore((s) => s.apisAuthType);
-  const authToken = useUIStore((s) => s.apisAuthToken);
-  const authHeaderName = useUIStore((s) => s.apisAuthHeaderName);
-  const authUsername = useUIStore((s) => s.apisAuthUsername);
-  const authPassword = useUIStore((s) => s.apisAuthPassword);
-  const authTokenUrl = useUIStore((s) => s.apisAuthTokenUrl);
-  const authClientId = useUIStore((s) => s.apisAuthClientId);
-  const authClientSecret = useUIStore((s) => s.apisAuthClientSecret);
+  // Persistent editor state (per-project)
+  const name = ps.apisName;
+  const method = ps.apisMethod;
+  const url = ps.apisUrl;
+  const headersText = ps.apisHeadersText;
+  const body = ps.apisBody;
+  const authType = ps.apisAuthType;
+  const authToken = ps.apisAuthToken;
+  const authHeaderName = ps.apisAuthHeaderName;
+  const authUsername = ps.apisAuthUsername;
+  const authPassword = ps.apisAuthPassword;
+  const authTokenUrl = ps.apisAuthTokenUrl;
+  const authClientId = ps.apisAuthClientId;
+  const authClientSecret = ps.apisAuthClientSecret;
+
+  // Ephemeral state (session-only)
   const response = useUIStore((s) => s.apisResponse);
   const history = useUIStore((s) => s.apisHistory);
   const envVars = useUIStore((s) => s.apisEnvVars);
@@ -138,15 +141,13 @@ export function APIsPanel() {
   const newEnvValue = useUIStore((s) => s.apisNewEnvValue);
   const curlPaste = useUIStore((s) => s.apisCurlPaste);
   const openapiPaste = useUIStore((s) => s.apisOpenapiPaste);
+  const setUI = useUIStore.setState;
 
-  // Ephemeral UI state (not persisted across tab switches)
+  // Ephemeral UI state (not persisted)
   const [oauthCode, setOauthCode] = useState("");
   const [showOauthDialog, setShowOauthDialog] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Shorthand setter
-  const setUI = useUIStore.setState;
 
   // Load from FS on project change
   useEffect(() => {
@@ -172,7 +173,7 @@ export function APIsPanel() {
 
   const selectApi = useCallback((api: SavedApi) => {
     openApi(api.id);
-    setUI({
+    setPs({
       apisName: api.name,
       apisMethod: api.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
       apisUrl: api.url,
@@ -186,12 +187,9 @@ export function APIsPanel() {
       apisAuthTokenUrl: api.authTokenUrl || "",
       apisAuthClientId: api.authClientId || "",
       apisAuthClientSecret: api.authClientSecret || "",
-      apisHistory: api.history || [],
-      apisResponse: null,
-      apisCurlPaste: "",
-      apisOpenapiPaste: "",
     });
-  }, [openApi, setUI]);
+    setUI({ apisHistory: api.history || [], apisResponse: null, apisCurlPaste: "", apisOpenapiPaste: "" });
+  }, [openApi, setPs, setUI]);
 
   function resolveEnvVars(text: string): string {
     return text.replace(/\{\{(\w+)\}\}/g, (_, key) => envVars[key] ?? `{{${key}}}`);
@@ -236,24 +234,14 @@ export function APIsPanel() {
   const deleteApi = (id: string) => {
     setApis((prev) => prev.filter((a) => a.id !== id));
     if (selectedApiId === id) {
-      useProjectStore.setState({ activeApi: null });
-      setUI({
-        apisName: "",
-        apisMethod: "GET",
-        apisUrl: "",
-        apisHeadersText: "{}",
-        apisBody: "",
-        apisAuthType: "none",
-        apisAuthToken: "",
-        apisAuthHeaderName: "X-API-Key",
-        apisAuthUsername: "",
-        apisAuthPassword: "",
-        apisAuthTokenUrl: "",
-        apisAuthClientId: "",
-        apisAuthClientSecret: "",
-        apisHistory: [],
-        apisResponse: null,
+      setPs({
+        activeApi: null,
+        apisName: "", apisMethod: "GET", apisUrl: "", apisHeadersText: "{}",
+        apisBody: "", apisAuthType: "none", apisAuthToken: "",
+        apisAuthHeaderName: "X-API-Key", apisAuthUsername: "", apisAuthPassword: "",
+        apisAuthTokenUrl: "", apisAuthClientId: "", apisAuthClientSecret: "",
       });
+      setUI({ apisHistory: [], apisResponse: null });
     }
   };
 
@@ -261,7 +249,7 @@ export function APIsPanel() {
     if (!curlPaste.trim()) return;
     const parsed = parseCurl(curlPaste);
     if (parsed) {
-      setUI({
+      setPs({
         ...(parsed.method ? { apisMethod: parsed.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" } : {}),
         ...(parsed.url ? { apisUrl: parsed.url } : {}),
         ...(parsed.headersText ? { apisHeadersText: parsed.headersText } : {}),
@@ -363,7 +351,7 @@ export function APIsPanel() {
       const data = JSON.parse(res.body);
       const token = data.access_token || data.token || "";
       if (token) {
-        setUI({ apisAuthToken: token });
+        setPs({ apisAuthToken: token });
       }
       setShowOauthDialog(false);
       setOauthCode("");
@@ -508,12 +496,12 @@ export function APIsPanel() {
                   <Input
                     placeholder="API Name"
                     value={name}
-                    onChange={(e) => setUI({ apisName: e.target.value })}
+                    onChange={(e) => setPs({ apisName: e.target.value })}
                     className="h-8 text-sm"
                   />
 
                   <div className="flex gap-2">
-                    <Select value={method} onValueChange={(v) => setUI({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
+                    <Select value={method} onValueChange={(v) => setPs({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
                       <SelectTrigger className="w-[100px]">
                         <SelectValue />
                       </SelectTrigger>
@@ -528,7 +516,7 @@ export function APIsPanel() {
                     <Input
                       placeholder="https://api.example.com/endpoint"
                       value={url}
-                      onChange={(e) => setUI({ apisUrl: e.target.value })}
+                      onChange={(e) => setPs({ apisUrl: e.target.value })}
                     />
                     <Button onClick={send} disabled={loading}>
                       <Send size={14} />
@@ -573,7 +561,7 @@ export function APIsPanel() {
                     <div className="flex gap-2">
                       <Select
                         value={authType}
-                        onValueChange={(v) => setUI({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}
+                        onValueChange={(v) => setPs({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}
                       >
                         <SelectTrigger className="w-[120px]">
                           <SelectValue />
@@ -587,32 +575,32 @@ export function APIsPanel() {
                         </SelectContent>
                       </Select>
                       {authType === "bearer" && (
-                        <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                       )}
                       {authType === "apikey" && (
                         <div className="flex gap-2">
-                          <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setUI({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
-                          <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                          <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setPs({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
+                          <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                         </div>
                       )}
                       {authType === "oauth2" && (
-                        <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                       )}
                     </div>
                     {authType === "basic" && (
                       <div className="flex gap-2">
-                        <Input placeholder="Username" value={authUsername} onChange={(e) => setUI({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
-                        <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setUI({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
+                        <Input placeholder="Username" value={authUsername} onChange={(e) => setPs({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setPs({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
                       </div>
                     )}
                     {authType === "oauth2" && (
                       <div className="space-y-2">
-                        <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setUI({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
+                        <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setPs({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
                         <div className="flex gap-2">
-                          <Input placeholder="Client ID" value={authClientId} onChange={(e) => setUI({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
-                          <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setUI({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
+                          <Input placeholder="Client ID" value={authClientId} onChange={(e) => setPs({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
+                          <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setPs({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
                         </div>
-                        <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setUI({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                        <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>
                           Authorize
                         </Button>
@@ -623,7 +611,7 @@ export function APIsPanel() {
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">Headers (JSON)</label>
                     <div className="h-32 border rounded overflow-hidden">
-                      <CodeMirrorEditor value={headersText} onChange={(v) => setUI({ apisHeadersText: v })} mode="json" />
+                      <CodeMirrorEditor value={headersText} onChange={(v) => setPs({ apisHeadersText: v })} mode="json" />
                     </div>
                   </div>
 
@@ -631,7 +619,7 @@ export function APIsPanel() {
                     <label className="text-xs font-medium text-muted-foreground">Body</label>
                     <Textarea
                       value={body}
-                      onChange={(e) => setUI({ apisBody: e.target.value })}
+                      onChange={(e) => setPs({ apisBody: e.target.value })}
                       placeholder="Request body... (use {{VAR_NAME}} for env vars)"
                       className="min-h-[120px] text-sm font-mono"
                     />

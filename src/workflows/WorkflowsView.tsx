@@ -36,7 +36,7 @@ import {
 import { Channel } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
-import { useProjectStore } from "@/stores/projectStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import Frame from "react-frame-component";
 
@@ -151,7 +151,7 @@ function generateId() {
 
 function WorkflowCanvas() {
   const { settings } = useAppStore();
-  const { activeWorkflow: initialWorkflow } = useProjectStore();
+  const { ps: { activeWorkflow: initialWorkflow } } = useProjectSettingsStore();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 3);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
 

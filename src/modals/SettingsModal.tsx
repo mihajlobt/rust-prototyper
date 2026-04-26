@@ -18,21 +18,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Plus, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide-react";
+import { Settings, RotateCcw, Plus, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide-react";
 import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { readFile, writeFile, bunInstall } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
-import { ICON_LIBRARY_PACKAGES, type IconLibrary } from "@/lib/prompts";
+import { ICON_LIBRARY_PACKAGES, PROMPT_DEFINITIONS, type IconLibrary, type PromptGroup } from "@/lib/prompts";
 
 export function SettingsModal() {
   const { settings, setSettings } = useSettings();
+  const { ps, setPs } = useProjectSettingsStore();
   const [open, setOpen] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const [newPresetValue, setNewPresetValue] = useState("");
-  const [newPromptName, setNewPromptName] = useState("");
-  const [newPromptValue, setNewPromptValue] = useState("");
+  const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
 
   const addPreset = async () => {
     if (!newPresetName || !newPresetValue) return;
@@ -47,17 +48,14 @@ export function SettingsModal() {
     await setSettings({ styles: next });
   };
 
-  const addPrompt = async () => {
-    if (!newPromptName || !newPromptValue) return;
-    const next = { ...settings.prompts, [newPromptName]: newPromptValue };
+  const setPrompt = async (key: string, value: string) => {
+    const next = { ...settings.prompts, [key]: value };
     await setSettings({ prompts: next });
-    setNewPromptName("");
-    setNewPromptValue("");
   };
 
-  const removePrompt = async (name: string) => {
+  const resetPrompt = async (key: string) => {
     const next = { ...settings.prompts };
-    delete next[name];
+    delete next[key];
     await setSettings({ prompts: next });
   };
 
@@ -112,7 +110,7 @@ export function SettingsModal() {
           <Settings size={14} />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
@@ -188,8 +186,8 @@ export function SettingsModal() {
               <p className="text-xs text-muted-foreground">Name of the theme folder auto-selected when generating components.</p>
               <Input
                 id="stylePreset"
-                value={settings.stylePreset}
-                onChange={(e) => setSettings({ stylePreset: e.target.value })}
+                value={ps.stylePreset}
+                onChange={(e) => setPs({ stylePreset: e.target.value })}
                 placeholder="e.g. main"
               />
             </div>
@@ -384,8 +382,8 @@ export function SettingsModal() {
               <Label htmlFor="dir-themes">Themes</Label>
               <Input
                 id="dir-themes"
-                value={settings.directories.themes}
-                onChange={(e) => setSettings({ directories: { ...settings.directories, themes: e.target.value } })}
+                value={ps.directories.themes}
+                onChange={(e) => setPs({ directories: { ...ps.directories, themes: e.target.value } })}
                 placeholder="src/styles/themes"
                 className="font-mono text-xs"
               />
@@ -395,8 +393,8 @@ export function SettingsModal() {
               <Label htmlFor="dir-components">Components</Label>
               <Input
                 id="dir-components"
-                value={settings.directories.components}
-                onChange={(e) => setSettings({ directories: { ...settings.directories, components: e.target.value } })}
+                value={ps.directories.components}
+                onChange={(e) => setPs({ directories: { ...ps.directories, components: e.target.value } })}
                 placeholder="src/components"
                 className="font-mono text-xs"
               />
@@ -406,8 +404,8 @@ export function SettingsModal() {
               <Label htmlFor="dir-screens">Screens</Label>
               <Input
                 id="dir-screens"
-                value={settings.directories.screens}
-                onChange={(e) => setSettings({ directories: { ...settings.directories, screens: e.target.value } })}
+                value={ps.directories.screens}
+                onChange={(e) => setPs({ directories: { ...ps.directories, screens: e.target.value } })}
                 placeholder="src/screens"
                 className="font-mono text-xs"
               />
@@ -417,7 +415,7 @@ export function SettingsModal() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setSettings({
+                onClick={() => setPs({
                   directories: { themes: "src/styles/themes", components: "src/components", screens: "src/screens" },
                 })}
               >
@@ -457,38 +455,66 @@ export function SettingsModal() {
             </div>
           </TabsContent>
 
-          <TabsContent value="prompts" className="flex-1 overflow-auto space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>New Prompt Template</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Name"
-                  value={newPromptName}
-                  onChange={(e) => setNewPromptName(e.target.value)}
-                />
-                <Button size="sm" onClick={addPrompt}>
-                  <Plus size={14} />
-                </Button>
-              </div>
-              <Textarea
-                placeholder="Prompt template value..."
-                value={newPromptValue}
-                onChange={(e) => setNewPromptValue(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              {Object.entries(settings.prompts).map(([name, value]) => (
-                <div key={name} className="flex items-start justify-between p-2 rounded bg-muted gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{value as string}</div>
+          <TabsContent value="prompts" className="flex-1 overflow-auto mt-4">
+            <p className="text-xs text-muted-foreground mb-4">
+              Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
+              Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
+            </p>
+            {(["Components", "Screens", "Themes"] as PromptGroup[]).map((group) => {
+              const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
+              return (
+                <div key={group} className="mb-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 px-0.5">{group}</p>
+                  <div className="space-y-1">
+                    {defs.map((def) => {
+                      const isCustom = !!settings.prompts[def.key];
+                      const isExpanded = expandedPrompt === def.key;
+                      return (
+                        <div key={def.key} className="rounded-lg border border-border overflow-hidden">
+                          <button
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors"
+                            onClick={() => setExpandedPrompt(isExpanded ? null : def.key)}
+                          >
+                            <span className="flex-1 text-sm font-medium">{def.label}</span>
+                            <span className={[
+                              "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                              isCustom
+                                ? "bg-primary/15 text-primary"
+                                : "bg-muted text-muted-foreground",
+                            ].join(" ")}>
+                              {isCustom ? "Custom" : "Default"}
+                            </span>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 space-y-2 border-t border-border bg-muted/20">
+                              <p className="text-[11px] text-muted-foreground pt-2">{def.description}</p>
+                              <Textarea
+                                className="font-mono text-xs min-h-[180px] resize-y"
+                                placeholder={def.getDefault()}
+                                value={settings.prompts[def.key] ?? ""}
+                                onChange={(e) => setPrompt(def.key, e.target.value)}
+                              />
+                              <div className="flex justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs gap-1.5"
+                                  disabled={!isCustom}
+                                  onClick={() => resetPrompt(def.key)}
+                                >
+                                  <RotateCcw size={11} />
+                                  Reset to default
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removePrompt(name)}>
-                    <Trash2 size={12} />
-                  </Button>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </TabsContent>
         </Tabs>
       </DialogContent>

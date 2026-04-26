@@ -1,15 +1,14 @@
 import { create, type StateCreator } from "zustand";
 import { load } from "@tauri-apps/plugin-store";
+import { useProjectSettingsStore } from "./projectSettingsStore";
 
 const SETTINGS_KEY = "settings.json";
 
 export type Provider = "ollama-local" | "ollama-cloud" | "openai" | "claude";
 
 export interface Settings {
-  view: string;
   modelId: string;
   project: string;
-  stylePreset: string;
   dark: boolean;
   accent: string;
   editorTheme: string;
@@ -23,19 +22,11 @@ export interface Settings {
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
   layout: Record<string, number[]>;
-  /** Output paths for generated assets, relative to projects/{project}/generated/ */
-  directories: {
-    themes: string;
-    components: string;
-    screens: string;
-  };
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  view: "screens",
   modelId: "gemma4-26b-128k:latest",
   project: "default",
-  stylePreset: "default",
   dark: true,
   accent: "oklch(0.488 0.243 264.376)",
   editorTheme: "oneDark",
@@ -49,11 +40,6 @@ const DEFAULT_SETTINGS: Settings = {
   amoled: false,
   iconLibrary: "lucide",
   layout: {},
-  directories: {
-    themes: "src/styles/themes",
-    components: "src/components",
-    screens: "src/screens",
-  },
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */
@@ -103,10 +89,8 @@ function ensureInit(set: (fn: (state: SettingsSlice) => Partial<SettingsSlice>) 
     // Migrate legacy localStorage keys
     if (typeof window !== "undefined") {
       const legacyMap: Record<string, keyof Settings> = {
-        "pt.view": "view",
         "pt.model": "modelId",
         "pt.project": "project",
-        "pt.stylePreset": "stylePreset",
         "pt.host": "host",
       };
       let migrated = false;
@@ -126,6 +110,8 @@ function ensureInit(set: (fn: (state: SettingsSlice) => Partial<SettingsSlice>) 
       }
     }
     set(() => ({ settings: loaded, loaded: true }));
+    // Load per-project settings for the active project
+    await useProjectSettingsStore.getState().loadProject(loaded.project);
   })();
   return initPromise;
 }
@@ -134,13 +120,18 @@ const createSettingsSlice: StateCreator<SettingsSlice> = (set, get) => ({
   settings: DEFAULT_SETTINGS,
   loaded: false,
   setSettings: async (patch) => {
-    const next = { ...get().settings, ...patch };
+    const prev = get().settings;
+    const next = { ...prev, ...patch };
     set({ settings: next });
     const store = await getStore();
     for (const [key, value] of Object.entries(patch)) {
       await store.set(key, value);
     }
     await store.save();
+    // When project switches, load its persisted settings
+    if (patch.project && patch.project !== prev.project) {
+      await useProjectSettingsStore.getState().loadProject(patch.project);
+    }
   },
   setHost: async (host) => {
     const { settings } = get();

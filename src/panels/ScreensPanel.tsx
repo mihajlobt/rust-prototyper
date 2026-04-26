@@ -1,12 +1,11 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Link2, Trash2 } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
 import { writeFile, createDir, readFile, readDir, exportProject, getHostForProvider } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
-import { useProjectStore } from "@/stores/projectStore";
-import { useUIStore } from "@/stores/uiStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -19,11 +18,12 @@ import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
-  const { activeScreen: screenId, openScreen: setScreenId } = useProjectStore();
-  const screensDevice = useUIStore((s) => s.screensDevice);
-  const screensShowInspector = useUIStore((s) => s.screensShowInspector);
-  const screensLinkMode = useUIStore((s) => s.screensLinkMode);
-  const screensZoom = useUIStore((s) => s.screensZoom);
+  const { ps, setPs, openScreen: setScreenId } = useProjectSettingsStore();
+  const screenId = ps.activeScreen;
+  const screensDevice = ps.screensDevice;
+  const screensShowInspector = ps.screensShowInspector;
+  const screensLinkMode = ps.screensLinkMode;
+  const screensZoom = ps.screensZoom;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3);
   const [screens, setScreens] = useState<string[]>(["main"]);
@@ -38,7 +38,7 @@ export function ScreensPanel() {
   const chatPath = screenId
     ? `projects/${settings.project}/screens/${screenId}/chat.json`
     : "projects/__placeholder__/chat.json";
-  const generatedScreenDir = settings.directories.screens;
+  const generatedScreenDir = ps.directories.screens;
   const screenPath = screenId
     ? `projects/${settings.project}/generated/${generatedScreenDir}/${screenId}.tsx`
     : `projects/${settings.project}/screens/__placeholder__/screen.tsx`;
@@ -54,12 +54,12 @@ export function ScreensPanel() {
   // Switch to update prompt after first generation — the model needs the current
   // code context to make targeted edits instead of generating from scratch.
   const hasGeneratedCode = previewHtml.length > 0;
-  const defaultSystem = hasGeneratedCode
-    ? getScreenUpdatePrompt(settings.iconLibrary, previewHtml) +
-      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
-    : getScreenNewPrompt(settings.iconLibrary) +
-      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
-  const systemContent = settings.prompts["screens-system"] || defaultSystem;
+  const themeCssSection = themeCss
+    ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\``
+    : "";
+  const systemContent = hasGeneratedCode
+    ? getScreenUpdatePrompt(settings.iconLibrary, previewHtml, settings.prompts["prompt.screens.update"] || undefined) + themeCssSection
+    : getScreenNewPrompt(settings.iconLibrary, settings.prompts["prompt.screens.new"] || undefined) + themeCssSection;
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
@@ -110,7 +110,7 @@ export function ScreensPanel() {
   }, [settings.project, screenId, screenJsonPath]);
 
   useEffect(() => {
-    const selectedTheme = settings.stylePreset;
+    const selectedTheme = ps.stylePreset;
     if (!selectedTheme) {
       setThemeCss("");
       return;
@@ -125,7 +125,7 @@ export function ScreensPanel() {
       }
     })();
     return () => { cancelled = true; };
-  }, [settings.stylePreset, settings.project]);
+  }, [ps.stylePreset, settings.project]);
 
   const persistLinks = useCallback(async (newLinks: typeof links) => {
     try {
@@ -183,7 +183,7 @@ export function ScreensPanel() {
       const nextLinks = [...links, newLink];
       setLinks(nextLinks);
       persistLinks(nextLinks);
-      useUIStore.setState({ screensLinkMode: false });
+      setPs({ screensLinkMode: false });
     }
   };
 
@@ -240,15 +240,14 @@ export function ScreensPanel() {
                     </span>
                   )}
                   <div className="flex-1" />
-                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={handleExport}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleExport} title="Export project">
                     <Download size={12} />
-                    Export
                   </Button>
-                  <Button variant={screensLinkMode ? "default" : "ghost"} size="sm" className="h-6 text-xs" onClick={() => useUIStore.setState({ screensLinkMode: !screensLinkMode })}>
-                    {screensLinkMode ? "Linking…" : "Link Mode"}
+                  <Button variant={screensLinkMode ? "default" : "ghost"} size="icon" className="h-6 w-6" onClick={() => setPs({ screensLinkMode: !screensLinkMode })} title={screensLinkMode ? "Linking…" : "Link Mode"}>
+                    <Link2 size={12} />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={clearChat}>
-                    Clear
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={clearChat} title="Clear chat" disabled={messages.length === 0}>
+                    <Trash2 size={12} />
                   </Button>
                 </div>
                 {chatPane}
@@ -257,7 +256,7 @@ export function ScreensPanel() {
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <div
                 className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => useUIStore.setState({ screensShowInspector: !screensShowInspector })}
+                onClick={() => setPs({ screensShowInspector: !screensShowInspector })}
               >
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {screensShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
@@ -285,18 +284,18 @@ export function ScreensPanel() {
               <span className="text-sm font-medium">Preview</span>
               <div className="flex-1" />
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => useUIStore.setState({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
                 <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(screensZoom * 100)}%</span>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => useUIStore.setState({ screensZoom: Math.min(screensZoom + 0.1, 2) })}>+</Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.min(screensZoom + 0.1, 2) })}>+</Button>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant={screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => useUIStore.setState({ screensDevice: "mobile" })}>
+                <Button variant={screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "mobile" })}>
                   <Smartphone size={12} />
                 </Button>
-                <Button variant={screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => useUIStore.setState({ screensDevice: "tablet" })}>
+                <Button variant={screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "tablet" })}>
                   <Tablet size={12} />
                 </Button>
-                <Button variant={screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => useUIStore.setState({ screensDevice: "desktop" })}>
+                <Button variant={screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "desktop" })}>
                   <Monitor size={12} />
                 </Button>
               </div>

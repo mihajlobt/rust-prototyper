@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { readDir, readFile, writeFile, deleteDir, createDir, renameFile } from "@/lib/ipc";
 import { save, confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
-import { useProjectStore } from "@/stores/projectStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 
 interface LibraryItem {
@@ -20,7 +20,7 @@ interface LibraryItem {
 
 export function LibraryPanel() {
   const { settings } = useAppStore();
-  const { openComponent, openScreen, openTheme, openWorkflow } = useProjectStore();
+  const { openComponent, openScreen, openTheme, openWorkflow } = useProjectSettingsStore();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [items, setItems] = useState<LibraryItem[]>([]);

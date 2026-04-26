@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Save, FileCode, Sun, Moon } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Save, FolderUp, FileCode, Sun, Moon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,8 +14,7 @@ import { writeFile, createDir, getHostForProvider } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
-import { useProjectStore } from "@/stores/projectStore";
-import { useUIStore } from "@/stores/uiStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -27,21 +26,21 @@ import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 export function ThemesPanel() {
   const { settings } = useAppStore();
-  const { activeTheme: selectedThemeDir, openTheme: setSelectedThemeDir } = useProjectStore();
+  const { ps, setPs, openTheme: setSelectedThemeDir } = useProjectSettingsStore();
+  const selectedThemeDir = ps.activeTheme;
+  const themesDevice = ps.themesDevice;
+  const themesFramework = ps.themesFramework;
+  const themesDarkLightSupport = ps.themesDarkLightSupport;
+  const themesDarkPreview = ps.themesDarkPreview;
+  const themesCodeOpen = ps.themesCodeOpen;
+  const themesShowInspector = ps.themesShowInspector;
   const [css, setCss] = useState("");
-  const themesDevice = useUIStore((s) => s.themesDevice);
-  const themesFramework = useUIStore((s) => s.themesFramework);
-  const themesDarkLightSupport = useUIStore((s) => s.themesDarkLightSupport);
-  const themesDarkPreview = useUIStore((s) => s.themesDarkPreview);
-  const themesCodeOpen = useUIStore((s) => s.themesCodeOpen);
-  const themesShowInspector = useUIStore((s) => s.themesShowInspector);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
   const chatPath = `projects/${settings.project}/themes/${selectedThemeDir || "main"}/chat.json`;
 
   const themeDir = selectedThemeDir || "main";
-  const generatedThemeDir = settings.directories.themes;
-  const themeOutputPath = `projects/${settings.project}/generated/${generatedThemeDir}/${themeDir}.css`;
+  const themeOutputPath = `projects/${settings.project}/themes/${themeDir}/theme.css`;
 
   const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
     try {
@@ -55,21 +54,32 @@ export function ThemesPanel() {
     }
   }, [settings.project, selectedThemeDir]);
 
+  const handleSaveToRunner = useCallback(async () => {
+    if (!css) return;
+    const dest = `projects/${settings.project}/generated/${ps.directories.themes}/${themeDir}.css`;
+    try {
+      await createDir(`projects/${settings.project}/generated/${ps.directories.themes}`);
+      await writeFile(dest, css);
+      notify.success("Saved to Runner", dest);
+    } catch (e) {
+      notify.error("Save to Runner failed", e instanceof Error ? e.message : String(e));
+    }
+  }, [css, settings.project, ps.directories.themes, themeDir]);
+
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
-    stopGeneration, regenerate, deleteFrom, attachments, addAttachment, removeAttachment,
+    stopGeneration, regenerate, clearChat, deleteFrom, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
   } = useChat({
     entityId: `theme-${themeDir}`,
     chatPath,
-    systemPrompt: settings.prompts["themes-system"] || (
-      getThemeSystemPrompt(themesFramework) +
-      (themesDarkLightSupport
-        ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block."
-        : "")
-    ),
+    systemPrompt: getThemeSystemPrompt(
+      themesFramework,
+      settings.prompts["prompt.themes.base"] || undefined,
+      settings.prompts[`prompt.themes.${themesFramework}`] || undefined,
+    ) + (themesDarkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : ""),
     outputPath: themeOutputPath,
     onOutput: (content) => {
       // Same extraction as the Apply button: strip fences, keep only the CSS block
@@ -80,7 +90,7 @@ export function ThemesPanel() {
       const css = cleaned || content.trim();
       setCss(css);
       persistTheme(css, "").catch(() => {});
-      useUIStore.setState({ themesCodeOpen: true });
+      setPs({ themesCodeOpen: true });
     },
   });
 
@@ -159,7 +169,7 @@ export function ThemesPanel() {
       {(["shadcn", "daisy", "bootstrap", "generic"] as const).map((f) => (
         <button
           key={f}
-          onClick={() => useUIStore.setState({ themesFramework: f })}
+          onClick={() => setPs({ themesFramework: f })}
           className={[
             "px-1.5 py-0.5 rounded text-[10px] border transition-colors",
             themesFramework === f
@@ -172,7 +182,7 @@ export function ThemesPanel() {
       ))}
       <div className="w-px h-3.5 bg-border mx-0.5" />
       <button
-        onClick={() => useUIStore.setState({ themesDarkLightSupport: !themesDarkLightSupport })}
+        onClick={() => setPs({ themesDarkLightSupport: !themesDarkLightSupport })}
         className={[
           "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors",
           themesDarkLightSupport
@@ -197,14 +207,31 @@ export function ThemesPanel() {
                   {frameworkPills}
                   <div className="flex-1" />
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
+                    variant="ghost" size="icon" className="h-6 w-6"
                     onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
                     disabled={!css}
                     title="Save as…"
                   >
                     <Save size={12} />
+                  </Button>
+                  <Button
+                    variant="ghost" size="icon" className="h-6 w-6"
+                    onClick={handleSaveToRunner}
+                    disabled={!css}
+                    title="Save to Runner project"
+                  >
+                    <FolderUp size={12} />
+                  </Button>
+                  <Button
+                    variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    onClick={async () => {
+                      const { confirm } = await import("@tauri-apps/plugin-dialog");
+                      if (await confirm("Clear all chat messages?", { title: "Clear Chat", kind: "warning" })) clearChat();
+                    }}
+                    disabled={messages.length === 0}
+                    title="Clear chat"
+                  >
+                    <Trash2 size={12} />
                   </Button>
                 </div>
                 {chatPane}
@@ -213,7 +240,7 @@ export function ThemesPanel() {
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <div
                 className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => useUIStore.setState({ themesShowInspector: !themesShowInspector })}
+                onClick={() => setPs({ themesShowInspector: !themesShowInspector })}
               >
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {themesShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
@@ -244,7 +271,7 @@ export function ThemesPanel() {
                       variant={themesDevice === "mobile" ? "secondary" : "ghost"}
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => useUIStore.setState({ themesDevice: "mobile" })}
+                      onClick={() => setPs({ themesDevice: "mobile" })}
                     >
                       <Smartphone size={12} />
                     </Button>
@@ -252,7 +279,7 @@ export function ThemesPanel() {
                       variant={themesDevice === "tablet" ? "secondary" : "ghost"}
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => useUIStore.setState({ themesDevice: "tablet" })}
+                      onClick={() => setPs({ themesDevice: "tablet" })}
                     >
                       <Tablet size={12} />
                     </Button>
@@ -260,7 +287,7 @@ export function ThemesPanel() {
                       variant={themesDevice === "desktop" ? "secondary" : "ghost"}
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => useUIStore.setState({ themesDevice: "desktop" })}
+                      onClick={() => setPs({ themesDevice: "desktop" })}
                     >
                       <Monitor size={12} />
                     </Button>
@@ -270,7 +297,7 @@ export function ThemesPanel() {
                     variant={themesDarkPreview ? "secondary" : "ghost"}
                     size="icon"
                     className="h-7 w-7"
-                    onClick={() => useUIStore.setState({ themesDarkPreview: !themesDarkPreview })}
+                    onClick={() => setPs({ themesDarkPreview: !themesDarkPreview })}
                     title={themesDarkPreview ? "Light preview" : "Dark preview"}
                   >
                     {themesDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
@@ -375,7 +402,7 @@ body { margin: 0; font-family: sans-serif; }
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <div
                 className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => useUIStore.setState({ themesCodeOpen: !themesCodeOpen })}
+                onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}
               >
                 <FileCode size={12} className="mr-1.5" />
                 <span className="text-xs font-medium">CSS Output</span>

@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { MentionAsset } from "@/types/chat";
 import { notify } from "@/hooks/useToast";
@@ -64,11 +65,12 @@ import { PackagePlus } from "lucide-react";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
+  const { ps, setPs } = useProjectSettingsStore();
   const generatedDir = `projects/${settings.project}/generated`;
-  const runnerDevice = useUIStore((s) => s.runnerDevice);
-  const runnerZoom = useUIStore((s) => s.runnerZoom);
-  const runnerTerminalOpen = useUIStore((s) => s.runnerTerminalOpen);
-  const runnerActiveTab = useUIStore((s) => s.runnerActiveTab);
+  const runnerDevice = ps.runnerDevice;
+  const runnerZoom = ps.runnerZoom;
+  const runnerTerminalOpen = ps.runnerTerminalOpen;
+  const runnerActiveTab = ps.runnerActiveTab;
   const fileTreeNonce = useUIStore((s) => s.runnerFileTreeNonce);
 
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -307,9 +309,9 @@ export function RunnerPanel() {
 
   const handleRefreshPreview = () => { iframeRef.current?.contentWindow?.location.reload(); };
 
-  const zoomIn = () => useUIStore.setState({ runnerZoom: Math.min(runnerZoom + 0.1, 2) });
-  const zoomOut = () => useUIStore.setState({ runnerZoom: Math.max(runnerZoom - 0.1, 0.3) });
-  const zoomReset = () => useUIStore.setState({ runnerZoom: 1 });
+  const zoomIn = () => setPs({ runnerZoom: Math.min(runnerZoom + 0.1, 2) });
+  const zoomOut = () => setPs({ runnerZoom: Math.max(runnerZoom - 0.1, 0.3) });
+  const zoomReset = () => setPs({ runnerZoom: 1 });
 
   return (
     <div className="h-full flex flex-col">
@@ -397,9 +399,9 @@ export function RunnerPanel() {
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleRefreshPreview} title="Refresh"><RotateCw size={11} /></Button>
                           <div className="w-px h-3 bg-border" />
                           <div className="flex items-center gap-0.5">
-                            <Button variant={runnerDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => useUIStore.setState({ runnerDevice: "mobile" })} title="Mobile"><Smartphone size={11} /></Button>
-                            <Button variant={runnerDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => useUIStore.setState({ runnerDevice: "tablet" })} title="Tablet"><Tablet size={11} /></Button>
-                            <Button variant={runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => useUIStore.setState({ runnerDevice: "desktop" })} title="Desktop"><Monitor size={11} /></Button>
+                            <Button variant={runnerDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "mobile" })} title="Mobile"><Smartphone size={11} /></Button>
+                            <Button variant={runnerDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "tablet" })} title="Tablet"><Tablet size={11} /></Button>
+                            <Button variant={runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "desktop" })} title="Desktop"><Monitor size={11} /></Button>
                           </div>
                           <div className="w-px h-3 bg-border" />
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomOut} title="Zoom out"><Minus size={11} /></Button>
@@ -432,7 +434,7 @@ export function RunnerPanel() {
                 {/* Terminal header — always visible, locked height */}
                 <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
                   <div className="h-full flex items-center border-b border-border bg-card px-2">
-                    <Tabs value={runnerActiveTab} onValueChange={(v) => useUIStore.setState({ runnerActiveTab: v as "terminal" | "logs" | "network" })}>
+                    <Tabs value={runnerActiveTab} onValueChange={(v) => setPs({ runnerActiveTab: v as "terminal" | "logs" | "network" })}>
                       <TabsList variant="line" className="h-7">
                         <TabsTrigger value="terminal" className="text-[11px] gap-1"><Terminal size={10} />Terminal</TabsTrigger>
                         <TabsTrigger value="logs" className="text-[11px] gap-1"><ScrollText size={10} />Logs</TabsTrigger>
@@ -440,10 +442,10 @@ export function RunnerPanel() {
                       </TabsList>
                     </Tabs>
                     <div className="flex-1" />
-                    <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!runnerTerminalOpen) useUIStore.setState({ runnerTerminalOpen: true }); }}>
+                    <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!runnerTerminalOpen) setPs({ runnerTerminalOpen: true }); }}>
                       <Terminal size={10} />Shell
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { useUIStore.setState({ runnerTerminalOpen: !runnerTerminalOpen }); }} title={runnerTerminalOpen ? "Collapse terminal" : "Expand terminal"}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setPs({ runnerTerminalOpen: !runnerTerminalOpen }); }} title={runnerTerminalOpen ? "Collapse terminal" : "Expand terminal"}>
                       {runnerTerminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
                     </Button>
                   </div>

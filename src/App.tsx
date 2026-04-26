@@ -11,7 +11,7 @@ import { RunnerPanel } from "./panels/RunnerPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
 import { useAppStore } from "./stores/appStore";
-import { useProjectStore } from "./stores/projectStore";
+import { useProjectSettingsStore } from "./stores/projectSettingsStore";
 import { ToastProvider } from "./components/ToastProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { setupGlobalErrorHandlers } from "./lib/notifications";
@@ -19,20 +19,13 @@ import { useAllotmentLayout } from "./hooks/useAllotmentLayout";
 
 export default function App() {
   const { settings, loaded } = useAppStore();
-  const { activeView, setView } = useProjectStore();
+  const { ps, setPs } = useProjectSettingsStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("app", 2);
 
   useEffect(() => {
     setupGlobalErrorHandlers();
   }, []);
-
-  // Sync projectStore view with settings on first load
-  useEffect(() => {
-    if (loaded && settings.view) {
-      setView(settings.view);
-    }
-  }, [loaded, settings.view, setView]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", settings.dark);
@@ -67,8 +60,8 @@ export default function App() {
       <ToastProvider />
       <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
         <Header
-          activeView={activeView}
-          onViewChange={setView}
+          activeView={ps.activeView}
+          onViewChange={(view) => setPs({ activeView: view })}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
         />
@@ -79,13 +72,13 @@ export default function App() {
             </Allotment.Pane>
             <Allotment.Pane>
               <ErrorBoundary>
-                {activeView === "screens"    && <ScreensPanel />}
-                {activeView === "components" && <ComponentsPanel />}
-                {activeView === "themes"     && <ThemesPanel />}
-                {activeView === "workflows"  && <WorkflowsView />}
-                {activeView === "apis"       && <APIsPanel />}
-                {activeView === "runner"     && <RunnerPanel />}
-                {activeView === "library"    && <LibraryPanel />}
+                {ps.activeView === "screens"    && <ScreensPanel />}
+                {ps.activeView === "components" && <ComponentsPanel />}
+                {ps.activeView === "themes"     && <ThemesPanel />}
+                {ps.activeView === "workflows"  && <WorkflowsView />}
+                {ps.activeView === "apis"       && <APIsPanel />}
+                {ps.activeView === "runner"     && <RunnerPanel />}
+                {ps.activeView === "library"    && <LibraryPanel />}
               </ErrorBoundary>
             </Allotment.Pane>
           </Allotment>

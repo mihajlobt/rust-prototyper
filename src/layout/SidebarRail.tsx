@@ -13,14 +13,14 @@ import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
-import { useProjectStore } from "@/stores/projectStore";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { ProjectExplorer } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
 
 export function SidebarRail() {
   const { settings } = useAppStore();
-  const { openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectStore();
+  const { setPs, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectSettingsStore();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -31,6 +31,11 @@ export function SidebarRail() {
   const base = `projects/${settings.project}`;
 
   // --- Navigation ---
+  const handleSetDefaultTheme = (name: string) => {
+    setPs({ stylePreset: name });
+    notify.success("Default theme set", `"${name}" will be used for component and screen generation`);
+  };
+
   const handleSelectAsset = (section: SectionName, name: string) => {
     if (section === "screens") openScreen(name);
     else if (section === "components") openComponent(name);
@@ -200,6 +205,7 @@ export function SidebarRail() {
           </div>
           <ProjectExplorer
             onSelectAsset={handleSelectAsset}
+            onSetDefaultTheme={handleSetDefaultTheme}
             onRename={startRename}
             onDelete={handleDelete}
             onDuplicate={handleDuplicate}

@@ -90,6 +90,7 @@ interface ProjectExplorerProps {
   onRename: (section: SectionName, name: string) => void;
   onDelete: (section: SectionName, name: string) => void;
   onDuplicate: (section: SectionName, name: string) => void;
+  onSetDefaultTheme: (name: string) => void;
   onNewItem: (type: string) => void;
   onRefresh: () => void;
 }
@@ -97,7 +98,7 @@ interface ProjectExplorerProps {
 /** Query data array entry type from readDir */
 type TreeEntry = { name: string; path: string; is_dir: boolean };
 
-export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate, onNewItem, onRefresh }: ProjectExplorerProps) {
+export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate, onSetDefaultTheme, onNewItem, onRefresh }: ProjectExplorerProps) {
   const settings = useAppStore((s) => s.settings);
   const project = settings.project;
 
@@ -305,7 +306,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
                   </ContextMenuItem>
                 )}
                 {section === "themes" && (
-                  <ContextMenuItem onClick={() => {}}>
+                  <ContextMenuItem onClick={() => onSetDefaultTheme(itemData.name)}>
                     Set as default theme
                   </ContextMenuItem>
                 )}

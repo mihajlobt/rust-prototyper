@@ -93,8 +93,8 @@ CODE RULES:
 - Generate realistic content — real names, real data, no "Lorem ipsum".
 - Do NOT wrap in HTML, DOCTYPE, html, head, or body tags.`;
 
-export function getScreenNewPrompt(iconLibrary: IconLibrary): string {
-  return `${SCREEN_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
+export function getScreenNewPrompt(iconLibrary: IconLibrary, customBase?: string): string {
+  return `${customBase ?? SCREEN_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
 }
 
 export const COMPONENT_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer generating focused, reusable UI components.
@@ -124,8 +124,8 @@ GENERATE ONE FOCUSED COMPONENT (not a full-page layout):
 
 DO NOT generate full pages, dashboards, multi-section layouts, or full-screen apps.`;
 
-export function getComponentNewPrompt(iconLibrary: IconLibrary): string {
-  return `${COMPONENT_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
+export function getComponentNewPrompt(iconLibrary: IconLibrary, customBase?: string): string {
+  return `${customBase ?? COMPONENT_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
 }
 
 export const COMPONENT_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer updating a focused UI component.
@@ -143,11 +143,11 @@ CODE RULES:
 - TypeScript types throughout. Never use \`any\`.
 - Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.`;
 
-export function getComponentUpdatePrompt(iconLibrary: IconLibrary, currentCode?: string): string {
+export function getComponentUpdatePrompt(iconLibrary: IconLibrary, currentCode?: string, customBase?: string): string {
   const codeSection = currentCode
     ? `\n\nCURRENT CODE — edit this code to apply the user's requested changes:\n\`\`\`tsx\n${currentCode}\n\`\`\``
     : "";
-  return `${COMPONENT_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}${codeSection}`;
+  return `${customBase ?? COMPONENT_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}${codeSection}`;
 }
 
 export const SCREEN_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer making surgical edits to a TSX screen.
@@ -163,11 +163,11 @@ CODE RULES:
 - TypeScript types throughout. Never use \`any\`.
 - Use CSS variables for colors, not hardcoded hex/rgb values.`;
 
-export function getScreenUpdatePrompt(iconLibrary: IconLibrary, currentCode?: string): string {
+export function getScreenUpdatePrompt(iconLibrary: IconLibrary, currentCode?: string, customBase?: string): string {
   const codeSection = currentCode
     ? `\n\nCURRENT CODE — edit this code to apply the user's requested changes:\n\`\`\`tsx\n${currentCode}\n\`\`\``
     : "";
-  return `${SCREEN_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}${codeSection}`;
+  return `${customBase ?? SCREEN_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}${codeSection}`;
 }
 
 // ─── Theme Generator Prompts ─────────────────────────────────────────────────
@@ -255,10 +255,89 @@ CSS RULES:
   Example: /* Halloween theme — pumpkin orange primary, deep violet secondary */
 - Do NOT append any markdown, bullet lists, or explanations after the CSS.`;
 
-export function getThemeSystemPrompt(themeType: string): string {
-  const typeDocs = THEME_TYPE_DOCS[themeType] ?? THEME_TYPE_DOCS.generic;
-  return `${THEME_SYSTEM_PROMPT_BASE}\n\n${typeDocs}`;
+export function getThemeSystemPrompt(themeType: string, customBase?: string, customTypeDocs?: string): string {
+  const base = customBase ?? THEME_SYSTEM_PROMPT_BASE;
+  const typeDocs = customTypeDocs ?? (THEME_TYPE_DOCS[themeType] ?? THEME_TYPE_DOCS.generic);
+  return `${base}\n\n${typeDocs}`;
 }
+
+// ─── Prompt definitions — used by SettingsModal to render editable prompt slots ─
+
+export type PromptGroup = "Components" | "Screens" | "Themes";
+
+export interface PromptDefinition {
+  key: string;
+  label: string;
+  group: PromptGroup;
+  description: string;
+  getDefault: () => string;
+}
+
+export const PROMPT_DEFINITIONS: PromptDefinition[] = [
+  {
+    key: "prompt.components.new",
+    label: "New Component — base",
+    group: "Components",
+    description: "System prompt base for generating a brand-new component. The icon library section and theme CSS are appended automatically.",
+    getDefault: () => COMPONENT_NEW_PROMPT_BASE,
+  },
+  {
+    key: "prompt.components.update",
+    label: "Update Component — base",
+    group: "Components",
+    description: "System prompt base for editing an existing component. The icon library section and current code block are appended automatically.",
+    getDefault: () => COMPONENT_UPDATE_PROMPT_BASE,
+  },
+  {
+    key: "prompt.screens.new",
+    label: "New Screen — base",
+    group: "Screens",
+    description: "System prompt base for generating a brand-new screen. The icon library section and theme CSS are appended automatically.",
+    getDefault: () => SCREEN_NEW_PROMPT_BASE,
+  },
+  {
+    key: "prompt.screens.update",
+    label: "Update Screen — base",
+    group: "Screens",
+    description: "System prompt base for editing an existing screen. The icon library section and current code block are appended automatically.",
+    getDefault: () => SCREEN_UPDATE_PROMPT_BASE,
+  },
+  {
+    key: "prompt.themes.base",
+    label: "Theme Generator — base",
+    group: "Themes",
+    description: "System prompt base shared by all theme framework types. The framework-specific token docs are appended automatically.",
+    getDefault: () => THEME_SYSTEM_PROMPT_BASE,
+  },
+  {
+    key: "prompt.themes.shadcn",
+    label: "Theme Format — shadcn",
+    group: "Themes",
+    description: "Token format docs appended when the shadcn framework is selected.",
+    getDefault: () => THEME_TYPE_DOCS.shadcn,
+  },
+  {
+    key: "prompt.themes.daisyui",
+    label: "Theme Format — daisyUI",
+    group: "Themes",
+    description: "Token format docs appended when the daisyUI framework is selected.",
+    getDefault: () => THEME_TYPE_DOCS.daisyui,
+  },
+  {
+    key: "prompt.themes.bootstrap",
+    label: "Theme Format — Bootstrap",
+    group: "Themes",
+    description: "Token format docs appended when the Bootstrap framework is selected.",
+    getDefault: () => THEME_TYPE_DOCS.bootstrap,
+  },
+  {
+    key: "prompt.themes.generic",
+    label: "Theme Format — Generic",
+    group: "Themes",
+    description: "Token format docs appended when the Generic framework is selected.",
+    getDefault: () => THEME_TYPE_DOCS.generic,
+  },
+];
 
 // ─── UI Theme Suffixes (optional visual styles) ─────────────────────────────
 
