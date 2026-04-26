@@ -35,8 +35,8 @@ export function useModelCapabilities(modelId: string): Capabilities {
   const settings = useAppStore((s) => s.settings)
 
   const provider = settings.provider
-  const isOllama = provider === "ollama"
-  const isCloud = isOllama && settings.ollamaCloudModels.includes(modelId)
+  const isOllama = provider.startsWith("ollama")
+  const isCloud = provider === "ollama-cloud"
   const queryHost = isCloud ? "https://ollama.com" : settings.host
   const queryApiKey = isCloud ? (settings.apiKeys["ollama"] || "") : ""
 

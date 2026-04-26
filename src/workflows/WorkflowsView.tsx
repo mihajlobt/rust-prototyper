@@ -334,8 +334,8 @@ function WorkflowCanvas() {
         let output = "";
         const promptBase = d.prompt || d.label;
         const model = settings.modelId;
-        const host = getHostForProvider(settings.provider, settings.host, model, settings.ollamaCloudModels);
-        const apiKey = getApiKeyForProvider(settings.provider, settings.apiKeys);
+        const host = getHostForProvider(settings.provider as Provider, settings.host);
+        const apiKey = getApiKeyForProvider(settings.provider as Provider, settings.apiKeys);
         const customPrompts = settings.prompts;
 
         const streamAI = async (msgs: Message[]): Promise<string> => {

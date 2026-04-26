@@ -227,7 +227,7 @@ export function ThemesPanel() {
                 <PromptInspector
                   model={settings.modelId}
                   messages={messages.map((m) => ({ role: m.role, content: m.content }))}
-                  host={getHostForProvider(settings.provider, settings.host, settings.modelId, settings.ollamaCloudModels)}
+                  host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}
                 />
               )}

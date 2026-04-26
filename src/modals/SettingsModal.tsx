@@ -396,6 +396,33 @@ export function SettingsModal() {
               </div>
             </div>
 
+            {/* Active provider */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">Provider</p>
+              <div className="flex gap-1">
+                {([
+                  { id: "ollama-local" as const, label: "Ollama Local", icon: <Server size={11} /> },
+                  { id: "ollama-cloud" as const, label: "Ollama Cloud", icon: <Cloud size={11} /> },
+                  { id: "openai" as const, label: "OpenAI", icon: <Zap size={11} /> },
+                  { id: "claude" as const, label: "Claude", icon: <Bot size={11} /> },
+                ]).map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSettings({ provider: p.id })}
+                    className={[
+                      "flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors border",
+                      settings.provider === p.id
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted",
+                    ].join(" ")}
+                  >
+                    {p.icon}
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Active model */}
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">Active Model</p>
@@ -405,8 +432,9 @@ export function SettingsModal() {
                 const cloudIds = new Set(cloudModels.map(m => m.id))
                 const openaiIds = new Set(OPENAI_MODELS.map(m => m.id))
                 const anthropicIds = new Set(ANTHROPIC_MODELS.map(m => m.id))
-                let provider: "ollama" | "openai" | "claude" = settings.provider
-                if (localIds.has(modelId) || cloudIds.has(modelId)) provider = "ollama"
+                let provider: "ollama-local" | "ollama-cloud" | "openai" | "claude" = settings.provider
+                if (localIds.has(modelId)) provider = "ollama-local"
+                else if (cloudIds.has(modelId)) provider = "ollama-cloud"
                 else if (openaiIds.has(modelId)) provider = "openai"
                 else if (anthropicIds.has(modelId)) provider = "claude"
                 setSettings({ modelId, provider })

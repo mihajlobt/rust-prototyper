@@ -7,9 +7,6 @@ import {
   BookOpen,
   Terminal,
   PanelLeft,
-  Server,
-  Zap,
-  Bot,
 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SettingsModal } from "@/modals/SettingsModal";
@@ -17,13 +14,6 @@ import { ProjectManagerModal } from "@/modals/ProjectManagerModal";
 import { ExportModal } from "@/modals/ExportModal";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Button } from "@/components/ui/button";
-import type { Provider } from "@/lib/ipc";
-
-const PROVIDERS: { id: Provider; label: string; icon: React.ReactNode }[] = [
-  { id: "ollama", label: "Ollama", icon: <Server size={11} /> },
-  { id: "openai", label: "OpenAI", icon: <Zap size={11} /> },
-  { id: "claude", label: "Claude", icon: <Bot size={11} /> },
-];
 
 const tabs = [
   { id: "screens", label: "Screens", icon: LayoutGrid },
@@ -87,24 +77,6 @@ export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar 
 
       <ProjectManagerModal />
       <ExportModal />
-      <div className="flex items-center gap-1 bg-muted/50 rounded-md px-1 py-0.5">
-        {PROVIDERS.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setSettings({ provider: p.id })}
-            className={[
-              "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
-              settings.provider === p.id
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            ].join(" ")}
-            title={p.label}
-          >
-            {p.icon}
-            <span className="hidden sm:inline">{p.label}</span>
-          </button>
-        ))}
-      </div>
       <ModelPicker
         value={settings.modelId}
         onChange={(model) => setSettings({ modelId: model })}

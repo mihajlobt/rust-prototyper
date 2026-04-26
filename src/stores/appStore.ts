@@ -17,7 +17,7 @@ export interface Settings {
   host: string;
   apiKeys: Record<string, string>;
   ollamaCloudModels: string[];
-  provider: "ollama" | "openai" | "claude";
+  provider: "ollama-local" | "ollama-cloud" | "openai" | "claude";
   glow: "off" | "subtle" | "full";
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: Settings = {
   host: "http://localhost:11434",
   apiKeys: {},
   ollamaCloudModels: [],
-  provider: "ollama",
+  provider: "ollama-local",
   glow: "subtle",
   amoled: false,
   iconLibrary: "lucide",
@@ -74,6 +74,10 @@ function ensureInit(set: (fn: (state: SettingsSlice) => Partial<SettingsSlice>) 
       if (key in loaded) {
         (loaded as unknown as Record<string, unknown>)[key] = value;
       }
+    }
+    // Migrate legacy provider value: "ollama" → "ollama-local"
+    if ((loaded as unknown as Record<string, unknown>).provider === "ollama") {
+      (loaded as unknown as Record<string, unknown>).provider = "ollama-local";
     }
     // Migrate legacy localStorage keys
     if (typeof window !== "undefined") {

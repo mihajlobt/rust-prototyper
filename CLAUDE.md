@@ -191,3 +191,15 @@ bunx tsc --noEmit    # type-check
 - **NEVER leave dead code, unused variables, unused imports, or code "for legacy" / "compatibility".** If it's not used, delete it. If you need it back, use git history.
 - **NEVER prefix unused variables with underscore (`_foo`) to silence warnings.** If a variable is unused, remove it entirely — from the parameter list, destructuring, or declaration. Underscore prefixes are a suppression hack, not a fix.
 - **TypeScript errors are never "pre-existing".** If `tsc --noEmit` reports errors, fix them immediately. Do not skip or dismiss them.
+
+## CRITICAL — NO FALLBACKS OR SAFETY NETS
+
+- **NEVER add fallback values, backwards-compatibility shims, or safety nets when fixing a bug or error.** Fix the root cause — do not patch around it.
+- If old data causes a runtime error, write a proper migration at the source (e.g., the store init), not a fallback `|| default` or `?? default` that hides the real problem.
+- Defensive code masks bugs instead of fixing them. Make the code strict and fix the data.
+
+## CRITICAL — ICONS: LUCIDE ONLY, NO CUSTOM SVG
+
+- **NEVER create custom SVG icon components.** Use lucide-react icons exclusively.
+- If lucide doesn't have a suitable icon, pick the closest match from lucide. Do not create inline SVG, icon fonts, or icon files.
+- This keeps the icon set consistent and avoids maintenance burden.

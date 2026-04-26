@@ -156,8 +156,6 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
 
   const triggerLabel = value || "Select model";
 
-  const cloudIds = new Set(cloudModels.map((m) => m.id));
-
   const hasOpenAIKey = !!(settings.apiKeys["openai"]);
   const hasAnthropicKey = !!(settings.apiKeys["claude"]);
 
@@ -170,7 +168,7 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
               const icon = getProviderIcon(settings.provider)
               if (icon === "openai") return <Zap size={11} />
               if (icon === "anthropic") return <Bot size={11} />
-              if (cloudIds.has(value)) return <Cloud size={11} />
+              if (icon === "cloud") return <Cloud size={11} />
               return <Server size={11} />
             })()}
           </span>
@@ -183,7 +181,7 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
 
         {localStatus !== "offline" && (
           <>
-            <SectionHeader icon={<Server size={11} />} label="Ollama Local" status={localStatus} />
+             <SectionHeader icon={<Server size={11} />} label="Ollama Local" status={localStatus} />
             {localStatus === "loading" && (
               <p className="text-[10px] text-muted-foreground px-2.5 py-1">Connecting…</p>
             )}

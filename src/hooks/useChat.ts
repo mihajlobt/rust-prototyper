@@ -141,8 +141,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       })),
     ]
 
-    const { modelId, host, ollamaCloudModels, apiKeys, provider } = settings
-    const resolvedHost = getHostForProvider(provider as Provider, host, modelId, ollamaCloudModels)
+    const { modelId, host, apiKeys, provider } = settings
+    const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
@@ -274,8 +274,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       })),
     ]
 
-    const { modelId, host, ollamaCloudModels, apiKeys, provider } = settings
-    const resolvedHost = getHostForProvider(provider as Provider, host, modelId, ollamaCloudModels)
+    const { modelId, host, apiKeys, provider } = settings
+    const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined

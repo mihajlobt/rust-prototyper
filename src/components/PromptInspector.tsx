@@ -38,7 +38,7 @@ export function PromptInspector({ model, messages, host, provider }: PromptInspe
   const tokenCount = useMemo(() => countTokens(assembled, model), [assembled, model]);
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
 
-  const isOllama = provider === "ollama";
+  const isOllama = provider.startsWith("ollama");
 
   const curl = isOllama
     ? `curl -X POST ${host}/api/chat \\

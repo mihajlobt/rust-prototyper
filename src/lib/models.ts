@@ -16,12 +16,13 @@ export const ANTHROPIC_MODELS: StaticModel[] = [
   { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
 ];
 
-export type Provider = "ollama" | "openai" | "claude"
+export type Provider = "ollama-local" | "ollama-cloud" | "openai" | "claude"
 
-export function getProviderIcon(provider: Provider): "server" | "cloud" | "openai" | "anthropic" | "unknown" {
+export function getProviderIcon(provider: Provider): "server" | "cloud" | "openai" | "anthropic" {
   switch (provider) {
+    case "ollama-local": return "server"
+    case "ollama-cloud": return "cloud"
     case "openai": return "openai"
     case "claude": return "anthropic"
-    default: return "unknown"
   }
 }
