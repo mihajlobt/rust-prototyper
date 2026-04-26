@@ -10,8 +10,9 @@ import { useUIStore } from "@/stores/uiStore";
 import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
-import { getScreenNewPrompt } from "@/lib/prompts";
+import { getScreenNewPrompt, getScreenUpdatePrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
+import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -45,7 +46,17 @@ export function ScreensPanel() {
   const Preview = useMemo(() => {
     if (!previewHtml) return null;
     return createPreviewComponent(previewHtml);
-  }, [previewHtml, settings.iconLibrary]);
+  }, [previewHtml]);
+
+  // Switch to update prompt after first generation — the model needs the current
+  // code context to make targeted edits instead of generating from scratch.
+  const hasGeneratedCode = previewHtml.length > 0;
+  const defaultSystem = hasGeneratedCode
+    ? getScreenUpdatePrompt(settings.iconLibrary, previewHtml) +
+      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
+    : getScreenNewPrompt(settings.iconLibrary) +
+      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
+  const systemContent = settings.prompts["screens-system"] || defaultSystem;
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
@@ -55,10 +66,7 @@ export function ScreensPanel() {
   } = useChat({
     entityId: screenId ? `screen-${screenId}` : "screen-none",
     chatPath,
-    systemPrompt: settings.prompts["screens-system"] || (
-      getScreenNewPrompt(settings.iconLibrary) +
-      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
-    ),
+    systemPrompt: systemContent,
     outputPath: screenId ? screenPath : undefined,
     onOutput: (content) => {
       setPreviewHtml(content);
@@ -252,7 +260,10 @@ export function ScreensPanel() {
               {screensShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
-                  messages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                  messages={[
+                    { role: "system", content: systemContent },
+                    ...messages.map((m) => ({ role: m.role, content: m.content })),
+                  ]}
                   host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
                 />
               )}
@@ -297,7 +308,9 @@ export function ScreensPanel() {
                     head={<style>{parentCss + themeCss + iconFontCss}</style>}
                     className="w-full h-full border-0"
                   >
-                    <Preview />
+                    <PreviewErrorBoundary resetKey={previewHtml}>
+                      <Preview />
+                    </PreviewErrorBoundary>
                   </Frame>
                 </div>
               ) : (

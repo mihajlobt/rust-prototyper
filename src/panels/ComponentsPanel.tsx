@@ -24,8 +24,9 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { FileEntry } from "@/lib/ipc";
-import { getComponentNewPrompt } from "@/lib/prompts";
+import { getComponentNewPrompt, getComponentUpdatePrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
+import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
@@ -47,8 +48,14 @@ export function ComponentsPanel() {
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3);
 
-  const defaultSystem = getComponentNewPrompt(settings.iconLibrary) +
-    (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
+  // Switch to update prompt after first generation — the model needs the current
+  // code context to make targeted edits instead of generating from scratch.
+  const hasGeneratedCode = code.length > 0;
+  const defaultSystem = hasGeneratedCode
+    ? getComponentUpdatePrompt(settings.iconLibrary, code) +
+      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "")
+    : getComponentNewPrompt(settings.iconLibrary) +
+      (themeCss ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\`` : "");
   const systemContent = settings.prompts["components-system"] || defaultSystem;
 
   const parentCss = getParentCss();
@@ -56,7 +63,7 @@ export function ComponentsPanel() {
   const Preview = useMemo(() => {
     if (!code) return null;
     return createPreviewComponent(code);
-  }, [code, settings.iconLibrary]);
+  }, [code]);
 
   const saveCode = useCallback(async (value: string) => {
     if (!value) return;
@@ -334,7 +341,11 @@ export function ComponentsPanel() {
                             color: "var(--foreground, #000)",
                           }}
                         >
-                          {Preview ? <Preview /> : null}
+                          {Preview ? (
+                            <PreviewErrorBoundary resetKey={code}>
+                              <Preview />
+                            </PreviewErrorBoundary>
+                          ) : null}
                         </div>
                       </Frame>
                     </div>

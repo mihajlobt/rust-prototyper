@@ -26,14 +26,12 @@ function CodeBlock({ children, className, ...props }: CodeBlockProps) {
 export type CodeBlockCodeProps = {
   code: string
   language?: string
-  theme?: string
   className?: string
 } & React.HTMLProps<HTMLDivElement>
 
 function CodeBlockCode({
   code,
   language = "text",
-  theme = "github-light",
   className,
   ...props
 }: CodeBlockCodeProps) {
@@ -48,7 +46,13 @@ function CodeBlockCode({
       try {
         // Shiki doesn't support "plaintext" — fall back to "text"
         const lang = language === "plaintext" ? "text" : language
-        const html = await codeToHtml(code, { lang, theme })
+        // Dual themes: light + dark CSS variables in a single HTML output.
+        // The .dark CSS rule in globals.css switches colors via --shiki-dark vars.
+        // Source: https://shiki.style/guide/dual-themes
+        const html = await codeToHtml(code, {
+          lang,
+          themes: { light: "github-light", dark: "github-dark" },
+        })
         setHighlightedHtml(html)
       } catch {
         // Unknown language — render plain
@@ -56,7 +60,7 @@ function CodeBlockCode({
       }
     }
     highlight()
-  }, [code, language, theme])
+  }, [code, language])
 
   const classNames = cn(
     "w-full overflow-x-auto text-[13px] [&>pre]:px-4 [&>pre]:py-4",

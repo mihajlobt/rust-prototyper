@@ -123,6 +123,11 @@ bunx tsc --noEmit    # type-check
 
 ## Coding Rules
 
+## CRITICAL — CONSULT DOCS FOR EVERY STEP
+- **CONSULT Context7 OR OFFICIAL DOCS for EVERY file you edit and EVERY library/API you use.**
+- Your training data may be outdated. Always verify current API signatures, patterns, and best practices before making changes.
+- This applies even to well-known libraries — APIs change, defaults shift, and patterns evolve.
+
 ## CRITICAL — NEVER REMOVE EXISTING FUNCTIONALITY
 - **NEVER remove, disable, or silently drop existing functionality without explicit user approval or a direct bug fix that requires it.**
 - This applies especially when implementing new features, migrating old code, or executing long plans — do not quietly discard working behaviour as a side effect.

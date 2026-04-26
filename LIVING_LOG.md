@@ -77,7 +77,7 @@ AI calls `write_file(content=...)` using ollama-rs streaming with manual tool-ca
 
 ## Known Issues
 
-**Tool call reliability** — smaller models skip `write_file` on first turn; no fallback to `extractCode` when tool isn't called and outputPath is set.
+**Tool call content suppression** — `regenerate` path in `useChat.ts` was missing the `(!outputPath || toolWritten)` suppression guard that `sendMessage` has, causing raw tool call syntax text to leak into chat. Fixed.
 
 **`thinking` in history for non-thinking models** — if user switches model mid-conversation, `thinking` fields reach a model that ignores or mishandles them. Should be stripped when `!caps.thinking`.
 
@@ -135,7 +135,6 @@ Frontend:   FileWritten → stripFences → onOutput → editor + disk
 
 ## Forward
 
-- Fallback extraction when model skips `write_file` (use `extractCode` on accumulated content if `outputPath` set but no `FileWritten` by Done)
 - Strip `thinking` from history when switching to non-thinking model mid-conversation
 - JSON-envelope detection in `stripFences` or a `cleanContent()` util
 - `App` entry-point enforcement in component prompts with concrete example structure

@@ -216,7 +216,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
     }
-  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking])
+  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath])
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)
@@ -290,7 +290,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
             })
           }
         }
-        if (msg.data.text) contentAccumulated += msg.data.text
+        if (msg.data.text && (!outputPath || toolWrittenRegen)) contentAccumulated += msg.data.text
         if (rafId === null) {
           rafId = requestAnimationFrame(() => {
             rafId = null
@@ -299,7 +299,10 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         }
       } else if (msg.event === "FileWritten") {
         toolWrittenRegen = true
-        onOutputRef.current?.(msg.data.content)
+        contentAccumulated = ""
+        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        useChatStore.getState().setStreamingContent(entityId, "")
+        onOutputRef.current?.(stripFences(msg.data.content))
         useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
       } else if (msg.event === "Done") {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }

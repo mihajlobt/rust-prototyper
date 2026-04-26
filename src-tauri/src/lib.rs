@@ -519,7 +519,7 @@ impl Tool for WriteFileTool {
     type Params = WriteFileParams;
     fn name() -> &'static str { "write_file" }
     fn description() -> &'static str {
-        "Write the generated code or CSS to the output file. Always call this with the complete file content."
+        "Write the raw source code to the output file. The content must be raw code — NOT a JSON object, NOT wrapped in an envelope with code/commentary keys. Just the raw code itself."
     }
     fn call(&mut self, _: WriteFileParams) -> impl std::future::Future<Output = ollama_rs::generation::tools::Result<String>> + Send + Sync {
         async { Ok(String::new()) }
