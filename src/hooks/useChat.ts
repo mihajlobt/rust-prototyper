@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type MutableRefObject, type RefObject } from "react"
 
-/** Strip markdown code fences a model may have wrapped around file content. */
 function stripFences(content: string): string {
   return content
     .replace(/^```[\w]*\r?\n?/, "")
@@ -61,6 +60,17 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     }
     prevCanThinkRef.current = caps.thinking
   }, [caps.thinking])
+
+  const [toolsEnabled, setToolsEnabled] = useState(true)
+  const prevCanToolsRef = useRef(false)
+  useEffect(() => {
+    if (caps.tools && !prevCanToolsRef.current) {
+      setToolsEnabled(true)
+    } else if (!caps.tools) {
+      setToolsEnabled(false)
+    }
+    prevCanToolsRef.current = caps.tools
+  }, [caps.tools])
 
   // Track which entityIds we've already loaded from disk
   const loadedRef = useRef<Set<string>>(new Set())
@@ -134,6 +144,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const resolvedHost = getModelHost(modelId, host, ollamaCloudModels)
     const resolvedKey = getApiKey(modelId, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
+    const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
     const channel = new Channel<CompletionEvent>()
     let contentAccumulated = ""
@@ -175,11 +186,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
             })
           }
         }
-        // Handle content chunk.
-        // In tool mode, suppress content before FileWritten — it's the model echoing
-        // the tool call syntax as text (not useful to show). After FileWritten fires,
-        // contentAccumulated is cleared and second-turn content accumulates normally.
-        if (msg.data.text && (!outputPath || toolWritten)) {
+        if (msg.data.text) {
           contentAccumulated += msg.data.text
         }
         if (rafId === null) {
@@ -190,13 +197,11 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         }
       } else if (msg.event === "FileWritten") {
         toolWritten = true
-        // Clear accumulated content — it's the raw tool call syntax the model echoed
-        // as text. Only the confirmation text from the next stream turn is useful.
         contentAccumulated = ""
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         useChatStore.getState().setStreamingContent(entityId, "")
         onOutputRef.current?.(stripFences(msg.data.content))
-        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
+        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path, { content: msg.data.content })
       } else if (msg.event === "Done") {
         finalize(contentAccumulated, thinkingAccumulated)
         if (!toolWritten) onOutputRef.current?.(contentAccumulated)
@@ -209,14 +214,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     try {
       await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
-        channel, useThinking || undefined, outputPath,
+        channel, useThinking || undefined, effectiveOutputPath,
       )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
     }
-  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath])
+  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath, toolsEnabled])
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)
@@ -271,6 +276,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const resolvedHost = getModelHost(modelId, host, ollamaCloudModels)
     const resolvedKey = getApiKey(modelId, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
+    const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
     const channel = new Channel<CompletionEvent>()
     let contentAccumulated = ""
@@ -290,7 +296,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
             })
           }
         }
-        if (msg.data.text && (!outputPath || toolWrittenRegen)) contentAccumulated += msg.data.text
+        if (msg.data.text) contentAccumulated += msg.data.text
         if (rafId === null) {
           rafId = requestAnimationFrame(() => {
             rafId = null
@@ -303,7 +309,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         useChatStore.getState().setStreamingContent(entityId, "")
         onOutputRef.current?.(stripFences(msg.data.content))
-        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path)
+        useChatStore.getState().attachToolCall(entityId, "write_file", msg.data.path, { content: msg.data.content })
       } else if (msg.event === "Done") {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         const finalMessage: ChatMessage = {
@@ -328,14 +334,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     try {
       await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
-        channel, useThinking || undefined, outputPath,
+        channel, useThinking || undefined, effectiveOutputPath,
       )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
     }
-  }, [entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath])
+  }, [entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath, toolsEnabled])
 
   const addAttachment = useCallback((file: AttachmentFile) => {
     setAttachments((prev) => [...prev, file])
@@ -369,7 +375,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     regenerate,
     clearChat,
     deleteFrom,
-    isToolMode: !!outputPath,
+    isToolMode: !!outputPath && toolsEnabled,
     attachments,
     addAttachment,
     removeAttachment,
@@ -379,6 +385,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     thinkEnabled,
     toggleThink: () => setThinkEnabled((v) => !v),
     canThink: caps.thinking,
+    toolsEnabled,
+    toggleTools: () => setToolsEnabled((v) => !v),
+    canTools: caps.tools,
     canVision: caps.vision,
     capsLoading: caps.loading,
   }

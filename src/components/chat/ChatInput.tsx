@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
-import { Send, Square, ImageIcon, Brain } from "lucide-react"
+import { Send, Square, ImageIcon, Brain, Wrench } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
@@ -25,6 +25,9 @@ interface ChatInputProps {
   onToggleThink?: () => void
   canThink?: boolean
   canVision?: boolean
+  toolsEnabled?: boolean
+  onToggleTools?: () => void
+  canTools?: boolean
   onStop?: () => void
 }
 
@@ -32,7 +35,7 @@ export function ChatInput({
   value, onChange, onSend, disabled,
   attachments, onAddAttachment, onRemoveAttachment,
   mentions, onAddMention, onRemoveMention,
-  thinkEnabled, onToggleThink, canThink, canVision, onStop,
+  thinkEnabled, onToggleThink, canThink, canVision, toolsEnabled, onToggleTools, canTools, onStop,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -187,6 +190,32 @@ export function ChatInput({
                   {canThink
                     ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
                     : "Model does not support thinking"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={canTools ? onToggleTools : undefined}
+                    className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition-colors ${
+                      canTools
+                        ? toolsEnabled
+                          ? "text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        : "text-muted-foreground/30 cursor-not-allowed"
+                    }`}
+                  >
+                    <Wrench size={13} />
+                    {toolsEnabled && canTools && <span>Tools</span>}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {canTools
+                    ? toolsEnabled ? "Tools on — click to disable" : "Tools off — click to enable"
+                    : "Model does not support tool calling"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

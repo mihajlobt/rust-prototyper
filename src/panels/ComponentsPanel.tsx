@@ -149,6 +149,7 @@ export function ComponentsPanel() {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, clearChat, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink, canVision,
+    toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
   } = useChat({
     entityId: componentId ? `component-${componentId}` : "component-none",
@@ -231,6 +232,9 @@ export function ComponentsPanel() {
           onToggleThink={toggleThink}
           canThink={canThink}
           canVision={canVision}
+          toolsEnabled={toolsEnabled}
+          onToggleTools={toggleTools}
+          canTools={canTools}
           onStop={stopGeneration}
         />
       </div>

@@ -143,6 +143,11 @@ bunx tsc --noEmit    # type-check
 - Temp directories create race conditions, permission issues, and stale file problems.
 - If a CLI tool refuses to scaffold into a non-empty directory, the correct approach is to save user data, clear the target directory, scaffold into the now-empty directory, then restore user data.
 
+## CRITICAL — NEVER MANUALLY PARSE STRUCTURED API CONTENT
+- **NEVER manually parse, unwrap, or extract structured content from API AI model responses** — no JSON envelope unwrapping, no regex extraction from model output, no content trimming hacks.
+- Use the API's native structured output mechanisms: tool calling arguments (`tool_calls[].function.arguments`), structured output format (`ChatRequest.format`), or fix the prompt instead.
+- String cleanup of markdown fences (`stripFences`) is acceptable — that's presentational normalization, not API content parsing.
+
 ## URGENT - DO NOT REVERT UNCOMMITTED FILES
 - **CRITICAL: NEVER use `git checkout`, `git revert`, or any git command that discards uncommitted changes.**
 - If you need to fix something, build ON TOP of existing changes, never discard them.

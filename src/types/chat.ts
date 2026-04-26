@@ -1,6 +1,7 @@
 export interface ToolCallRecord {
   tool: string
   path: string
+  arguments: Record<string, unknown>
 }
 
 export interface ChatMessage {

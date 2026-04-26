@@ -62,6 +62,7 @@ export function ScreensPanel() {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, clearChat, deleteFrom, isToolMode, attachments, addAttachment, removeAttachment,
     thinkEnabled, toggleThink, canThink, canVision,
+    toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
   } = useChat({
     entityId: screenId ? `screen-${screenId}` : "screen-none",
@@ -211,6 +212,9 @@ export function ScreensPanel() {
           onToggleThink={toggleThink}
           canThink={canThink}
           canVision={canVision}
+          toolsEnabled={toolsEnabled}
+          onToggleTools={toggleTools}
+          canTools={canTools}
           onStop={stopGeneration}
         />
 

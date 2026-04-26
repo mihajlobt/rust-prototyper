@@ -143,8 +143,9 @@ const MessageBubble = memo(function MessageBubble({
             <Tool
               key={i}
               toolPart={{
-                type: "write_file",
-                state: isStreaming ? "input-streaming" : "output-available",
+                type: tc.tool,
+                state: message.toolCalls?.length ? "output-available" : "input-streaming",
+                input: tc.arguments,
                 output: { file: tc.path.split("/").pop() },
               }}
               defaultOpen
