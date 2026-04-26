@@ -204,7 +204,7 @@ export function ThemesPanel() {
           <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
-                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                <div className="panel-toolbar h-10 px-3 gap-2">
                   {frameworkPills}
                   <div className="flex-1" />
                   <Button
@@ -261,7 +261,7 @@ export function ThemesPanel() {
           <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
-                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+                <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
                   <span className="text-sm font-medium">Preview</span>
                   <div className="flex-1" />
                   <div className="flex items-center gap-1">

@@ -89,7 +89,7 @@ export function PromptInspector({ model, messages, host, provider }: PromptInspe
 
   return (
     <div className="h-full flex flex-col">
-      <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+      <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
         <Eye size={14} />
         <span className="text-sm font-medium">Prompt Inspector</span>
         <div className="flex-1" />

@@ -36,7 +36,7 @@ export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar 
   const { settings, setSettings } = useAppStore();
 
   return (
-    <header className="h-12 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+    <header className="panel-toolbar h-12 px-3 gap-2 bg-card">
       {/* Sidebar toggle */}
       <Button
         variant="ghost"

@@ -518,7 +518,7 @@ function WorkflowCanvas() {
   return (
     <div className="h-full flex flex-col" onClick={() => setCtxMenu(null)}>
       {/* Toolbar */}
-      <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+      <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
         <Button variant={running ? "destructive" : "default"} size="sm" className="h-7 text-xs gap-1" onClick={running ? stopWorkflow : runWorkflow}>
           {running ? <><Square size={12} />Stop</> : <><Play size={12} />Run</>}
         </Button>
@@ -725,7 +725,7 @@ function WorkflowCanvas() {
         {/* Workflows panel */}
         {showWorkflowsPanel && (
           <div className="absolute top-0 right-0 h-full w-[260px] bg-card border-l border-border z-40 flex flex-col shadow-xl">
-            <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+            <div className="panel-toolbar h-10 px-3 gap-2">
               <FolderOpen size={14} />
               <span className="text-sm font-medium flex-1">Saved Workflows</span>
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={refreshSavedWorkflows}><RotateCw size={11} /></Button>

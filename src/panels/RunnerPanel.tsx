@@ -316,7 +316,7 @@ export function RunnerPanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
-      <div className="h-9 border-b border-border flex items-center px-2 gap-1 shrink-0 bg-card">
+      <div className="panel-toolbar h-9 px-2 gap-1 bg-card">
         <Button variant={running ? "destructive" : "default"} size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleRun}>
           {running ? <Square size={10} /> : <Play size={10} />}
           {running ? "Stop" : "Run"}
@@ -377,7 +377,7 @@ export function RunnerPanel() {
                     <Allotment.Pane minSize={200}>
                       {selectedFile ? (
                         <div className="h-full flex flex-col">
-                          <div className="h-7 border-b border-border flex items-center px-3 gap-2 bg-card shrink-0">
+                          <div className="panel-toolbar h-7 px-3 gap-2 bg-card">
                             <span className="text-[11px] font-medium text-muted-foreground">{selectedFile.split("/").pop()}</span>
                             <div className="flex-1" />
                             <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleSaveFile}><Save size={12} /></Button>
@@ -395,7 +395,7 @@ export function RunnerPanel() {
                     <Allotment.Pane minSize={300}>
                       <div className="h-full flex flex-col">
                         {/* Chrome DevTools-style device toolbar */}
-                        <div className="h-7 border-b border-border flex items-center px-2 gap-1 bg-card shrink-0">
+                        <div className="panel-toolbar h-7 px-2 gap-1 bg-card">
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleRefreshPreview} title="Refresh"><RotateCw size={11} /></Button>
                           <div className="w-px h-3 bg-border" />
                           <div className="flex items-center gap-0.5">

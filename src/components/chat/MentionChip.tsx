@@ -14,7 +14,7 @@ interface MentionChipProps {
 
 export function MentionChip({ asset, onRemove }: MentionChipProps) {
   return (
-    <div className="flex items-center gap-1 rounded border border-border bg-accent/10 px-1.5 py-0.5 text-xs text-foreground">
+    <div className="flex items-center gap-1 rounded border border-border bg-accent/10 px-1.5 py-0.5 text-xs">
       {TYPE_ICONS[asset.type]}
       <span>{asset.name}</span>
       <button

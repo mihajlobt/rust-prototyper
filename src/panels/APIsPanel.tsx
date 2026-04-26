@@ -424,7 +424,7 @@ export function APIsPanel() {
         {/* APIs Sidebar */}
         <Allotment.Pane preferredSize={220} minSize={180}>
           <div className="h-full flex flex-col bg-card border-r border-border">
-            <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+            <div className="panel-toolbar h-10 px-3 gap-2">
               <span className="text-sm font-medium">APIs</span>
               <div className="flex-1" />
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={createApi}>
@@ -484,7 +484,7 @@ export function APIsPanel() {
             {/* Request */}
             <Allotment.Pane minSize={320}>
               <div className="h-full flex flex-col bg-card">
-                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                <div className="panel-toolbar h-10 px-3 gap-2">
                   <span className="text-sm font-medium">Request</span>
                   <div className="flex-1" />
                   <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={saveCurrent}>
@@ -676,7 +676,7 @@ export function APIsPanel() {
             {/* Response */}
             <Allotment.Pane minSize={320}>
               <div className="h-full flex flex-col bg-card">
-                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                <div className="panel-toolbar h-10 px-3 gap-2">
                   <span className="text-sm font-medium">Response</span>
                   {response && (
                     <span

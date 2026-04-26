@@ -233,7 +233,7 @@ export function ScreensPanel() {
           <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
-                <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0">
+                <div className="panel-toolbar h-10 px-3 gap-2">
                   <span className="text-sm font-medium">Chat</span>
                   {messages.length > 0 && (
                     <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
@@ -278,7 +278,7 @@ export function ScreensPanel() {
 
         <Allotment.Pane minSize={400}>
           <div className="h-full flex flex-col">
-            <div className="h-10 border-b border-border flex items-center px-3 gap-2 shrink-0 bg-card">
+            <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
               <span className="text-sm font-medium">Preview</span>
               <div className="flex-1" />
               <div className="flex items-center gap-1">

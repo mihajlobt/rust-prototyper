@@ -216,13 +216,10 @@ export function SidebarRail() {
       </div>
 
       <div className="p-2 border-t border-border">
-        <button
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-          onClick={() => setShowNewDialog(true)}
-        >
+        <Button variant="ghost" className="w-full justify-start gap-2" onClick={() => setShowNewDialog(true)}>
           <Plus size={16} />
           New Item
-        </button>
+        </Button>
       </div>
 
       {/* New item dialog */}
