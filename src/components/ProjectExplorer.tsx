@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { cn } from "@/lib/utils";
 import {
   asyncDataLoaderFeature,
   hotkeysCoreFeature,
@@ -97,6 +98,24 @@ interface ProjectExplorerProps {
 
 /** Query data array entry type from readDir */
 type TreeEntry = { name: string; path: string; is_dir: boolean };
+
+/** Shared button style for all tree items (folders and leaves).
+ *  Accepts className so Radix asChild / headless-tree getProps() merges correctly. */
+function TreeItemButton({ style, className, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={cn(
+        "w-full flex items-center gap-1.5 px-2 py-0.5 text-xs text-left rounded transition-colors",
+        "text-muted-foreground hover:text-foreground hover:bg-muted",
+        className
+      )}
+      style={style}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate, onSetDefaultTheme, onNewItem, onRefresh }: ProjectExplorerProps) {
   const settings = useAppStore((s) => s.settings);
@@ -241,15 +260,11 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
             <div key={item.getId()}>
               <ContextMenu>
                 <ContextMenuTrigger asChild>
-                  <button
-                    className="w-full flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors text-left"
-                    style={{ paddingLeft: `${indent}px` }}
-                    {...item.getProps()}
-                  >
+                  <TreeItemButton style={{ paddingLeft: `${indent}px` }} {...item.getProps()}>
                     {item.isExpanded() ? <ChevronDown size={10} className="shrink-0" /> : <ChevronRight size={10} className="shrink-0" />}
                     {item.isExpanded() ? <FolderOpen size={12} className="shrink-0" /> : <Folder size={12} className="shrink-0" />}
                     <span className="font-medium">{itemData.name}</span>
-                  </button>
+                  </TreeItemButton>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   {section && (
@@ -274,8 +289,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
           <div key={item.getId()}>
             <ContextMenu>
               <ContextMenuTrigger asChild>
-                <button
-                  className="w-full flex items-center gap-1.5 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors text-left"
+                <TreeItemButton
                   style={{ paddingLeft: `${indent}px` }}
                   {...item.getProps()}
                   onDoubleClick={() => section && onSelectAsset(section, itemData.name)}
@@ -292,7 +306,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
                 >
                   {section ? <AssetIcon section={section} /> : <FileIcon name={itemData.name} />}
                   <span className="truncate">{itemData.name}</span>
-                </button>
+                </TreeItemButton>
               </ContextMenuTrigger>
               <ContextMenuContent>
                 {section && (

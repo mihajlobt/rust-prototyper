@@ -1,5 +1,18 @@
 import { memo } from "react"
 import { Copy, Code2, RefreshCw, Trash2 } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+/** Small action button used inside message action rows. */
+function MsgActionBtn({ className, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={cn("p-1 rounded flex items-center gap-1 text-xs transition-colors text-muted-foreground hover:text-foreground hover:bg-muted", className)}
+      {...props}
+    >
+      {children}
+    </button>
+  )
+}
 import { Tool } from "@/components/ui/tool"
 import type { ToolPart } from "@/components/ui/tool"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
@@ -125,21 +138,15 @@ const MessageBubble = memo(function MessageBubble({
           </MessageContent>
           <MessageActions className="opacity-0 group-hover:opacity-100 transition-opacity">
             <MessageAction tooltip="Copy message">
-              <button
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                onClick={() => navigator.clipboard.writeText(content)}
-              >
+              <MsgActionBtn onClick={() => navigator.clipboard.writeText(content)}>
                 <Copy size={13} />
-              </button>
+              </MsgActionBtn>
             </MessageAction>
             {onDeleteFrom && (
               <MessageAction tooltip="Delete from here">
-                <button
-                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
-                  onClick={() => onDeleteFrom(index)}
-                >
+                <MsgActionBtn className="hover:text-destructive" onClick={() => onDeleteFrom(index)}>
                   <Trash2 size={13} />
-                </button>
+                </MsgActionBtn>
               </MessageAction>
             )}
           </MessageActions>
@@ -198,33 +205,22 @@ const MessageBubble = memo(function MessageBubble({
         {!isStreaming && content && (
           <MessageActions className="opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
             <MessageAction tooltip="Copy message">
-              <button
-                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                onClick={() => navigator.clipboard.writeText(content)}
-              >
+              <MsgActionBtn onClick={() => navigator.clipboard.writeText(content)}>
                 <Copy size={13} />
-              </button>
+              </MsgActionBtn>
             </MessageAction>
             {onApplyCode && hasCode && (
               <MessageAction tooltip="Apply code">
-                <button
-                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 text-xs"
-                  onClick={() => onApplyCode(content)}
-                >
-                  <Code2 size={13} />
-                  Apply
-                </button>
+                <MsgActionBtn onClick={() => onApplyCode(content)}>
+                  <Code2 size={13} /> Apply
+                </MsgActionBtn>
               </MessageAction>
             )}
             {isLastAssistant && onRegenerate && (
               <MessageAction tooltip="Regenerate">
-                <button
-                  className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1 text-xs"
-                  onClick={onRegenerate}
-                >
-                  <RefreshCw size={13} />
-                  Retry
-                </button>
+                <MsgActionBtn onClick={onRegenerate}>
+                  <RefreshCw size={13} /> Retry
+                </MsgActionBtn>
               </MessageAction>
             )}
           </MessageActions>

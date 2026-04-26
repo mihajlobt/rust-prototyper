@@ -82,6 +82,16 @@ No `localStorage` except one-time migration of legacy keys on first launch.
 
 Tailwind v4 + shadcn/ui. Tokens in `src/styles/globals.css` (`@theme inline` block). Domain-specific CSS kept in `src/styles/workflows.css`, `panels.css`, `ui.css`.
 
+## CRITICAL — MAX 6–7 TAILWIND CLASSES PER ELEMENT
+
+- **NEVER write more than 6–7 Tailwind utility classes on a single element.**
+- If you need more, use one of these official approaches:
+  1. **Extract a component** — the primary Tailwind recommendation. Move the element into its own named React component.
+  2. **`cva` (class-variance-authority)** — already used in this project for shadcn/ui primitives. Use it for any element that has variants.
+  3. **`@apply` in a CSS file** — for non-component HTML elements or repeated patterns that can't be componentised. Add to the appropriate file in `src/styles/`.
+- This applies to every `className` prop and every `cn(...)` call in component source code.
+- Long className strings are a maintainability hazard: they hide intent, break diffs, and make refactoring error-prone.
+
 ## Keyboard Shortcuts
 
 Global shortcuts use `window.addEventListener('keydown', ...)` in `useEffect` — **not** `onKeyDown` on divs with `tabIndex`. This ensures they fire regardless of focus. Current shortcuts:

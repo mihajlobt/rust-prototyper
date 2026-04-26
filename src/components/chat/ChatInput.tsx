@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
 import { Send, Square, ImageIcon, Brain, Wrench } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
@@ -161,7 +162,7 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+          className="chat-textarea"
           style={{ minHeight: 36, maxHeight: 160 }}
         />
 
@@ -252,22 +253,13 @@ export function ChatInput({
           </div>
 
           {disabled && onStop ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="flex items-center justify-center rounded-md bg-destructive/80 hover:bg-destructive px-2.5 py-1 text-white transition-colors"
-            >
+            <Button type="button" size="sm" variant="destructive" onClick={onStop} className="px-2.5 py-1 h-auto">
               <Square size={12} />
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              onClick={onSend}
-              disabled={disabled || !value.trim()}
-              className="flex items-center justify-center rounded-md bg-primary px-2.5 py-1 text-primary-foreground disabled:opacity-30 hover:opacity-90 transition-opacity"
-            >
+            <Button type="button" size="sm" onClick={onSend} disabled={disabled || !value.trim()} className="px-2.5 py-1 h-auto">
               <Send size={12} />
-            </button>
+            </Button>
           )}
         </div>
       </div>

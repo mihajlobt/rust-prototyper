@@ -22,6 +22,7 @@ import { Settings, RotateCcw, Plus, Trash2, Server, Cloud, Zap, Bot, Library } f
 import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { notify } from "@/hooks/useToast";
 import { readFile, writeFile, bunInstall } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
@@ -133,22 +134,12 @@ export function SettingsModal() {
                   {/* Dark mode */}
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Dark mode</Label>
-                    <button
-                      onClick={() => setSettings({ dark: !settings.dark })}
-                      className={["relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", settings.dark ? "bg-primary" : "bg-input"].join(" ")}
-                    >
-                      <span className={["inline-block h-3.5 w-3.5 rounded-full bg-background shadow transition-transform", settings.dark ? "translate-x-4.5" : "translate-x-0.5"].join(" ")} />
-                    </button>
+                    <ToggleSwitch checked={settings.dark} onCheckedChange={(v) => setSettings({ dark: v })} />
                   </div>
                   {/* AMOLED */}
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">AMOLED black</Label>
-                    <button
-                      onClick={() => setSettings({ amoled: !settings.amoled })}
-                      className={["relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", settings.amoled ? "bg-primary" : "bg-input"].join(" ")}
-                    >
-                      <span className={["inline-block h-3.5 w-3.5 rounded-full bg-background shadow transition-transform", settings.amoled ? "translate-x-4.5" : "translate-x-0.5"].join(" ")} />
-                    </button>
+                    <ToggleSwitch checked={settings.amoled} onCheckedChange={(v) => setSettings({ amoled: v })} />
                   </div>
                   {/* Glow */}
                   <div className="space-y-1.5">

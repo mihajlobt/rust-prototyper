@@ -167,6 +167,22 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* ─── Reusable layout patterns ─────────────────────────────────────────────── */
+@layer components {
+  /* Panel toolbar strip — thin header row used across all panels.
+     Use h-{n} to set height; add bg-card when an opaque background is needed. */
+  .panel-toolbar {
+    @apply border-b border-border flex items-center shrink-0;
+  }
+
+  /* Chat input textarea */
+  .chat-textarea {
+    @apply w-full resize-none bg-transparent px-3 pt-2.5 pb-1;
+    @apply text-sm text-foreground placeholder:text-muted-foreground;
+    @apply focus:outline-none disabled:opacity-50;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

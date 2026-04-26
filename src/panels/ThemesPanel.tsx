@@ -23,6 +23,7 @@ import { getParentCss } from "@/lib/preview";
 import { PromptInspector } from "@/components/PromptInspector";
 import Frame from "react-frame-component";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
+import { PaneHeader } from "@/components/ui/pane-header";
 
 export function ThemesPanel() {
   const { settings } = useAppStore();
@@ -238,13 +239,10 @@ export function ThemesPanel() {
               </div>
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <div
-                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => setPs({ themesShowInspector: !themesShowInspector })}
-              >
+              <PaneHeader onClick={() => setPs({ themesShowInspector: !themesShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {themesShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </div>
+              </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={themesShowInspector} preferredSize={240} minSize={160}>
               {themesShowInspector && (
@@ -400,15 +398,12 @@ body { margin: 0; font-family: sans-serif; }
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <div
-                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}
-              >
+              <PaneHeader onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}>
                 <FileCode size={12} className="mr-1.5" />
                 <span className="text-xs font-medium">CSS Output</span>
                 <div className="flex-1" />
                 {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </div>
+              </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100}>
               <div className="h-full overflow-hidden">

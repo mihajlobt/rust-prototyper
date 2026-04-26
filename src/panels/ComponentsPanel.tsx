@@ -28,6 +28,7 @@ import { getComponentNewPrompt, getComponentUpdatePrompt } from "@/lib/prompts";
 import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
 import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
+import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 
@@ -291,13 +292,10 @@ export function ComponentsPanel() {
               {chatPane}
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <div
-                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => setPs({ componentsShowInspector: !componentsShowInspector })}
-              >
+              <PaneHeader onClick={() => setPs({ componentsShowInspector: !componentsShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {componentsShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </div>
+              </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={componentsShowInspector} preferredSize={240} minSize={160}>
               {componentsShowInspector && (
@@ -405,13 +403,10 @@ export function ComponentsPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <div
-                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => setPs({ componentsCodeOpen: !componentsCodeOpen })}
-              >
+              <PaneHeader onClick={() => setPs({ componentsCodeOpen: !componentsCodeOpen })}>
                 <span className="text-xs font-medium flex-1">Code</span>
                 {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </div>
+              </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={componentsCodeOpen} preferredSize={252} minSize={100}>
               <div className="h-full overflow-hidden">

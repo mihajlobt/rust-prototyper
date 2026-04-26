@@ -15,6 +15,7 @@ import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
+import { PaneHeader } from "@/components/ui/pane-header";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
@@ -254,13 +255,10 @@ export function ScreensPanel() {
               </div>
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <div
-                className="h-full border-b border-border flex items-center px-3 bg-card cursor-pointer select-none hover:bg-muted transition-colors"
-                onClick={() => setPs({ screensShowInspector: !screensShowInspector })}
-              >
+              <PaneHeader onClick={() => setPs({ screensShowInspector: !screensShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {screensShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </div>
+              </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160}>
               {screensShowInspector && (
