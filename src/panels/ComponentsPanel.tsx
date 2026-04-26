@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { writeFile, createDir, readDir, readFile, getModelHost } from "@/lib/ipc";
+import { writeFile, createDir, readDir, readFile, getHostForProvider } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -266,7 +266,8 @@ export function ComponentsPanel() {
                     { role: "system", content: systemContent },
                     ...messages.map((m) => ({ role: m.role, content: m.content })),
                   ]}
-                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
+                  host={getHostForProvider(settings.provider, settings.host, settings.modelId, settings.ollamaCloudModels)}
+                  provider={settings.provider}
                 />
               )}
             </Allotment.Pane>

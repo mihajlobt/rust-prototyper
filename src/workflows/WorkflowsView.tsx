@@ -29,9 +29,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  generateCompletionStream, getApiKey, getModelHost, httpRequest, runShellCommand,
+  generateCompletionStream, getApiKeyForProvider, getHostForProvider, httpRequest, runShellCommand,
   readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev,
-  type FileEntry, type CompletionEvent, type Message,
+  type FileEntry, type CompletionEvent, type Message, type Provider,
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
 import { useAppStore } from "@/stores/appStore";
@@ -334,15 +334,15 @@ function WorkflowCanvas() {
         let output = "";
         const promptBase = d.prompt || d.label;
         const model = settings.modelId;
-        const host = getModelHost(model, settings.host, settings.ollamaCloudModels);
-        const apiKey = getApiKey(model, settings.apiKeys);
+        const host = getHostForProvider(settings.provider, settings.host, model, settings.ollamaCloudModels);
+        const apiKey = getApiKeyForProvider(settings.provider, settings.apiKeys);
         const customPrompts = settings.prompts;
 
         const streamAI = async (msgs: Message[]): Promise<string> => {
           const channel = new Channel<CompletionEvent>();
           let acc = "";
           channel.onmessage = (msg) => { if (msg.event === "Chunk") { acc += msg.data.text; updateStatus(nodeId, { output: acc.slice(0, 500) }); } };
-          await generateCompletionStream(model, msgs, host, apiKey, channel);
+          await generateCompletionStream(model, msgs, host, apiKey, channel, undefined, undefined, settings.provider as Provider);
           return acc;
         };
         const ai = (sys: string, user: string) => streamAI([{ role: "system", content: sys }, { role: "user", content: user }]);

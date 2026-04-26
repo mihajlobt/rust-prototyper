@@ -16,8 +16,12 @@ export const ANTHROPIC_MODELS: StaticModel[] = [
   { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
 ];
 
-export function getProviderIcon(modelId: string): "server" | "cloud" | "openai" | "anthropic" | "unknown" {
-  if (modelId.startsWith("gpt-") || modelId.startsWith("o1") || modelId.startsWith("o3")) return "openai";
-  if (modelId.startsWith("claude-")) return "anthropic";
-  return "unknown";
+export type Provider = "ollama" | "openai" | "claude"
+
+export function getProviderIcon(provider: Provider): "server" | "cloud" | "openai" | "anthropic" | "unknown" {
+  switch (provider) {
+    case "openai": return "openai"
+    case "claude": return "anthropic"
+    default: return "unknown"
+  }
 }

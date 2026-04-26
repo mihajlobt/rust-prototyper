@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { writeFile, createDir, getModelHost } from "@/lib/ipc";
+import { writeFile, createDir, getHostForProvider } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
@@ -227,7 +227,8 @@ export function ThemesPanel() {
                 <PromptInspector
                   model={settings.modelId}
                   messages={messages.map((m) => ({ role: m.role, content: m.content }))}
-                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
+                  host={getHostForProvider(settings.provider, settings.host, settings.modelId, settings.ollamaCloudModels)}
+                  provider={settings.provider}
                 />
               )}
             </Allotment.Pane>

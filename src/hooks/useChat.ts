@@ -13,9 +13,10 @@ import {
   generateCompletionStream,
   readFile,
   writeFile,
-  getApiKey,
-  getModelHost,
+  getHostForProvider,
+  getApiKeyForProvider,
   type CompletionEvent,
+  type Provider,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
@@ -140,9 +141,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       })),
     ]
 
-    const { modelId, host, ollamaCloudModels, apiKeys } = settings
-    const resolvedHost = getModelHost(modelId, host, ollamaCloudModels)
-    const resolvedKey = getApiKey(modelId, apiKeys)
+    const { modelId, host, ollamaCloudModels, apiKeys, provider } = settings
+    const resolvedHost = getHostForProvider(provider as Provider, host, modelId, ollamaCloudModels)
+    const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
@@ -215,6 +216,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
+        provider as Provider,
       )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
@@ -272,9 +274,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       })),
     ]
 
-    const { modelId, host, ollamaCloudModels, apiKeys } = settings
-    const resolvedHost = getModelHost(modelId, host, ollamaCloudModels)
-    const resolvedKey = getApiKey(modelId, apiKeys)
+    const { modelId, host, ollamaCloudModels, apiKeys, provider } = settings
+    const resolvedHost = getHostForProvider(provider as Provider, host, modelId, ollamaCloudModels)
+    const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
@@ -335,6 +337,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
+        provider as Provider,
       )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)

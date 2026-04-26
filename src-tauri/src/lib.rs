@@ -439,18 +439,6 @@ enum CompletionEvent {
     Error { message: String },
 }
 
-fn detect_provider(model: &str) -> &str {
-    if model.contains(":") {
-        "ollama"
-    } else if model.starts_with("gpt-") || model.starts_with("o1-") || model.starts_with("o3-") {
-        "openai"
-    } else if model.starts_with("claude-") {
-        "claude"
-    } else {
-        "ollama"
-    }
-}
-
 // ─── ollama-rs helpers ───
 
 /// Parse "http://host:port" or "https://host:port" into (base_url, port).
@@ -777,14 +765,14 @@ async fn generate_completion(
     messages: Vec<Message>,
     host: String,
     api_key: String,
+    provider: String,
     app: AppHandle,
 ) -> Result<String, AppError> {
     let state = app.state::<AppState>();
     let client = &state.http_client;
-    let provider = detect_provider(&model);
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
-    match provider {
+    match provider.as_str() {
         "ollama" => {
             let ollama = build_ollama_client(&host, &api_key)?;
             let ollama_messages = to_ollama_messages(&messages);
@@ -818,14 +806,14 @@ async fn generate_completion_stream(
     on_event: Channel<CompletionEvent>,
     think: Option<bool>,
     output_path: Option<String>,
+    provider: String,
     app: AppHandle,
 ) -> Result<(), AppError> {
     let state = app.state::<AppState>();
     let client = &state.http_client;
-    let provider = detect_provider(&model);
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
 
-    let result = match provider {
+    let result = match provider.as_str() {
         "ollama" => {
             generate_ollama_completion_stream(
                 &host, &model, &messages, &api_key,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Eye } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-import { isOllamaModel } from "@/lib/ipc";
+import type { Provider } from "@/lib/ipc";
 import type { Message } from "@/lib/ipc";
 import { useModelCapabilities } from "@/hooks/useModelCapabilities";
 
@@ -13,6 +13,7 @@ interface PromptInspectorProps {
   model: string;
   messages: Message[];
   host: string;
+  provider: Provider;
 }
 
 function countTokens(text: string, model: string): number {
@@ -29,7 +30,7 @@ function countTokens(text: string, model: string): number {
   }
 }
 
-export function PromptInspector({ model, messages, host }: PromptInspectorProps) {
+export function PromptInspector({ model, messages, host, provider }: PromptInspectorProps) {
   const caps = useModelCapabilities(model);
   const contextWindow = caps.contextLength ?? 8192;
 
@@ -37,7 +38,7 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
   const tokenCount = useMemo(() => countTokens(assembled, model), [assembled, model]);
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
 
-  const isOllama = isOllamaModel(model);
+  const isOllama = provider === "ollama";
 
   const curl = isOllama
     ? `curl -X POST ${host}/api/chat \\
@@ -47,7 +48,7 @@ export function PromptInspector({ model, messages, host }: PromptInspectorProps)
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       stream: false,
     })}'`
-    : model.startsWith("claude-")
+    : provider === "claude"
       ? `curl -X POST https://api.anthropic.com/v1/messages \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: $ANTHROPIC_API_KEY" \\

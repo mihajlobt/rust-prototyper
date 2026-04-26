@@ -399,7 +399,18 @@ export function SettingsModal() {
             {/* Active model */}
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">Active Model</p>
-              <Select value={settings.modelId} onValueChange={(v) => setSettings({ modelId: v })}>
+              <Select value={settings.modelId} onValueChange={(v) => {
+                const modelId = v.replace(/^cloud-/, "")
+                const localIds = new Set(localModels.map(m => m.id))
+                const cloudIds = new Set(cloudModels.map(m => m.id))
+                const openaiIds = new Set(OPENAI_MODELS.map(m => m.id))
+                const anthropicIds = new Set(ANTHROPIC_MODELS.map(m => m.id))
+                let provider: "ollama" | "openai" | "claude" = settings.provider
+                if (localIds.has(modelId) || cloudIds.has(modelId)) provider = "ollama"
+                else if (openaiIds.has(modelId)) provider = "openai"
+                else if (anthropicIds.has(modelId)) provider = "claude"
+                setSettings({ modelId, provider })
+              }}>
                 <SelectTrigger className="text-xs">
                   <SelectValue placeholder="Select a model…" />
                 </SelectTrigger>
@@ -442,12 +453,6 @@ export function SettingsModal() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <Input
-                value={settings.modelId}
-                onChange={(e) => setSettings({ modelId: e.target.value })}
-                placeholder="Or type a model ID manually (e.g. qwen2.5-coder:32b)"
-                className="h-8 text-xs"
-              />
             </div>
 
             {/* Icon Library */}

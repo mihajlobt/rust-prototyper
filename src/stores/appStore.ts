@@ -17,6 +17,7 @@ export interface Settings {
   host: string;
   apiKeys: Record<string, string>;
   ollamaCloudModels: string[];
+  provider: "ollama" | "openai" | "claude";
   glow: "off" | "subtle" | "full";
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: Settings = {
   host: "http://localhost:11434",
   apiKeys: {},
   ollamaCloudModels: [],
+  provider: "ollama",
   glow: "subtle",
   amoled: false,
   iconLibrary: "lucide",

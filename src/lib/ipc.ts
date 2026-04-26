@@ -126,25 +126,29 @@ export interface OllamaModel {
   contextLength?: number;
 }
 
-export function getApiKey(modelId: string, apiKeys: Record<string, string>): string {
-  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return apiKeys["openai"] || "";
-  if (modelId.startsWith("claude-")) return apiKeys["claude"] || "";
-  return apiKeys["ollama"] || "";
+export type Provider = "ollama" | "openai" | "claude"
+
+/** Resolve the API host for a provider.
+ *  - OpenAI: https://api.openai.com (ref: https://platform.openai.com/docs/api-reference)
+ *  - Claude: https://api.anthropic.com (ref: https://docs.anthropic.com/en/api)
+ *  - Ollama Cloud: https://ollama.com (ref: https://github.com/ollama/ollama/blob/main/docs/cloud.mdx)
+ *  - Ollama Local: configured host (default: http://localhost:11434, ref: https://github.com/ollama/ollama/blob/main/docs/api.md)
+ */
+export function getHostForProvider(provider: Provider, ollamaHost: string, modelId: string, cloudModelIds: ReadonlyArray<string>): string {
+  switch (provider) {
+    case "openai": return "https://api.openai.com"
+    case "claude": return "https://api.anthropic.com"
+    case "ollama": return cloudModelIds.includes(modelId) ? "https://ollama.com" : ollamaHost
+  }
 }
 
-/** Determine the API host for a given model ID */
-export function getModelHost(modelId: string, ollamaHost: string, cloudModelIds?: ReadonlyArray<string>): string {
-  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return "https://api.openai.com";
-  if (modelId.startsWith("claude-")) return "https://api.anthropic.com";
-  // Only route to ollama.com when the model is explicitly in the cloud list
-  if (cloudModelIds?.includes(modelId)) return "https://ollama.com";
-  return ollamaHost;
-}
-
-export function isOllamaModel(modelId: string): boolean {
-  if (modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-")) return false;
-  if (modelId.startsWith("claude-")) return false;
-  return true;
+/** Resolve the API key for a provider. Keys are stored in settings.apiKeys per provider name. */
+export function getApiKeyForProvider(provider: Provider, apiKeys: Record<string, string>): string {
+  switch (provider) {
+    case "openai": return apiKeys["openai"] || ""
+    case "claude": return apiKeys["claude"] || ""
+    case "ollama": return apiKeys["ollama"] || ""
+  }
 }
 
 export type CompletionEvent =
@@ -158,9 +162,10 @@ export async function generateCompletion(
   model: string,
   messages: Message[],
   host: string = "",
-  apiKey: string = ""
+  apiKey: string = "",
+  provider: Provider = "ollama"
 ): Promise<string> {
-  return invoke("generate_completion", { model, messages, host, apiKey });
+  return invoke("generate_completion", { model, messages, host, apiKey, provider });
 }
 
 /** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel */
@@ -171,10 +176,11 @@ export async function generateCompletionStream(
   apiKey: string,
   onEvent: Channel<CompletionEvent>,
   think?: boolean,
-  outputPath?: string
+  outputPath?: string,
+  provider: Provider = "ollama"
 ): Promise<void> {
   return invoke("generate_completion_stream", {
-    model, messages, host, apiKey, onEvent,
+    model, messages, host, apiKey, onEvent, provider,
     think: think ?? null,
     outputPath: outputPath ?? null,
   });

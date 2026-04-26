@@ -52,6 +52,7 @@ function useTextStream({
   const streamRef = useRef<AbortController | null>(null)
   const completedRef = useRef(false)
   const onCompleteRef = useRef(onComplete)
+  const onErrorRef = useRef(onError)
 
   useEffect(() => {
     speedRef.current = speed
@@ -63,7 +64,8 @@ function useTextStream({
 
   useEffect(() => {
     onCompleteRef.current = onComplete
-  }, [onComplete])
+    onErrorRef.current = onError
+  }, [onComplete, onError])
 
   const getChunkSize = useCallback(() => {
     if (typeof characterChunkSizeRef.current === "number") {
@@ -130,7 +132,7 @@ function useTextStream({
             index,
           }))
         setSegments(newSegments)
-        onError?.(error)
+        onErrorRef.current?.(error)
       }
     }
   }, [])
@@ -219,10 +221,10 @@ function useTextStream({
       } catch (error) {
         console.error("Error processing text stream:", error)
         markComplete()
-        onError?.(error)
+        onErrorRef.current?.(error)
       }
     },
-    [updateSegments, markComplete, onError]
+    [updateSegments, markComplete]
   )
 
   const startStreaming = useCallback(() => {

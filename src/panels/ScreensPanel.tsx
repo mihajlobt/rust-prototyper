@@ -3,7 +3,7 @@ import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download } from "lucide-react";
 import Frame from "react-frame-component";
 import { Button } from "@/components/ui/button";
-import { writeFile, createDir, readFile, readDir, exportProject, getModelHost } from "@/lib/ipc";
+import { writeFile, createDir, readFile, readDir, exportProject, getHostForProvider } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -268,7 +268,8 @@ export function ScreensPanel() {
                     { role: "system", content: systemContent },
                     ...messages.map((m) => ({ role: m.role, content: m.content })),
                   ]}
-                  host={getModelHost(settings.modelId, settings.host, settings.ollamaCloudModels)}
+                  host={getHostForProvider(settings.provider, settings.host, settings.modelId, settings.ollamaCloudModels)}
+                  provider={settings.provider}
                 />
               )}
             </Allotment.Pane>

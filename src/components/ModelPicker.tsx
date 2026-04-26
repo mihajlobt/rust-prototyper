@@ -1,4 +1,3 @@
-import { useState, useRef } from "react";
 import { Server, Cloud, Zap, Bot, ChevronDown, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,11 +7,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import {
   listOllamaModels,
 } from "@/lib/ipc";
-import { OPENAI_MODELS, ANTHROPIC_MODELS } from "@/lib/models";
+import { OPENAI_MODELS, ANTHROPIC_MODELS, getProviderIcon } from "@/lib/models";
 import { useAppStore } from "@/stores/appStore";
 
 interface ModelPickerProps {
@@ -127,10 +125,7 @@ function SectionHeader({
 }
 
 export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelPickerProps) {
-  const settings = useAppStore((s) => s.settings);
-  const [manualValue, setManualValue] = useState("");
-  const [showManual, setShowManual] = useState(false);
-  const manualRef = useRef<HTMLInputElement>(null);
+  const { settings } = useAppStore();
 
   // TanStack Query: fetch local Ollama models (with capabilities from /api/show)
   // Per docs/api/tanstack-query.md: staleTime=15s for polling, refetchInterval for live updates
@@ -171,14 +166,13 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7 max-w-[220px]">
           <span className="text-muted-foreground">
-            {value.startsWith("gpt-") || value.startsWith("o1") || value.startsWith("o3")
-              ? <Zap size={11} />
-              : value.startsWith("claude-")
-              ? <Bot size={11} />
-              : cloudIds.has(value)
-              ? <Cloud size={11} />
-              : <Server size={11} />
-            }
+            {(() => {
+              const icon = getProviderIcon(settings.provider)
+              if (icon === "openai") return <Zap size={11} />
+              if (icon === "anthropic") return <Bot size={11} />
+              if (cloudIds.has(value)) return <Cloud size={11} />
+              return <Server size={11} />
+            })()}
           </span>
           <span className="truncate flex-1 text-left">{triggerLabel}</span>
           <ChevronDown size={11} className="shrink-0 text-muted-foreground" />
@@ -248,35 +242,6 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
             ))}
           </>
         )}
-
-        <DropdownMenuSeparator className="my-1" />
-        {showManual ? (
-          <div className="px-2 py-1.5" onKeyDown={(e) => e.stopPropagation()}>
-            <Input
-              ref={manualRef}
-              value={manualValue}
-              onChange={(e) => setManualValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && manualValue.trim()) {
-                  onChange(manualValue.trim());
-                  setManualValue("");
-                  setShowManual(false);
-                }
-                if (e.key === "Escape") setShowManual(false);
-              }}
-              placeholder="model-id… (Enter to apply)"
-              className="h-7 text-xs"
-            />
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowManual(true)}
-            className="w-full text-left text-[10px] text-muted-foreground hover:text-foreground px-2.5 py-1.5 transition-colors"
-          >
-            Enter model ID manually…
-          </button>
-        )}
-
       </DropdownMenuContent>
     </DropdownMenu>
   );
