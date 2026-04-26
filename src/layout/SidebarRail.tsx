@@ -9,6 +9,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile } from "@/lib/ipc";
+import { queryClient } from "@/lib/queryClient";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -85,8 +86,8 @@ export function SidebarRail() {
           break;
         }
       }
-      setShowNewDialog(false);
-      setNewItemName("");
+      // Also invalidate the queries to force refetch
+      queryClient.invalidateQueries({ queryKey: ["project-tree", settings.project] });
       refresh();
     } catch (e) {
       alert(`Create failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -104,6 +105,7 @@ export function SidebarRail() {
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
+      queryClient.invalidateQueries({ queryKey: ["project-tree", settings.project] });
       refresh();
     } catch (e) {
       notify.error("Delete failed", e instanceof Error ? e.message : String(e));
