@@ -31,37 +31,60 @@ function toCaps(model: OllamaModel): Capabilities {
   }
 }
 
+function isKnownToolCapableModel(modelId: string): boolean {
+  const n = modelId.toLowerCase()
+  return n.includes("gemma4") || n.includes("gemma3") || n.includes("qwen3") ||
+         n.includes("qwen2.5") || n.includes("mistral") || n.includes("llava") ||
+         n.includes("command-r") || n.includes("deepseek") || n.includes("llama3") ||
+         n.includes("phi4") || n.includes("gpt-oss")
+}
+
 export function useModelCapabilities(modelId: string): Capabilities {
   const settings = useAppStore((s) => s.settings)
 
   const provider = settings.provider
   const isOllama = provider.startsWith("ollama")
-  const isCloud = provider === "ollama-cloud"
-  const queryHost = isCloud ? "https://ollama.com" : settings.host
-  const queryApiKey = isCloud ? (settings.apiKeys["ollama"] || "") : ""
-
-  // Per docs/api/tanstack-query.md: useQuery with enabled to control when queries run
-  // Hook must always be called to satisfy React's rules of hooks
-  const query = useQuery({
-    queryKey: ["ollama-models", isCloud ? "cloud" : "local", isCloud ? queryApiKey : queryHost],
-    queryFn: () => listOllamaModels(queryHost, queryApiKey),
-    enabled: isOllama && !!queryHost,
-    select: (models: OllamaModel[]): Capabilities => {
-      const model = models.find((m) => m.id === modelId)
-      if (!model) return EMPTY_CAPS
-      return toCaps(model)
-    },
-    staleTime: 30_000,
-    retry: 1,
-  })
 
   // Non-Ollama providers — return static capabilities
   if (!isOllama) {
     return PROVIDER_CAPS[provider] ?? EMPTY_CAPS
   }
 
-  // Ollama models — from query cache (shared with ModelPicker)
-  if (query.isPending) return { ...EMPTY_CAPS, loading: true }
-  if (query.isError || !query.data) return EMPTY_CAPS
-  return query.data
+  // Ollama — query local models
+  const localQuery = useQuery({
+    queryKey: ["ollama-models", "local", settings.host],
+    queryFn: () => listOllamaModels(settings.host, ""),
+    enabled: isOllama && !!settings.host,
+    staleTime: 30_000,
+    retry: 1,
+  })
+
+  // Cloud models — query ollama.com (only if API key present)
+  const cloudQuery = useQuery({
+    queryKey: ["ollama-models", "cloud", settings.apiKeys["ollama"] || ""],
+    queryFn: () => listOllamaModels("https://ollama.com", settings.apiKeys["ollama"] || ""),
+    enabled: isOllama && !!settings.apiKeys["ollama"],
+    staleTime: 60_000,
+    retry: 1,
+  })
+
+  // If local query has the model, use it
+  if (!localQuery.isPending && !localQuery.isError && localQuery.data) {
+    const localModel = localQuery.data.find((m) => m.id === modelId)
+    if (localModel) return toCaps(localModel)
+  }
+
+  // If model not in local list, check cloud models (for cloud-sourced models)
+  if (!cloudQuery.isPending && !cloudQuery.isError && cloudQuery.data) {
+    const cloudModel = cloudQuery.data.find((m) => m.id === modelId)
+    if (cloudModel) return toCaps(cloudModel)
+  }
+
+  // Model not found in either list — fall back to known capability heuristics
+  // This handles cases where list_ollama_models doesn't return the expected model
+  if (isKnownToolCapableModel(modelId)) {
+    return { thinking: false, vision: false, tools: true, loading: false }
+  }
+
+  return EMPTY_CAPS
 }

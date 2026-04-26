@@ -3,6 +3,8 @@ import { load } from "@tauri-apps/plugin-store";
 
 const SETTINGS_KEY = "settings.json";
 
+export type Provider = "ollama-local" | "ollama-cloud" | "openai" | "claude";
+
 export interface Settings {
   view: string;
   modelId: string;
@@ -16,8 +18,7 @@ export interface Settings {
   styles: Array<{ name: string; value: string }>;
   host: string;
   apiKeys: Record<string, string>;
-  ollamaCloudModels: string[];
-  provider: "ollama-local" | "ollama-cloud" | "openai" | "claude";
+  provider: Provider;
   glow: "off" | "subtle" | "full";
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
@@ -37,7 +38,6 @@ const DEFAULT_SETTINGS: Settings = {
   styles: [],
   host: "http://localhost:11434",
   apiKeys: {},
-  ollamaCloudModels: [],
   provider: "ollama-local",
   glow: "subtle",
   amoled: false,
@@ -45,12 +45,22 @@ const DEFAULT_SETTINGS: Settings = {
   layout: {},
 };
 
+/** Derive provider from host + API key. Provider is NOT stored — it's computed. */
+export function inferProvider(host: string, apiKeys: Record<string, string>): Provider {
+  if (host === "https://ollama.com") {
+    return apiKeys["ollama"] ? "ollama-cloud" : "ollama-local"
+  }
+  return "ollama-local"
+}
+
 // ─── Settings Slice ───
 
 interface SettingsSlice {
   settings: Settings;
   loaded: boolean;
   setSettings: (patch: Partial<Settings>) => Promise<void>;
+  /** Set host and auto-derive provider */
+  setHost: (host: string) => Promise<void>;
 }
 
 let storePromise: ReturnType<typeof load> | null = null;
@@ -120,6 +130,11 @@ const createSettingsSlice: StateCreator<SettingsSlice> = (set, get) => ({
       await store.set(key, value);
     }
     await store.save();
+  },
+  setHost: async (host) => {
+    const { settings } = get();
+    const provider = inferProvider(host, settings.apiKeys);
+    await get().setSettings({ host, provider });
   },
 });
 

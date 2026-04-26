@@ -79,10 +79,9 @@ export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar 
       <ExportModal />
       <ModelPicker
         value={settings.modelId}
-        onChange={(model) => setSettings({ modelId: model })}
+        onChange={({ modelId, provider }) => setSettings({ modelId, provider })}
         host={settings.host}
         ollamaApiKey={settings.apiKeys["ollama"] ?? ""}
-        cloudModelIds={settings.ollamaCloudModels}
       />
       <SettingsModal />
     </header>

@@ -419,6 +419,8 @@ struct OllamaModel {
     family: String,
     families: Vec<String>,
     context_length: Option<u64>,
+    /// "ollama-local" or "ollama-cloud" — derived from which host was queried
+    provider: String,
 }
 
 #[derive(serde::Serialize)]
@@ -844,6 +846,7 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
     let client = &state.http_client;
 
     let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
+    let provider: String = if host == "https://ollama.com" { "ollama-cloud".to_string() } else { "ollama-local".to_string() };
 
     // 1. Fetch model list via ollama-rs
     let ollama = build_ollama_client(&host, &api_key)?;
@@ -880,6 +883,7 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
                 family: details.family,
                 families: details.families,
                 context_length: details.context_length,
+                provider: provider.clone(),
             },
             Err(_) => OllamaModel {
                     id: name.clone(),
@@ -888,6 +892,7 @@ async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Re
                     family: String::new(),
                     families: vec![],
                     context_length: None,
+                    provider: provider.clone(),
                 },
         }
     }).collect();

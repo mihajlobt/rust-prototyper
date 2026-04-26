@@ -22,9 +22,8 @@ import { Settings, Plus, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide
 import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
 import { notify } from "@/hooks/useToast";
-import { listOllamaModels, type OllamaModel, readFile, writeFile, bunInstall } from "@/lib/ipc";
+import { readFile, writeFile, bunInstall } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
-import { OPENAI_MODELS, ANTHROPIC_MODELS } from "@/lib/models";
 import { ICON_LIBRARY_PACKAGES, type IconLibrary } from "@/lib/prompts";
 
 export function SettingsModal() {
@@ -34,10 +33,6 @@ export function SettingsModal() {
   const [newPresetValue, setNewPresetValue] = useState("");
   const [newPromptName, setNewPromptName] = useState("");
   const [newPromptValue, setNewPromptValue] = useState("");
-  const [localModels, setLocalModels] = useState<OllamaModel[]>([]);
-  const [cloudModels, setCloudModels] = useState<OllamaModel[]>([]);
-  const [localStatus, setLocalStatus] = useState<"online" | "offline" | "loading">("loading");
-  const [cloudStatus, setCloudStatus] = useState<"online" | "offline" | "loading">("loading");
 
   const addPreset = async () => {
     if (!newPresetName || !newPresetValue) return;
@@ -109,43 +104,6 @@ export function SettingsModal() {
       }
     })();
   }, [settings.iconLibrary, settings.project]);
-
-  // Fetch local and cloud Ollama models independently
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLocalStatus("loading");
-    (async () => {
-      try {
-        const list = await listOllamaModels(settings.host, "");
-        if (!cancelled) { setLocalModels(list); setLocalStatus("online"); }
-      } catch {
-        if (!cancelled) { setLocalModels([]); setLocalStatus("offline"); }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [open, settings.host]);
-
-  useEffect(() => {
-    if (!open) return;
-    const key = settings.apiKeys["ollama"] ?? "";
-    if (!key) { setCloudModels([]); setCloudStatus("offline"); void setSettings({ ollamaCloudModels: [] }); return; }
-    let cancelled = false;
-    setCloudStatus("loading");
-    (async () => {
-      try {
-        const list = await listOllamaModels("https://ollama.com", key);
-        if (!cancelled) {
-          setCloudModels(list);
-          setCloudStatus("online");
-          await setSettings({ ollamaCloudModels: list.map((m) => m.id) });
-        }
-      } catch {
-        if (!cancelled) { setCloudModels([]); setCloudStatus("offline"); }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [open, settings.apiKeys, setSettings]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -331,11 +289,6 @@ export function SettingsModal() {
                 <div className="flex items-center gap-2">
                   <Server size={13} className="text-muted-foreground shrink-0" />
                   <span className="text-sm font-medium flex-1">Ollama Local</span>
-                  <span className={[
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    localStatus === "online" ? "bg-green-500" : localStatus === "loading" ? "bg-yellow-500" : "bg-muted-foreground/40",
-                  ].join(" ")} />
-                  <span className="text-[10px] text-muted-foreground capitalize">{localStatus}</span>
                 </div>
                 <Input
                   value={settings.host}
@@ -350,11 +303,6 @@ export function SettingsModal() {
                 <div className="flex items-center gap-2">
                   <Cloud size={13} className="text-muted-foreground shrink-0" />
                   <span className="text-sm font-medium flex-1">Ollama Cloud</span>
-                  <span className={[
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    cloudStatus === "online" ? "bg-green-500" : cloudStatus === "loading" ? "bg-yellow-500" : "bg-muted-foreground/40",
-                  ].join(" ")} />
-                  <span className="text-[10px] text-muted-foreground capitalize">{cloudStatus}</span>
                 </div>
                 <Input
                   type="password"
@@ -394,93 +342,6 @@ export function SettingsModal() {
                   className="h-8 text-xs"
                 />
               </div>
-            </div>
-
-            {/* Active provider */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">Provider</p>
-              <div className="flex gap-1">
-                {([
-                  { id: "ollama-local" as const, label: "Ollama Local", icon: <Server size={11} /> },
-                  { id: "ollama-cloud" as const, label: "Ollama Cloud", icon: <Cloud size={11} /> },
-                  { id: "openai" as const, label: "OpenAI", icon: <Zap size={11} /> },
-                  { id: "claude" as const, label: "Claude", icon: <Bot size={11} /> },
-                ]).map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setSettings({ provider: p.id })}
-                    className={[
-                      "flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium transition-colors border",
-                      settings.provider === p.id
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted",
-                    ].join(" ")}
-                  >
-                    {p.icon}
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Active model */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">Active Model</p>
-              <Select value={settings.modelId} onValueChange={(v) => {
-                const modelId = v.replace(/^cloud-/, "")
-                const localIds = new Set(localModels.map(m => m.id))
-                const cloudIds = new Set(cloudModels.map(m => m.id))
-                const openaiIds = new Set(OPENAI_MODELS.map(m => m.id))
-                const anthropicIds = new Set(ANTHROPIC_MODELS.map(m => m.id))
-                let provider: "ollama-local" | "ollama-cloud" | "openai" | "claude" = settings.provider
-                if (localIds.has(modelId)) provider = "ollama-local"
-                else if (cloudIds.has(modelId)) provider = "ollama-cloud"
-                else if (openaiIds.has(modelId)) provider = "openai"
-                else if (anthropicIds.has(modelId)) provider = "claude"
-                setSettings({ modelId, provider })
-              }}>
-                <SelectTrigger className="text-xs">
-                  <SelectValue placeholder="Select a model…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {localModels.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="flex items-center gap-1.5 text-[10px]">
-                        <Server size={10} /> Ollama Local
-                      </SelectLabel>
-                      {localModels.map((m) => (
-                        <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {cloudModels.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel className="flex items-center gap-1.5 text-[10px]">
-                        <Cloud size={10} /> Ollama Cloud
-                      </SelectLabel>
-                      {cloudModels.map((m) => (
-                        <SelectItem key={`cloud-${m.id}`} value={m.id} className="text-xs">{m.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  <SelectGroup>
-                    <SelectLabel className="flex items-center gap-1.5 text-[10px]">
-                      <Zap size={10} /> OpenAI
-                    </SelectLabel>
-                    {OPENAI_MODELS.map((m) => (
-                      <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                    ))}
-                  </SelectGroup>
-                  <SelectGroup>
-                    <SelectLabel className="flex items-center gap-1.5 text-[10px]">
-                      <Bot size={10} /> Anthropic
-                    </SelectLabel>
-                    {ANTHROPIC_MODELS.map((m) => (
-                      <SelectItem key={m.id} value={m.id} className="text-xs">{m.name}</SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
             </div>
 
             {/* Icon Library */}

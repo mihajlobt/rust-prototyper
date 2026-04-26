@@ -10,15 +10,14 @@ import {
 import {
   listOllamaModels,
 } from "@/lib/ipc";
-import { OPENAI_MODELS, ANTHROPIC_MODELS, getProviderIcon } from "@/lib/models";
+import { OPENAI_MODELS, ANTHROPIC_MODELS, getProviderIcon, type Provider } from "@/lib/models";
 import { useAppStore } from "@/stores/appStore";
 
 interface ModelPickerProps {
   value: string;
-  onChange: (model: string) => void;
+  onChange: (payload: { modelId: string; provider: Provider }) => void;
   host: string;
   ollamaApiKey?: string;
-  cloudModelIds?: ReadonlyArray<string>;
 }
 
 type Status = "loading" | "online" | "offline";
@@ -193,7 +192,7 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
                 key={m.id}
                 model={m}
                 isActive={value === m.id}
-                onClick={() => onChange(m.id)}
+                onClick={() => onChange({ modelId: m.id, provider: m.provider })}
                 capabilities={m.capabilities}
                 contextLength={m.contextLength}
               />
@@ -213,7 +212,7 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
                 key={m.id}
                 model={m}
                 isActive={value === m.id}
-                onClick={() => onChange(m.id)}
+                onClick={() => onChange({ modelId: m.id, provider: m.provider })}
                 capabilities={m.capabilities}
                 contextLength={m.contextLength}
               />
@@ -226,7 +225,7 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
             <DropdownMenuSeparator className="my-1" />
             <SectionHeader icon={<Zap size={11} />} label="OpenAI" />
             {OPENAI_MODELS.map((m) => (
-              <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange(m.id)} />
+              <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
             ))}
           </>
         )}
@@ -236,7 +235,7 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
             <DropdownMenuSeparator className="my-1" />
             <SectionHeader icon={<Bot size={11} />} label="Anthropic" />
             {ANTHROPIC_MODELS.map((m) => (
-              <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange(m.id)} />
+              <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
             ))}
           </>
         )}
