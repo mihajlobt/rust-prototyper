@@ -13,10 +13,11 @@ import { useExplorerStore } from "@/stores/explorerStore";
 
 /** Flat per-section listing — used by panels for dropdowns/lists and sidebar tree */
 export function useFlatProjectTree(project: string, section: string) {
+  // Subscribe to treeVersion to trigger refetch when refresh() is called
   const treeVersion = useExplorerStore((s) => s.treeVersion);
 
   return useQuery({
-    queryKey: [...projectKeys.tree(project, section), treeVersion],
+    queryKey: ["project-tree", project, section, treeVersion] as const,
     queryFn: async () => {
       try {
         return await readDir(`projects/${project}/${section}`);
