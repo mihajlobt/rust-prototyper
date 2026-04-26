@@ -26,6 +26,8 @@ export function useFlatProjectTree(project: string, section: string) {
       }
     },
     enabled: !!project,
+    refetchOnMount: true,
+    staleTime: 0, // Immediately stale to force refetch on version change
   });
 }
 
