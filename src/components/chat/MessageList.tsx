@@ -137,29 +137,23 @@ const MessageBubble = memo(function MessageBubble({
           </MessageContent>
         )}
 
-        {/* Tool usage — streaming (pending) or finalized (completed) */}
-        {isToolMode && (isStreaming ? (
-          !isEmpty && (
-            <Tool
-              toolPart={{ type: "write_file", state: "input-streaming" }}
-              defaultOpen
-            />
-          )
-        ) : (
-          message.toolCalls?.map((tc, i) => (
+        {/* Tool usage — only show after the model actually called the tool (FileWritten fired) */}
+        {isToolMode && message.toolCalls?.length ? (
+          message.toolCalls.map((tc, i) => (
             <Tool
               key={i}
               toolPart={{
                 type: "write_file",
-                state: "output-available",
+                state: isStreaming ? "input-streaming" : "output-available",
                 output: { file: tc.path.split("/").pop() },
               }}
+              defaultOpen
             />
           ))
-        ))}
+        ) : null}
 
-        {/* Generating indicator — non-tool streaming */}
-        {isStreaming && !isEmpty && !isToolMode && (
+        {/* Generating indicator — streaming without tool call yet, or non-tool mode */}
+        {isStreaming && !isEmpty && !(isToolMode && message.toolCalls?.length) && (
           <Loader variant="loading-dots" size="sm" text="Generating" />
         )}
 
