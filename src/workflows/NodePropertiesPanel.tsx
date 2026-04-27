@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
 import { Settings, Copy, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader } from "@/components/ui/loader";
-import { Markdown } from "@/components/ui/markdown";
+import { MessageContent } from "@/components/ui/message";
+import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
 import Frame from "react-frame-component";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 
@@ -22,18 +22,12 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
   const isRunning = data.status === "running";
   const isError = data.status === "error";
 
-  const outputRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (isRunning && outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
-  }, [data.output, isRunning]);
-
+  // nowheel is React Flow's built-in class that disables canvas zoom on scroll
+  // nopan prevents drag-panning when clicking inside the panel
   return (
     <div
-      className="w-[420px] bg-card border border-border rounded-lg flex flex-col shadow-xl"
+      className="nowheel nopan w-[420px] bg-card border border-border rounded-lg flex flex-col shadow-xl"
       style={{ maxHeight: "85vh" }}
-      onWheel={(e) => e.stopPropagation()}
     >
       <div className="panel-toolbar h-10 px-3 gap-2 rounded-t-lg border-b border-border shrink-0">
         <Settings size={14} />
@@ -201,14 +195,18 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
           )}
 
           {!isError && data.output && (
-            <div ref={outputRef} className="bg-muted rounded p-2 max-h-64 overflow-y-auto">
-              <Markdown
-                isStreaming={isRunning}
-                className="text-[11px] text-muted-foreground prose-headings:text-foreground prose-code:text-[10px]"
-              >
-                {data.output}
-              </Markdown>
-            </div>
+            <ChatContainerRoot className="max-h-64 rounded bg-muted">
+              <ChatContainerContent className="p-2">
+                <MessageContent
+                  markdown
+                  isStreaming={isRunning}
+                  className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+                >
+                  {data.output}
+                </MessageContent>
+                <ChatContainerScrollAnchor />
+              </ChatContainerContent>
+            </ChatContainerRoot>
           )}
         </div>
       </div>
