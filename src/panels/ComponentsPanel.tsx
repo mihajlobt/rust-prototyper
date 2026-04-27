@@ -106,10 +106,16 @@ export function ComponentsPanel() {
         if (cancelled) return;
 
         try {
-          await scaffoldComponentPreview(componentPreviewDir, settings.iconLibrary);
-          notify.success("Scaffold complete", "Component preview project created");
-        } catch (e) {
-          notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+          await notify.promise(
+            scaffoldComponentPreview(componentPreviewDir, settings.iconLibrary),
+            {
+              loading: "Scaffolding component preview…",
+              success: "Component preview project created",
+              error: (e) => `Scaffold failed: ${e.message}`,
+            },
+            { duration: 4000 }
+          );
+        } catch {
           return;
         }
       }
