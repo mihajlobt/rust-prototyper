@@ -19,7 +19,7 @@ import { useAllotmentLayout } from "./hooks/useAllotmentLayout";
 
 export default function App() {
   const { settings, loaded } = useAppStore();
-  const { ps, setPs } = useProjectSettingsStore();
+  const { ps, setPs, loaded: projectLoaded } = useProjectSettingsStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("app", 2);
 
@@ -47,7 +47,7 @@ export default function App() {
     document.documentElement.classList.toggle("amoled", settings.amoled);
   }, [settings.amoled]);
 
-  if (!loaded) {
+  if (!loaded || !projectLoaded) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background text-foreground">
         <div className="animate-pulse text-lg font-medium">Loading Prototyper…</div>
