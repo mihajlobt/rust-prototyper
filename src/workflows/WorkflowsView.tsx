@@ -269,7 +269,7 @@ function WorkflowCanvas() {
       setWorkflowId(cleanId);
       setShowWorkflowsPanel(false);
       setPs({ activeWorkflow: cleanId });
-      setTimeout(() => fitView({ padding: 0.1 }), 50);
+      fitView({ padding: 0.1 });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!silent) {
