@@ -70,7 +70,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
               <SelectTrigger className="h-7 text-xs">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent side="bottom" avoidCollisions={false}>
                 <SelectItem value="overwrite" className="text-xs">Overwrite</SelectItem>
                 <SelectItem value="append" className="text-xs">Append</SelectItem>
               </SelectContent>
