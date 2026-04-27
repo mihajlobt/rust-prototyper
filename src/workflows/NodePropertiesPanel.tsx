@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Settings, Copy, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +22,19 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
   const isRunning = data.status === "running";
   const isError = data.status === "error";
 
+  const outputRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isRunning && outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [data.output, isRunning]);
+
   return (
-    <div className="w-[280px] bg-card border border-border rounded-lg flex flex-col shadow-xl" style={{ maxHeight: "80vh" }}>
+    <div
+      className="w-[420px] bg-card border border-border rounded-lg flex flex-col shadow-xl"
+      style={{ maxHeight: "85vh" }}
+      onWheel={(e) => e.stopPropagation()}
+    >
       <div className="panel-toolbar h-10 px-3 gap-2 rounded-t-lg border-b border-border shrink-0">
         <Settings size={14} />
         <span className="text-sm font-medium flex-1 truncate">{data.label}</span>
@@ -189,7 +201,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
           )}
 
           {!isError && data.output && (
-            <div className="bg-muted rounded p-2 max-h-64 overflow-y-auto">
+            <div ref={outputRef} className="bg-muted rounded p-2 max-h-64 overflow-y-auto">
               <Markdown
                 isStreaming={isRunning}
                 className="text-[11px] text-muted-foreground prose-headings:text-foreground prose-code:text-[10px]"
