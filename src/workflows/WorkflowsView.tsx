@@ -52,7 +52,7 @@ function WorkflowCanvas() {
   const { settings } = useAppStore();
   const { ps: { activeWorkflow: initialWorkflow }, setPs } = useProjectSettingsStore();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
-  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
+  const { screenToFlowPosition, getNodes, getEdges, fitView } = useReactFlow<WorkflowNodeType, Edge>();
 
   const flowContainerRef = useRef<HTMLDivElement>(null);
   const [flowReady, setFlowReady] = useState(false);
@@ -71,6 +71,16 @@ function WorkflowCanvas() {
   const projectRef = useRef(settings.project);
   useEffect(() => { projectRef.current = settings.project; }, [settings.project]);
 
+  // ── Custom node defs ────────────────────────────────────────────────────
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customDefs, setCustomDefs] = useState<NodeTypeDef[]>([]);
+  const [customName, setCustomName] = useState("");
+  const [customDesc, setCustomDesc] = useState("");
+  const allDefs = useMemo(() => [...BUILTIN_NODE_TYPES, ...customDefs], [customDefs]);
+  const categories = CATEGORY_ORDER.filter((c) => allDefs.some((t) => t.category === c));
+
+  const defaultColor = (type: string) => allDefs.find((t) => t.type === type)?.color ?? "var(--node-custom)";
+
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): WorkflowNodeType => ({
     id: generateId(),
     type: "workflow",
@@ -83,16 +93,6 @@ function WorkflowCanvas() {
       status: "idle",
     } satisfies WorkflowNodeData,
   }), []);
-
-  const defaultColor = (type: string) => allDefs.find((t) => t.type === type)?.color ?? "var(--node-custom)";
-
-  // ── Custom node defs (declared early so allDefs is available for onDrop etc.) ──
-  const [showCustomForm, setShowCustomForm] = useState(false);
-  const [customDefs, setCustomDefs] = useState<NodeTypeDef[]>([]);
-  const [customName, setCustomName] = useState("");
-  const [customDesc, setCustomDesc] = useState("");
-  const allDefs = useMemo(() => [...BUILTIN_NODE_TYPES, ...customDefs], [customDefs]);
-  const categories = CATEGORY_ORDER.filter((c) => allDefs.some((t) => t.category === c));
 
   const handleAddCustomDef = () => {
     if (!customName.trim()) return;
@@ -235,14 +235,17 @@ function WorkflowCanvas() {
   // Keep latest state in a ref so the unmount cleanup can read it without stale closures
   useEffect(() => { latestStateRef.current = { nodes, edges, workflowId }; }, [nodes, edges, workflowId]);
 
-  // Auto-save current workflow when navigating away
+  // Auto-save current workflow when navigating away (only if it was explicitly loaded/saved)
+  const activeWorkflowRef = useRef(initialWorkflow);
+  useEffect(() => { activeWorkflowRef.current = initialWorkflow; }, [initialWorkflow]);
+
   useEffect(() => {
     return () => {
       const { nodes: ns, edges: es, workflowId: wid } = latestStateRef.current;
       const project = projectRef.current;
-      if (project && wid && ns.length > 0) {
-        saveWorkflow(project, wid, JSON.stringify({ nodes: ns, edges: es }, null, 2)).catch(() => {});
-      }
+      if (!project || !wid || !activeWorkflowRef.current || ns.length === 0) return;
+      const cleanNodes = ns.map((n) => ({ ...n, data: { ...n.data, status: "idle" as const, output: undefined } }));
+      saveWorkflow(project, wid, JSON.stringify({ nodes: cleanNodes, edges: es }, null, 2)).catch(() => {});
     };
   }, []);
 
@@ -258,11 +261,15 @@ function WorkflowCanvas() {
     try {
       const data = await loadWorkflow(settings.project, cleanId);
       const parsed = JSON.parse(data);
-      if (parsed.nodes) setNodes(parsed.nodes);
-      if (parsed.edges) setEdges(parsed.edges);
+      const loadedNodes: WorkflowNodeType[] = (parsed.nodes ?? []).map((n: WorkflowNodeType) => ({
+        ...n, data: { ...n.data, status: "idle" as const, output: undefined },
+      }));
+      setNodes(loadedNodes);
+      setEdges(parsed.edges ?? []);
       setWorkflowId(cleanId);
       setShowWorkflowsPanel(false);
       setPs({ activeWorkflow: cleanId });
+      setTimeout(() => fitView({ padding: 0.1 }), 50);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!silent) {
@@ -270,7 +277,7 @@ function WorkflowCanvas() {
         notify.error("Failed to load workflow", msg);
       }
     }
-  }, [settings.project, setNodes, setEdges, setPs]);
+  }, [settings.project, setNodes, setEdges, setPs, fitView]);
 
   const autoLoadedRef = useRef(false);
   useEffect(() => {
@@ -284,7 +291,8 @@ function WorkflowCanvas() {
     try {
       const id = workflowId.trim() || "default";
       setWorkflowId(id);
-      await saveWorkflow(settings.project, id, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
+      const cleanNodes = getNodes().map((n) => ({ ...n, data: { ...n.data, status: "idle" as const, output: undefined } }));
+      await saveWorkflow(settings.project, id, JSON.stringify({ nodes: cleanNodes, edges: getEdges() }, null, 2));
       setPs({ activeWorkflow: id });
       await refreshSavedWorkflows();
     } catch (e) {
