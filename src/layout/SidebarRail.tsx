@@ -222,7 +222,7 @@ export function SidebarRail() {
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => setShowNewDialog(true)}>
+          <ContextMenuItem onClick={() => openNewDialogFor(newItemType)}>
             <Plus size={12} className="mr-2" />New…
           </ContextMenuItem>
           <ContextMenuSeparator />
