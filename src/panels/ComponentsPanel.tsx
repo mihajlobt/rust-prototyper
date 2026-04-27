@@ -223,8 +223,14 @@ export function ComponentsPanel() {
   const { data: loadedCode } = useComponentCode(settings.project, selectedComponent);
 
   useEffect(() => {
-    if (loadedCode !== undefined) setCode(loadedCode);
-  }, [loadedCode]);
+    if (loadedCode === undefined) return;
+    setCode(loadedCode);
+    if (!loadedCode) return;
+    // Push to preview dirs so the Vite dev server shows the opened component immediately
+    writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, loadedCode).catch(() => {});
+    const genDir = `projects/${settings.project}/generated`;
+    writeFile(`${genDir}/src/App.tsx`, loadedCode).catch(() => {});
+  }, [loadedCode, componentPreviewDir, settings.project]);
 
   const chatPath = componentId
     ? `projects/${settings.project}/components/${componentId}/chat.json`
