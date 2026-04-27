@@ -482,7 +482,7 @@ struct Message {
     images: Vec<String>,
 }
 
-#[derive(serde::Deserialize, Clone, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 struct OllamaOptions {
     temperature: Option<f32>,
@@ -497,6 +497,35 @@ struct OllamaOptions {
     mirostat_tau: Option<f32>,
     mirostat_eta: Option<f32>,
     tfs_z: Option<f32>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ModelPreset {
+    id: String,
+    name: String,
+    description: String,
+    options: OllamaOptions,
+}
+
+#[tauri::command]
+async fn save_model_presets(presets: Vec<ModelPreset>, app: AppHandle) -> Result<(), AppError> {
+    let path = app_data_dir(&app)?.join("model-presets.json");
+    let json = serde_json::to_string_pretty(&presets)
+        .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+    std::fs::write(&path, json.as_bytes())
+        .map_err(AppError::Io)
+}
+
+#[tauri::command]
+async fn load_model_presets(app: AppHandle) -> Result<Vec<ModelPreset>, AppError> {
+    let path = app_data_dir(&app)?.join("model-presets.json");
+    if !path.exists() {
+        return Ok(vec![]);
+    }
+    let json = std::fs::read_to_string(&path).map_err(AppError::Io)?;
+    serde_json::from_str(&json)
+        .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -1548,6 +1577,7 @@ pub fn run() {
             read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file, reveal_in_explorer,
             http_request,
             generate_completion, generate_completion_stream, list_ollama_models,
+            save_model_presets, load_model_presets,
             export_project, export_component,
             save_workflow, load_workflow, list_workflows,
         ])

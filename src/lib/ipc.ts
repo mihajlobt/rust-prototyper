@@ -235,6 +235,23 @@ export async function listOllamaModels(host: string, apiKey = ""): Promise<Ollam
   return invoke("list_ollama_models", { host, apiKey });
 }
 
+// ─── Model Presets ───
+
+export interface ModelPreset {
+  id: string;
+  name: string;
+  description: string;
+  options: OllamaModelOptions;
+}
+
+export async function saveModelPresets(presets: ModelPreset[]): Promise<void> {
+  return invoke("save_model_presets", { presets });
+}
+
+export async function loadModelPresets(): Promise<ModelPreset[]> {
+  return invoke("load_model_presets");
+}
+
 // ─── Workflows ───
 
 export async function saveWorkflow(projectId: string, workflowId: string, data: string): Promise<void> {
