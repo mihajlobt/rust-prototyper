@@ -351,58 +351,7 @@
 
 /* ─── Sonner Toast Overrides ─── */
 
-/* Toast entrance/exit animations */
-@keyframes toast-slide-in {
-  0% { opacity: 0; transform: translateX(100%) scale(0.95); }
-  100% { opacity: 1; transform: translateX(0) scale(1); }
-}
-@keyframes toast-slide-out {
-  0% { opacity: 1; transform: translateX(0) scale(1); }
-  100% { opacity: 0; transform: translateX(100%) scale(0.95); }
-}
-
-/* Override sonner's default positioning for our app layout */
-[data-sonner-toaster] {
-  --offset: 16px;
-  --normal-height: auto;
-}
-
-/* Toast item styling refinements */
+/* Toast border */
 [data-sonner-toast] {
-  animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   border-width: 1px;
-}
-
-[data-sonner-toast][data-swipe="end"] {
-  animation: toast-slide-out 0.2s ease-in forwards;
-}
-
-/* Progress bar styling per toast type */
-[data-sonner-toast] [data-sonner-toast-content] {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-[data-sonner-toast][data-type="error"] [data-sonner-toast-bar] {
-  background: var(--destructive) !important;
-}
-[data-sonner-toast][data-type="success"] [data-sonner-toast-bar] {
-  background: oklch(0.55 0.18 155) !important;
-}
-[data-sonner-toast][data-type="warning"] [data-sonner-toast-bar] {
-  background: oklch(0.68 0.19 65) !important;
-}
-[data-sonner-toast][data-type="info"] [data-sonner-toast-bar] {
-  background: oklch(0.55 0.22 240) !important;
-}
-
-/* Ensure toast bar height is thin */
-[data-sonner-toast-bar] {
-  height: 2px !important;
-}
-
-/* Close button visibility */
-[data-sonner-toast]:hover [data-close-button] {
-  opacity: 1;
 }

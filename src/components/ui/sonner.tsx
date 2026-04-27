@@ -16,8 +16,9 @@ function Toaster(props: ToasterProps) {
       theme={dark ? "dark" : "light"}
       className="toaster group"
       position="top-right"
-      offset={{ top: 56, right: 16 }}
-      visibleToasts={5}
+      offset={16}
+      visibleToasts={9}
+      gap={8}
       expand
       icons={{
         success: <CircleCheckIcon className="size-4" />,
@@ -32,6 +33,7 @@ function Toaster(props: ToasterProps) {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          top: "56px",
         } as React.CSSProperties
       }
       toastOptions={{
