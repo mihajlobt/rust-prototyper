@@ -50,7 +50,7 @@ import { notify } from "@/hooks/useToast";
 
 function WorkflowCanvas() {
   const { settings } = useAppStore();
-  const { ps: { activeWorkflow: initialWorkflow } } = useProjectSettingsStore();
+  const { ps: { activeWorkflow: initialWorkflow }, setPs } = useProjectSettingsStore();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
 
@@ -65,6 +65,11 @@ function WorkflowCanvas() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Refs for auto-save on unmount (avoids stale closures in cleanup)
+  const latestStateRef = useRef<{ nodes: WorkflowNodeType[]; edges: Edge[]; workflowId: string }>({ nodes: [], edges: [], workflowId: "" });
+  const projectRef = useRef(settings.project);
+  useEffect(() => { projectRef.current = settings.project; }, [settings.project]);
 
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): WorkflowNodeType => ({
     id: generateId(),
@@ -95,16 +100,8 @@ function WorkflowCanvas() {
     setCustomName(""); setCustomDesc(""); setShowCustomForm(false);
   };
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([
-    { id: "n1", type: "workflow", position: { x: 60,  y: 100 }, data: { label: "User Prompt",    nodeType: "input",        color: defaultColor("input"), desc: "Start of workflow", status: "idle", prompt: "Build a login form" } },
-    { id: "n2", type: "workflow", position: { x: 280, y: 100 }, data: { label: "Requirements",   nodeType: "requirements", color: defaultColor("requirements"), desc: "Parse requirements", status: "idle" } },
-    { id: "n3", type: "workflow", position: { x: 500, y: 100 }, data: { label: "Plan Structure", nodeType: "architect",    color: defaultColor("architect"), desc: "Plan structure",     status: "idle" } },
-  ]);
-
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([
-    { id: "e1-2", source: "n1", target: "n2", type: "smoothstep" },
-    { id: "e2-3", source: "n2", target: "n3", type: "smoothstep" },
-  ]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => addEdge({ ...connection, type: "smoothstep" }, eds));
@@ -235,6 +232,20 @@ function WorkflowCanvas() {
 
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Keep latest state in a ref so the unmount cleanup can read it without stale closures
+  useEffect(() => { latestStateRef.current = { nodes, edges, workflowId }; }, [nodes, edges, workflowId]);
+
+  // Auto-save current workflow when navigating away
+  useEffect(() => {
+    return () => {
+      const { nodes: ns, edges: es, workflowId: wid } = latestStateRef.current;
+      const project = projectRef.current;
+      if (project && wid && ns.length > 0) {
+        saveWorkflow(project, wid, JSON.stringify({ nodes: ns, edges: es }, null, 2)).catch(() => {});
+      }
+    };
+  }, []);
+
   const refreshSavedWorkflows = useCallback(async () => {
     try { setSavedWorkflows(await listWorkflows(settings.project)); } catch { setSavedWorkflows([]); }
   }, [settings.project]);
@@ -243,13 +254,15 @@ function WorkflowCanvas() {
 
   const handleLoad = useCallback(async (id: string, silent = false) => {
     setSaveError(null);
+    const cleanId = id.replace(".json", "");
     try {
-      const data = await loadWorkflow(settings.project, id.replace(".json", ""));
+      const data = await loadWorkflow(settings.project, cleanId);
       const parsed = JSON.parse(data);
       if (parsed.nodes) setNodes(parsed.nodes);
       if (parsed.edges) setEdges(parsed.edges);
-      setWorkflowId(id.replace(".json", ""));
+      setWorkflowId(cleanId);
       setShowWorkflowsPanel(false);
+      setPs({ activeWorkflow: cleanId });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!silent) {
@@ -257,7 +270,7 @@ function WorkflowCanvas() {
         notify.error("Failed to load workflow", msg);
       }
     }
-  }, [settings.project, setNodes, setEdges]);
+  }, [settings.project, setNodes, setEdges, setPs]);
 
   const autoLoadedRef = useRef(false);
   useEffect(() => {
@@ -272,6 +285,7 @@ function WorkflowCanvas() {
       const id = workflowId.trim() || "default";
       setWorkflowId(id);
       await saveWorkflow(settings.project, id, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
+      setPs({ activeWorkflow: id });
       await refreshSavedWorkflows();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -298,6 +312,7 @@ function WorkflowCanvas() {
     setNodes([{ id: "n1", type: "workflow", position: { x: 100, y: 100 }, data: { label: "Input", nodeType: "input", color: defaultColor("input"), desc: "Start of workflow", status: "idle" } }]);
     setEdges([]);
     setWorkflowId(`workflow-${Date.now()}`);
+    setPs({ activeWorkflow: null });
   };
 
   const handleLoadTemplate = (template: WorkflowTemplate) => {
@@ -306,6 +321,7 @@ function WorkflowCanvas() {
     setEdges(template.edges);
     setWorkflowId(template.id);
     setShowWorkflowsPanel(false);
+    setPs({ activeWorkflow: null });
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
