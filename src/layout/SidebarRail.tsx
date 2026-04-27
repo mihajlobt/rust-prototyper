@@ -8,6 +8,9 @@ import {
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
@@ -15,7 +18,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
-import { ProjectExplorer, SECTION_NAMES, SECTION_NEW_TYPE } from "@/components/ProjectExplorer";
+import { ProjectExplorer, SECTION_NAMES } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
 
 export function SidebarRail() {
@@ -187,7 +190,6 @@ export function SidebarRail() {
     }
   };
 
-  const typeLabel = (type: string) => type === "api" ? "API" : type.charAt(0).toUpperCase() + type.slice(1);
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
@@ -220,11 +222,9 @@ export function SidebarRail() {
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          {SECTION_NAMES.map((section) => (
-            <ContextMenuItem key={section} onClick={() => openNewDialogFor(SECTION_NEW_TYPE[section])}>
-              New {typeLabel(SECTION_NEW_TYPE[section])}…
-            </ContextMenuItem>
-          ))}
+          <ContextMenuItem onClick={() => setShowNewDialog(true)}>
+            New…
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={refreshAll}>
             <RefreshCw size={12} className="mr-2" />Refresh
@@ -232,13 +232,23 @@ export function SidebarRail() {
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* New item dialog — type is set by context, shown in title */}
+      {/* New item dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>New {typeLabel(newItemType)}</DialogTitle>
+            <DialogTitle>New Item</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <Select value={newItemType} onValueChange={setNewItemType}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent position="popper" side="bottom">
+                <SelectItem value="screen">Screen</SelectItem>
+                <SelectItem value="component">Component</SelectItem>
+                <SelectItem value="theme">Theme</SelectItem>
+                <SelectItem value="workflow">Workflow</SelectItem>
+                <SelectItem value="api">API</SelectItem>
+              </SelectContent>
+            </Select>
             <Input
               value={newItemName}
               onChange={(e) => setNewItemName(e.target.value)}
