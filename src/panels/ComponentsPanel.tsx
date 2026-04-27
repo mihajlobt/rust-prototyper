@@ -143,10 +143,10 @@ export function ComponentsPanel() {
   const saveCode = useCallback(async (value: string) => {
     if (!value) return;
     try {
-      // Persist to the Runner project and the component file
+      // Write to Runner's App.tsx (Runner has no Generated wrapper — App IS the component)
       const genDir = `projects/${settings.project}/generated`;
-      await writeFile(`${genDir}/src/components/Generated.tsx`, value);
-      // Also write to component-preview/ so the Vite preview stays in sync
+      await writeFile(`${genDir}/src/App.tsx`, value);
+      // Write to component-preview/ Generated.tsx for the Vite component preview
       await writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, value);
       if (selectedComponent) {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;
@@ -253,10 +253,9 @@ export function ComponentsPanel() {
     setCode(extracted);
     setPs({ componentsCodeOpen: true });
     try {
-      // Write to the generated/ project (for Runner)
+      // Write to Runner's App.tsx (Runner has no Generated wrapper — App IS the component)
       const genDir = `projects/${settings.project}/generated`;
-      await createDir(`${genDir}/src/components`);
-      await writeFile(`${genDir}/src/components/Generated.tsx`, extracted);
+      await writeFile(`${genDir}/src/App.tsx`, extracted);
 
       // Write to component-preview/ for the Vite dev server (HMR will pick it up)
       const previewDir = componentPreviewDir;

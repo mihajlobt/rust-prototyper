@@ -6,6 +6,7 @@ import {
   SHADCN_ADD_COMMAND,
   PROJECT_PATHS,
   getAppTsx,
+  getRunnerAppTsx,
   getGeneratedPlaceholderTsx,
   getPreviewThemeCss,
   getComponentPreviewDirPath,
@@ -83,10 +84,10 @@ export async function scaffoldGenerated(
   const dirName = generatedDir.substring(generatedDir.lastIndexOf("/") + 1);
   assertSafeDirName(dirName);
 
-  // Step 1: Save user's Generated.tsx if it exists
-  let savedGenerated = "";
+  // Step 1: Save user's App.tsx if it exists (contains generated component code)
+  let savedAppTsx = "";
   try {
-    savedGenerated = await readFile(`${generatedDir}/${SRC.GENERATED_TSX}`);
+    savedAppTsx = await readFile(`${generatedDir}/${SRC.APP_TSX}`);
   } catch {
     // Doesn't exist yet
   }
@@ -104,23 +105,12 @@ export async function scaffoldGenerated(
   onStep?.(`> bunx shadcn add --all`);
   await runShellCommandSync(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 7: Write our App.tsx (overwrites shadcn's placeholder)
-  onStep?.(`> writing App.tsx, preview-theme.css, Generated.tsx`);
-  await writeFile(`${generatedDir}/${SRC.APP_TSX}`, getAppTsx());
+  // Step 5: Write App.tsx — restore user's generated component or write starter template.
+  // The Runner has no Generated.tsx wrapper; App.tsx IS the component.
+  onStep?.(`> writing App.tsx`);
+  await writeFile(`${generatedDir}/${SRC.APP_TSX}`, savedAppTsx || getRunnerAppTsx());
 
-  // Step 8: Write preview-theme.css (runtime theme overlay)
-  await createDir(`${generatedDir}/${SRC.STYLES_DIR}`);
-  await writeFile(`${generatedDir}/${SRC.PREVIEW_THEME_CSS}`, getPreviewThemeCss());
-
-  // Step 9: Restore or create Generated.tsx
-  await createDir(`${generatedDir}/${SRC.COMPONENTS_DIR}`);
-  if (savedGenerated) {
-    await writeFile(`${generatedDir}/${SRC.GENERATED_TSX}`, savedGenerated);
-  } else {
-    await writeFile(`${generatedDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
-  }
-
-  // Step 10: Add non-lucide icon library. lucide-react is already a shadcn
+  // Step 6: Add non-lucide icon library. lucide-react is already a shadcn
   // dependency — installing it again races with shadcn add's bun install and
   // causes cache conflicts, so we skip it here.
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];

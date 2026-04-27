@@ -55,11 +55,9 @@ export const SHADCN_INIT_COMMAND: string =
   "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer --reinstall";
 
 /**
- * Returns the App.tsx source for the scaffolded project.
- *
- * Imports shadcn's index.css (created by shadcn init) and
- * preview-theme.css (our runtime theme overlay), then the Generated component.
- * Listens for postMessage to toggle dark mode.
+ * Returns the App.tsx for the component-preview/ project.
+ * Wraps Generated.tsx and handles dark-mode toggle via postMessage.
+ * Used only by scaffoldComponentPreview — NOT by the Runner.
  */
 export function getAppTsx(): string {
   return `import React from "react"
@@ -88,6 +86,23 @@ function App() {
 }
 
 export default App
+`;
+}
+
+/**
+ * Returns the starter App.tsx for the Runner's generated/ project.
+ * AI-generated code from ComponentsPanel is written directly here — no Generated.tsx wrapper.
+ */
+export function getRunnerAppTsx(): string {
+  return `import "./index.css"
+
+export default function App() {
+  return (
+    <div className="p-8 text-muted-foreground text-sm">
+      Generated component will appear here.
+    </div>
+  )
+}
 `;
 }
 
