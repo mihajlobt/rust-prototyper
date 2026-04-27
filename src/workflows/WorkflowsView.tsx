@@ -54,6 +54,18 @@ function WorkflowCanvas() {
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
 
+  const flowContainerRef = useRef<HTMLDivElement>(null);
+  const [flowReady, setFlowReady] = useState(false);
+  useEffect(() => {
+    const el = flowContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) setFlowReady(true);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): WorkflowNodeType => ({
     id: generateId(),
     type: "workflow",
@@ -229,7 +241,7 @@ function WorkflowCanvas() {
 
   useEffect(() => { refreshSavedWorkflows(); }, [refreshSavedWorkflows]);
 
-  const handleLoad = useCallback(async (id: string) => {
+  const handleLoad = useCallback(async (id: string, silent = false) => {
     setSaveError(null);
     try {
       const data = await loadWorkflow(settings.project, id.replace(".json", ""));
@@ -240,15 +252,19 @@ function WorkflowCanvas() {
       setShowWorkflowsPanel(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setSaveError(msg);
-      notify.error("Failed to load workflow", msg);
+      if (!silent) {
+        setSaveError(msg);
+        notify.error("Failed to load workflow", msg);
+      }
     }
   }, [settings.project, setNodes, setEdges]);
 
+  const autoLoadedRef = useRef(false);
   useEffect(() => {
-    if (!initialWorkflow) return;
-    handleLoad(initialWorkflow);
-  }, [initialWorkflow, handleLoad]);
+    if (!initialWorkflow || !settings.project || autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    handleLoad(initialWorkflow, true);
+  }, [initialWorkflow, settings.project, handleLoad]);
 
   const handleSave = async () => {
     setSaveError(null);
@@ -378,8 +394,8 @@ function WorkflowCanvas() {
 
           {/* React Flow canvas */}
           <Allotment.Pane>
-            <div className="w-full h-full">
-            <ReactFlow
+            <div ref={flowContainerRef} className="w-full h-full">
+            {flowReady && <ReactFlow
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChange}
@@ -428,7 +444,7 @@ function WorkflowCanvas() {
                   />
                 )}
               </NodeToolbar>
-            </ReactFlow>
+            </ReactFlow>}
             </div>
           </Allotment.Pane>
 
