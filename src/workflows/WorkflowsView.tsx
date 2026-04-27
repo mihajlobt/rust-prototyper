@@ -130,8 +130,8 @@ function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       className="bg-card rounded-lg shadow-md relative cursor-pointer"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
     >
-      <Handle type="target" position={Position.Left}  className="wf-handle" style={{ borderColor }} />
-      <Handle type="source" position={Position.Right} className="wf-handle" style={{ borderColor }} />
+      <Handle type="target" position={Position.Left}  style={{ width: 12, height: 12, borderColor }} />
+      <Handle type="source" position={Position.Right} style={{ width: 12, height: 12, borderColor }} />
 
       <div className="px-3 pt-1.5 pb-2">
         <div className="wf-accent-bar mb-1.5" style={{ background: d.color }} />

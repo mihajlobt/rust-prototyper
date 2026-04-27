@@ -300,6 +300,8 @@
   --xy-controls-button-color-hover-default: var(--foreground);
   --xy-controls-button-border-color-default: var(--border);
   --xy-controls-box-shadow-default: 0 1px 4px rgba(0,0,0,0.15);
+  --xy-handle-background-color-default: var(--card);
+  --xy-handle-border-color-default: var(--border);
 }
 
 /* Thinking animation */
@@ -311,18 +313,6 @@
 .thinking-dot:nth-child(2) { animation: thinking-dot 1.2s ease-in-out infinite 0.2s; }
 .thinking-dot:nth-child(3) { animation: thinking-dot 1.2s ease-in-out infinite 0.4s; }
 
-/* React Flow Handle base styles */
-.react-flow__handle.wf-handle {
-  width: 12px;
-  height: 12px;
-  background: var(--card);
-  border: 2px solid var(--border);
-  border-radius: 9999px;
-}
-.react-flow__handle.wf-handle:hover {
-  background: var(--primary);
-  border-color: var(--primary);
-}
 .wf-accent-bar {
   height: 2px;
   border-radius: 1px;

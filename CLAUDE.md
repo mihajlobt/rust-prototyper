@@ -91,6 +91,7 @@ Tailwind v4 + shadcn/ui. Tokens in `src/styles/globals.css` (`@theme inline` blo
   3. **`@apply` in a CSS file** — for non-component HTML elements or repeated patterns that can't be componentised. Add to the appropriate file in `src/styles/`.
 - This applies to every `className` prop and every `cn(...)` call in component source code.
 - Long className strings are a maintainability hazard: they hide intent, break diffs, and make refactoring error-prone.
+- **CRITICAL: When reducing class count, do NOT merge classes into a CSS class and then re-apply them alongside new Tailwind classes on the same element.** The goal is FEWER total styling declarations per element, not shuffling them between CSS and Tailwind. If you extract to a CSS class, remove the equivalent Tailwind classes from the element — don't keep both. Review every element before slapping on a new class.
 
 ## Keyboard Shortcuts
 
