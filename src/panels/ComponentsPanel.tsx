@@ -316,7 +316,7 @@ export function ComponentsPanel() {
   const chatPane = (
     <div className="h-full flex flex-col bg-card">
       <div className="panel-toolbar h-10 px-3 gap-2">
-        <span className="text-sm font-medium">Chat</span>
+        <span className="text-sm font-medium">{selectedComponent ?? "Chat"}</span>
         {messages.length > 0 && (
           <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
             {messages.filter((m) => m.role === "user").length} turns

@@ -40,22 +40,6 @@ export function useComponentCode(project: string, name: string | null) {
   });
 }
 
-export function useComponentChat(project: string, name: string | null) {
-  return useQuery({
-    queryKey: projectKeys.componentChat(project, name || ""),
-    queryFn: async () => {
-      if (!name) return [] as Array<{ role: "user" | "assistant"; content: string }>;
-      try {
-        const data = await readFile(`projects/${project}/components/${name}/chat.json`);
-        return JSON.parse(data) as Array<{ role: "user" | "assistant"; content: string }>;
-      } catch {
-        return [] as Array<{ role: "user" | "assistant"; content: string }>;
-      }
-    },
-    enabled: !!project && !!name,
-  });
-}
-
 export function useThemeCss(project: string, name: string | null) {
   return useQuery({
     queryKey: projectKeys.themeCss(project, name || ""),
@@ -65,37 +49,6 @@ export function useThemeCss(project: string, name: string | null) {
         return await readFile(`projects/${project}/themes/${name}/theme.css`);
       } catch {
         return "";
-      }
-    },
-    enabled: !!project && !!name,
-  });
-}
-
-export function useScreenCode(project: string, name: string | null) {
-  return useQuery({
-    queryKey: projectKeys.screenCode(project, name || ""),
-    queryFn: async () => {
-      if (!name) return "";
-      try {
-        return await readFile(`projects/${project}/screens/${name}/screen.tsx`);
-      } catch {
-        return "";
-      }
-    },
-    enabled: !!project && !!name,
-  });
-}
-
-export function useScreenChat(project: string, name: string | null) {
-  return useQuery({
-    queryKey: projectKeys.screenChat(project, name || ""),
-    queryFn: async () => {
-      if (!name) return [] as Array<{ role: "user" | "assistant"; content: string }>;
-      try {
-        const data = await readFile(`projects/${project}/screens/${name}/chat.json`);
-        return JSON.parse(data) as Array<{ role: "user" | "assistant"; content: string }>;
-      } catch {
-        return [] as Array<{ role: "user" | "assistant"; content: string }>;
       }
     },
     enabled: !!project && !!name,
@@ -133,9 +86,6 @@ export function useSaveComponent() {
       });
       queryClient.invalidateQueries({
         queryKey: projectKeys.componentCode(variables.project, variables.name),
-      });
-      queryClient.invalidateQueries({
-        queryKey: projectKeys.componentChat(variables.project, variables.name),
       });
     },
   });

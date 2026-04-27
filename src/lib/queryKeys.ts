@@ -5,15 +5,9 @@ export const projectKeys = {
     ["project", project, "component", name] as const,
   componentCode: (project: string, name: string) =>
     ["project", project, "component", name, "code"] as const,
-  componentChat: (project: string, name: string) =>
-    ["project", project, "component", name, "chat"] as const,
   screens: (project: string) => ["project", project, "screens"] as const,
   screen: (project: string, name: string) =>
     ["project", project, "screen", name] as const,
-  screenCode: (project: string, name: string) =>
-    ["project", project, "screen", name, "code"] as const,
-  screenChat: (project: string, name: string) =>
-    ["project", project, "screen", name, "chat"] as const,
   themes: (project: string) => ["project", project, "themes"] as const,
   theme: (project: string, name: string) =>
     ["project", project, "theme", name] as const,

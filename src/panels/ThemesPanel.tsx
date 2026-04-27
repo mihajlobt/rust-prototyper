@@ -205,8 +205,9 @@ export function ThemesPanel() {
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
-                  {frameworkPills}
+                  <span className="text-sm font-medium">{selectedThemeDir ?? "Theme"}</span>
                   <div className="flex-1" />
+                  {frameworkPills}
                   <Button
                     variant="ghost" size="icon" className="h-6 w-6"
                     onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
