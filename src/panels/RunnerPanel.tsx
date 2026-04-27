@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Allotment } from "allotment";
 import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
+import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
 import {
   Play,
   Square,
@@ -80,7 +81,10 @@ export function RunnerPanel() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState("");
-  const [terminalLines, setTerminalLines] = useState<Array<{ line: string; source: string }>>([]);
+  const xtermRef = useRef<XTerminalHandle>(null);
+  // Side buffer for Logs / Network tabs — not rendered directly so kept as ref
+  const logLinesRef = useRef<Array<{ line: string; source: string }>>([]);
+  const [, setLogTick] = useState(0);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
@@ -97,7 +101,6 @@ export function RunnerPanel() {
   const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
   const shellPidRef = useRef<number | null>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const deviceWidth = {
@@ -123,19 +126,15 @@ export function RunnerPanel() {
 
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
-      setTerminalLines((prev) => [...prev, { line: event.line, source: event.source }]);
+      xtermRef.current?.writeln(event.line);
+      logLinesRef.current = [...logLinesRef.current, { line: event.line, source: event.source }];
+      setLogTick((t) => t + 1);
       if (runningRef.current && iframeRef.current && /updated|hmr/i.test(event.line)) {
         iframeRef.current.contentWindow?.location.reload();
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
   }, []);
-
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, [terminalLines]);
 
   const handleSelectFile = async (path: string) => {
     setSelectedFile(path);
@@ -167,16 +166,12 @@ export function RunnerPanel() {
     const ok = await confirm("The generated/ folder needs a Vite + React + shadcn/ui project. Create one now?");
     if (!ok) return false;
     setIsScaffolding(true);
-    setTerminalLines((prev) => [
-      ...prev,
-      { line: "─────────────────────────────────", source: "stdout" },
-    ]);
-    const onStep = (msg: string) =>
-      setTerminalLines((prev) => [...prev, { line: msg, source: "stdout" }]);
+    xtermRef.current?.writeln("\r\n\x1b[90m─────────────────────────────────\x1b[0m");
+    const onStep = (msg: string) => xtermRef.current?.writeln(`\x1b[36m${msg}\x1b[0m`);
     try {
       await scaffoldGenerated(generatedDir, settings.iconLibrary, onStep);
       await loadFiles();
-      setTerminalLines((prev) => [...prev, { line: "✓ scaffold complete", source: "stdout" }]);
+      xtermRef.current?.writeln("\x1b[32m✓ scaffold complete\x1b[0m");
       notify.success("Scaffold complete", "Vite + React + shadcn/ui project created in generated/");
       return true;
     } catch (e) {
@@ -193,7 +188,7 @@ export function RunnerPanel() {
       return;
     }
     if (!(await ensureScaffold())) return;
-    setTerminalLines((prev) => [...prev, { line: "> starting dev server...", source: "stdout" }]);
+    xtermRef.current?.writeln("\x1b[36m> starting dev server…\x1b[0m");
     try {
       await devServerStore.startRunner(generatedDir, runnerPort);
     } catch (e) { notify.error("Failed to start dev server", e instanceof Error ? e.message : String(e)); }
@@ -201,12 +196,12 @@ export function RunnerPanel() {
 
   const handleBuild = async () => {
     if (!(await ensureScaffold())) return;
-    setTerminalLines((prev) => [...prev, { line: "> bun build", source: "stdout" }]);
+    xtermRef.current?.writeln("\x1b[36m> bun build\x1b[0m");
     try { await bunBuild(generatedDir); } catch (e) { notify.error("Build failed", e instanceof Error ? e.message : String(e)); }
   };
 
   const handleInstall = async () => {
-    setTerminalLines((prev) => [...prev, { line: "> bun install", source: "stdout" }]);
+    xtermRef.current?.writeln("\x1b[36m> bun install\x1b[0m");
     try { await bunInstall(generatedDir); } catch (e) { notify.error("Install failed", e instanceof Error ? e.message : String(e)); }
   };
 
@@ -276,7 +271,7 @@ export function RunnerPanel() {
 
   const handleNewShell = async () => {
     if (!shellCommand.trim()) return;
-    setTerminalLines((prev) => [...prev, { line: `> ${shellCommand}`, source: "stdout" }]);
+    xtermRef.current?.writeln(`\x1b[36m> ${shellCommand}\x1b[0m`);
     const pid = await runShellCommand(generatedDir, shellCommand);
     shellPidRef.current = pid;
     setShellCommand("");
@@ -444,43 +439,40 @@ export function RunnerPanel() {
                         <Input value={shellCommand} onChange={(e) => setShellCommand(e.target.value)} placeholder="Enter shell command..." className="h-6 text-xs" onKeyDown={(e) => { if (e.key === "Enter") handleNewShell(); if (e.key === "Escape") setShowShellInput(false); }} autoFocus />
                       </div>
                     )}
-                    <div className="flex-1 overflow-hidden bg-black text-green-400 font-mono text-xs">
-                      {runnerActiveTab === "terminal" && (
-                        <div ref={terminalRef} className="h-full overflow-auto p-2 space-y-0.5">
-                          {terminalLines.map((item, i) => (
-                            <div key={i} className={["break-all whitespace-pre-wrap", item.source === "stderr" ? "text-red-400" : ""].join(" ")}>
-                              {item.line}
-                            </div>
-                          ))}
-                          {terminalLines.length === 0 && <div className="opacity-40">No output yet&#8230;</div>}
-                        </div>
-                      )}
+                    <div className="flex-1 overflow-hidden">
+                      {/* Terminal tab: xterm handles rendering — always mounted so it retains history */}
+                      <XTerminal
+                        ref={xtermRef}
+                        className={runnerActiveTab === "terminal" ? "" : "hidden"}
+                      />
                       {runnerActiveTab === "logs" && (
-                        <div className="h-full overflow-auto p-2 space-y-0.5">
-                          {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
-                            <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : ""].join(" ")}>
+                        <div className="h-full overflow-auto p-2 space-y-0.5 bg-black font-mono text-xs">
+                          {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
+                            <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : "text-green-400"].join(" ")}>
                               {item.line}
                             </div>
                           ))}
-                          {terminalLines.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && <div className="opacity-40">No log events yet&#8230;</div>}
+                          {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && (
+                            <div className="text-green-400 opacity-40">No log events yet…</div>
+                          )}
                         </div>
                       )}
                       {runnerActiveTab === "network" && (
-                        <div className="h-full overflow-auto p-2 space-y-1">
+                        <div className="h-full overflow-auto p-2 space-y-1 bg-black font-mono text-xs">
                           {(() => {
-                            const requests = terminalLines.map((item) => {
+                            const requests = logLinesRef.current.map((item) => {
                               const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
                               if (match) return { method: match[1], path: match[2], status: parseInt(match[3]) };
                               const hmr = item.line.match(/hmr update\s+(\S+)/i);
                               if (hmr) return { method: "HMR", path: hmr[1], status: 0 };
                               return null;
                             }).filter(Boolean) as Array<{ method: string; path: string; status: number }>;
-                            if (requests.length === 0) return <div className="opacity-40">No network requests logged yet&#8230;</div>;
+                            if (requests.length === 0) return <div className="text-green-400 opacity-40">No network requests logged yet…</div>;
                             return requests.map((req, i) => (
-                              <div key={i} className="flex items-center gap-2 text-xs">
+                              <div key={i} className="flex items-center gap-2">
                                 <span className={["font-bold px-1 py-0.5 rounded", req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" : req.status >= 400 ? "bg-red-500/20 text-red-400" : req.method === "HMR" ? "bg-blue-500/20 text-blue-400" : "bg-muted text-muted-foreground"].join(" ")}>{req.method}</span>
-                                <span className="truncate flex-1">{req.path}</span>
-                                {req.status > 0 && <span className="text-muted-foreground">{req.status}</span>}
+                                <span className="truncate flex-1 text-green-400">{req.path}</span>
+                                {req.status > 0 && <span className="text-green-400 opacity-50">{req.status}</span>}
                               </div>
                             ));
                           })()}
