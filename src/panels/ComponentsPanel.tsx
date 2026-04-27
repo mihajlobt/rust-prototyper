@@ -42,6 +42,7 @@ export function ComponentsPanel() {
   const { previewStatus, previewUrl, previewError, startPreview, stopPreview } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
+  const stoppedManuallyRef = useRef(false);
 
   const [code, setCode] = useState("");
   const componentsShowInspector = ps.componentsShowInspector;
@@ -70,8 +71,11 @@ export function ComponentsPanel() {
     : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + themeCssSection;
   const systemContent = defaultSystem;
 
-  // Reset scaffold guard whenever the active project changes
-  useEffect(() => { scaffoldAttemptedRef.current = false; }, [settings.project]);
+  // Reset guards whenever the active project changes
+  useEffect(() => {
+    scaffoldAttemptedRef.current = false;
+    stoppedManuallyRef.current = false;
+  }, [settings.project]);
 
   // ─── Ensure dev server is running ──────────────────────────────────────────
 
@@ -81,6 +85,7 @@ export function ComponentsPanel() {
     async function ensurePreviewServer() {
       if (cancelled) return;
       if (previewStatus === "running" || previewStatus === "starting") return;
+      if (stoppedManuallyRef.current) return;
 
       // Check if scaffolded
       const isScaffolded = await hasComponentPreviewScaffold(`projects/${settings.project}`);
@@ -283,8 +288,8 @@ export function ComponentsPanel() {
 
   const handleRetryPreview = useCallback(() => {
     scaffoldAttemptedRef.current = false;
+    stoppedManuallyRef.current = false;
     useDevServerStore.getState().stopPreview();
-    // The useEffect watching previewStatus will re-trigger startPreview
   }, []);
 
   const chatPane = (
@@ -454,7 +459,7 @@ export function ComponentsPanel() {
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
                   <span className="text-sm font-medium">Preview</span>
                   {previewStatus === "running" ? (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={stopPreview} title="Stop preview server">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopPreview(); }} title="Stop preview server">
                       <Square size={12} />
                     </Button>
                   ) : previewStatus === "starting" ? (
@@ -462,7 +467,7 @@ export function ComponentsPanel() {
                       <Loader2 size={12} className="animate-spin" />
                     </Button>
                   ) : (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startPreview(componentPreviewDir, ps.devServerPort)} title="Start preview server">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startPreview(componentPreviewDir, ps.devServerPort); }} title="Start preview server">
                       <Play size={12} />
                     </Button>
                   )}
