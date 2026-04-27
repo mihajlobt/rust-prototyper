@@ -44,13 +44,13 @@ export const SHADCN_ADD_COMMAND: string =
  * --no-monorepo    suppress the monorepo detection prompt
  * --no-rtl         suppress the RTL direction prompt
  * --pointer        enable pointer cursor for buttons
- * --no-reinstall   suppress the re-install existing components prompt
+ * --reinstall      re-install existing UI components
  * (-y/--yes defaults to true per CLI docs, not needed)
  *
  * Ref: https://ui.shadcn.com/docs/cli — init options
  */
 export const SHADCN_INIT_COMMAND: string =
-  "bunx --bun shadcn@latest init -t vite -b radix --no-monorepo --no-rtl --pointer --no-reinstall";
+  "bunx --bun shadcn@latest init -t vite -b radix --no-monorepo --no-rtl --pointer --reinstall";
 
 /**
  * Returns the App.tsx source for the scaffolded project.
