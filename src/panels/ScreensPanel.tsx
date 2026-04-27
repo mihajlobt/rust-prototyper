@@ -1,66 +1,164 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Link2, Trash2 } from "lucide-react";
-import Frame from "react-frame-component";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { writeFile, createDir, readFile, readDir, exportProject, getHostForProvider } from "@/lib/ipc";
+import { writeFile, createDir, readFile, exportProject, getHostForProvider } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt } from "@/lib/prompts";
-import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
-import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
+import { extractCode } from "@/lib/preview";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
+import { useDevServerStore } from "@/lib/dev-server-manager";
+import { hasScreenPreviewScaffold, scaffoldScreenPreview } from "@/lib/scaffold";
+import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
+import { getScreenPreviewDirPath, getScreenPreviewAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
-  const { ps, setPs, openScreen: setScreenId } = useProjectSettingsStore();
+  const { ps, setPs } = useProjectSettingsStore();
   const screenId = ps.activeScreen;
   const screensDevice = ps.screensDevice;
   const screensShowInspector = ps.screensShowInspector;
-  const screensLinkMode = ps.screensLinkMode;
   const screensZoom = ps.screensZoom;
+  const screensDarkPreview = ps.screensDarkPreview;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3);
-  const [screens, setScreens] = useState<string[]>(["main"]);
-  const [previewHtml, setPreviewHtml] = useState("");
-
-  const [links, setLinks] = useState<Array<{ selector: string; target: string }>>([]);
-
+  const [code, setCode] = useState("");
 
   const [themeCss, setThemeCss] = useState("");
-  const previewRef = useRef<HTMLDivElement>(null);
 
-  const chatPath = screenId
-    ? `projects/${settings.project}/screens/${screenId}/chat.json`
-    : "projects/__placeholder__/chat.json";
+  const { screensStatus, screensUrl, screensError, startScreens, stopScreens } = useDevServerStore();
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+  const scaffoldAttemptedRef = useRef(false);
+  const stoppedManuallyRef = useRef(false);
+  const darkAtUrlArrival = useRef(screensDarkPreview);
+  useEffect(() => { darkAtUrlArrival.current = screensDarkPreview; }, [screensDarkPreview]);
+  const initialPreviewSrc = useMemo(
+    () => (screensUrl ? `${screensUrl}?dark=${darkAtUrlArrival.current}` : undefined),
+    [screensUrl]
+  );
+
+  const screenPreviewDir = getScreenPreviewDirPath(`projects/${settings.project}`);
   const generatedScreenDir = ps.directories.screens;
   const screenPath = screenId
     ? `projects/${settings.project}/generated/${generatedScreenDir}/${screenId}.tsx`
     : `projects/${settings.project}/screens/__placeholder__/screen.tsx`;
-  const screenJsonPath = `projects/${settings.project}/screens/${screenId}/screen.json`;
 
-  const parentCss = getParentCss();
-  const iconFontCss = useIconFontCss(settings.iconLibrary, settings.project);
-  const Preview = useMemo(() => {
-    if (!previewHtml) return null;
-    return createPreviewComponent(previewHtml);
-  }, [previewHtml]);
+  const chatPath = screenId
+    ? `projects/${settings.project}/screens/${screenId}/chat.json`
+    : "projects/__placeholder__/chat.json";
 
-  // Switch to update prompt after first generation — the model needs the current
-  // code context to make targeted edits instead of generating from scratch.
-  const hasGeneratedCode = previewHtml.length > 0;
+  // Switch to update prompt after first generation
+  const hasGeneratedCode = code.length > 0;
   const themeCssSection = themeCss
     ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\``
     : "";
   const systemContent = hasGeneratedCode
-    ? getScreenUpdatePrompt(settings.iconLibrary, previewHtml, settings.prompts["prompt.screens.update"] || undefined) + themeCssSection
+    ? getScreenUpdatePrompt(settings.iconLibrary, code, settings.prompts["prompt.screens.update"] || undefined) + themeCssSection
     : getScreenNewPrompt(settings.iconLibrary, settings.prompts["prompt.screens.new"] || undefined) + themeCssSection;
+
+  // Reset guards whenever the active project changes
+  useEffect(() => {
+    scaffoldAttemptedRef.current = false;
+    stoppedManuallyRef.current = false;
+  }, [settings.project]);
+
+  // ─── Ensure screens dev server is running ────────────────────────────────────
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function ensureScreensServer() {
+      if (cancelled) return;
+      if (screensStatus === "running" || screensStatus === "starting") return;
+      if (stoppedManuallyRef.current) return;
+
+      const isScaffolded = await hasScreenPreviewScaffold(`projects/${settings.project}`);
+      if (cancelled) return;
+
+      if (!isScaffolded) {
+        if (scaffoldAttemptedRef.current) return;
+        scaffoldAttemptedRef.current = true;
+
+        useDevServerStore.getState().stopScreens();
+
+        const ok = await confirm(
+          "The screen preview needs a Vite project. Create one now?",
+          { title: "Scaffold Required", kind: "info" }
+        );
+        if (!ok) return;
+        if (cancelled) return;
+
+        try {
+          await withScaffoldNotifications(
+            "scaffold-screen-preview",
+            "Scaffolding screen preview",
+            (onStep) => scaffoldScreenPreview(screenPreviewDir, settings.iconLibrary, onStep)
+          );
+        } catch {
+          return;
+        }
+      } else {
+        // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
+        writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getScreenPreviewAppTsx()).catch(() => {});
+      }
+
+      if (cancelled) return;
+      try {
+        await startScreens(screenPreviewDir, ps.screensPreviewPort);
+      } catch (e) {
+        notify.error("Failed to start screen preview server", e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    ensureScreensServer();
+    return () => { cancelled = true; };
+  }, [settings.project, screensStatus, screenPreviewDir, startScreens, ps.screensPreviewPort, settings.iconLibrary]);
+
+  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
+
+  useEffect(() => {
+    const iframe = previewIframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: "set-dark", value: screensDarkPreview }, "*");
+  }, [screensDarkPreview, screensUrl]);
+
+  // ─── Write current screen to screen-preview when screenId or code changes ───
+
+  const writeToScreenPreview = useCallback(async (content: string) => {
+    if (!content) return;
+    try {
+      await createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`);
+      await writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.GENERATED_TSX}`, content);
+    } catch (e) {
+      console.error("Failed to write to screen preview:", e);
+    }
+  }, [screenPreviewDir]);
+
+  // Load existing screen code when screenId changes
+  useEffect(() => {
+    if (!screenId) { setCode(""); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const content = await readFile(screenPath);
+        if (!cancelled && content) {
+          setCode(content);
+          await writeToScreenPreview(content);
+        }
+      } catch {
+        if (!cancelled) setCode("");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [screenId, settings.project, screenPath, writeToScreenPreview]);
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
@@ -74,41 +172,14 @@ export function ScreensPanel() {
     systemPrompt: systemContent,
     outputPath: screenId ? screenPath : undefined,
     onOutput: (content) => {
-      setPreviewHtml(content);
+      setCode(content);
       const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
       createDir(parentDir)
         .then(() => writeFile(screenPath, content))
         .catch(() => {});
+      writeToScreenPreview(content).catch(() => {});
     },
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const entries = await readDir(`projects/${settings.project}/screens`);
-        const names = entries.filter((e) => e.is_dir).map((e) => e.name);
-        if (!cancelled && names.length > 0) setScreens(names);
-      } catch {
-        // no screens yet
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [settings.project]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await readFile(screenJsonPath);
-        const parsed = JSON.parse(data);
-        if (!cancelled && parsed.links) setLinks(parsed.links);
-      } catch {
-        if (!cancelled) setLinks([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [settings.project, screenId, screenJsonPath]);
 
   useEffect(() => {
     const selectedTheme = ps.stylePreset;
@@ -127,15 +198,6 @@ export function ScreensPanel() {
     })();
     return () => { cancelled = true; };
   }, [ps.stylePreset, settings.project]);
-
-  const persistLinks = useCallback(async (newLinks: typeof links) => {
-    try {
-      await createDir(screenJsonPath.replace("/screen.json", ""));
-      await writeFile(screenJsonPath, JSON.stringify({ links: newLinks }, null, 2));
-    } catch (e) {
-      notify.error("Failed to save links", e instanceof Error ? e.message : String(e));
-    }
-  }, [screenJsonPath]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -156,36 +218,53 @@ export function ScreensPanel() {
     }
   };
 
-  const handlePreviewClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const tagName = target.tagName.toLowerCase();
+  const handleRetryPreview = () => {
+    stoppedManuallyRef.current = false;
+    scaffoldAttemptedRef.current = false;
+    startScreens(screenPreviewDir, ps.screensPreviewPort).catch(() => {});
+  };
 
-      if (!screensLinkMode) {
-      for (const link of links) {
-        const matchesSelector =
-          (link.selector === tagName) ||
-          (target.id && link.selector === target.id) ||
-          (target.className && typeof target.className === "string" && link.selector === target.className) ||
-          target.matches?.(link.selector);
-        if (matchesSelector) {
-          e.preventDefault();
-          if (screens.includes(link.target)) {
-            setScreenId(link.target);
-          }
-          return;
-        }
-      }
-      return;
+  const renderPreview = () => {
+    if (screensStatus === "error") {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 p-4 h-full text-center">
+          <AlertCircle size={24} className="text-destructive" />
+          <p className="text-xs font-medium text-destructive">Preview Error</p>
+          <p className="text-[10px] text-muted-foreground max-w-full line-clamp-3">
+            {screensError || "Failed to start dev server"}
+          </p>
+          <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleRetryPreview}>
+            Retry
+          </Button>
+        </div>
+      );
     }
 
-    if (tagName === 'a' || tagName === 'button') {
-      const selector = target.id || target.className || tagName;
-      const newLink = { selector, target: target.getAttribute('href') || target.textContent || tagName };
-      const nextLinks = [...links, newLink];
-      setLinks(nextLinks);
-      persistLinks(nextLinks);
-      setPs({ screensLinkMode: false });
+    if (screensStatus === "starting") {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 h-full">
+          <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">Starting preview…</p>
+        </div>
+      );
     }
+
+    if (screensStatus === "running" && screensUrl) {
+      return (
+        <iframe
+          ref={previewIframeRef}
+          src={initialPreviewSrc}
+          className="w-full h-full border-0"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+        />
+      );
+    }
+
+    return (
+      <div className="flex items-center justify-center text-muted-foreground text-sm">
+        Generated screens will preview here
+      </div>
+    );
   };
 
   const chatPane = (
@@ -194,7 +273,7 @@ export function ScreensPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) setPreviewHtml(c); }}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) { setCode(c); writeToScreenPreview(c).catch(() => {}); } }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
       />
@@ -221,7 +300,6 @@ export function ScreensPanel() {
           canTools={canTools}
           onStop={stopGeneration}
         />
-
       </div>
     </div>
   );
@@ -243,9 +321,6 @@ export function ScreensPanel() {
                   <div className="flex-1" />
                   <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleExport} title="Export project">
                     <Download size={12} />
-                  </Button>
-                  <Button variant={screensLinkMode ? "default" : "ghost"} size="icon" className="h-6 w-6" onClick={() => setPs({ screensLinkMode: !screensLinkMode })} title={screensLinkMode ? "Linking…" : "Link Mode"}>
-                    <Link2 size={12} />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={clearChat} title="Clear chat" disabled={messages.length === 0}>
                     <Trash2 size={12} />
@@ -280,7 +355,35 @@ export function ScreensPanel() {
           <div className="h-full flex flex-col">
             <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
               <span className="text-sm font-medium">Preview</span>
+              {screensStatus === "running" ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopScreens(); }} title="Stop preview server">
+                  <Square size={12} />
+                </Button>
+              ) : screensStatus === "starting" ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
+                  <Loader2 size={12} className="animate-spin" />
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startScreens(screenPreviewDir, ps.screensPreviewPort); }} title="Start preview server">
+                  <Play size={12} />
+                </Button>
+              )}
               <div className="flex-1" />
+              <Button
+                variant={screensDarkPreview ? "secondary" : "ghost"}
+                size="icon" className="h-7 w-7"
+                onClick={() => {
+                  setPs({ screensDarkPreview: !screensDarkPreview });
+                  previewIframeRef.current?.contentWindow?.postMessage(
+                    { type: "set-dark", value: !screensDarkPreview },
+                    "*"
+                  );
+                }}
+                title={screensDarkPreview ? "Light preview" : "Dark preview"}
+              >
+                {screensDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+              </Button>
+              <div className="w-px h-4 bg-border" />
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
                 <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(screensZoom * 100)}%</span>
@@ -298,31 +401,13 @@ export function ScreensPanel() {
                 </Button>
               </div>
             </div>
-            <div
-              ref={previewRef}
-              className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center"
-              onDragOver={(e) => e.preventDefault()}
-              onClick={handlePreviewClick}
-            >
-              {Preview ? (
-                <div
-                  className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                  style={{ width: deviceWidth[screensDevice], transform: `scale(${screensZoom})`, transformOrigin: "top center" }}
-                >
-                  <Frame
-                    head={<style>{parentCss + themeCss + iconFontCss}</style>}
-                    className="w-full h-full border-0"
-                  >
-                    <PreviewErrorBoundary resetKey={previewHtml}>
-                      <Preview />
-                    </PreviewErrorBoundary>
-                  </Frame>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center text-muted-foreground text-sm">
-                  Generated screens will preview here
-                </div>
-              )}
+            <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
+              <div
+                className="h-full bg-background shadow-lg border border-border overflow-hidden"
+                style={{ width: deviceWidth[screensDevice], transform: `scale(${screensZoom})`, transformOrigin: "top center" }}
+              >
+                {renderPreview()}
+              </div>
             </div>
           </div>
         </Allotment.Pane>

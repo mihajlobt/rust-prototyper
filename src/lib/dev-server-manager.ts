@@ -17,11 +17,18 @@ export interface DevServerState {
   runnerUrl: string | null;
   runnerError: string | null;
 
+  // Screens preview server state (screen-preview/)
+  screensStatus: DevServerStatus;
+  screensUrl: string | null;
+  screensError: string | null;
+
   // Actions
   startPreview: (componentPreviewDir: string, port?: number) => Promise<string>;
   startRunner: (generatedDir: string, port?: number) => Promise<string>;
+  startScreens: (screenPreviewDir: string, port?: number) => Promise<string>;
   stopPreview: () => void;
   stopRunner: () => void;
+  stopScreens: () => void;
 }
 
 // ─── Internal State ───────────────────────────────────────────────────────────
@@ -30,20 +37,25 @@ type UrlWaiter = { resolve: (url: string) => void; reject: (e: Error) => void };
 
 let previewPid: number | null = null;
 let runnerPid: number | null = null;
+let screensPid: number | null = null;
 let previewUnlisten: UnlistenFn | null = null;
 let runnerUnlisten: UnlistenFn | null = null;
+let screensUnlisten: UnlistenFn | null = null;
 
 /** All callers waiting for the URL while status is "starting" */
 let previewUrlWaiters: UrlWaiter[] = [];
 let runnerUrlWaiters: UrlWaiter[] = [];
+let screensUrlWaiters: UrlWaiter[] = [];
 
 /** Timeout handles so we can clear them */
 let previewTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 let runnerTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+let screensTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
 const URL_CAPTURE_TIMEOUT_MS = 30_000;
 const DEFAULT_PREVIEW_PORT = 5173;
 const DEFAULT_RUNNER_PORT = 5174;
+const DEFAULT_SCREENS_PORT = 5175;
 
 // ─── URL Detection ────────────────────────────────────────────────────────────
 
@@ -73,6 +85,10 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
   runnerStatus: "idle",
   runnerUrl: null,
   runnerError: null,
+
+  screensStatus: "idle",
+  screensUrl: null,
+  screensError: null,
 
   // ── startPreview ──────────────────────────────────────────────────────────
 
@@ -250,29 +266,109 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
   // ── stopRunner ────────────────────────────────────────────────────────────
 
   stopRunner: () => {
-    // Clear timeout
     if (runnerTimeoutHandle) {
       clearTimeout(runnerTimeoutHandle);
       runnerTimeoutHandle = null;
     }
-
-    // Unsubscribe from terminal output
     if (runnerUnlisten) {
       runnerUnlisten();
       runnerUnlisten = null;
     }
-
-    // Kill process
     if (runnerPid !== null) {
       killProcess(runnerPid).catch(() => { /* process may already be dead */ });
       runnerPid = null;
     }
-
-    // Reject all callers waiting for the URL
     const stopped = new Error("Runner dev server was stopped before URL was captured");
     for (const w of runnerUrlWaiters) w.reject(stopped);
     runnerUrlWaiters = [];
-
     set({ runnerStatus: "idle", runnerUrl: null, runnerError: null });
+  },
+
+  // ── startScreens ──────────────────────────────────────────────────────────
+
+  startScreens: async (screenPreviewDir: string, port?: number): Promise<string> => {
+    const state = get();
+
+    if (state.screensStatus === "running" && state.screensUrl) {
+      return state.screensUrl;
+    }
+
+    if (state.screensStatus === "starting") {
+      return new Promise<string>((resolve, reject) => {
+        screensUrlWaiters.push({ resolve, reject });
+      });
+    }
+
+    set({ screensStatus: "starting", screensUrl: null, screensError: null });
+
+    const targetPort = port ?? DEFAULT_SCREENS_PORT;
+
+    const settleScreensWaiters = (url: string) => {
+      for (const w of screensUrlWaiters) w.resolve(url);
+      screensUrlWaiters = [];
+    };
+    const rejectScreensWaiters = (e: Error) => {
+      for (const w of screensUrlWaiters) w.reject(e);
+      screensUrlWaiters = [];
+    };
+
+    let pid: number;
+    try {
+      pid = await bunDev(screenPreviewDir, targetPort);
+      screensPid = pid;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set({ screensStatus: "error", screensError: message });
+      rejectScreensWaiters(new Error(message));
+      throw error;
+    }
+
+    let urlCaptured = false;
+    screensUnlisten = await onTerminalOutput((event: TerminalOutputEvent) => {
+      if (event.pid !== screensPid || urlCaptured) return;
+
+      const url = extractLocalUrl(event.line);
+      if (url) {
+        urlCaptured = true;
+        set({ screensStatus: "running", screensUrl: url, screensError: null });
+        settleScreensWaiters(url);
+        if (screensTimeoutHandle) {
+          clearTimeout(screensTimeoutHandle);
+          screensTimeoutHandle = null;
+        }
+      }
+    });
+
+    return new Promise<string>((resolve, reject) => {
+      screensUrlWaiters.push({ resolve, reject });
+
+      screensTimeoutHandle = setTimeout(() => {
+        const err = new Error(`Screens dev server URL capture timed out after ${URL_CAPTURE_TIMEOUT_MS / 1000}s`);
+        set({ screensStatus: "error", screensError: `Dev server started (PID ${pid}) but URL was not captured within ${URL_CAPTURE_TIMEOUT_MS / 1000}s` });
+        rejectScreensWaiters(err);
+        screensTimeoutHandle = null;
+      }, URL_CAPTURE_TIMEOUT_MS);
+    });
+  },
+
+  // ── stopScreens ───────────────────────────────────────────────────────────
+
+  stopScreens: () => {
+    if (screensTimeoutHandle) {
+      clearTimeout(screensTimeoutHandle);
+      screensTimeoutHandle = null;
+    }
+    if (screensUnlisten) {
+      screensUnlisten();
+      screensUnlisten = null;
+    }
+    if (screensPid !== null) {
+      killProcess(screensPid).catch(() => { /* process may already be dead */ });
+      screensPid = null;
+    }
+    const stopped = new Error("Screens dev server was stopped before URL was captured");
+    for (const w of screensUrlWaiters) w.reject(stopped);
+    screensUrlWaiters = [];
+    set({ screensStatus: "idle", screensUrl: null, screensError: null });
   },
 }));

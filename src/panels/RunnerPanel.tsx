@@ -61,6 +61,7 @@ import type { MentionAsset } from "@/types/chat";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { hasGeneratedScaffold, scaffoldGenerated } from "@/lib/scaffold";
+import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import { useDevServerStore } from "@/lib/dev-server-manager";
 
@@ -167,15 +168,22 @@ export function RunnerPanel() {
     if (!ok) return false;
     setIsScaffolding(true);
     xtermRef.current?.writeln("\r\n\x1b[90m─────────────────────────────────\x1b[0m");
-    const onStep = (msg: string) => xtermRef.current?.writeln(`\x1b[36m${msg}\x1b[0m`);
     try {
-      await scaffoldGenerated(generatedDir, settings.iconLibrary, onStep);
+      await withScaffoldNotifications(
+        "scaffold-generated",
+        "Scaffolding generated project",
+        (onStep) => {
+          const wrappedStep = (msg: string) => {
+            xtermRef.current?.writeln(`\x1b[36m${msg}\x1b[0m`);
+            onStep(msg);
+          };
+          return scaffoldGenerated(generatedDir, settings.iconLibrary, wrappedStep);
+        }
+      );
       await loadFiles();
       xtermRef.current?.writeln("\x1b[32m✓ scaffold complete\x1b[0m");
-      notify.success("Scaffold complete", "Vite + React + shadcn/ui project created in generated/");
       return true;
-    } catch (e) {
-      notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+    } catch {
       return false;
     } finally {
       setIsScaffolding(false);

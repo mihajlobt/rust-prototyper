@@ -27,7 +27,8 @@ import { getComponentNewPrompt, getComponentUpdatePrompt } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
 import { hasComponentPreviewScaffold, scaffoldComponentPreview } from "@/lib/scaffold";
-import { getComponentPreviewDirPath } from "@/lib/scaffold-shadcn";
+import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
+import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat } from "@/hooks/useChat";
@@ -115,18 +116,17 @@ export function ComponentsPanel() {
         if (cancelled) return;
 
         try {
-          await notify.promise(
-            scaffoldComponentPreview(componentPreviewDir, settings.iconLibrary),
-            {
-              loading: "Scaffolding component preview…",
-              success: "Component preview project created",
-              error: (e) => `Scaffold failed: ${e.message}`,
-            },
-            { duration: 4000 }
+          await withScaffoldNotifications(
+            "scaffold-component-preview",
+            "Scaffolding component preview",
+            (onStep) => scaffoldComponentPreview(componentPreviewDir, settings.iconLibrary, onStep)
           );
         } catch {
           return;
         }
+      } else {
+        // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
+        writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch(() => {});
       }
 
       if (cancelled) return;

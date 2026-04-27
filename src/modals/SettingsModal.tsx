@@ -221,26 +221,10 @@ export function SettingsModal() {
                 </div>
               </section>
 
-              {/* Project */}
-              <section className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Project</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="project" className="text-sm">Active project ID</Label>
-                    <Input id="project" value={settings.project} onChange={(e) => setSettings({ project: e.target.value })} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="stylePreset" className="text-sm">Default theme</Label>
-                    <p className="text-xs text-muted-foreground">Theme folder used when generating components</p>
-                    <Input id="stylePreset" value={ps.stylePreset} onChange={(e) => setPs({ stylePreset: e.target.value })} placeholder="e.g. main" />
-                  </div>
-                </div>
-              </section>
-
               {/* Dev Server */}
               <section className="space-y-3">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dev Server</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="devServerPort" className="text-sm">Component Preview Port</Label>
                     <Input
@@ -253,6 +237,23 @@ export function SettingsModal() {
                         const val = parseInt(e.target.value, 10);
                         if (!isNaN(val) && val >= 1024 && val <= 65535) {
                           setPs({ devServerPort: val });
+                        }
+                      }}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="screensPreviewPort" className="text-sm">Screen Preview Port</Label>
+                    <Input
+                      id="screensPreviewPort"
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={ps.screensPreviewPort}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val >= 1024 && val <= 65535) {
+                          setPs({ screensPreviewPort: val });
                         }
                       }}
                       className="h-8 text-xs"

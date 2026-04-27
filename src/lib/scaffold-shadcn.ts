@@ -55,40 +55,54 @@ export const SHADCN_INIT_COMMAND: string =
   "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer --reinstall";
 
 /**
- * Returns the App.tsx for the component-preview/ project.
- * Wraps Generated.tsx and handles dark-mode toggle via postMessage.
- * Used only by scaffoldComponentPreview — NOT by the Runner.
+ * Returns the App.tsx for the component-preview/ or screen-preview/ project.
+ * Sets dark class on documentElement so body { bg-background } picks up the
+ * dark CSS variables. Reads initial state from ?dark= query param (sync, before
+ * React mounts) and listens for set-dark postMessage for live toggling.
  */
-export function getAppTsx(): string {
+export function getPreviewAppTsx(cssImports: string[]): string {
+  const imports = cssImports.map((p) => `import "${p}"`).join("\n");
   return `import React from "react"
-import "./${PROJECT_PATHS.SRC.INDEX_CSS.replace('src/', '')}"
-import "./${PROJECT_PATHS.SRC.PREVIEW_THEME_CSS.replace('src/', '')}"
+${imports}
 import Generated from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
 
 function App() {
-  const [dark, setDark] = React.useState(
-    () => new URLSearchParams(window.location.search).get("dark") === "true"
-  )
+  const [dark, setDark] = React.useState(() => {
+    const d = new URLSearchParams(window.location.search).get("dark") === "true"
+    document.documentElement.classList.toggle("dark", d)
+    return d
+  })
+
+  React.useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark)
+  }, [dark])
 
   React.useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type === "set-dark") {
-        setDark(e.data.value as boolean)
-      }
+      if (e.data?.type === "set-dark") setDark(e.data.value as boolean)
     }
     window.addEventListener("message", handler)
     return () => window.removeEventListener("message", handler)
   }, [])
 
-  return (
-    <div className={dark ? "dark" : ""} style={{ minHeight: "100vh" }}>
-      <Generated />
-    </div>
-  )
+  return <Generated />
 }
 
 export default App
 `;
+}
+
+/** Returns the App.tsx for the component-preview/ project (includes preview-theme.css). */
+export function getAppTsx(): string {
+  return getPreviewAppTsx([
+    `./${PROJECT_PATHS.SRC.INDEX_CSS.replace('src/', '')}`,
+    `./${PROJECT_PATHS.SRC.PREVIEW_THEME_CSS.replace('src/', '')}`,
+  ]);
+}
+
+/** Returns the App.tsx for the screen-preview/ project (no preview-theme.css). */
+export function getScreenPreviewAppTsx(): string {
+  return getPreviewAppTsx([`./${PROJECT_PATHS.SRC.INDEX_CSS.replace('src/', '')}`]);
 }
 
 /** Returns the placeholder Generated.tsx source shown before any component is generated. */
@@ -107,6 +121,11 @@ export function getPreviewThemeCss(): string {
 /** Given a project data directory, returns the component-preview directory path. */
 export function getComponentPreviewDirPath(projectDir: string): string {
   return `${projectDir}/component-preview`;
+}
+
+/** Given a project data directory, returns the screen-preview directory path. */
+export function getScreenPreviewDirPath(projectDir: string): string {
+  return `${projectDir}/screen-preview`;
 }
 
 /** Given a project data directory, returns the generated directory path. */

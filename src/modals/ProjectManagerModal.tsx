@@ -14,6 +14,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
 import { scaffoldGenerated } from "@/lib/scaffold";
 import { notify } from "@/hooks/useToast";
+import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 
 interface ProjectMeta {
   id: string;
@@ -121,10 +122,13 @@ export function ProjectManagerModal() {
 
     setScaffolding(true);
     try {
-      await scaffoldGenerated(`${projectPath}/generated`, settings.iconLibrary);
-      notify.success("Project created", `"${newProjectName}" scaffolded with Vite + React`);
-    } catch (e) {
-      notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+      await withScaffoldNotifications(
+        "scaffold-generated",
+        `Creating project "${newProjectName}"`,
+        (onStep) => scaffoldGenerated(`${projectPath}/generated`, settings.iconLibrary, onStep)
+      );
+    } catch {
+      // withScaffoldNotifications shows the error toast
     } finally {
       setScaffolding(false);
     }

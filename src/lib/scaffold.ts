@@ -6,9 +6,11 @@ import {
   SHADCN_ADD_COMMAND,
   PROJECT_PATHS,
   getAppTsx,
+  getScreenPreviewAppTsx,
   getGeneratedPlaceholderTsx,
   getPreviewThemeCss,
   getComponentPreviewDirPath,
+  getScreenPreviewDirPath,
   getGeneratedDirPath,
 } from "@/lib/scaffold-shadcn";
 
@@ -83,16 +85,16 @@ export async function scaffoldGenerated(
   assertSafeDirName(dirName);
 
   // Step 1: Remove the target directory so shadcn can create it fresh
-  onStep?.(`> removing ${dirName}/`);
+  onStep?.("Removing old files…");
   await removeProjectDir(generatedDir);
   await createDir(projectDir);
 
   // Step 2: shadcn init — creates the full Vite + React + shadcn project with its own App.tsx
-  onStep?.(`> bunx shadcn init -t vite -b radix --name ${dirName}`);
+  onStep?.("Initializing Vite + React + shadcn/ui…");
   await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
   // Step 3: Add all shadcn components and install their deps
-  onStep?.(`> bunx shadcn add --all`);
+  onStep?.("Adding shadcn components…");
   await runShellCommandSync(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
   // Step 4: Add non-lucide icon library. lucide-react is already a shadcn
@@ -100,7 +102,7 @@ export async function scaffoldGenerated(
   // causes cache conflicts, so we skip it here.
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg && iconLibrary !== "lucide") {
-    onStep?.(`> bun add ${iconPkg}`);
+    onStep?.(`Installing ${iconPkg}…`);
     const pkgPath = `${generatedDir}/${P.PACKAGE_JSON}`;
     const pkgRaw = await readFile(pkgPath);
     const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
@@ -127,7 +129,8 @@ export async function scaffoldGenerated(
  */
 export async function scaffoldComponentPreview(
   componentPreviewDir: string,
-  iconLibrary: IconLibrary
+  iconLibrary: IconLibrary,
+  onStep?: (msg: string) => void
 ): Promise<void> {
   const projectDir = componentPreviewDir.substring(0, componentPreviewDir.lastIndexOf("/"));
   const dirName = componentPreviewDir.substring(componentPreviewDir.lastIndexOf("/") + 1);
@@ -142,16 +145,20 @@ export async function scaffoldComponentPreview(
   }
 
   // Step 2: Remove the target directory so shadcn can create it fresh
+  onStep?.("Removing old files…");
   await removeProjectDir(componentPreviewDir);
   await createDir(projectDir);
 
   // Step 3: shadcn init — creates the Vite project and installs base deps
+  onStep?.("Initializing Vite + React + shadcn/ui…");
   await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
   // Step 4: Add all shadcn components and install their deps
+  onStep?.("Adding shadcn components…");
   await runShellCommandSync(componentPreviewDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
   // Step 5: Write our App.tsx (overwrites shadcn's placeholder)
+  onStep?.("Writing App.tsx…");
   await writeFile(`${componentPreviewDir}/${SRC.APP_TSX}`, getAppTsx());
 
   // Step 6: Write preview-theme.css (runtime theme overlay)
@@ -159,6 +166,7 @@ export async function scaffoldComponentPreview(
   await writeFile(`${componentPreviewDir}/${SRC.PREVIEW_THEME_CSS}`, getPreviewThemeCss());
 
   // Step 7: Restore or create Generated.tsx
+  onStep?.(savedGenerated ? "Restoring Generated.tsx…" : "Creating Generated.tsx placeholder…");
   await createDir(`${componentPreviewDir}/${SRC.COMPONENTS_DIR}`);
   if (savedGenerated) {
     await writeFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`, savedGenerated);
@@ -170,6 +178,7 @@ export async function scaffoldComponentPreview(
   // dependency — skip it to avoid racing with shadcn add's bun install.
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg && iconLibrary !== "lucide") {
+    onStep?.(`Installing ${iconPkg}…`);
     const pkgPath = `${componentPreviewDir}/${P.PACKAGE_JSON}`;
     const pkgRaw = await readFile(pkgPath);
     const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
@@ -187,6 +196,78 @@ export async function scaffoldComponentPreview(
  */
 export async function hasComponentPreviewScaffold(projectDir: string): Promise<boolean> {
   return isScaffoldValid(getComponentPreviewDirPath(projectDir));
+}
+
+/**
+ * Check if the screen-preview/ directory has a valid scaffold
+ * by verifying structural files exist.
+ */
+export async function hasScreenPreviewScaffold(projectDir: string): Promise<boolean> {
+  return isScaffoldValid(getScreenPreviewDirPath(projectDir));
+}
+
+/**
+ * Scaffold a React + TypeScript + Vite project with shadcn/ui
+ * in the screen-preview/ directory.
+ *
+ * Same flow as scaffoldComponentPreview but without preview-theme.css.
+ */
+export async function scaffoldScreenPreview(
+  screenPreviewDir: string,
+  iconLibrary: IconLibrary,
+  onStep?: (msg: string) => void
+): Promise<void> {
+  const projectDir = screenPreviewDir.substring(0, screenPreviewDir.lastIndexOf("/"));
+  const dirName = screenPreviewDir.substring(screenPreviewDir.lastIndexOf("/") + 1);
+  assertSafeDirName(dirName);
+
+  // Step 1: Save user's Generated.tsx if it exists
+  let savedGenerated = "";
+  try {
+    savedGenerated = await readFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`);
+  } catch {
+    // Doesn't exist yet
+  }
+
+  // Step 2: Remove the target directory so shadcn can create it fresh
+  onStep?.("Removing old files…");
+  await removeProjectDir(screenPreviewDir);
+  await createDir(projectDir);
+
+  // Step 3: shadcn init
+  onStep?.("Initializing Vite + React + shadcn/ui…");
+  await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
+
+  // Step 4: Add all shadcn components
+  onStep?.("Adding shadcn components…");
+  await runShellCommandSync(screenPreviewDir, `${SHADCN_ADD_COMMAND} --cwd .`);
+
+  // Step 5: Write our App.tsx
+  onStep?.("Writing App.tsx…");
+  await writeFile(`${screenPreviewDir}/${SRC.APP_TSX}`, getScreenPreviewAppTsx());
+
+  // Step 6: Restore or create Generated.tsx
+  onStep?.(savedGenerated ? "Restoring Generated.tsx…" : "Creating Generated.tsx placeholder…");
+  await createDir(`${screenPreviewDir}/${SRC.COMPONENTS_DIR}`);
+  if (savedGenerated) {
+    await writeFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`, savedGenerated);
+  } else {
+    await writeFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
+  }
+
+  // Step 7: Add non-lucide icon library
+  const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
+  if (iconPkg && iconLibrary !== "lucide") {
+    onStep?.(`Installing ${iconPkg}…`);
+    const pkgPath = `${screenPreviewDir}/${P.PACKAGE_JSON}`;
+    const pkgRaw = await readFile(pkgPath);
+    const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
+    const deps = (pkg.dependencies as Record<string, string>) || {};
+    deps[iconPkg] = "latest";
+    pkg.dependencies = deps;
+    await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
+    await bunInstallSync(screenPreviewDir);
+  }
 }
 
 /**

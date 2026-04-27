@@ -24,7 +24,8 @@ export interface ProjectSettings {
   screensDevice: "desktop" | "tablet" | "mobile";
   screensZoom: number;
   screensShowInspector: boolean;
-  screensLinkMode: boolean;
+  screensDarkPreview: boolean;
+  screensPreviewPort: number;
 
   // Components panel
   componentsDevice: "desktop" | "tablet" | "mobile";
@@ -86,7 +87,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   screensDevice: "desktop",
   screensZoom: 1,
   screensShowInspector: false,
-  screensLinkMode: false,
+  screensDarkPreview: false,
+  screensPreviewPort: 5175,
 
   componentsDevice: "desktop",
   componentsDarkPreview: false,

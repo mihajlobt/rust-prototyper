@@ -136,6 +136,7 @@ CODE RULES:
 - TypeScript types for all props and state. Never use \`any\`. For icon props: React.ComponentType<{ size?: number; className?: string }>
 - Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
 - Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies.
+- DARK MODE: never manage dark mode yourself. Do NOT use an isDark state, do NOT add a className="dark" wrapper, do NOT render a theme toggle button. The outer App already applies the .dark class to <html> — your component inherits it automatically.
 - Keep it compact — the component must fit within 400px width.
 
 GENERATE ONE FOCUSED COMPONENT (not a full-page layout):
@@ -163,6 +164,7 @@ CODE RULES:
 - TypeScript types for all props and state. Never use \`any\`.
 - Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
 - Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies.
+- DARK MODE: never manage dark mode yourself. Do NOT use an isDark state, do NOT add a className="dark" wrapper, do NOT render a theme toggle button. The outer App already applies the .dark class to <html> — your component inherits it automatically.
 - Prefer shadcn components over raw HTML elements. Use <Button> not <button>, <Card> not a <div> with card styles, etc.
 - Keep it compact — the component must fit within 400px width.
 
@@ -193,7 +195,8 @@ CODE RULES:
 - Keep all existing hooks, state, and handlers intact.
 - Apply ONLY the requested changes.
 - TypeScript types throughout. Never use \`any\`.
-- Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.`;
+- Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.
+- DARK MODE: never manage dark mode yourself. Do NOT use an isDark state, do NOT add a className="dark" wrapper, do NOT render a theme toggle button. The outer App already applies the .dark class to <html> — your component inherits it automatically.`;
 
 export const COMPONENT_UPDATE_PROMPT_SHADCN = `You are an expert React/TypeScript developer updating a focused UI component using shadcn/ui.
 
@@ -213,7 +216,8 @@ CODE RULES:
 - Apply ONLY the requested changes.
 - Preserve any existing shadcn imports — do not remove them.
 - TypeScript types throughout. Never use \`any\`.
-- Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.`;
+- Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.
+- DARK MODE: never manage dark mode yourself. Do NOT use an isDark state, do NOT add a className="dark" wrapper, do NOT render a theme toggle button. The outer App already applies the .dark class to <html> — your component inherits it automatically.`;
 
 export function getComponentUpdatePrompt(iconLibrary: IconLibrary, currentCode?: string, shadcnMode?: boolean, customBase?: string): string {
   const base = customBase ?? (shadcnMode ? COMPONENT_UPDATE_PROMPT_SHADCN : COMPONENT_UPDATE_PROMPT_BASE);
