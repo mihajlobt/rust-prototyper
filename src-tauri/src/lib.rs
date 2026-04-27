@@ -190,6 +190,74 @@ async fn run_shell_command(cwd: String, command: String, app: AppHandle) -> Resu
     spawn_bun_command(&app, &parts[0], args, cwd.to_string_lossy().to_string())
 }
 
+/// Runs a whitelisted shell command synchronously — awaits process termination,
+/// streams terminal-output events, and returns an error if the exit code is non-zero.
+async fn spawn_bun_command_sync(
+    app: &AppHandle,
+    cmd: &str,
+    args: Vec<String>,
+    cwd: String,
+) -> Result<(), AppError> {
+    let (mut rx, child) = app
+        .shell()
+        .command(cmd)
+        .args(&args)
+        .current_dir(&cwd)
+        .spawn()
+        .map_err(|e| AppError::Process(e.to_string()))?;
+
+    let pid = child.pid();
+    app.state::<AppState>().active_processes.lock().unwrap().insert(pid, child);
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(buf) => {
+                let line = String::from_utf8_lossy(&buf).to_string();
+                let _ = app.emit("terminal-output", serde_json::json!({ "pid": pid, "line": line, "source": "stdout" }));
+            }
+            CommandEvent::Stderr(buf) => {
+                let line = String::from_utf8_lossy(&buf).to_string();
+                let _ = app.emit("terminal-output", serde_json::json!({ "pid": pid, "line": line, "source": "stderr" }));
+            }
+            CommandEvent::Terminated(payload) => {
+                app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
+                return match payload.code {
+                    Some(0) | None => Ok(()),
+                    Some(code) => Err(AppError::Process(format!("Process exited with code {code}"))),
+                };
+            }
+            CommandEvent::Error(e) => {
+                app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
+                return Err(AppError::Process(format!("Process error: {e}")));
+            }
+            _ => {}
+        }
+    }
+
+    app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
+    Ok(())
+}
+
+#[tauri::command]
+async fn run_shell_command_sync(cwd: String, command: String, app: AppHandle) -> Result<(), AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    let parts = shlex::split(&command).ok_or_else(|| AppError::Process("Invalid shell syntax".into()))?;
+    if parts.is_empty() {
+        return Err(AppError::Process("Empty command".into()));
+    }
+    if !ALLOWED_SHELL_COMMANDS.contains(&parts[0].as_str()) {
+        return Err(AppError::Security(format!("Command '{}' not allowed", parts[0])));
+    }
+    let args = parts.iter().skip(1).map(|s| s.to_string()).collect();
+    spawn_bun_command_sync(&app, &parts[0], args, cwd.to_string_lossy().to_string()).await
+}
+
+#[tauri::command]
+async fn bun_install_sync(cwd: String, app: AppHandle) -> Result<(), AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    spawn_bun_command_sync(&app, "bun", vec!["install".into()], cwd.to_string_lossy().to_string()).await
+}
+
 #[tauri::command]
 async fn kill_process(pid: u32, state: State<'_, AppState>) -> Result<(), AppError> {
     let mut processes = state.active_processes.lock().unwrap();
@@ -1438,7 +1506,7 @@ pub fn run() {
             http_client,
         })
         .invoke_handler(tauri::generate_handler![
-            bun_dev, bun_build, bun_install, run_shell_command, kill_process, kill_all_processes, kill_port,
+            bun_dev, bun_build, bun_install, bun_install_sync, run_shell_command, run_shell_command_sync, kill_process, kill_all_processes, kill_port,
             read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file, reveal_in_explorer,
             http_request,
             generate_completion, generate_completion_stream, list_ollama_models,

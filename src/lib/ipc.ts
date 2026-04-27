@@ -20,6 +20,16 @@ export async function runShellCommand(cwd: string, command: string): Promise<num
   return invoke("run_shell_command", { cwd, command });
 }
 
+/** Runs a command synchronously — awaits process termination and throws if exit code is non-zero. */
+export async function runShellCommandSync(cwd: string, command: string): Promise<void> {
+  return invoke("run_shell_command_sync", { cwd, command });
+}
+
+/** Runs `bun install` and awaits completion. */
+export async function bunInstallSync(cwd: string): Promise<void> {
+  return invoke("bun_install_sync", { cwd });
+}
+
 export async function killProcess(pid: number): Promise<void> {
   return invoke("kill_process", { pid });
 }

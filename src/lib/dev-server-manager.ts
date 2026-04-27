@@ -26,16 +26,16 @@ export interface DevServerState {
 
 // ─── Internal State ───────────────────────────────────────────────────────────
 
+type UrlWaiter = { resolve: (url: string) => void; reject: (e: Error) => void };
+
 let previewPid: number | null = null;
 let runnerPid: number | null = null;
 let previewUnlisten: UnlistenFn | null = null;
 let runnerUnlisten: UnlistenFn | null = null;
 
-/** Resolve functions for URL capture promises */
-let previewUrlResolve: ((url: string) => void) | null = null;
-let runnerUrlResolve: ((url: string) => void) | null = null;
-let previewUrlReject: ((error: Error) => void) | null = null;
-let runnerUrlReject: ((error: Error) => void) | null = null;
+/** All callers waiting for the URL while status is "starting" */
+let previewUrlWaiters: UrlWaiter[] = [];
+let runnerUrlWaiters: UrlWaiter[] = [];
 
 /** Timeout handles so we can clear them */
 let previewTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
@@ -84,11 +84,10 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
       return state.previewUrl;
     }
 
-    // If starting, wait for the existing promise to resolve
+    // If starting, queue as a waiter — the primary starter will settle us
     if (state.previewStatus === "starting") {
       return new Promise<string>((resolve, reject) => {
-        previewUrlResolve = resolve;
-        previewUrlReject = reject;
+        previewUrlWaiters.push({ resolve, reject });
       });
     }
 
@@ -97,21 +96,37 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
 
     const targetPort = port ?? DEFAULT_PREVIEW_PORT;
 
-    // Subscribe to terminal output to capture the URL
+    const settlePreviewWaiters = (url: string) => {
+      for (const w of previewUrlWaiters) w.resolve(url);
+      previewUrlWaiters = [];
+    };
+    const rejectPreviewWaiters = (e: Error) => {
+      for (const w of previewUrlWaiters) w.reject(e);
+      previewUrlWaiters = [];
+    };
+
+    // Start dev server first so we have the PID before subscribing
+    let pid: number;
+    try {
+      pid = await bunDev(componentPreviewDir, targetPort);
+      previewPid = pid;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set({ previewStatus: "error", previewError: message });
+      rejectPreviewWaiters(new Error(message));
+      throw error;
+    }
+
+    // Subscribe filtered to this server's PID so runner output is ignored
     let urlCaptured = false;
     previewUnlisten = await onTerminalOutput((event: TerminalOutputEvent) => {
-      if (urlCaptured) return;
+      if (event.pid !== previewPid || urlCaptured) return;
 
       const url = extractLocalUrl(event.line);
       if (url) {
         urlCaptured = true;
         set({ previewStatus: "running", previewUrl: url, previewError: null });
-        if (previewUrlResolve) {
-          previewUrlResolve(url);
-          previewUrlResolve = null;
-          previewUrlReject = null;
-        }
-        // Clear timeout — we got the URL
+        settlePreviewWaiters(url);
         if (previewTimeoutHandle) {
           clearTimeout(previewTimeoutHandle);
           previewTimeoutHandle = null;
@@ -119,35 +134,16 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
       }
     });
 
-    // Start dev server
-    try {
-      const pid = await bunDev(componentPreviewDir, targetPort);
-      previewPid = pid;
+    return new Promise<string>((resolve, reject) => {
+      previewUrlWaiters.push({ resolve, reject });
 
-      // Set a timeout — if URL isn't captured within timeout, reject
-      return new Promise<string>((resolve, reject) => {
-        previewUrlResolve = resolve;
-        previewUrlReject = reject;
-
-        previewTimeoutHandle = setTimeout(() => {
-          set({ previewStatus: "error", previewError: `Dev server started (PID ${pid}) but URL was not captured within ${URL_CAPTURE_TIMEOUT_MS / 1000}s` });
-          if (previewUrlReject) {
-            previewUrlReject(new Error(`Preview dev server URL capture timed out after ${URL_CAPTURE_TIMEOUT_MS / 1000}s`));
-            previewUrlResolve = null;
-            previewUrlReject = null;
-          }
-          previewTimeoutHandle = null;
-        }, URL_CAPTURE_TIMEOUT_MS);
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      set({ previewStatus: "error", previewError: message });
-      if (previewUnlisten) {
-        previewUnlisten();
-        previewUnlisten = null;
-      }
-      throw error;
-    }
+      previewTimeoutHandle = setTimeout(() => {
+        const err = new Error(`Preview dev server URL capture timed out after ${URL_CAPTURE_TIMEOUT_MS / 1000}s`);
+        set({ previewStatus: "error", previewError: `Dev server started (PID ${pid}) but URL was not captured within ${URL_CAPTURE_TIMEOUT_MS / 1000}s` });
+        rejectPreviewWaiters(err);
+        previewTimeoutHandle = null;
+      }, URL_CAPTURE_TIMEOUT_MS);
+    });
   },
 
   // ── startRunner ───────────────────────────────────────────────────────────
@@ -160,11 +156,10 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
       return state.runnerUrl;
     }
 
-    // If starting, wait for the existing promise to resolve
+    // If starting, queue as a waiter — the primary starter will settle us
     if (state.runnerStatus === "starting") {
       return new Promise<string>((resolve, reject) => {
-        runnerUrlResolve = resolve;
-        runnerUrlReject = reject;
+        runnerUrlWaiters.push({ resolve, reject });
       });
     }
 
@@ -173,21 +168,37 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
 
     const targetPort = port ?? DEFAULT_RUNNER_PORT;
 
-    // Subscribe to terminal output to capture the URL
+    const settleRunnerWaiters = (url: string) => {
+      for (const w of runnerUrlWaiters) w.resolve(url);
+      runnerUrlWaiters = [];
+    };
+    const rejectRunnerWaiters = (e: Error) => {
+      for (const w of runnerUrlWaiters) w.reject(e);
+      runnerUrlWaiters = [];
+    };
+
+    // Start dev server first so we have the PID before subscribing
+    let pid: number;
+    try {
+      pid = await bunDev(generatedDir, targetPort);
+      runnerPid = pid;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set({ runnerStatus: "error", runnerError: message });
+      rejectRunnerWaiters(new Error(message));
+      throw error;
+    }
+
+    // Subscribe filtered to this server's PID so preview output is ignored
     let urlCaptured = false;
     runnerUnlisten = await onTerminalOutput((event: TerminalOutputEvent) => {
-      if (urlCaptured) return;
+      if (event.pid !== runnerPid || urlCaptured) return;
 
       const url = extractLocalUrl(event.line);
       if (url) {
         urlCaptured = true;
         set({ runnerStatus: "running", runnerUrl: url, runnerError: null });
-        if (runnerUrlResolve) {
-          runnerUrlResolve(url);
-          runnerUrlResolve = null;
-          runnerUrlReject = null;
-        }
-        // Clear timeout — we got the URL
+        settleRunnerWaiters(url);
         if (runnerTimeoutHandle) {
           clearTimeout(runnerTimeoutHandle);
           runnerTimeoutHandle = null;
@@ -195,35 +206,16 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
       }
     });
 
-    // Start dev server
-    try {
-      const pid = await bunDev(generatedDir, targetPort);
-      runnerPid = pid;
+    return new Promise<string>((resolve, reject) => {
+      runnerUrlWaiters.push({ resolve, reject });
 
-      // Set a timeout — if URL isn't captured within timeout, reject
-      return new Promise<string>((resolve, reject) => {
-        runnerUrlResolve = resolve;
-        runnerUrlReject = reject;
-
-        runnerTimeoutHandle = setTimeout(() => {
-          set({ runnerStatus: "error", runnerError: `Dev server started (PID ${pid}) but URL was not captured within ${URL_CAPTURE_TIMEOUT_MS / 1000}s` });
-          if (runnerUrlReject) {
-            runnerUrlReject(new Error(`Runner dev server URL capture timed out after ${URL_CAPTURE_TIMEOUT_MS / 1000}s`));
-            runnerUrlResolve = null;
-            runnerUrlReject = null;
-          }
-          runnerTimeoutHandle = null;
-        }, URL_CAPTURE_TIMEOUT_MS);
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      set({ runnerStatus: "error", runnerError: message });
-      if (runnerUnlisten) {
-        runnerUnlisten();
-        runnerUnlisten = null;
-      }
-      throw error;
-    }
+      runnerTimeoutHandle = setTimeout(() => {
+        const err = new Error(`Runner dev server URL capture timed out after ${URL_CAPTURE_TIMEOUT_MS / 1000}s`);
+        set({ runnerStatus: "error", runnerError: `Dev server started (PID ${pid}) but URL was not captured within ${URL_CAPTURE_TIMEOUT_MS / 1000}s` });
+        rejectRunnerWaiters(err);
+        runnerTimeoutHandle = null;
+      }, URL_CAPTURE_TIMEOUT_MS);
+    });
   },
 
   // ── stopPreview ───────────────────────────────────────────────────────────
@@ -247,12 +239,10 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
       previewPid = null;
     }
 
-    // Reject any pending promise
-    if (previewUrlReject) {
-      previewUrlReject(new Error("Preview dev server was stopped before URL was captured"));
-      previewUrlResolve = null;
-      previewUrlReject = null;
-    }
+    // Reject all callers waiting for the URL
+    const stopped = new Error("Preview dev server was stopped before URL was captured");
+    for (const w of previewUrlWaiters) w.reject(stopped);
+    previewUrlWaiters = [];
 
     set({ previewStatus: "idle", previewUrl: null, previewError: null });
   },
@@ -278,12 +268,10 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
       runnerPid = null;
     }
 
-    // Reject any pending promise
-    if (runnerUrlReject) {
-      runnerUrlReject(new Error("Runner dev server was stopped before URL was captured"));
-      runnerUrlResolve = null;
-      runnerUrlReject = null;
-    }
+    // Reject all callers waiting for the URL
+    const stopped = new Error("Runner dev server was stopped before URL was captured");
+    for (const w of runnerUrlWaiters) w.reject(stopped);
+    runnerUrlWaiters = [];
 
     set({ runnerStatus: "idle", runnerUrl: null, runnerError: null });
   },

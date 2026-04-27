@@ -70,6 +70,9 @@ export function ComponentsPanel() {
     : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + themeCssSection;
   const systemContent = defaultSystem;
 
+  // Reset scaffold guard whenever the active project changes
+  useEffect(() => { scaffoldAttemptedRef.current = false; }, [settings.project]);
+
   // ─── Ensure dev server is running ──────────────────────────────────────────
 
   useEffect(() => {

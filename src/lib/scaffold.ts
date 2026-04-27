@@ -1,4 +1,4 @@
-import { readFile, writeFile, createDir, bunInstall, runShellCommand, deleteDir } from "@/lib/ipc";
+import { readFile, writeFile, createDir, bunInstallSync, runShellCommandSync, deleteDir } from "@/lib/ipc";
 import { ICON_LIBRARY_PACKAGES } from "@/lib/prompts";
 import type { IconLibrary } from "@/lib/prompts";
 import {
@@ -42,20 +42,11 @@ async function isScaffoldValid(dir: string): Promise<boolean> {
   }
 }
 
-/**
- * Poll until a file exists or timeout is reached.
- */
-async function waitForFile(path: string, timeoutMs = 30000, intervalMs = 500): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      await readFile(path);
-      return;
-    } catch {
-      await new Promise((r) => setTimeout(r, intervalMs));
-    }
+/** Validates that a directory name segment is safe to interpolate into a shell command. */
+function assertSafeDirName(name: string): void {
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    throw new Error(`Invalid project directory name: "${name}"`);
   }
-  throw new Error(`Timeout waiting for ${path} to appear after ${timeoutMs}ms`);
 }
 
 /**
@@ -74,28 +65,22 @@ async function removeProjectDir(dir: string): Promise<void> {
  * Scaffold a React + TypeScript + Vite project with shadcn/ui
  * in the generated/ directory.
  *
- * Follows shadcn Vite docs: shadcn init creates the entire project,
- * then we add our files on top.
- *
  * Flow:
  * 1. Save user's Generated.tsx if it exists.
  * 2. Remove the target directory so shadcn can create it fresh.
- * 3. Run `shadcn init -t vite --yes --name generated`
- *    in the parent directory (creates generated/ subdirectory).
- * 4. Wait for shadcn to finish (check for package.json + components.json).
- * 5. Add all shadcn components via `shadcn add --all`.
- * 6. Install dependencies after adding components.
- * 7. Write our App.tsx and preview-theme.css.
- * 8. Restore Generated.tsx.
- * 9. Add icon library if selected.
+ * 3. Run `shadcn init -t vite --yes --name generated` (awaits completion).
+ * 4. Add all shadcn components via `shadcn add --all` (awaits completion).
+ * 5. Write our App.tsx and preview-theme.css.
+ * 6. Restore Generated.tsx.
+ * 7. Add icon library if selected.
  */
 export async function scaffoldGenerated(
   generatedDir: string,
   iconLibrary: IconLibrary
 ): Promise<void> {
-  // The parent directory (e.g. "projects/abc")
   const projectDir = generatedDir.substring(0, generatedDir.lastIndexOf("/"));
   const dirName = generatedDir.substring(generatedDir.lastIndexOf("/") + 1);
+  assertSafeDirName(dirName);
 
   // Step 1: Save user's Generated.tsx if it exists
   let savedGenerated = "";
@@ -107,31 +92,22 @@ export async function scaffoldGenerated(
 
   // Step 2: Remove the target directory so shadcn can create it fresh
   await removeProjectDir(generatedDir);
-  // Ensure parent directory exists
   await createDir(projectDir);
 
-  // Step 3: Run shadcn init — creates the entire Vite + shadcn project
-  await runShellCommand(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
+  // Step 3: Run shadcn init — awaits completion
+  await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
-  // Step 4: Wait for shadcn to finish creating the project
-  await waitForFile(`${generatedDir}/${P.PACKAGE_JSON}`, 60000);
-  await waitForFile(`${generatedDir}/${P.COMPONENTS_JSON}`, 60000);
+  // Step 4: Add all shadcn components — awaits completion (shadcn add runs bun install internally)
+  await runShellCommandSync(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 5: Add all shadcn components
-  await runShellCommand(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
-
-  // Step 6: Install dependencies after adding components
-  await bunInstall(generatedDir);
-  await waitForFile(`${generatedDir}/${P.VITE_PKG}`);
-
-  // Step 7: Write our App.tsx (overwrites shadcn's placeholder)
+  // Step 5: Write our App.tsx (overwrites shadcn's placeholder)
   await writeFile(`${generatedDir}/${SRC.APP_TSX}`, getAppTsx());
 
-  // Step 8: Write preview-theme.css (runtime theme overlay)
+  // Step 6: Write preview-theme.css (runtime theme overlay)
   await createDir(`${generatedDir}/${SRC.STYLES_DIR}`);
   await writeFile(`${generatedDir}/${SRC.PREVIEW_THEME_CSS}`, getPreviewThemeCss());
 
-  // Step 9: Restore or create Generated.tsx
+  // Step 7: Restore or create Generated.tsx
   await createDir(`${generatedDir}/${SRC.COMPONENTS_DIR}`);
   if (savedGenerated) {
     await writeFile(`${generatedDir}/${SRC.GENERATED_TSX}`, savedGenerated);
@@ -139,7 +115,7 @@ export async function scaffoldGenerated(
     await writeFile(`${generatedDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
   }
 
-  // Step 10: Add icon library if selected
+  // Step 8: Add icon library if selected
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg) {
     const pkgPath = `${generatedDir}/${P.PACKAGE_JSON}`;
@@ -149,8 +125,7 @@ export async function scaffoldGenerated(
     deps[iconPkg] = "latest";
     pkg.dependencies = deps;
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
-    await bunInstall(generatedDir);
-    await waitForFile(`${generatedDir}/${P.VITE_PKG}`);
+    await bunInstallSync(generatedDir);
   }
 }
 
@@ -158,28 +133,22 @@ export async function scaffoldGenerated(
  * Scaffold a React + TypeScript + Vite project with shadcn/ui
  * in the component-preview/ directory.
  *
- * Follows shadcn Vite docs: shadcn init creates the entire project,
- * then we add our files on top.
- *
  * Flow:
  * 1. Save user's Generated.tsx if it exists.
  * 2. Remove the target directory so shadcn can create it fresh.
- * 3. Run `shadcn init -t vite --yes --name component-preview`
- *    in the parent directory (creates component-preview/ subdirectory).
- * 4. Wait for shadcn to finish (check for package.json + components.json).
- * 5. Add all shadcn components via `shadcn add --all`.
- * 6. Install dependencies after adding components.
- * 7. Write our App.tsx and preview-theme.css.
- * 8. Restore Generated.tsx.
- * 9. Add icon library if selected.
+ * 3. Run `shadcn init -t vite --yes --name component-preview` (awaits completion).
+ * 4. Add all shadcn components via `shadcn add --all` (awaits completion).
+ * 5. Write our App.tsx and preview-theme.css.
+ * 6. Restore Generated.tsx.
+ * 7. Add icon library if selected.
  */
 export async function scaffoldComponentPreview(
   componentPreviewDir: string,
   iconLibrary: IconLibrary
 ): Promise<void> {
-  // The parent directory (e.g. "projects/abc")
   const projectDir = componentPreviewDir.substring(0, componentPreviewDir.lastIndexOf("/"));
   const dirName = componentPreviewDir.substring(componentPreviewDir.lastIndexOf("/") + 1);
+  assertSafeDirName(dirName);
 
   // Step 1: Save user's Generated.tsx if it exists
   let savedGenerated = "";
@@ -191,45 +160,30 @@ export async function scaffoldComponentPreview(
 
   // Step 2: Remove the target directory so shadcn can create it fresh
   await removeProjectDir(componentPreviewDir);
-  // Ensure parent directory exists
   await createDir(projectDir);
 
-  // Step 3: Run shadcn init — creates the entire Vite + shadcn project
-  await runShellCommand(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
+  // Step 3: Run shadcn init — awaits completion
+  await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
-  // Step 4: Wait for shadcn to finish creating the project
-  await waitForFile(`${componentPreviewDir}/${P.PACKAGE_JSON}`, 60000);
-  await waitForFile(`${componentPreviewDir}/${P.COMPONENTS_JSON}`, 60000);
+  // Step 4: Add all shadcn components — awaits completion (shadcn add runs bun install internally)
+  await runShellCommandSync(componentPreviewDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 5: Add all shadcn components
-  await runShellCommand(componentPreviewDir, `${SHADCN_ADD_COMMAND} --cwd .`);
-
-  // Step 6: Install dependencies after adding components
-  await bunInstall(componentPreviewDir);
-  await waitForFile(`${componentPreviewDir}/${P.VITE_PKG}`);
-
-  // Step 7: Write our App.tsx (overwrites shadcn's placeholder)
+  // Step 5: Write our App.tsx (overwrites shadcn's placeholder)
   await writeFile(`${componentPreviewDir}/${SRC.APP_TSX}`, getAppTsx());
 
-  // Step 8: Write preview-theme.css (runtime theme overlay)
+  // Step 6: Write preview-theme.css (runtime theme overlay)
   await createDir(`${componentPreviewDir}/${SRC.STYLES_DIR}`);
-  await writeFile(
-    `${componentPreviewDir}/${SRC.PREVIEW_THEME_CSS}`,
-    getPreviewThemeCss()
-  );
+  await writeFile(`${componentPreviewDir}/${SRC.PREVIEW_THEME_CSS}`, getPreviewThemeCss());
 
-  // Step 9: Restore or create Generated.tsx
+  // Step 7: Restore or create Generated.tsx
   await createDir(`${componentPreviewDir}/${SRC.COMPONENTS_DIR}`);
   if (savedGenerated) {
     await writeFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`, savedGenerated);
   } else {
-    await writeFile(
-      `${componentPreviewDir}/${SRC.GENERATED_TSX}`,
-      getGeneratedPlaceholderTsx()
-    );
+    await writeFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
   }
 
-  // Step 10: Add icon library if selected
+  // Step 8: Add icon library if selected
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg) {
     const pkgPath = `${componentPreviewDir}/${P.PACKAGE_JSON}`;
@@ -239,8 +193,7 @@ export async function scaffoldComponentPreview(
     deps[iconPkg] = "latest";
     pkg.dependencies = deps;
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
-    await bunInstall(componentPreviewDir);
-    await waitForFile(`${componentPreviewDir}/${P.VITE_PKG}`);
+    await bunInstallSync(componentPreviewDir);
   }
 }
 
