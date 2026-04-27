@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -223,7 +223,7 @@ export function SidebarRail() {
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => setShowNewDialog(true)}>
-            New…
+            <Plus size={12} className="mr-2" />New…
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={refreshAll}>

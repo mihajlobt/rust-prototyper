@@ -13,6 +13,7 @@ import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import {
   Folder, FolderOpen, FileCode, File, FileText, ChevronRight, ChevronDown, RefreshCw,
   Workflow, Globe, Palette, Layout, Box,
+  Plus, Copy, Star, Pencil, Trash2, ExternalLink,
 } from "lucide-react";
 
 /** All sections in order */
@@ -269,11 +270,11 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
                 <ContextMenuContent>
                   {section && (
                     <ContextMenuItem onClick={() => onNewItem(SECTION_NEW_TYPE[section])}>
-                      New {SECTION_NEW_TYPE[section]}…
+                      <Plus size={12} className="mr-2" />New {SECTION_NEW_TYPE[section]}…
                     </ContextMenuItem>
                   )}
                   <ContextMenuItem onClick={onRefresh}>
-                    <RefreshCw size={12} className="mr-2" /> Refresh
+                    <RefreshCw size={12} className="mr-2" />Refresh
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>
@@ -311,28 +312,28 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
               <ContextMenuContent>
                 {section && (
                   <ContextMenuItem onClick={() => onSelectAsset(section, itemData.name)}>
-                    Open
+                    <ExternalLink size={12} className="mr-2" />Open
                   </ContextMenuItem>
                 )}
                 {assetType !== null && (
                   <ContextMenuItem onClick={() => onDuplicate(section!, itemData.name)}>
-                    Duplicate
+                    <Copy size={12} className="mr-2" />Duplicate
                   </ContextMenuItem>
                 )}
                 {section === "themes" && (
                   <ContextMenuItem onClick={() => onSetDefaultTheme(itemData.name)}>
-                    Set as default theme
+                    <Star size={12} className="mr-2" />Set as default theme
                   </ContextMenuItem>
                 )}
                 <ContextMenuSeparator />
                 {section && (
                   <ContextMenuItem onClick={() => onRename(section, itemData.name)}>
-                    Rename…
+                    <Pencil size={12} className="mr-2" />Rename…
                   </ContextMenuItem>
                 )}
                 {section && (
                   <ContextMenuItem className="text-destructive" onClick={() => onDelete(section, itemData.name)}>
-                    Delete
+                    <Trash2 size={12} className="mr-2" />Delete
                   </ContextMenuItem>
                 )}
               </ContextMenuContent>
