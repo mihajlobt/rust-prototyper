@@ -29,7 +29,7 @@ export function ScreensPanel() {
   const screensZoom = ps.screensZoom;
   const screensDarkPreview = ps.screensDarkPreview;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
-  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3);
+  const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3, [true, true, screensShowInspector]);
   const [code, setCode] = useState("");
 
   const [themeCss, setThemeCss] = useState("");
