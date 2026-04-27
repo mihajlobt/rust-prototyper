@@ -34,6 +34,10 @@ export function useAllotmentLayout(key: string, paneCount?: number) {
   const onDragEnd = useCallback(
     (sizes: number[]) => {
       if (paneCount !== undefined && sizes.length !== paneCount) return;
+      // Skip saving when any pane is hidden (visible={false} → size 0).
+      // Saving zeros would corrupt defaultSizes: on next mount the pane would
+      // open at 0px, hit its minSize, and steal space from neighbours — visible jump.
+      if (sizes.some((s) => s === 0)) return;
       setSettings({
         layout: { ...settings.layout, [key]: sizes },
       });
