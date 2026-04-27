@@ -190,9 +190,20 @@ export async function hasComponentPreviewScaffold(projectDir: string): Promise<b
 }
 
 /**
- * Check if the generated/ directory has a valid shadcn scaffold.
+ * Check if the generated/ directory has a valid Runner scaffold.
+ * Also rejects projects where App.tsx still uses the old Generated.tsx wrapper
+ * (written by a previous version of the scaffold code) — those must re-scaffold.
  */
 export async function hasGeneratedScaffold(projectDir: string): Promise<boolean> {
-  return isScaffoldValid(getGeneratedDirPath(projectDir));
+  const dir = getGeneratedDirPath(projectDir);
+  if (!(await isScaffoldValid(dir))) return false;
+  try {
+    const appTsx = await readFile(`${dir}/${P.SRC.APP_TSX}`);
+    // Old pattern: our code wrote an App.tsx that wraps ./components/Generated
+    if (appTsx.includes("./components/Generated")) return false;
+  } catch {
+    return false;
+  }
+  return true;
 }
 
