@@ -497,7 +497,7 @@ export function ComponentsPanel() {
                     <SelectTrigger className="h-6 text-xs w-[90px]">
                       <SelectValue placeholder="Theme…" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" side="bottom">
                       {themes.map((t) => (
                         <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
                       ))}

@@ -160,7 +160,7 @@ export function SettingsModal() {
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" side="bottom">
                         <SelectGroup>
                           <SelectLabel className="text-xs text-muted-foreground">Dark</SelectLabel>
                           {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => dark).map(([key, { label }]) => (
@@ -351,7 +351,7 @@ export function SettingsModal() {
                           <SelectValue placeholder="Select icon library" />
                         </div>
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" side="bottom">
                         <SelectItem value="lucide" className="text-xs">lucide-react (React components)</SelectItem>
                         <SelectItem value="tabler" className="text-xs">Tabler Icons (CSS font)</SelectItem>
                         <SelectItem value="fontawesome" className="text-xs">Font Awesome (CSS font)</SelectItem>

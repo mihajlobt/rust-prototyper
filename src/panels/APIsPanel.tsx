@@ -505,7 +505,7 @@ export function APIsPanel() {
                       <SelectTrigger className="w-[100px]">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" side="bottom">
                         {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
                           <SelectItem key={m} value={m}>
                             {m}
@@ -566,7 +566,7 @@ export function APIsPanel() {
                         <SelectTrigger className="w-[120px]">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" side="bottom">
                           <SelectItem value="none">None</SelectItem>
                           <SelectItem value="bearer">Bearer</SelectItem>
                           <SelectItem value="apikey">API Key</SelectItem>

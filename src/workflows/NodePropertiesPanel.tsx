@@ -100,7 +100,13 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
         {data.nodeType === "fileop" && (<>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Operation</label>
-            <Input value={data.operation || "read"} onChange={(e) => set({ operation: e.target.value })} className="h-7 text-xs" placeholder="read or write" />
+            <Select value={data.operation || "read"} onValueChange={(v) => set({ operation: v })}>
+              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent position="popper" side="bottom">
+                <SelectItem value="read" className="text-xs">Read</SelectItem>
+                <SelectItem value="write" className="text-xs">Write</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Path</label>
@@ -117,7 +123,14 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
         {data.nodeType === "auth" && (<>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Scheme</label>
-            <Input value={data.authScheme || "bearer"} onChange={(e) => set({ authScheme: e.target.value })} className="h-7 text-xs" placeholder="bearer / apikey / basic" />
+            <Select value={data.authScheme || "bearer"} onValueChange={(v) => set({ authScheme: v })}>
+              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent position="popper" side="bottom">
+                <SelectItem value="bearer" className="text-xs">Bearer</SelectItem>
+                <SelectItem value="apikey" className="text-xs">API Key</SelectItem>
+                <SelectItem value="basic" className="text-xs">Basic</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Token / Key</label>

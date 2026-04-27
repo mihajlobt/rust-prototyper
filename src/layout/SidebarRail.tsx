@@ -231,7 +231,7 @@ export function SidebarRail() {
           <div className="space-y-3">
             <Select value={newItemType} onValueChange={setNewItemType}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" side="bottom">
                 <SelectItem value="screen">Screen</SelectItem>
                 <SelectItem value="component">Component</SelectItem>
                 <SelectItem value="theme">Theme</SelectItem>
