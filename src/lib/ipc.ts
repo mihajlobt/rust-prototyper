@@ -188,6 +188,21 @@ export async function generateCompletion(
   return invoke("generate_completion", { model, messages, host, apiKey, provider: providerForIpc(provider) });
 }
 
+export interface OllamaModelOptions {
+  temperature?: number;
+  topK?: number;
+  topP?: number;
+  numCtx?: number;
+  numPredict?: number;
+  repeatPenalty?: number;
+  repeatLastN?: number;
+  seed?: number;
+  mirostat?: number;
+  mirostatTau?: number;
+  mirostatEta?: number;
+  tfsZ?: number;
+}
+
 /** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel */
 export async function generateCompletionStream(
   model: string,
@@ -197,7 +212,8 @@ export async function generateCompletionStream(
   onEvent: Channel<CompletionEvent>,
   think?: boolean,
   outputPath?: string,
-  provider: Provider = "ollama-local"
+  provider: Provider = "ollama-local",
+  options?: OllamaModelOptions
 ): Promise<void> {
   return invoke("generate_completion_stream", {
     request: {
@@ -208,6 +224,7 @@ export async function generateCompletionStream(
       provider: providerForIpc(provider),
       think: think ?? null,
       outputPath: outputPath ?? null,
+      options: options ?? null,
     },
     onEvent,
   });

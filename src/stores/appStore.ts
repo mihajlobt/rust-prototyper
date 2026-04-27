@@ -6,6 +6,22 @@ const SETTINGS_KEY = "settings.json";
 
 export type Provider = "ollama-local" | "ollama-cloud" | "openai" | "claude";
 
+/** Ollama generation options — all fields optional; omitted fields use Ollama's defaults. */
+export interface OllamaModelOptions {
+  temperature?: number;
+  topK?: number;
+  topP?: number;
+  numCtx?: number;
+  numPredict?: number;
+  repeatPenalty?: number;
+  repeatLastN?: number;
+  seed?: number;
+  mirostat?: number;
+  mirostatTau?: number;
+  mirostatEta?: number;
+  tfsZ?: number;
+}
+
 export interface Settings {
   modelId: string;
   project: string;
@@ -22,6 +38,7 @@ export interface Settings {
   amoled: boolean;
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
   layout: Record<string, number[]>;
+  modelOptions: OllamaModelOptions;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +57,7 @@ const DEFAULT_SETTINGS: Settings = {
   amoled: false,
   iconLibrary: "lucide",
   layout: {},
+  modelOptions: {},
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

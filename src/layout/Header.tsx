@@ -13,6 +13,7 @@ import { SettingsModal } from "@/modals/SettingsModal";
 import { ProjectManagerModal } from "@/modals/ProjectManagerModal";
 import { ExportModal } from "@/modals/ExportModal";
 import { ModelPicker } from "@/components/ModelPicker";
+import { ModelOptionsPopover } from "@/components/ModelOptionsPopover";
 import { Button } from "@/components/ui/button";
 
 const tabs = [
@@ -83,6 +84,7 @@ export function Header({ activeView, onViewChange, sidebarOpen, onToggleSidebar 
         host={settings.host}
         ollamaApiKey={settings.apiKeys["ollama"] ?? ""}
       />
+      <ModelOptionsPopover />
       <SettingsModal />
     </header>
   );

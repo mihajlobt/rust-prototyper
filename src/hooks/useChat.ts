@@ -219,11 +219,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       }
     }
 
+    const isOllama = (provider as Provider).startsWith("ollama")
     try {
       await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
+        isOllama ? settings.modelOptions : undefined,
       )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)
@@ -349,11 +351,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       }
     }
 
+    const isOllama = (provider as Provider).startsWith("ollama")
     try {
       await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
+        isOllama ? settings.modelOptions : undefined,
       )
     } catch (e) {
       useChatStore.getState().setStreaming(entityId, false)

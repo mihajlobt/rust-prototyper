@@ -19,6 +19,7 @@ use ollama_rs::{
         images::Image,
         parameters::ThinkType,
     },
+    models::ModelOptions,
 };
 
 struct AppState {
@@ -481,6 +482,23 @@ struct Message {
     images: Vec<String>,
 }
 
+#[derive(serde::Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct OllamaOptions {
+    temperature: Option<f32>,
+    top_k: Option<u32>,
+    top_p: Option<f32>,
+    num_ctx: Option<u64>,
+    num_predict: Option<i32>,
+    repeat_penalty: Option<f32>,
+    repeat_last_n: Option<i32>,
+    seed: Option<i32>,
+    mirostat: Option<u8>,
+    mirostat_tau: Option<f32>,
+    mirostat_eta: Option<f32>,
+    tfs_z: Option<f32>,
+}
+
 #[derive(serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CompletionRequest {
@@ -491,6 +509,7 @@ struct CompletionRequest {
     provider: String,
     think: Option<bool>,
     output_path: Option<String>,
+    options: Option<OllamaOptions>,
 }
 
 #[derive(serde::Deserialize)]
@@ -615,6 +634,22 @@ async fn generate_ollama_completion_stream(
         let mut chat_request = ChatMessageRequest::new(request.model.clone(), ollama_messages);
         if let Some(true) = request.think {
             chat_request = chat_request.think(ThinkType::True);
+        }
+        if let Some(opts) = &request.options {
+            let mut model_opts = ModelOptions::default();
+            if let Some(v) = opts.temperature    { model_opts = model_opts.temperature(v); }
+            if let Some(v) = opts.top_k          { model_opts = model_opts.top_k(v); }
+            if let Some(v) = opts.top_p          { model_opts = model_opts.top_p(v); }
+            if let Some(v) = opts.num_ctx        { model_opts = model_opts.num_ctx(v); }
+            if let Some(v) = opts.num_predict    { model_opts = model_opts.num_predict(v); }
+            if let Some(v) = opts.repeat_penalty { model_opts = model_opts.repeat_penalty(v); }
+            if let Some(v) = opts.repeat_last_n  { model_opts = model_opts.repeat_last_n(v); }
+            if let Some(v) = opts.seed           { model_opts = model_opts.seed(v); }
+            if let Some(v) = opts.mirostat       { model_opts = model_opts.mirostat(v); }
+            if let Some(v) = opts.mirostat_tau   { model_opts = model_opts.mirostat_tau(v); }
+            if let Some(v) = opts.mirostat_eta   { model_opts = model_opts.mirostat_eta(v); }
+            if let Some(v) = opts.tfs_z          { model_opts = model_opts.tfs_z(v); }
+            chat_request = chat_request.options(model_opts);
         }
 
         let mut stream = ollama
