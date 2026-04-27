@@ -116,9 +116,15 @@ export function RunnerPanel() {
   useEffect(() => { loadFiles(); }, [loadFiles]);
   useEffect(() => { if (fileTreeNonce > 0) loadFiles(); }, [fileTreeNonce, loadFiles]);
 
+  const runningRef = useRef(running);
+  useEffect(() => { runningRef.current = running; }, [running]);
+
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       setTerminalLines((prev) => [...prev, { line: event.line, source: event.source }]);
+      if (runningRef.current && iframeRef.current && /updated|hmr/i.test(event.line)) {
+        iframeRef.current.contentWindow?.location.reload();
+      }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
   }, []);
@@ -149,33 +155,33 @@ export function RunnerPanel() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleSaveFile]);
 
-  useEffect(() => {
-    const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
-      if (running && iframeRef.current && (event.line.includes("updated") || event.line.includes("hmr") || event.line.includes("HMR"))) {
-        iframeRef.current.contentWindow?.location.reload();
-      }
-    });
-    return () => { unlistenPromise.then((fn) => fn()); };
-  }, [running]);
+
+  const projectDir = `projects/${settings.project}`;
+
+  const ensureScaffold = async (): Promise<boolean> => {
+    // hasGeneratedScaffold expects the project dir (it appends /generated internally)
+    const scaffolded = await hasGeneratedScaffold(projectDir);
+    if (scaffolded) return true;
+    const ok = await confirm("The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?");
+    if (!ok) return false;
+    setTerminalLines((prev) => [...prev, { line: "> scaffolding vite project...", source: "stdout" }]);
+    try {
+      await scaffoldGenerated(generatedDir, settings.iconLibrary);
+      await loadFiles();
+      notify.success("Scaffold complete", "Vite + React project created in generated/");
+      return true;
+    } catch (e) {
+      notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+      return false;
+    }
+  };
 
   const handleRun = async () => {
     if (running) {
       try { devServerStore.stopRunner(); } catch (e) { notify.error("Failed to stop dev server", e instanceof Error ? e.message : String(e)); }
       return;
     }
-
-    const scaffolded = await hasGeneratedScaffold(generatedDir);
-    if (!scaffolded) {
-      const ok = await confirm("The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?");
-      if (!ok) return;
-      setTerminalLines((prev) => [...prev, { line: "> scaffolding vite project...", source: "stdout" }]);
-      try {
-        await scaffoldGenerated(generatedDir, settings.iconLibrary);
-        await loadFiles();
-        notify.success("Scaffold complete", "Vite + React project created in generated/");
-      } catch (e) { notify.error("Scaffold failed", e instanceof Error ? e.message : String(e)); return; }
-    }
-
+    if (!(await ensureScaffold())) return;
     setTerminalLines((prev) => [...prev, { line: "> starting dev server...", source: "stdout" }]);
     try {
       await devServerStore.startRunner(generatedDir, runnerPort);
@@ -183,17 +189,7 @@ export function RunnerPanel() {
   };
 
   const handleBuild = async () => {
-    const scaffolded = await hasGeneratedScaffold(generatedDir);
-    if (!scaffolded) {
-      const ok = await confirm("The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?");
-      if (!ok) return;
-      setTerminalLines((prev) => [...prev, { line: "> scaffolding vite project...", source: "stdout" }]);
-      try {
-        await scaffoldGenerated(generatedDir, settings.iconLibrary);
-        await loadFiles();
-        notify.success("Scaffold complete", "Vite + React project created in generated/");
-      } catch (e) { notify.error("Scaffold failed", e instanceof Error ? e.message : String(e)); return; }
-    }
+    if (!(await ensureScaffold())) return;
     setTerminalLines((prev) => [...prev, { line: "> bun build", source: "stdout" }]);
     try { await bunBuild(generatedDir); } catch (e) { notify.error("Build failed", e instanceof Error ? e.message : String(e)); }
   };
@@ -341,7 +337,7 @@ export function RunnerPanel() {
                 </div>
               </div>
               {files.length === 0 && <div className="text-xs text-muted-foreground px-1">No files yet</div>}
-              <FileTree entries={files} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={handleSelectFile} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={handleNewFileInDir} onNewFolder={startNewFolder} onCollapse={(path) => { expandedDirs.delete(path); setExpandedDirs(new Set(expandedDirs)); }} onReveal={(path) => revealInExplorer(path)} depth={0} />
+              <FileTree entries={files} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={handleSelectFile} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={handleNewFileInDir} onNewFolder={startNewFolder} onCollapse={(path) => { expandedDirs.delete(path); setExpandedDirs(new Set(expandedDirs)); }} onReveal={(path) => revealInExplorer(path)} depth={0} nonce={fileTreeNonce} />
             </div>
           </Allotment.Pane>
 
@@ -541,9 +537,10 @@ interface FileTreeProps {
   onCollapse: (path: string) => void;
   onReveal: (path: string) => void;
   depth: number;
+  nonce: number;
 }
 
-function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, onReveal, depth }: FileTreeProps) {
+function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, onReveal, depth, nonce }: FileTreeProps) {
   return (
     <>
       {entries.map((file) => (
@@ -570,7 +567,7 @@ function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFi
               <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => onDeleteEntry(file.path, file.is_dir)}>Delete</ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
-          {file.is_dir && expandedDirs.has(file.path) && (<AsyncDirChildren path={file.path} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={onToggleDir} onSelectFile={onSelectFile} onDeleteEntry={onDeleteEntry} onRename={onRename} onNewFile={onNewFile} onNewFolder={onNewFolder} onCollapse={onCollapse} onReveal={onReveal} depth={depth + 1} />)}
+          {file.is_dir && expandedDirs.has(file.path) && (<AsyncDirChildren path={file.path} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={onToggleDir} onSelectFile={onSelectFile} onDeleteEntry={onDeleteEntry} onRename={onRename} onNewFile={onNewFile} onNewFolder={onNewFolder} onCollapse={onCollapse} onReveal={onReveal} depth={depth + 1} nonce={nonce} />)}
         </div>
       ))}
     </>
@@ -579,6 +576,13 @@ function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFi
 
 function AsyncDirChildren(props: Omit<FileTreeProps, "entries"> & { path: string }) {
   const [children, setChildren] = useState<FileEntry[]>([]);
-  useEffect(() => { let cancelled = false; (async () => { try { const entries = await readDir(props.path); if (!cancelled) setChildren(entries); } catch { if (!cancelled) setChildren([]); } })(); return () => { cancelled = true; }; }, [props.path]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try { const entries = await readDir(props.path); if (!cancelled) setChildren(entries); }
+      catch { if (!cancelled) setChildren([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [props.path, props.nonce]);
   return <FileTree entries={children} {...props} />;
 }
