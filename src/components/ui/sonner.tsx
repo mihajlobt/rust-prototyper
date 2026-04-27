@@ -18,6 +18,7 @@ function Toaster(props: ToasterProps) {
       position="top-right"
       offset={{ top: 56, right: 16 }}
       visibleToasts={5}
+      expand
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,
