@@ -59,12 +59,53 @@ export const SHADCN_INIT_COMMAND: string =
  * Sets dark class on documentElement so body { bg-background } picks up the
  * dark CSS variables. Reads initial state from ?dark= query param (sync, before
  * React mounts) and listens for set-dark postMessage for live toggling.
+ *
+ * Includes a class-based error boundary around <Generated /> that catches
+ * render and commit-phase errors (e.g. React 19 frozen-props TypeError from
+ * malformed AI-generated code) and displays a styled fallback with a retry
+ * button, keeping the dark-mode shell and message listener intact.
  */
 export function getPreviewAppTsx(cssImports: string[]): string {
   const imports = cssImports.map((p) => `import "${p}"`).join("\n");
   return `import React from "react"
 ${imports}
 import Generated from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
+
+class PreviewErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error, info) {
+    console.error("[PreviewErrorBoundary]", error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const msg = this.state.error?.message || "An unexpected error occurred"
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          height: "100%", width: "100%", padding: "24px", gap: "8px", textAlign: "center",
+        }}>
+          <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--destructive, #ef4444)" }}>Preview Error</p>
+          <p style={{ fontSize: "11px", color: "var(--muted-foreground, #888)", maxWidth: "100%", lineHeight: 1.4, wordBreak: "break-word" }}>{msg}</p>
+          <button style={{
+            marginTop: "4px", padding: "4px 12px", fontSize: "11px", fontWeight: 500,
+            border: "1px solid var(--border, #333)", borderRadius: "6px",
+            background: "transparent", color: "var(--foreground, #eee)", cursor: "pointer",
+          }} onClick={() => this.setState({ hasError: false, error: null })}>Retry</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function App() {
   const [dark, setDark] = React.useState(() => {
@@ -85,7 +126,11 @@ function App() {
     return () => window.removeEventListener("message", handler)
   }, [])
 
-  return <Generated />
+  return (
+    <PreviewErrorBoundary>
+      <Generated />
+    </PreviewErrorBoundary>
+  )
 }
 
 export default App
