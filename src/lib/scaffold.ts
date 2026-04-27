@@ -76,7 +76,8 @@ async function removeProjectDir(dir: string): Promise<void> {
  */
 export async function scaffoldGenerated(
   generatedDir: string,
-  iconLibrary: IconLibrary
+  iconLibrary: IconLibrary,
+  onStep?: (msg: string) => void
 ): Promise<void> {
   const projectDir = generatedDir.substring(0, generatedDir.lastIndexOf("/"));
   const dirName = generatedDir.substring(generatedDir.lastIndexOf("/") + 1);
@@ -91,23 +92,27 @@ export async function scaffoldGenerated(
   }
 
   // Step 2: Remove the target directory so shadcn can create it fresh
+  onStep?.(`> removing ${dirName}/`);
   await removeProjectDir(generatedDir);
   await createDir(projectDir);
 
-  // Step 3: Run shadcn init — awaits completion
+  // Step 3: shadcn init — creates the Vite project and installs base deps
+  onStep?.(`> bunx shadcn init -t vite -b radix --name ${dirName}`);
   await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
-  // Step 4: Add all shadcn components — awaits completion (shadcn add runs bun install internally)
+  // Step 4: Add all shadcn components and install their deps
+  onStep?.(`> bunx shadcn add --all`);
   await runShellCommandSync(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 5: Write our App.tsx (overwrites shadcn's placeholder)
+  // Step 7: Write our App.tsx (overwrites shadcn's placeholder)
+  onStep?.(`> writing App.tsx, preview-theme.css, Generated.tsx`);
   await writeFile(`${generatedDir}/${SRC.APP_TSX}`, getAppTsx());
 
-  // Step 6: Write preview-theme.css (runtime theme overlay)
+  // Step 8: Write preview-theme.css (runtime theme overlay)
   await createDir(`${generatedDir}/${SRC.STYLES_DIR}`);
   await writeFile(`${generatedDir}/${SRC.PREVIEW_THEME_CSS}`, getPreviewThemeCss());
 
-  // Step 7: Restore or create Generated.tsx
+  // Step 9: Restore or create Generated.tsx
   await createDir(`${generatedDir}/${SRC.COMPONENTS_DIR}`);
   if (savedGenerated) {
     await writeFile(`${generatedDir}/${SRC.GENERATED_TSX}`, savedGenerated);
@@ -115,9 +120,12 @@ export async function scaffoldGenerated(
     await writeFile(`${generatedDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
   }
 
-  // Step 8: Add icon library if selected
+  // Step 10: Add non-lucide icon library. lucide-react is already a shadcn
+  // dependency — installing it again races with shadcn add's bun install and
+  // causes cache conflicts, so we skip it here.
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
-  if (iconPkg) {
+  if (iconPkg && iconLibrary !== "lucide") {
+    onStep?.(`> bun add ${iconPkg}`);
     const pkgPath = `${generatedDir}/${P.PACKAGE_JSON}`;
     const pkgRaw = await readFile(pkgPath);
     const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
@@ -162,10 +170,10 @@ export async function scaffoldComponentPreview(
   await removeProjectDir(componentPreviewDir);
   await createDir(projectDir);
 
-  // Step 3: Run shadcn init — awaits completion
+  // Step 3: shadcn init — creates the Vite project and installs base deps
   await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
-  // Step 4: Add all shadcn components — awaits completion (shadcn add runs bun install internally)
+  // Step 4: Add all shadcn components and install their deps
   await runShellCommandSync(componentPreviewDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
   // Step 5: Write our App.tsx (overwrites shadcn's placeholder)
@@ -183,9 +191,10 @@ export async function scaffoldComponentPreview(
     await writeFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
   }
 
-  // Step 8: Add icon library if selected
+  // Step 8: Add non-lucide icon library. lucide-react is already a shadcn
+  // dependency — skip it to avoid racing with shadcn add's bun install.
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
-  if (iconPkg) {
+  if (iconPkg && iconLibrary !== "lucide") {
     const pkgPath = `${componentPreviewDir}/${P.PACKAGE_JSON}`;
     const pkgRaw = await readFile(pkgPath);
     const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;

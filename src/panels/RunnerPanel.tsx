@@ -170,10 +170,11 @@ export function RunnerPanel() {
     setTerminalLines((prev) => [
       ...prev,
       { line: "─────────────────────────────────", source: "stdout" },
-      { line: "> scaffolding Vite + React + shadcn/ui project…", source: "stdout" },
     ]);
+    const onStep = (msg: string) =>
+      setTerminalLines((prev) => [...prev, { line: msg, source: "stdout" }]);
     try {
-      await scaffoldGenerated(generatedDir, settings.iconLibrary);
+      await scaffoldGenerated(generatedDir, settings.iconLibrary, onStep);
       await loadFiles();
       setTerminalLines((prev) => [...prev, { line: "✓ scaffold complete", source: "stdout" }]);
       notify.success("Scaffold complete", "Vite + React + shadcn/ui project created in generated/");
