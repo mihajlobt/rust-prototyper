@@ -1,16 +1,20 @@
-<!-- Context: project-intelligence/nav | Priority: high | Version: 1.0 | Updated: 2025-01-12 -->
+<!-- Context: project-intelligence/nav | Priority: high | Version: 2.0 | Updated: 2026-04-27 -->
 
-# Project Intelligence
+# Project Intelligence — Prototyper
 
-> Start here for quick project understanding. These files bridge business and technical domains.
+> Start here for quick project understanding. Domain-specific files for this Tauri v2 desktop app.
 
 ## Structure
 
 ```
 .opencode/context/project-intelligence/
 ├── navigation.md              # This file - quick overview
-├── business-domain.md         # Business context and problem statement
-├── technical-domain.md        # Stack, architecture, technical decisions
+├── domain.md                  # Architecture, directories, IPC, data model
+├── processes.md               # How to run, build, test, common pitfalls
+├── standards.md               # All coding standards from CLAUDE.md
+├── templates.md               # Code templates: WorkflowNodeType, CSS vars, React Flow, Allotment
+├── business-domain.md         # Business context and problem statement (generic template)
+├── technical-domain.md        # Generic technical domain template
 ├── business-tech-bridge.md    # How business needs map to solutions
 ├── decisions-log.md           # Major decisions with rationale
 └── living-notes.md            # Active issues, debt, open questions
@@ -20,12 +24,14 @@
 
 | What You Need | File | Description |
 |---------------|------|-------------|
+| Understand the app | **`domain.md`** | Architecture, directories, IPC, Rust commands, data model |
+| How to develop | **`processes.md`** | Run, build, test, common pitfalls |
+| Coding rules | **`standards.md`** | ALL standards from CLAUDE.md (tailwind, types, React Flow, Allotment…) |
+| Code patterns | **`templates.md`** | WorkflowNodeType, CSS vars, React Flow theming, AI streaming, Allotment |
 | Understand the "why" | `business-domain.md` | Problem, users, value proposition |
-| Understand the "how" | `technical-domain.md` | Stack, architecture, integrations |
-| See the connection | `business-tech-bridge.md` | Business → technical mapping |
-| Know the context | `decisions-log.md` | Why decisions were made |
+| Understand the "how" | `technical-domain.md` | Stack, architecture, integrations (generic template) |
+| Decision context | `decisions-log.md` | Why decisions were made |
 | Current state | `living-notes.md` | Active issues and open questions |
-| All of the above | Read all files in order | Full project intelligence |
 
 ## Usage
 

@@ -445,7 +445,7 @@ export function SettingsModal() {
               Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
               Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
             </p>
-            {(["Components", "Screens", "Themes"] as PromptGroup[]).map((group) => {
+            {(["Components", "Screens", "Themes", "Workflows"] as PromptGroup[]).map((group) => {
               const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
               return (
                 <div key={group} className="mb-5">

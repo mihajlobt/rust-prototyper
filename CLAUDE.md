@@ -134,6 +134,17 @@ bunx tsc --noEmit    # type-check
 
 ## Coding Rules
 
+## CRITICAL — MAX 500-600 LINES PER FILE
+- **NEVER write a file that exceeds 500-600 lines of code.** This is a hard limit, not a guideline.
+- If a file approaches this limit, split it immediately using one of these approaches:
+  1. **Extract a module** — move related functions/types to a new file in the same directory and re-export from the original.
+  2. **Extract a sub-component** — move a self-contained UI section into its own component file.
+  3. **Extract a custom hook** — move stateful logic into a `use*.ts` hook file.
+- A file that exceeds 600 lines is a maintainability hazard: it hides bugs, makes diffs noisy, discourages refactoring, and makes code review painful.
+- The limit applies to ALL files: components, hooks, utilities, stores, types, styles.
+- When splitting, prefer domain-based groupings (e.g., `prompts/screens.ts`, `prompts/workflows.ts`) over arbitrary line-count splits.
+- **Re-export from barrel files** so that import paths don't change for consumers.
+
 ## CRITICAL — CONSULT DOCS FOR EVERY STEP
 - **CONSULT Context7 OR OFFICIAL DOCS for EVERY file you edit and EVERY library/API you use.**
 - Your training data may be outdated. Always verify current API signatures, patterns, and best practices before making changes.
