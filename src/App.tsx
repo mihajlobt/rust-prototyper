@@ -12,7 +12,7 @@ import { LibraryPanel } from "./panels/LibraryPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
 import { useAppStore } from "./stores/appStore";
 import { useProjectSettingsStore } from "./stores/projectSettingsStore";
-import { ToastProvider } from "./components/ToastProvider";
+import { Toaster } from "./components/ui/sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { setupGlobalErrorHandlers } from "./lib/notifications";
 import { useAllotmentLayout } from "./hooks/useAllotmentLayout";
@@ -57,7 +57,7 @@ export default function App() {
 
   return (
     <>
-      <ToastProvider />
+      <Toaster />
       <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
         <Header
           activeView={ps.activeView}
