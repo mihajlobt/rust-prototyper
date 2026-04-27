@@ -101,20 +101,21 @@ export const SCREEN_NEW_PROMPT_BASE = `You are an expert React/TypeScript develo
 
 ${TOOL_USAGE_SECTION}
 
-GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
-- React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
-- Lucide icons: any icon from lucide-react (Home, User, Settings, Search, Mail, Bell, Star, Menu, X, Check, Plus, Trash2, Edit, ChevronRight, ArrowLeft, etc.) — use them directly, e.g. <Bell size={20} />
+IMPORTS — this runs in a real Vite project, all imports are required:
+- ALWAYS import every React hook you use: import { useState, useEffect, ... } from 'react'
+- ALWAYS import every lucide icon you use: import { Bell, Star, Menu, ... } from 'lucide-react'
+- Every identifier used in JSX or code must be imported — missing imports cause ReferenceErrors at runtime.
 
 CODE RULES:
-- NO import statements of any kind — they will break the runtime.
-- NO export keyword — just: function App() { ... }
+- The function MUST be the default export: export default function App() { ... }
 - TypeScript types for all props and state. Never use \`any\`.
 - DESIGN FOR ALL SCREEN SIZES — responsive at 375px, 768px, and 1280px.
 - Mobile-first Tailwind: use sm:, md:, lg: prefixes for layout changes.
 - Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
 - Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies correctly.
 - Generate realistic content — real names, real data, no "Lorem ipsum".
-- Do NOT wrap in HTML, DOCTYPE, html, head, or body tags.`;
+- Do NOT wrap in HTML, DOCTYPE, html, head, or body tags.
+- DARK MODE: never manage dark mode yourself. Do NOT use an isDark state, do NOT add a className="dark" wrapper, do NOT render a theme toggle button. The outer App already applies the .dark class to <html> — your screen inherits it automatically.`;
 
 export function getScreenNewPrompt(iconLibrary: IconLibrary, customBase?: string): string {
   return `${customBase ?? SCREEN_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
@@ -232,13 +233,15 @@ export const SCREEN_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript dev
 ${TOOL_USAGE_SECTION}
 
 CODE RULES:
-- Output the COMPLETE updated function — do NOT patch or diff.
-- NO import statements. NO export keyword. Function must be named App.
+- Output the COMPLETE updated file — do NOT patch or diff.
+- Preserve ALL existing imports and add any new ones required. Every identifier used must be imported.
+- The function MUST remain the default export: export default function App() { ... }
 - Preserve ALL existing functionality and responsive design unless asked to change it.
 - Keep all existing hooks, state, and handlers intact.
 - Apply ONLY the requested changes.
 - TypeScript types throughout. Never use \`any\`.
-- Use CSS variables for colors, not hardcoded hex/rgb values.`;
+- Use CSS variables for colors, not hardcoded hex/rgb values.
+- DARK MODE: never manage dark mode yourself. Do NOT use an isDark state, do NOT add a className="dark" wrapper, do NOT render a theme toggle button. The outer App already applies the .dark class to <html> — your screen inherits it automatically.`;
 
 export function getScreenUpdatePrompt(iconLibrary: IconLibrary, currentCode?: string, customBase?: string): string {
   const codeSection = currentCode
