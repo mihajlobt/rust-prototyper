@@ -129,8 +129,8 @@ export function RunnerPanel() {
       xtermRef.current?.writeln(event.line);
       logLinesRef.current = [...logLinesRef.current, { line: event.line, source: event.source }];
       setLogTick((t) => t + 1);
-      if (runningRef.current && iframeRef.current && /updated|hmr/i.test(event.line)) {
-        iframeRef.current.contentWindow?.location.reload();
+      if (runningRef.current && iframeRef.current && devUrl && /updated|hmr/i.test(event.line)) {
+        iframeRef.current.src = devUrl;
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
@@ -287,7 +287,9 @@ export function RunnerPanel() {
     } catch (e) { notify.error("Kill all failed", e instanceof Error ? e.message : String(e)); }
   };
 
-  const handleRefreshPreview = () => { iframeRef.current?.contentWindow?.location.reload(); };
+  const handleRefreshPreview = () => {
+    if (iframeRef.current && devUrl) iframeRef.current.src = devUrl;
+  };
 
   const zoomIn = () => setPs({ runnerZoom: Math.min(runnerZoom + 0.1, 2) });
   const zoomOut = () => setPs({ runnerZoom: Math.max(runnerZoom - 0.1, 0.3) });

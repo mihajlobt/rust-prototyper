@@ -282,59 +282,59 @@ async fn kill_all_processes(state: State<'_, AppState>) -> Result<(), AppError> 
 async fn kill_port(ports: Vec<u16>) -> Result<(), AppError> {
     tokio::task::spawn_blocking(move || {
         for port in ports {
-            #[cfg(unix)]
-            {
-                // -s TCP:LISTEN restricts to the listening server only —
-                // without it, lsof also returns client PIDs (e.g. the Tauri
-                // WebView holding an iframe connection), which would kill the app.
-                let output = std::process::Command::new("lsof")
-                    .args(["-t", &format!("-i:{}", port), "-s", "TCP:LISTEN"])
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::null())
-                    .output();
-
-                if let Ok(out) = output {
-                    let pids = String::from_utf8_lossy(&out.stdout);
-                    for pid in pids.lines() {
-                        let pid = pid.trim();
-                        if pid.is_empty() {
-                            continue;
-                        }
-                        let _ = std::process::Command::new("kill")
-                            .args(["-9", pid])
-                            .stdout(std::process::Stdio::null())
-                            .stderr(std::process::Stdio::null())
-                            .output();
-                    }
-                }
-            }
-
-            #[cfg(windows)]
-            {
-                let output = std::process::Command::new("cmd")
-                    .args(["/C", &format!("netstat -ano | findstr :{}", port)])
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::null())
-                    .output();
-
-                if let Ok(out) = output {
-                    let text = String::from_utf8_lossy(&out.stdout);
-                    for line in text.lines() {
-                        let parts: Vec<&str> = line.split_whitespace().collect();
-                        if let Some(pid) = parts.last() {
-                            let _ = std::process::Command::new("taskkill")
-                                .args(["/PID", pid, "/F"])
-                                .stdout(std::process::Stdio::null())
-                                .stderr(std::process::Stdio::null())
-                                .output();
-                        }
-                    }
-                }
-            }
+            kill_port_impl(port);
         }
     }).await.map_err(|e| AppError::Process(format!("spawn_blocking error: {e}")))?;
 
     Ok(())
+}
+
+/// Unix: use lsof with -s TCP:LISTEN so only the server PID is returned,
+/// not client PIDs (e.g. the Tauri WebView's open iframe connection).
+#[cfg(unix)]
+fn kill_port_impl(port: u16) {
+    let output = std::process::Command::new("lsof")
+        .args(["-t", &format!("-i:{}", port), "-s", "TCP:LISTEN"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output();
+
+    if let Ok(out) = output {
+        let pids = String::from_utf8_lossy(&out.stdout);
+        for pid in pids.lines() {
+            let pid = pid.trim();
+            if pid.is_empty() { continue; }
+            let _ = std::process::Command::new("kill")
+                .args(["-9", pid])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output();
+        }
+    }
+}
+
+/// Windows: find PID via netstat then taskkill.
+#[cfg(windows)]
+fn kill_port_impl(port: u16) {
+    let output = std::process::Command::new("cmd")
+        .args(["/C", &format!("netstat -ano | findstr :{}", port)])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output();
+
+    if let Ok(out) = output {
+        let text = String::from_utf8_lossy(&out.stdout);
+        for line in text.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(pid) = parts.last() {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/PID", pid, "/F"])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .output();
+            }
+        }
+    }
 }
 
 // ─── File System ───
