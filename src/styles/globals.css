@@ -325,7 +325,7 @@
 }
 .wf-accent-bar {
   height: 2px;
-  border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+  border-radius: 1px;
 }
 
 /* ─── Loader keyframes (prompt-kit) ─── */

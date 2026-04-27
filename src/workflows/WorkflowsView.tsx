@@ -130,13 +130,11 @@ function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       className="bg-card rounded-lg shadow-md relative cursor-pointer"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
     >
-      {/* Color accent bar */}
-      <div className="wf-accent-bar" style={{ background: d.color }} />
-
       <Handle type="target" position={Position.Left}  className="wf-handle" style={{ borderColor }} />
       <Handle type="source" position={Position.Right} className="wf-handle" style={{ borderColor }} />
 
       <div className="px-3 pt-1.5 pb-2">
+        <div className="wf-accent-bar mb-1.5" style={{ background: d.color }} />
         <div className="flex items-center gap-1.5">
           <Icon size={12} className="shrink-0" style={{ color: d.color }} />
           <span className="text-[11px] font-semibold truncate leading-tight flex-1">{d.label}</span>
