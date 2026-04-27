@@ -24,6 +24,7 @@ import {
   Save,
   FolderPlus,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -84,6 +85,7 @@ export function RunnerPanel() {
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileParentDir, setNewFileParentDir] = useState<string>(generatedDir);
+  const [isScaffolding, setIsScaffolding] = useState(false);
   const [shellCommand, setShellCommand] = useState("");
   const [showShellInput, setShowShellInput] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ path: string; name: string } | null>(null);
@@ -159,20 +161,28 @@ export function RunnerPanel() {
   const projectDir = `projects/${settings.project}`;
 
   const ensureScaffold = async (): Promise<boolean> => {
-    // hasGeneratedScaffold expects the project dir (it appends /generated internally)
+    // hasGeneratedScaffold expects the project dir (appends /generated internally)
     const scaffolded = await hasGeneratedScaffold(projectDir);
     if (scaffolded) return true;
-    const ok = await confirm("The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?");
+    const ok = await confirm("The generated/ folder needs a Vite + React + shadcn/ui project. Create one now?");
     if (!ok) return false;
-    setTerminalLines((prev) => [...prev, { line: "> scaffolding vite project...", source: "stdout" }]);
+    setIsScaffolding(true);
+    setTerminalLines((prev) => [
+      ...prev,
+      { line: "─────────────────────────────────", source: "stdout" },
+      { line: "> scaffolding Vite + React + shadcn/ui project…", source: "stdout" },
+    ]);
     try {
       await scaffoldGenerated(generatedDir, settings.iconLibrary);
       await loadFiles();
-      notify.success("Scaffold complete", "Vite + React project created in generated/");
+      setTerminalLines((prev) => [...prev, { line: "✓ scaffold complete", source: "stdout" }]);
+      notify.success("Scaffold complete", "Vite + React + shadcn/ui project created in generated/");
       return true;
     } catch (e) {
       notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
       return false;
+    } finally {
+      setIsScaffolding(false);
     }
   };
 
@@ -291,11 +301,11 @@ export function RunnerPanel() {
     <div className="h-full flex flex-col">
       {/* Toolbar */}
       <div className="panel-toolbar h-9 px-2 gap-1 bg-card">
-        <Button variant={running ? "destructive" : "default"} size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleRun}>
-          {running ? <Square size={10} /> : <Play size={10} />}
-          {running ? "Stop" : "Run"}
+        <Button variant={running ? "destructive" : "default"} size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleRun} disabled={isScaffolding}>
+          {isScaffolding ? <Loader2 size={10} className="animate-spin" /> : running ? <Square size={10} /> : <Play size={10} />}
+          {isScaffolding ? "Scaffolding…" : running ? "Stop" : "Run"}
         </Button>
-        <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleBuild}>
+        <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleBuild} disabled={isScaffolding}>
           <Wrench size={10} />Build
         </Button>
         <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleInstall}>

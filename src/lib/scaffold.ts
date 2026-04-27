@@ -206,9 +206,9 @@ export async function hasComponentPreviewScaffold(projectDir: string): Promise<b
 }
 
 /**
- * Check if the generated/ directory has a valid scaffold
- * by verifying structural files exist.
+ * Check if the generated/ directory has a valid shadcn scaffold.
  */
 export async function hasGeneratedScaffold(projectDir: string): Promise<boolean> {
   return isScaffoldValid(getGeneratedDirPath(projectDir));
 }
+
