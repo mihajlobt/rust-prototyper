@@ -24,13 +24,16 @@ import { Allotment } from "allotment";
 import {
   Play, Square, Save, Trash2, Settings, Undo2, Redo2,
   Plus, X, Copy, FolderOpen, FilePlus, RotateCw,
+  LogIn, LogOut, FileOutput, ListChecks, Palette, BookOpen, Compass,
+  Layout, Paintbrush, MousePointerClick, GitBranch, Merge,
+  Terminal, Globe, Lock, Wand2, ShieldCheck, Eye, Package, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   generateCompletionStream, getApiKeyForProvider, getHostForProvider, httpRequest, runShellCommand,
-  readFile, writeFile, saveWorkflow, loadWorkflow, listWorkflows, bunDev,
+  readFile, writeFile, createDir, saveWorkflow, loadWorkflow, listWorkflows, bunDev,
   type FileEntry, type CompletionEvent, type Message, type Provider,
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
@@ -42,35 +45,40 @@ import Frame from "react-frame-component";
 
 // ─── Node type definitions ─────────────────────────────────────────────────
 
+import type { LucideIcon } from "lucide-react";
+
 interface NodeTypeDef {
   type: string;
   label: string;
   desc: string;
   category: string;
   color: string;
+  icon: LucideIcon;
 }
 
 const BUILTIN_NODE_TYPES: NodeTypeDef[] = [
-  { type: "input",        label: "Input",         desc: "Start of workflow",       category: "IO",          color: "#3b82f6" },
-  { type: "output",       label: "Output",        desc: "End of workflow",         category: "IO",          color: "#3b82f6" },
-  { type: "requirements", label: "Requirements",  desc: "Parse requirements",      category: "Analysis",    color: "#8b5cf6" },
-  { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      category: "Analysis",    color: "#f472b6" },
-  { type: "reference",    label: "Reference",     desc: "Analyze components",      category: "Analysis",    color: "#8b5cf6" },
-  { type: "architect",    label: "Architect",     desc: "Plan structure",          category: "Planning",    color: "#10b981" },
-  { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       category: "Generation",  color: "#f59e0b" },
-  { type: "style",        label: "Style",         desc: "Apply CSS classes",       category: "Generation",  color: "#ec4899" },
-  { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         category: "Generation",  color: "#6366f1" },
-  { type: "parallel",     label: "Parallel",      desc: "Branch execution",        category: "Composition", color: "#f97316" },
-  { type: "composition",  label: "Composition",   desc: "Merge outputs",           category: "Composition", color: "#14b8a6" },
-  { type: "bash",         label: "Bash",          desc: "Run shell command",       category: "Utility",     color: "#64748b" },
-  { type: "fetch",        label: "Fetch",         desc: "HTTP request",            category: "Utility",     color: "#06b6d4" },
-  { type: "fileop",       label: "File Op",       desc: "Read / write files",      category: "Utility",     color: "#d946ef" },
-  { type: "auth",         label: "Auth",          desc: "Authentication header",   category: "Utility",     color: "#ef4444" },
-  { type: "transform",    label: "Transform",     desc: "Transform content via AI","category": "Utility",   color: "#a855f7" },
-  { type: "validate",     label: "Validate",      desc: "Validate code output",    category: "Utility",     color: "#22c55e" },
-  { type: "preview",      label: "Preview",       desc: "Render HTML output",      category: "Utility",     color: "#84cc16" },
-  { type: "bun",          label: "Bun",           desc: "Bun dev / build",         category: "Utility",     color: "#fbbf24" },
-  { type: "custom",       label: "Custom",        desc: "Custom AI node",          category: "Custom",      color: "#94a3b8" },
+  { type: "input",        label: "Input",         desc: "Start of workflow",       category: "IO",          color: "var(--chart-2)",  icon: LogIn },
+  { type: "output",       label: "Output",        desc: "End of workflow",         category: "IO",          color: "var(--chart-2)",  icon: LogOut },
+  { type: "writefile",    label: "Write File",    desc: "Write output to file",    category: "IO",          color: "var(--chart-4)", icon: FileOutput },
+  { type: "requirements", label: "Requirements",  desc: "Parse requirements",      category: "Analysis",    color: "var(--chart-3)",  icon: ListChecks },
+  { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      category: "Analysis",    color: "var(--chart-5)",  icon: Palette },
+  { type: "reference",    label: "Reference",     desc: "Analyze components",      category: "Analysis",    color: "var(--chart-1)", icon: BookOpen },
+  { type: "architect",    label: "Architect",     desc: "Plan structure",          category: "Planning",    color: "var(--chart-4)",  icon: Compass },
+  { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       category: "Generation",  color: "var(--chart-1)",  icon: Layout },
+  { type: "style",        label: "Style",         desc: "Apply CSS classes",       category: "Generation",  color: "var(--chart-5)",  icon: Paintbrush },
+  { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         category: "Generation",  color: "var(--destructive)", icon: MousePointerClick },
+  { type: "parallel",     label: "Parallel",      desc: "Branch execution",        category: "Composition", color: "var(--chart-1)",  icon: GitBranch },
+  { type: "composition",  label: "Composition",   desc: "Merge outputs",           category: "Composition", color: "var(--chart-2)",  icon: Merge },
+  { type: "bash",         label: "Bash",          desc: "Run shell command",       category: "Utility",     color: "var(--ring)",     icon: Terminal },
+  { type: "fetch",        label: "Fetch",         desc: "HTTP request",            category: "Utility",     color: "var(--chart-3)",  icon: Globe },
+  { type: "fileop",       label: "File Op",       desc: "Read / write files",      category: "Utility",     color: "var(--chart-4)",  icon: FolderOpen },
+  { type: "auth",         label: "Auth",          desc: "Authentication header",   category: "Utility",     color: "var(--destructive)", icon: Lock },
+  { type: "transform",    label: "Transform",     desc: "Transform content via AI","category": "Utility",    color: "var(--chart-5)",  icon: Wand2 },
+  { type: "validate",     label: "Validate",      desc: "Validate code output",    category: "Utility",     color: "var(--chart-3)",  icon: ShieldCheck },
+  { type: "preview",      label: "Preview",       desc: "Render HTML output",      category: "Utility",     color: "var(--chart-2)",  icon: Eye },
+  { type: "bun",          label: "Bun",           desc: "Bun dev / build",         category: "Utility",     color: "var(--ring)",     icon: Package },
+  { type: "runner",       label: "Runner",        desc: "Start dev server",        category: "Utility",     color: "var(--chart-1)",  icon: Play },
+  { type: "custom",       label: "Custom",        desc: "Custom AI node",          category: "Custom",      color: "var(--muted-foreground)", icon: Sparkles },
 ];
 
 const CATEGORY_ORDER = ["IO", "Analysis", "Planning", "Generation", "Composition", "Utility", "Custom"];
@@ -104,38 +112,44 @@ interface WorkflowNodeData {
 function WorkflowNode({ data, selected }: NodeProps) {
   const d = data as WorkflowNodeData;
   const borderColor =
-    d.status === "done"    ? "#22c55e" :
-    d.status === "error"   ? "#ef4444" :
-    d.status === "running" ? "#3b82f6" :
-    selected               ? "hsl(var(--primary))" :
-                             "hsl(var(--border))";
+    d.status === "done"    ? "var(--chart-2)" :
+    d.status === "error"   ? "var(--destructive)" :
+    d.status === "running" ? "var(--chart-1)" :
+    selected               ? "var(--primary)" :
+                              "var(--border)";
+
+  const def = BUILTIN_NODE_TYPES.find((t) => t.type === d.nodeType);
+  const Icon = def?.icon ?? Settings;
 
   return (
     <div
-      className="bg-card rounded-lg shadow-md relative cursor-pointer"
+      className="bg-card rounded-lg shadow-md relative cursor-pointer overflow-hidden"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
     >
       {/* Color accent bar */}
-      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-lg" style={{ background: d.color }} />
+      <div className="h-0.5" style={{ background: d.color }} />
 
       <Handle type="target" position={Position.Left}  className="!w-3 !h-3 !bg-card !border-2 hover:!bg-primary hover:!border-primary transition-colors" style={{ borderColor }} />
       <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-card !border-2 hover:!bg-primary hover:!border-primary transition-colors" style={{ borderColor }} />
 
-      <div className="px-3 pt-2.5 pb-2">
+      <div className="px-3 pt-1.5 pb-2">
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: d.color }} />
+          <Icon size={12} className="shrink-0" style={{ color: d.color }} />
           <span className="text-[11px] font-semibold truncate leading-tight flex-1">{d.label}</span>
           {d.status === "running" && (
             <span className="flex gap-0.5 shrink-0">
-              <span className="thinking-dot w-1 h-1 rounded-full bg-blue-400 inline-block" />
-              <span className="thinking-dot w-1 h-1 rounded-full bg-blue-400 inline-block" />
-              <span className="thinking-dot w-1 h-1 rounded-full bg-blue-400 inline-block" />
+              <span className="thinking-dot w-1 h-1 rounded-full inline-block" style={{ background: "var(--chart-1)" }} />
+              <span className="thinking-dot w-1 h-1 rounded-full inline-block" style={{ background: "var(--chart-1)" }} />
+              <span className="thinking-dot w-1 h-1 rounded-full inline-block" style={{ background: "var(--chart-1)" }} />
             </span>
           )}
         </div>
         <div className="text-[9px] text-muted-foreground truncate mt-0.5">
           {d.output || d.desc}
         </div>
+        {d.status === "error" && d.output && (
+          <div className="text-[9px] text-destructive truncate">{d.output.slice(0, 80)}</div>
+        )}
       </div>
     </div>
   );
@@ -168,10 +182,12 @@ function WorkflowCanvas() {
     } satisfies WorkflowNodeData,
   }), []);
 
+  const defaultColor = (type: string) => BUILTIN_NODE_TYPES.find((t) => t.type === type)?.color ?? "var(--muted-foreground)";
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([
-    { id: "n1", type: "workflow", position: { x: 60,  y: 100 }, data: { label: "User Prompt",    nodeType: "input",        color: "#3b82f6", desc: "Start of workflow", status: "idle", prompt: "Build a login form" } },
-    { id: "n2", type: "workflow", position: { x: 280, y: 100 }, data: { label: "Requirements",   nodeType: "requirements", color: "#8b5cf6", desc: "Parse requirements", status: "idle" } },
-    { id: "n3", type: "workflow", position: { x: 500, y: 100 }, data: { label: "Plan Structure", nodeType: "architect",    color: "#10b981", desc: "Plan structure",     status: "idle" } },
+    { id: "n1", type: "workflow", position: { x: 60,  y: 100 }, data: { label: "User Prompt",    nodeType: "input",        color: defaultColor("input"), desc: "Start of workflow", status: "idle", prompt: "Build a login form" } },
+    { id: "n2", type: "workflow", position: { x: 280, y: 100 }, data: { label: "Requirements",   nodeType: "requirements", color: defaultColor("requirements"), desc: "Parse requirements", status: "idle" } },
+    { id: "n3", type: "workflow", position: { x: 500, y: 100 }, data: { label: "Plan Structure", nodeType: "architect",    color: defaultColor("architect"), desc: "Plan structure",     status: "idle" } },
   ]);
 
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([
@@ -265,9 +281,10 @@ function WorkflowCanvas() {
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const raw = e.dataTransfer.getData("application/workflow-node");
-    if (!raw) return;
-    const typeDef: NodeTypeDef = JSON.parse(raw);
+    const nodeType = e.dataTransfer.getData("application/workflow-node");
+    if (!nodeType) return;
+    const typeDef = BUILTIN_NODE_TYPES.find((t) => t.type === nodeType);
+    if (!typeDef) return;
     const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     pushUndo();
     setNodes((prev) => [...prev, makeNode(typeDef, position)]);
@@ -286,11 +303,15 @@ function WorkflowCanvas() {
 
   // ── Execution engine ────────────────────────────────────────────────────
   const [running, setRunning] = useState(false);
+  const [runSummary, setRunSummary] = useState<{ total: number; done: number; errors: number; elapsed: number } | null>(null);
   const abortRef = useRef(false);
 
   const runWorkflow = async () => {
     setRunning(true);
+    setRunSummary(null);
     abortRef.current = false;
+    const generatedPath = `projects/${settings.project}/generated`;
+    const startTime = Date.now();
     const currentNodes = getNodes();
     const currentEdges = getEdges();
 
@@ -341,15 +362,29 @@ function WorkflowCanvas() {
         const streamAI = async (msgs: Message[]): Promise<string> => {
           const channel = new Channel<CompletionEvent>();
           let acc = "";
-          channel.onmessage = (msg) => { if (msg.event === "Chunk") { acc += msg.data.text; updateStatus(nodeId, { output: acc.slice(0, 500) }); } };
+          channel.onmessage = (msg) => {
+            if (msg.event === "Chunk") { acc += msg.data.text; updateStatus(nodeId, { output: acc }); }
+            if (msg.event === "Error") { throw new Error(msg.data.message); }
+          };
           await generateCompletionStream(model, msgs, host, apiKey, channel, undefined, undefined, settings.provider as Provider);
           return acc;
         };
         const ai = (sys: string, user: string) => streamAI([{ role: "system", content: sys }, { role: "user", content: user }]);
 
-        switch (d.nodeType) {
+        if (d.nodeType.startsWith("custom_")) {
+          output = await ai(d.prompt || "Process the input.", prevOut || promptBase);
+        } else switch (d.nodeType) {
           case "input":        output = promptBase; break;
           case "output":       output = prevOut; break;
+          case "writefile": {
+            const wfPath = d.path && d.path.startsWith("projects/") ? d.path : `${generatedPath}/${d.path || "output.txt"}`;
+            const wfDir = wfPath.substring(0, wfPath.lastIndexOf("/"));
+            try { await createDir(wfDir); } catch { /* dir may exist */ }
+            const wfContent = d.mode === "append" ? (await readFile(wfPath).catch(() => "") + "\n" + prevOut) : prevOut;
+            await writeFile(wfPath, wfContent);
+            output = `Wrote to ${d.path || "output.txt"}`;
+            break;
+          }
           case "requirements": output = await ai(customPrompts["workflow-requirements-system"] || "Extract and structure requirements as bullet points.", prevOut || promptBase); break;
           case "architect":    output = await ai(customPrompts["workflow-architect-system"]    || "Create a high-level architecture plan.", prevOut || promptBase); break;
           case "structure":    output = await ai(customPrompts["workflow-structure-system"]    || "Generate HTML/JSX. Output only code.", prevOut || promptBase); break;
@@ -359,15 +394,16 @@ function WorkflowCanvas() {
           case "transform":    output = await ai(customPrompts["workflow-transform-system"]    || "Transform the content per the instruction. Output only transformed content.", `Instruction: ${promptBase}\n\nContent: ${prevOut}`); break;
           case "validate":     output = await ai(customPrompts["workflow-validate-system"]     || "Validate code for errors. If valid, say 'Valid'.", prevOut || "No code to validate"); break;
           case "custom":       output = await ai(d.prompt || "Process the input.", prevOut || promptBase); break;
-          case "bash": { await runShellCommand(".", d.command || "echo hello"); output = `Ran: ${d.command}`; break; }
+          case "bash": { await runShellCommand(generatedPath, d.command || "echo hello"); output = `Ran: ${d.command}`; break; }
           case "fetch": {
             let headers: Record<string, string> = {}; try { headers = JSON.parse(d.headers || "{}"); } catch { /* invalid JSON headers */ }
             const res = await httpRequest(d.method || "GET", d.url || "https://api.github.com", headers, d.body || undefined);
             output = `Status: ${res.status}\n${res.body.slice(0, 2000)}`; break;
           }
           case "fileop": {
-            if ((d.operation || "read") === "read") output = (await readFile(d.path || "./test.txt")).slice(0, 2000);
-            else { await writeFile(d.path || "./test.txt", d.content || ""); output = `Wrote to ${d.path}`; } break;
+            const filePath = d.path && d.path.startsWith("projects/") ? d.path : `${generatedPath}/${d.path || "test.txt"}`;
+            if ((d.operation || "read") === "read") output = (await readFile(filePath)).slice(0, 2000);
+            else { await writeFile(filePath, d.content || ""); output = `Wrote to ${d.path}`; } break;
           }
           case "auth": {
             const h: Record<string, string> = {};
@@ -383,14 +419,15 @@ function WorkflowCanvas() {
             try { const css = await readFile(`projects/${settings.project}/themes/${d.prompt || "default"}/theme.css`); output = `${prevOut ? prevOut + "\n\n" : ""}/* Applied theme: ${d.prompt} */\n${css}`; }
             catch { output = `Theme not found. ${prevOut || ""}`; } break;
           }
-          case "bun": { if (d.command === "dev") { await bunDev(".", 5173); output = "Started bun dev"; } else { await runShellCommand(".", `bun ${d.command || "build"}`); output = `Ran bun ${d.command}`; } break; }
+          case "bun": { if (d.command === "dev") { await bunDev(generatedPath, 5173); output = "Started bun dev"; } else { await runShellCommand(generatedPath, `bun ${d.command || "build"}`); output = `Ran bun ${d.command}`; } break; }
+          case "runner": { const rPort = Number(d.port) || 5173; await bunDev(generatedPath, rPort); output = `Dev server running on :${rPort}`; break; }
           default: output = prevOut || `${d.label} passed through`;
         }
 
-        updateStatus(nodeId, { status: "done", output: output.slice(0, 500) });
+        updateStatus(nodeId, { status: "done", output });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        updateStatus(nodeId, { status: "error", output: msg.slice(0, 500) });
+        updateStatus(nodeId, { status: "error", output: msg });
         notify.error(`Workflow node "${d.label}" failed`, msg);
       }
     };
@@ -421,6 +458,10 @@ function WorkflowCanvas() {
       }
     }
     for (const [cid, deps] of compDeps) if (!done.has(cid) && [...deps].some((d) => done.has(d))) { await execNode(cid); done.add(cid); }
+    const finalNodes = getNodes();
+    const errorCount = finalNodes.filter((n) => (n.data as WorkflowNodeData).status === "error").length;
+    const doneCount = finalNodes.filter((n) => (n.data as WorkflowNodeData).status === "done").length;
+    setRunSummary({ total: currentNodes.length, done: doneCount, errors: errorCount, elapsed: Date.now() - startTime });
     setRunning(false);
   };
 
@@ -494,7 +535,7 @@ function WorkflowCanvas() {
 
   const handleNew = () => {
     pushUndo();
-    setNodes([{ id: "n1", type: "workflow", position: { x: 100, y: 100 }, data: { label: "Input", nodeType: "input", color: "#3b82f6", desc: "Start of workflow", status: "idle" } }]);
+    setNodes([{ id: "n1", type: "workflow", position: { x: 100, y: 100 }, data: { label: "Input", nodeType: "input", color: defaultColor("input"), desc: "Start of workflow", status: "idle" } }]);
     setEdges([]);
     setWorkflowId(`workflow-${Date.now()}`);
   };
@@ -507,7 +548,7 @@ function WorkflowCanvas() {
 
   const handleAddCustomDef = () => {
     if (!customName.trim()) return;
-    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", category: "Custom", color: "#94a3b8" }]);
+    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", category: "Custom", color: "var(--muted-foreground)", icon: Sparkles }]);
     setCustomName(""); setCustomDesc(""); setShowCustomForm(false);
   };
 
@@ -534,6 +575,14 @@ function WorkflowCanvas() {
         </Button>
       </div>
 
+      {runSummary && (
+        <div className="flex items-center gap-3 px-3 py-1.5 text-[10px] bg-muted/50 border-b border-border">
+          <span>{runSummary.done}/{runSummary.total} done</span>
+          {runSummary.errors > 0 && <span className="text-destructive">{runSummary.errors} errors</span>}
+          <span className="text-muted-foreground">{runSummary.elapsed}ms</span>
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden relative">
         <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
           {/* Palette */}
@@ -552,14 +601,14 @@ function WorkflowCanvas() {
                         <div
                           key={t.type}
                           draggable
-                          onDragStart={(e) => e.dataTransfer.setData("application/workflow-node", JSON.stringify(t))}
+                          onDragStart={(e) => e.dataTransfer.setData("application/workflow-node", t.type)}
                           onClick={() => {
                             pushUndo();
                             setNodes((prev) => [...prev, makeNode(t, { x: 100 + prev.length * 30, y: 100 + prev.length * 30 })]);
                           }}
                           className="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-grab active:cursor-grabbing transition-colors"
                         >
-                          <span className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ background: t.color }} />
+                          <t.icon size={14} className="mt-0.5 shrink-0" style={{ color: t.color }} />
                           <div className="min-w-0">
                             <div className="text-xs font-medium leading-tight">{t.label}</div>
                             <div className="text-[10px] text-muted-foreground leading-tight">{t.desc}</div>
@@ -615,7 +664,7 @@ function WorkflowCanvas() {
               <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
               <Controls />
               <MiniMap
-                nodeColor={(n) => (n.data as WorkflowNodeData).color || "#94a3b8"}
+                nodeColor={(n) => (n.data as WorkflowNodeData).color || "var(--muted-foreground)"}
                 className="!bg-card !border-border rounded-lg overflow-hidden"
                 maskColor="rgba(0,0,0,0.2)"
               />
@@ -653,6 +702,15 @@ function WorkflowCanvas() {
                 {selectedData.nodeType === "bash" && (
                   <div className="space-y-1"><label className="text-xs text-muted-foreground">Command</label><Input value={selectedData.command || ""} onChange={(e) => updateNodeData(selectedNodeId!, { command: e.target.value })} className="h-7 text-xs" placeholder="echo hello" /></div>
                 )}
+                {selectedData.nodeType === "writefile" && (<>
+                  <div className="space-y-1"><label className="text-xs text-muted-foreground">Path (relative to generated/)</label><Input value={selectedData.path || ""} onChange={(e) => updateNodeData(selectedNodeId!, { path: e.target.value })} className="h-7 text-xs" placeholder="src/App.tsx" /></div>
+                  <div className="space-y-1"><label className="text-xs text-muted-foreground">Mode</label>
+                    <select value={String(selectedData.mode ?? "overwrite")} onChange={(e) => updateNodeData(selectedNodeId!, { mode: e.target.value })} className="h-7 text-xs w-full rounded-md border border-border bg-card px-2">
+                      <option value="overwrite">Overwrite</option>
+                      <option value="append">Append</option>
+                    </select>
+                  </div>
+                </>)}
                 {selectedData.nodeType === "fetch" && (<>
                   <div className="space-y-1"><label className="text-xs text-muted-foreground">URL</label><Input value={selectedData.url || ""} onChange={(e) => updateNodeData(selectedNodeId!, { url: e.target.value })} className="h-7 text-xs" placeholder="https://api.example.com" /></div>
                   <div className="space-y-1"><label className="text-xs text-muted-foreground">Method</label><Input value={selectedData.method || "GET"} onChange={(e) => updateNodeData(selectedNodeId!, { method: e.target.value })} className="h-7 text-xs" /></div>
@@ -678,6 +736,9 @@ function WorkflowCanvas() {
                 {selectedData.nodeType === "bun" && (
                   <div className="space-y-1"><label className="text-xs text-muted-foreground">Bun Command</label><Input value={selectedData.command || "dev"} onChange={(e) => updateNodeData(selectedNodeId!, { command: e.target.value })} className="h-7 text-xs" placeholder="dev, build, install" /></div>
                 )}
+                {selectedData.nodeType === "runner" && (
+                  <div className="space-y-1"><label className="text-xs text-muted-foreground">Port</label><Input value={String(selectedData.port ?? "5173")} onChange={(e) => updateNodeData(selectedNodeId!, { port: e.target.value })} className="h-7 text-xs" placeholder="5173" /></div>
+                )}
                 {["requirements","architect","structure","style","interaction","reference","validate"].includes(selectedData.nodeType) && (
                   <div className="space-y-1"><label className="text-xs text-muted-foreground">Context Override</label><Textarea value={selectedData.prompt || ""} onChange={(e) => updateNodeData(selectedNodeId!, { prompt: e.target.value })} className="text-xs min-h-[60px] resize-none" placeholder="Override input from previous node…" /></div>
                 )}
@@ -688,10 +749,10 @@ function WorkflowCanvas() {
                 <div className="pt-2 border-t border-border">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Status</div>
                   <div className="flex items-center gap-1.5">
-                    <span className={["w-1.5 h-1.5 rounded-full", selectedData.status === "done" ? "bg-green-500" : selectedData.status === "error" ? "bg-red-500" : selectedData.status === "running" ? "bg-blue-500 animate-pulse" : "bg-muted-foreground"].join(" ")} />
+                    <span className={["w-1.5 h-1.5 rounded-full", selectedData.status === "done" ? "bg-chart-2" : selectedData.status === "error" ? "bg-destructive" : selectedData.status === "running" ? "bg-chart-1 animate-pulse" : "bg-muted-foreground"].join(" ")} />
                     <span className="text-xs capitalize">{selectedData.status || "idle"}</span>
                   </div>
-                  {selectedData.output && <div className="mt-2 text-[10px] text-muted-foreground bg-muted p-1.5 rounded break-all max-h-32 overflow-auto">{selectedData.output}</div>}
+                  {selectedData.output && <div className="mt-2 text-[10px] text-muted-foreground bg-muted p-1.5 rounded whitespace-pre-wrap font-mono overflow-y-auto flex-1 max-h-[50vh]">{selectedData.output}</div>}
                 </div>
               </div>
             ) : (
