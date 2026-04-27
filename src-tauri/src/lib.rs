@@ -284,8 +284,11 @@ async fn kill_port(ports: Vec<u16>) -> Result<(), AppError> {
         for port in ports {
             #[cfg(unix)]
             {
+                // -s TCP:LISTEN restricts to the listening server only —
+                // without it, lsof also returns client PIDs (e.g. the Tauri
+                // WebView holding an iframe connection), which would kill the app.
                 let output = std::process::Command::new("lsof")
-                    .args(["-t", &format!("-i:{}", port)])
+                    .args(["-t", &format!("-i:{}", port), "-s", "TCP:LISTEN"])
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::null())
                     .output();
