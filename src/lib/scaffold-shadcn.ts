@@ -66,12 +66,14 @@ import "./${PROJECT_PATHS.SRC.PREVIEW_THEME_CSS.replace('src/', '')}"
 import Generated from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
 
 function App() {
-  const [dark, setDark] = React.useState(false)
+  const [dark, setDark] = React.useState(
+    () => new URLSearchParams(window.location.search).get("dark") === "true"
+  )
 
   React.useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "set-dark") {
-        setDark(e.data.value)
+        setDark(e.data.value as boolean)
       }
     }
     window.addEventListener("message", handler)

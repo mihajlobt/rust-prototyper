@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
 import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2, Loader2, AlertCircle, Blocks, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,15 @@ export function ComponentsPanel() {
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const selectedTheme = ps.stylePreset;
   const [themeCss, setThemeCss] = useState("");
+  // Snapshot of dark mode at the time the preview URL first becomes available.
+  // Used to set the initial state in the iframe via query param so it reads it
+  // synchronously before React mounts — live changes go through postMessage.
+  const darkAtUrlArrival = useRef(componentsDarkPreview);
+  useEffect(() => { darkAtUrlArrival.current = componentsDarkPreview; }, [componentsDarkPreview]);
+  const initialPreviewSrc = useMemo(
+    () => (previewUrl ? `${previewUrl}?dark=${darkAtUrlArrival.current}` : undefined),
+    [previewUrl]
+  );
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
@@ -419,7 +428,7 @@ export function ComponentsPanel() {
       return (
         <iframe
           ref={previewIframeRef}
-          src={previewUrl}
+          src={initialPreviewSrc}
           className="w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-forms"
         />
