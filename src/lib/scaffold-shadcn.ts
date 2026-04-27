@@ -89,23 +89,6 @@ export default App
 `;
 }
 
-/**
- * Returns the starter App.tsx for the Runner's generated/ project.
- * AI-generated code from ComponentsPanel is written directly here — no Generated.tsx wrapper.
- */
-export function getRunnerAppTsx(): string {
-  return `import "./index.css"
-
-export default function App() {
-  return (
-    <div className="p-8 text-muted-foreground text-sm">
-      Generated component will appear here.
-    </div>
-  )
-}
-`;
-}
-
 /** Returns the placeholder Generated.tsx source shown before any component is generated. */
 export function getGeneratedPlaceholderTsx(): string {
   return `export default function Generated() {

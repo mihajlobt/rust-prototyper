@@ -6,7 +6,6 @@ import {
   SHADCN_ADD_COMMAND,
   PROJECT_PATHS,
   getAppTsx,
-  getRunnerAppTsx,
   getGeneratedPlaceholderTsx,
   getPreviewThemeCss,
   getComponentPreviewDirPath,
@@ -67,13 +66,12 @@ async function removeProjectDir(dir: string): Promise<void> {
  * in the generated/ directory.
  *
  * Flow:
- * 1. Save user's Generated.tsx if it exists.
- * 2. Remove the target directory so shadcn can create it fresh.
- * 3. Run `shadcn init -t vite --yes --name generated` (awaits completion).
- * 4. Add all shadcn components via `shadcn add --all` (awaits completion).
- * 5. Write our App.tsx and preview-theme.css.
- * 6. Restore Generated.tsx.
- * 7. Add icon library if selected.
+ * 1. Remove the target directory so shadcn can create it fresh.
+ * 2. `shadcn init -t vite -b radix -p nova --name generated` (awaits completion).
+ * 3. `shadcn add --all` (awaits completion).
+ * 4. Add non-lucide icon library if selected.
+ *
+ * App.tsx is NOT overwritten — shadcn init generates it with the Nova preset.
  */
 export async function scaffoldGenerated(
   generatedDir: string,
@@ -84,33 +82,20 @@ export async function scaffoldGenerated(
   const dirName = generatedDir.substring(generatedDir.lastIndexOf("/") + 1);
   assertSafeDirName(dirName);
 
-  // Step 1: Save user's App.tsx if it exists (contains generated component code)
-  let savedAppTsx = "";
-  try {
-    savedAppTsx = await readFile(`${generatedDir}/${SRC.APP_TSX}`);
-  } catch {
-    // Doesn't exist yet
-  }
-
-  // Step 2: Remove the target directory so shadcn can create it fresh
+  // Step 1: Remove the target directory so shadcn can create it fresh
   onStep?.(`> removing ${dirName}/`);
   await removeProjectDir(generatedDir);
   await createDir(projectDir);
 
-  // Step 3: shadcn init — creates the Vite project and installs base deps
+  // Step 2: shadcn init — creates the full Vite + React + shadcn project with its own App.tsx
   onStep?.(`> bunx shadcn init -t vite -b radix --name ${dirName}`);
   await runShellCommandSync(projectDir, `${SHADCN_INIT_COMMAND} --name ${dirName}`);
 
-  // Step 4: Add all shadcn components and install their deps
+  // Step 3: Add all shadcn components and install their deps
   onStep?.(`> bunx shadcn add --all`);
   await runShellCommandSync(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 5: Write App.tsx — restore user's generated component or write starter template.
-  // The Runner has no Generated.tsx wrapper; App.tsx IS the component.
-  onStep?.(`> writing App.tsx`);
-  await writeFile(`${generatedDir}/${SRC.APP_TSX}`, savedAppTsx || getRunnerAppTsx());
-
-  // Step 6: Add non-lucide icon library. lucide-react is already a shadcn
+  // Step 4: Add non-lucide icon library. lucide-react is already a shadcn
   // dependency — installing it again races with shadcn add's bun install and
   // causes cache conflicts, so we skip it here.
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
