@@ -45,12 +45,7 @@ export function useModelCapabilities(modelId: string): Capabilities {
   const provider = settings.provider
   const isOllama = provider.startsWith("ollama")
 
-  // Non-Ollama providers — return static capabilities
-  if (!isOllama) {
-    return PROVIDER_CAPS[provider] ?? EMPTY_CAPS
-  }
-
-  // Ollama — query local models
+  // Always call hooks (no conditional calls), but disable when not Ollama
   const localQuery = useQuery({
     queryKey: ["ollama-models", "local", settings.host],
     queryFn: () => listOllamaModels(settings.host, ""),
@@ -59,7 +54,6 @@ export function useModelCapabilities(modelId: string): Capabilities {
     retry: 1,
   })
 
-  // Cloud models — query ollama.com (only if API key present)
   const cloudQuery = useQuery({
     queryKey: ["ollama-models", "cloud", settings.apiKeys["ollama"] || ""],
     queryFn: () => listOllamaModels("https://ollama.com", settings.apiKeys["ollama"] || ""),
@@ -67,6 +61,11 @@ export function useModelCapabilities(modelId: string): Capabilities {
     staleTime: 60_000,
     retry: 1,
   })
+
+  // Non-Ollama providers — return static capabilities
+  if (!isOllama) {
+    return PROVIDER_CAPS[provider] ?? EMPTY_CAPS
+  }
 
   // If local query has the model, use it
   if (!localQuery.isPending && !localQuery.isError && localQuery.data) {

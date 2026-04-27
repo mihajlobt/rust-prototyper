@@ -6,6 +6,7 @@ import {
   Square,
   Wrench,
   Package,
+  PackagePlus,
   RotateCw,
   Minus,
   Plus,
@@ -36,10 +37,8 @@ import {
   deleteDir,
   renameFile,
   revealInExplorer,
-  bunDev,
   bunBuild,
   bunInstall,
-  killProcess,
   killAllProcesses,
   killPort,
   runShellCommand,
@@ -59,9 +58,9 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import type { MentionAsset } from "@/types/chat";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
-import { hasViteScaffold, scaffoldGenerated } from "@/lib/scaffold";
+import { hasGeneratedScaffold, scaffoldGenerated } from "@/lib/scaffold";
 import { AddLibraryModal } from "@/modals/AddLibraryModal";
-import { PackagePlus } from "lucide-react";
+import { useDevServerStore } from "@/lib/dev-server-manager";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
@@ -71,14 +70,16 @@ export function RunnerPanel() {
   const runnerZoom = ps.runnerZoom;
   const runnerTerminalOpen = ps.runnerTerminalOpen;
   const runnerActiveTab = ps.runnerActiveTab;
+  const runnerPort = ps.runnerPort;
   const fileTreeNonce = useUIStore((s) => s.runnerFileTreeNonce);
+  const devServerStore = useDevServerStore();
+  const running = devServerStore.runnerStatus === "running" || devServerStore.runnerStatus === "starting";
+  const devUrl = devServerStore.runnerUrl;
 
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState("");
   const [terminalLines, setTerminalLines] = useState<Array<{ line: string; source: string }>>([]);
-  const [running, setRunning] = useState(false);
-  const [devUrl, setDevUrl] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
@@ -93,10 +94,9 @@ export function RunnerPanel() {
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("runner", 2);
   const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
-  const pidRef = useRef<number | null>(null);
+  const shellPidRef = useRef<number | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const devUrlRef = useRef<string | null>(null);
 
   const deviceWidth = {
     desktop: "100%",
@@ -119,18 +119,6 @@ export function RunnerPanel() {
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       setTerminalLines((prev) => [...prev, { line: event.line, source: event.source }]);
-      const localMatch = event.line.match(/Local:\s*(https?:\/\/\S+)/i);
-      if (localMatch) {
-        const url = localMatch[1];
-        devUrlRef.current = url;
-        setDevUrl(url);
-        return;
-      }
-      const looseMatch = event.line.match(/https?:\/\/localhost:\d+\S*/);
-      if (looseMatch && !devUrlRef.current) {
-        devUrlRef.current = looseMatch[0];
-        setDevUrl(looseMatch[0]);
-      }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
   }, []);
@@ -170,22 +158,13 @@ export function RunnerPanel() {
     return () => { unlistenPromise.then((fn) => fn()); };
   }, [running]);
 
-  const DEV_PORT_RANGE = Array.from({ length: 12 }, (_, i) => 5173 + i);
-
   const handleRun = async () => {
-    if (running && pidRef.current) {
-      devUrlRef.current = null;
-      setDevUrl(null);
-      try {
-        await killProcess(pidRef.current);
-        await killAllProcesses();
-        await killPort(DEV_PORT_RANGE);
-      } catch (e) { notify.error("Failed to stop process", e instanceof Error ? e.message : String(e)); }
-      finally { pidRef.current = null; setRunning(false); }
+    if (running) {
+      try { devServerStore.stopRunner(); } catch (e) { notify.error("Failed to stop dev server", e instanceof Error ? e.message : String(e)); }
       return;
     }
 
-    const scaffolded = await hasViteScaffold(generatedDir);
+    const scaffolded = await hasGeneratedScaffold(generatedDir);
     if (!scaffolded) {
       const ok = await confirm("The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?");
       if (!ok) return;
@@ -197,18 +176,14 @@ export function RunnerPanel() {
       } catch (e) { notify.error("Scaffold failed", e instanceof Error ? e.message : String(e)); return; }
     }
 
-    setTerminalLines((prev) => [...prev, { line: "> bun dev", source: "stdout" }]);
-    setRunning(true);
-    devUrlRef.current = null;
-    setDevUrl(null);
+    setTerminalLines((prev) => [...prev, { line: "> starting dev server...", source: "stdout" }]);
     try {
-      const pid = await bunDev(generatedDir, 5173);
-      pidRef.current = pid;
-    } catch (e) { setRunning(false); notify.error("Failed to start dev server", e instanceof Error ? e.message : String(e)); }
+      await devServerStore.startRunner(generatedDir, runnerPort);
+    } catch (e) { notify.error("Failed to start dev server", e instanceof Error ? e.message : String(e)); }
   };
 
   const handleBuild = async () => {
-    const scaffolded = await hasViteScaffold(generatedDir);
+    const scaffolded = await hasGeneratedScaffold(generatedDir);
     if (!scaffolded) {
       const ok = await confirm("The generated/ folder is missing a Vite project scaffold. Create a React + TypeScript + Vite project now?");
       if (!ok) return;
@@ -296,15 +271,18 @@ export function RunnerPanel() {
     if (!shellCommand.trim()) return;
     setTerminalLines((prev) => [...prev, { line: `> ${shellCommand}`, source: "stdout" }]);
     const pid = await runShellCommand(generatedDir, shellCommand);
-    pidRef.current = pid;
+    shellPidRef.current = pid;
     setShellCommand("");
     setShowShellInput(false);
   };
 
   const handleKillAll = async () => {
-    devUrlRef.current = null;
-    setDevUrl(null);
-    try { await killAllProcesses(); await killPort(DEV_PORT_RANGE); pidRef.current = null; setRunning(false); notify.success("Killed all processes", "All active processes and ports 5173-5184 cleared"); } catch (e) { notify.error("Kill all failed", e instanceof Error ? e.message : String(e)); }
+    try {
+      devServerStore.stopRunner();
+      await killAllProcesses();
+      await killPort(Array.from({ length: 12 }, (_, i) => 5173 + i));
+      notify.success("Killed all processes", "All active processes and ports 5173-5184 cleared");
+    } catch (e) { notify.error("Kill all failed", e instanceof Error ? e.message : String(e)); }
   };
 
   const handleRefreshPreview = () => { iframeRef.current?.contentWindow?.location.reload(); };

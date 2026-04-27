@@ -1,11 +1,11 @@
-/// Agent loop verification test.
-/// Runs tests sequentially with 5s cooling between each against Ollama local (gemma4)
-/// and Ollama cloud (minimax m2.7). Prints PASS/FAIL for each assertion.
-///
-/// Usage:
-///   Local only:  cargo run --bin test_agent -- --local
-///   Cloud only:  cargo run --bin test_agent -- --cloud <host> <api_key>
-///   Both:        cargo run --bin test_agent -- --local --cloud <host> <api_key>
+//! Agent loop verification test.
+//! Runs tests sequentially with 5s cooling between each against Ollama local (gemma4)
+//! and Ollama cloud (minimax m2.7). Prints PASS/FAIL for each assertion.
+//!
+//! Usage:
+//!   Local only:  cargo run --bin test_agent -- --local
+//!   Cloud only:  cargo run --bin test_agent -- --cloud <host> <api_key>
+//!   Both:        cargo run --bin test_agent -- --local --cloud <host> <api_key>
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};

@@ -61,6 +61,11 @@ export interface ProjectSettings {
   apisAuthClientId: string;
   apisAuthClientSecret: string;
   apisShowInspector: boolean;
+
+  // Component preview
+  shadcnMode: boolean;
+  devServerPort: number;
+  runnerPort: number;
 }
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
@@ -114,6 +119,10 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   apisAuthClientId: "",
   apisAuthClientSecret: "",
   apisShowInspector: false,
+
+  shadcnMode: true,
+  devServerPort: 5173,
+  runnerPort: 5174,
 };
 
 // ─── Store handle cache — one open handle per project ─────────────────────────

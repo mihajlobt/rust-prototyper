@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2 } from "lucide-react";
-import Frame from "react-frame-component";
+import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2, Loader2, AlertCircle, Blocks, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -25,17 +24,25 @@ import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt, getComponentUpdatePrompt } from "@/lib/prompts";
-import { extractCode, createPreviewComponent, getParentCss, useIconFontCss } from "@/lib/preview";
-import { PreviewErrorBoundary } from "@/components/PreviewErrorBoundary";
+import { extractCode } from "@/lib/preview";
+import { useDevServerStore } from "@/lib/dev-server-manager";
+import { hasComponentPreviewScaffold, scaffoldComponentPreview } from "@/lib/scaffold";
+import { getComponentPreviewDirPath } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 
 export function ComponentsPanel() {
-  const { settings } = useAppStore(); // global settings (model, provider, icon lib, etc.)
+  const { settings } = useAppStore();
   const { ps, setPs, openComponent: setSelectedComponent } = useProjectSettingsStore();
   const queryClient = useQueryClient();
+
+  // Dev server state
+  const { previewStatus, previewUrl, previewError, startPreview, stopPreview } = useDevServerStore();
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+  const scaffoldAttemptedRef = useRef(false);
+
   const [code, setCode] = useState("");
   const componentsShowInspector = ps.componentsShowInspector;
   const componentsDevice = ps.componentsDevice;
@@ -50,29 +57,94 @@ export function ComponentsPanel() {
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3);
 
-  // Switch to update prompt after first generation — the model needs the current
-  // code context to make targeted edits instead of generating from scratch.
+  // Derived paths
+  const componentPreviewDir = getComponentPreviewDirPath(`projects/${settings.project}`);
+
+  // Switch to update prompt after first generation
   const hasGeneratedCode = code.length > 0;
   const themeCssSection = themeCss
     ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\``
     : "";
   const defaultSystem = hasGeneratedCode
-    ? getComponentUpdatePrompt(settings.iconLibrary, code, settings.prompts["prompt.components.update"] || undefined) + themeCssSection
-    : getComponentNewPrompt(settings.iconLibrary, settings.prompts["prompt.components.new"] || undefined) + themeCssSection;
+    ? getComponentUpdatePrompt(settings.iconLibrary, code, ps.shadcnMode, settings.prompts["prompt.components.update"] || undefined) + themeCssSection
+    : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + themeCssSection;
   const systemContent = defaultSystem;
 
-  const parentCss = getParentCss();
-  const iconFontCss = useIconFontCss(settings.iconLibrary, settings.project);
-  const Preview = useMemo(() => {
-    if (!code) return null;
-    return createPreviewComponent(code);
-  }, [code]);
+  // ─── Ensure dev server is running ──────────────────────────────────────────
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function ensurePreviewServer() {
+      if (cancelled) return;
+      if (previewStatus === "running" || previewStatus === "starting") return;
+
+      // Check if scaffolded
+      const isScaffolded = await hasComponentPreviewScaffold(`projects/${settings.project}`);
+      if (cancelled) return;
+
+      if (!isScaffolded) {
+        if (scaffoldAttemptedRef.current) return;
+        scaffoldAttemptedRef.current = true;
+
+        // Stop dev server before re-scaffolding to release file locks
+        useDevServerStore.getState().stopPreview();
+
+        const ok = await confirm(
+          "The component preview needs a Vite project. Create one now?",
+          { title: "Scaffold Required", kind: "info" }
+        );
+        if (!ok) return;
+        if (cancelled) return;
+
+        try {
+          await scaffoldComponentPreview(componentPreviewDir, settings.iconLibrary);
+          notify.success("Scaffold complete", "Component preview project created");
+        } catch (e) {
+          notify.error("Scaffold failed", e instanceof Error ? e.message : String(e));
+          return;
+        }
+      }
+
+      if (cancelled) return;
+      try {
+        await startPreview(componentPreviewDir, ps.devServerPort);
+      } catch (e) {
+        notify.error("Failed to start preview server", e instanceof Error ? e.message : String(e));
+      }
+    }
+
+    ensurePreviewServer();
+    return () => { cancelled = true; };
+  }, [settings.project, previewStatus, componentPreviewDir, startPreview, ps.devServerPort, settings.iconLibrary]);
+
+  // ─── Write theme CSS when it changes ───────────────────────────────────────
+
+  useEffect(() => {
+    if (!themeCss || previewStatus !== "running") return;
+
+    const themePath = `${componentPreviewDir}/src/styles/preview-theme.css`;
+    writeFile(themePath, themeCss).catch((e) => {
+      console.error("Failed to write theme CSS:", e);
+    });
+  }, [themeCss, previewStatus, componentPreviewDir]);
+
+  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
+
+  useEffect(() => {
+    const iframe = previewIframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: "set-dark", value: componentsDarkPreview }, "*");
+  }, [componentsDarkPreview, previewUrl]);
 
   const saveCode = useCallback(async (value: string) => {
     if (!value) return;
     try {
+      // Persist to the Runner project and the component file
       const genDir = `projects/${settings.project}/generated`;
       await writeFile(`${genDir}/src/components/Generated.tsx`, value);
+      // Also write to component-preview/ so the Vite preview stays in sync
+      await writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, value);
       if (selectedComponent) {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;
         await createDir(compDir);
@@ -81,7 +153,7 @@ export function ComponentsPanel() {
     } catch (e) {
       notify.error("Failed to save generated code", e instanceof Error ? e.message : String(e));
     }
-  }, [settings.project, selectedComponent]);
+  }, [settings.project, selectedComponent, componentPreviewDir]);
 
   const handleCodeChange = useCallback((value: string) => {
     setCode(value);
@@ -178,10 +250,18 @@ export function ComponentsPanel() {
     setCode(extracted);
     setPs({ componentsCodeOpen: true });
     try {
+      // Write to the generated/ project (for Runner)
       const genDir = `projects/${settings.project}/generated`;
       await createDir(`${genDir}/src/components`);
       await writeFile(`${genDir}/src/components/Generated.tsx`, extracted);
-      useUIStore.setState((s) => ({ runnerFileTreeNonce: s.runnerFileTreeNonce + 1 })); // ephemeral runner signal
+
+      // Write to component-preview/ for the Vite dev server (HMR will pick it up)
+      const previewDir = componentPreviewDir;
+      await createDir(`${previewDir}/src/components`);
+      await writeFile(`${previewDir}/src/components/Generated.tsx`, extracted);
+
+      useUIStore.setState((s) => ({ runnerFileTreeNonce: s.runnerFileTreeNonce + 1 }));
+
       if (selectedComponent) {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;
         await createDir(compDir);
@@ -191,13 +271,19 @@ export function ComponentsPanel() {
     } catch (e) {
       notify.error("Failed to apply generated code", e instanceof Error ? e.message : String(e));
     }
-  }, [settings.project, selectedComponent, queryClient]);
+  }, [settings.project, selectedComponent, queryClient, componentPreviewDir, setPs]);
 
   const deviceWidth = {
     desktop: "100%",
     tablet: "768px",
     mobile: "375px",
   };
+
+  const handleRetryPreview = useCallback(() => {
+    scaffoldAttemptedRef.current = false;
+    useDevServerStore.getState().stopPreview();
+    // The useEffect watching previewStatus will re-trigger startPreview
+  }, []);
 
   const chatPane = (
     <div className="h-full flex flex-col bg-card">
@@ -283,6 +369,52 @@ export function ComponentsPanel() {
     </div>
   );
 
+  // ─── Render preview content based on dev server status ─────────────────────
+
+  const renderPreview = () => {
+    if (previewStatus === "error") {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 p-4 h-full text-center">
+          <AlertCircle size={24} className="text-destructive" />
+          <p className="text-xs font-medium text-destructive">Preview Error</p>
+          <p className="text-[10px] text-muted-foreground max-w-full line-clamp-3">
+            {previewError || "Failed to start dev server"}
+          </p>
+          <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleRetryPreview}>
+            Retry
+          </Button>
+        </div>
+      );
+    }
+
+    if (previewStatus === "starting") {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 h-full">
+          <Loader2 size={20} className="animate-spin text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">Starting preview…</p>
+        </div>
+      );
+    }
+
+    if (previewStatus === "running" && previewUrl) {
+      return (
+        <iframe
+          ref={previewIframeRef}
+          src={previewUrl}
+          className="w-full h-full border-0"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+        />
+      );
+    }
+
+    // idle or no URL yet
+    return (
+      <div className="flex items-center justify-center text-muted-foreground text-sm">
+        Generated components will preview here
+      </div>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
@@ -319,6 +451,19 @@ export function ComponentsPanel() {
               <div className="h-full flex flex-col">
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
                   <span className="text-sm font-medium">Preview</span>
+                  {previewStatus === "running" ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={stopPreview} title="Stop preview server">
+                      <Square size={12} />
+                    </Button>
+                  ) : previewStatus === "starting" ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
+                      <Loader2 size={12} className="animate-spin" />
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startPreview(componentPreviewDir, ps.devServerPort)} title="Start preview server">
+                      <Play size={12} />
+                    </Button>
+                  )}
                   <div className="flex-1" />
                   <Select value={selectedTheme} onValueChange={(v) => setPs({ stylePreset: v })}>
                     <SelectTrigger className="h-6 text-xs w-[90px]">
@@ -334,10 +479,25 @@ export function ComponentsPanel() {
                   <Button
                     variant={componentsDarkPreview ? "secondary" : "ghost"}
                     size="icon" className="h-7 w-7"
-                    onClick={() => setPs({ componentsDarkPreview: !componentsDarkPreview })}
+                    onClick={() => {
+                      setPs({ componentsDarkPreview: !componentsDarkPreview });
+                      // Also send postMessage to iframe for immediate dark mode toggle
+                      previewIframeRef.current?.contentWindow?.postMessage(
+                        { type: "set-dark", value: !componentsDarkPreview },
+                        "*"
+                      );
+                    }}
                     title={componentsDarkPreview ? "Light preview" : "Dark preview"}
                   >
                     {componentsDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+                  </Button>
+                  <Button
+                    variant={ps.shadcnMode ? "secondary" : "ghost"}
+                    size="icon" className="h-7 w-7"
+                    onClick={() => setPs({ shadcnMode: !ps.shadcnMode })}
+                    title="Use shadcn/ui components"
+                  >
+                    <Blocks size={12} />
                   </Button>
                   <div className="w-px h-4 bg-border" />
                   <div className="flex items-center gap-1">
@@ -365,39 +525,12 @@ export function ComponentsPanel() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
-                  {code ? (
-                    <div
-                      className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                      style={{ width: deviceWidth[componentsDevice] }}
-                    >
-                      <Frame
-                        key={selectedTheme}
-                        head={
-                          <style>{`${parentCss}\n${themeCss}\n${iconFontCss}\n.dark { color-scheme: dark; }\nbody { margin: 0; }`}</style>
-                        }
-                        className="w-full h-full border-0"
-                      >
-                        <div
-                          className={componentsDarkPreview ? "dark" : ""}
-                          style={{
-                            minHeight: "100%",
-                            background: "var(--background, #fff)",
-                            color: "var(--foreground, #000)",
-                          }}
-                        >
-                          {Preview ? (
-                            <PreviewErrorBoundary resetKey={code}>
-                              <Preview />
-                            </PreviewErrorBoundary>
-                          ) : null}
-                        </div>
-                      </Frame>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center text-muted-foreground text-sm">
-                      Generated components will preview here
-                    </div>
-                  )}
+                  <div
+                    className="h-full bg-background shadow-lg border border-border overflow-hidden"
+                    style={{ width: deviceWidth[componentsDevice] }}
+                  >
+                    {renderPreview()}
+                  </div>
                 </div>
               </div>
             </Allotment.Pane>

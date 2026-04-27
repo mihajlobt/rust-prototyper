@@ -190,9 +190,16 @@ export async function generateCompletionStream(
   provider: Provider = "ollama-local"
 ): Promise<void> {
   return invoke("generate_completion_stream", {
-    model, messages, host, apiKey, onEvent, provider: providerForIpc(provider),
-    think: think ?? null,
-    outputPath: outputPath ?? null,
+    request: {
+      model,
+      messages,
+      host,
+      apiKey,
+      provider: providerForIpc(provider),
+      think: think ?? null,
+      outputPath: outputPath ?? null,
+    },
+    onEvent,
   });
 }
 
@@ -230,10 +237,12 @@ export async function exportProject(
     projectId,
     outputPath,
     format,
-    includeApis,
-    includeTheme,
-    includeComponents,
-    includeTests,
+    options: {
+      includeApis,
+      includeTheme,
+      includeComponents,
+      includeTests,
+    },
   });
 }
 
@@ -251,9 +260,11 @@ export async function exportComponent(
     componentId,
     outputPath,
     format,
-    includeTypes,
-    includeStorybook,
-    includeTests,
+    options: {
+      includeTypes,
+      includeStorybook,
+      includeTests,
+    },
   });
 }
 

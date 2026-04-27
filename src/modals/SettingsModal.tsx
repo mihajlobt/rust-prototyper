@@ -237,6 +237,48 @@ export function SettingsModal() {
                 </div>
               </section>
 
+              {/* Dev Server */}
+              <section className="space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dev Server</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="devServerPort" className="text-sm">Component Preview Port</Label>
+                    <Input
+                      id="devServerPort"
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={ps.devServerPort}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val >= 1024 && val <= 65535) {
+                          setPs({ devServerPort: val });
+                        }
+                      }}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="runnerPort" className="text-sm">Runner Port</Label>
+                    <Input
+                      id="runnerPort"
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={ps.runnerPort}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val) && val >= 1024 && val <= 65535) {
+                          setPs({ runnerPort: val });
+                        }
+                      }}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">Restart dev servers for port changes to take effect.</p>
+              </section>
+
               {/* Danger */}
               <section className="border-t border-border pt-4 space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Layout</p>
