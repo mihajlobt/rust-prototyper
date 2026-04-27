@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader } from "@/components/ui/loader";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageContent } from "@/components/ui/message";
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
 import Frame from "react-frame-component";
@@ -65,10 +66,15 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Mode</label>
-            <select value={String(data.mode ?? "overwrite")} onChange={(e) => set({ mode: e.target.value })} className="h-7 text-xs w-full rounded-md border border-border bg-card px-2">
-              <option value="overwrite">Overwrite</option>
-              <option value="append">Append</option>
-            </select>
+            <Select value={String(data.mode ?? "overwrite")} onValueChange={(v) => set({ mode: v })}>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="overwrite" className="text-xs">Overwrite</SelectItem>
+                <SelectItem value="append" className="text-xs">Append</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </>)}
 
