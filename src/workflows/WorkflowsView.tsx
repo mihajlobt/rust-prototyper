@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   ReactFlow,
   Background,
@@ -57,28 +57,28 @@ interface NodeTypeDef {
 }
 
 const BUILTIN_NODE_TYPES: NodeTypeDef[] = [
-  { type: "input",        label: "Input",         desc: "Start of workflow",       category: "IO",          color: "var(--chart-2)",  icon: LogIn },
-  { type: "output",       label: "Output",        desc: "End of workflow",         category: "IO",          color: "var(--chart-2)",  icon: LogOut },
-  { type: "writefile",    label: "Write File",    desc: "Write output to file",    category: "IO",          color: "var(--chart-4)", icon: FileOutput },
-  { type: "requirements", label: "Requirements",  desc: "Parse requirements",      category: "Analysis",    color: "var(--chart-3)",  icon: ListChecks },
-  { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      category: "Analysis",    color: "var(--chart-5)",  icon: Palette },
-  { type: "reference",    label: "Reference",     desc: "Analyze components",      category: "Analysis",    color: "var(--chart-1)", icon: BookOpen },
-  { type: "architect",    label: "Architect",     desc: "Plan structure",          category: "Planning",    color: "var(--chart-4)",  icon: Compass },
-  { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       category: "Generation",  color: "var(--chart-1)",  icon: Layout },
-  { type: "style",        label: "Style",         desc: "Apply CSS classes",       category: "Generation",  color: "var(--chart-5)",  icon: Paintbrush },
-  { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         category: "Generation",  color: "var(--destructive)", icon: MousePointerClick },
-  { type: "parallel",     label: "Parallel",      desc: "Branch execution",        category: "Composition", color: "var(--chart-1)",  icon: GitBranch },
-  { type: "composition",  label: "Composition",   desc: "Merge outputs",           category: "Composition", color: "var(--chart-2)",  icon: Merge },
-  { type: "bash",         label: "Bash",          desc: "Run shell command",       category: "Utility",     color: "var(--ring)",     icon: Terminal },
-  { type: "fetch",        label: "Fetch",         desc: "HTTP request",            category: "Utility",     color: "var(--chart-3)",  icon: Globe },
-  { type: "fileop",       label: "File Op",       desc: "Read / write files",      category: "Utility",     color: "var(--chart-4)",  icon: FolderOpen },
-  { type: "auth",         label: "Auth",          desc: "Authentication header",   category: "Utility",     color: "var(--destructive)", icon: Lock },
-  { type: "transform",    label: "Transform",     desc: "Transform content via AI","category": "Utility",    color: "var(--chart-5)",  icon: Wand2 },
-  { type: "validate",     label: "Validate",      desc: "Validate code output",    category: "Utility",     color: "var(--chart-3)",  icon: ShieldCheck },
-  { type: "preview",      label: "Preview",       desc: "Render HTML output",      category: "Utility",     color: "var(--chart-2)",  icon: Eye },
-  { type: "bun",          label: "Bun",           desc: "Bun dev / build",         category: "Utility",     color: "var(--ring)",     icon: Package },
-  { type: "runner",       label: "Runner",        desc: "Start dev server",        category: "Utility",     color: "var(--chart-1)",  icon: Play },
-  { type: "custom",       label: "Custom",        desc: "Custom AI node",          category: "Custom",      color: "var(--muted-foreground)", icon: Sparkles },
+  { type: "input",        label: "Input",         desc: "Start of workflow",       category: "IO",          color: "var(--node-io)",         icon: LogIn },
+  { type: "output",       label: "Output",        desc: "End of workflow",         category: "IO",          color: "var(--node-io)",         icon: LogOut },
+  { type: "writefile",    label: "Write File",    desc: "Write output to file",    category: "IO",          color: "var(--node-io)",         icon: FileOutput },
+  { type: "requirements", label: "Requirements",  desc: "Parse requirements",      category: "Analysis",    color: "var(--node-analysis)",    icon: ListChecks },
+  { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      category: "Analysis",    color: "var(--node-analysis)",    icon: Palette },
+  { type: "reference",    label: "Reference",     desc: "Analyze components",      category: "Analysis",    color: "var(--node-analysis)",    icon: BookOpen },
+  { type: "architect",    label: "Architect",     desc: "Plan structure",          category: "Planning",    color: "var(--node-planning)",    icon: Compass },
+  { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       category: "Generation",  color: "var(--node-generation)",  icon: Layout },
+  { type: "style",        label: "Style",         desc: "Apply CSS classes",       category: "Generation",  color: "var(--node-generation)",  icon: Paintbrush },
+  { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         category: "Generation",  color: "var(--node-terminal)",    icon: MousePointerClick },
+  { type: "parallel",     label: "Parallel",      desc: "Branch execution",        category: "Composition", color: "var(--node-composition)", icon: GitBranch },
+  { type: "composition",  label: "Composition",   desc: "Merge outputs",           category: "Composition", color: "var(--node-composition)", icon: Merge },
+  { type: "bash",         label: "Bash",          desc: "Run shell command",       category: "Utility",     color: "var(--node-utility)",     icon: Terminal },
+  { type: "fetch",        label: "Fetch",         desc: "HTTP request",            category: "Utility",     color: "var(--node-utility)",     icon: Globe },
+  { type: "fileop",       label: "File Op",       desc: "Read / write files",      category: "Utility",     color: "var(--node-utility)",     icon: FolderOpen },
+  { type: "auth",         label: "Auth",          desc: "Authentication header",   category: "Utility",     color: "var(--node-terminal)",    icon: Lock },
+  { type: "transform",    label: "Transform",     desc: "Transform content via AI","category": "Utility",    color: "var(--node-utility)",     icon: Wand2 },
+  { type: "validate",     label: "Validate",      desc: "Validate code output",    category: "Utility",     color: "var(--node-analysis)",    icon: ShieldCheck },
+  { type: "preview",      label: "Preview",       desc: "Render HTML output",      category: "Utility",     color: "var(--node-io)",          icon: Eye },
+  { type: "bun",          label: "Bun",           desc: "Bun dev / build",         category: "Utility",     color: "var(--node-utility)",     icon: Package },
+  { type: "runner",       label: "Runner",        desc: "Start dev server",        category: "Utility",     color: "var(--node-generation)",  icon: Play },
+  { type: "custom",       label: "Custom",        desc: "Custom AI node",          category: "Custom",      color: "var(--node-custom)",      icon: Sparkles },
 ];
 
 const CATEGORY_ORDER = ["IO", "Analysis", "Planning", "Generation", "Composition", "Utility", "Custom"];
@@ -104,33 +104,37 @@ interface WorkflowNodeData {
   authScheme?: string;
   authToken?: string;
   authHeaderName?: string;
+  mode?: string;
+  port?: string;
   [key: string]: unknown;
 }
 
+type WorkflowNodeType = Node<WorkflowNodeData, 'workflow'>;
+
 // ─── Custom node component ─────────────────────────────────────────────────
 
-function WorkflowNode({ data, selected }: NodeProps) {
-  const d = data as WorkflowNodeData;
+function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
+  const d = data;
   const borderColor =
-    d.status === "done"    ? "var(--chart-2)" :
-    d.status === "error"   ? "var(--destructive)" :
-    d.status === "running" ? "var(--chart-1)" :
+    d.status === "done"    ? "var(--status-done)" :
+    d.status === "error"   ? "var(--status-error)" :
+    d.status === "running" ? "var(--status-running)" :
     selected               ? "var(--primary)" :
-                              "var(--border)";
+                               "var(--border)";
 
   const def = BUILTIN_NODE_TYPES.find((t) => t.type === d.nodeType);
   const Icon = def?.icon ?? Settings;
 
   return (
     <div
-      className="bg-card rounded-lg shadow-md relative cursor-pointer overflow-hidden"
+      className="bg-card rounded-lg shadow-md relative cursor-pointer"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
     >
       {/* Color accent bar */}
-      <div className="h-0.5" style={{ background: d.color }} />
+      <div className="wf-accent-bar" style={{ background: d.color }} />
 
-      <Handle type="target" position={Position.Left}  className="!w-3 !h-3 !bg-card !border-2 hover:!bg-primary hover:!border-primary transition-colors" style={{ borderColor }} />
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-card !border-2 hover:!bg-primary hover:!border-primary transition-colors" style={{ borderColor }} />
+      <Handle type="target" position={Position.Left}  className="wf-handle" style={{ borderColor }} />
+      <Handle type="source" position={Position.Right} className="wf-handle" style={{ borderColor }} />
 
       <div className="px-3 pt-1.5 pb-2">
         <div className="flex items-center gap-1.5">
@@ -138,14 +142,14 @@ function WorkflowNode({ data, selected }: NodeProps) {
           <span className="text-[11px] font-semibold truncate leading-tight flex-1">{d.label}</span>
           {d.status === "running" && (
             <span className="flex gap-0.5 shrink-0">
-              <span className="thinking-dot w-1 h-1 rounded-full inline-block" style={{ background: "var(--chart-1)" }} />
-              <span className="thinking-dot w-1 h-1 rounded-full inline-block" style={{ background: "var(--chart-1)" }} />
-              <span className="thinking-dot w-1 h-1 rounded-full inline-block" style={{ background: "var(--chart-1)" }} />
+              <span className="thinking-dot w-1 h-1 rounded-full inline-block bg-status-running" />
+              <span className="thinking-dot w-1 h-1 rounded-full inline-block bg-status-running" />
+              <span className="thinking-dot w-1 h-1 rounded-full inline-block bg-status-running" />
             </span>
           )}
         </div>
         <div className="text-[9px] text-muted-foreground truncate mt-0.5">
-          {d.output || d.desc}
+          {d.status === "error" && d.output ? d.desc : (d.output || d.desc)}
         </div>
         {d.status === "error" && d.output && (
           <div className="text-[9px] text-destructive truncate">{d.output.slice(0, 80)}</div>
@@ -167,9 +171,9 @@ function WorkflowCanvas() {
   const { settings } = useAppStore();
   const { ps: { activeWorkflow: initialWorkflow } } = useProjectSettingsStore();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 3);
-  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
 
-  const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): Node => ({
+  const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): WorkflowNodeType => ({
     id: generateId(),
     type: "workflow",
     position,
@@ -182,9 +186,23 @@ function WorkflowCanvas() {
     } satisfies WorkflowNodeData,
   }), []);
 
-  const defaultColor = (type: string) => BUILTIN_NODE_TYPES.find((t) => t.type === type)?.color ?? "var(--muted-foreground)";
+  const defaultColor = (type: string) => allDefs.find((t) => t.type === type)?.color ?? "var(--node-custom)";
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([
+  // ── Custom node defs (declared early so allDefs is available for onDrop etc.) ──
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customDefs, setCustomDefs] = useState<NodeTypeDef[]>([]);
+  const [customName, setCustomName] = useState("");
+  const [customDesc, setCustomDesc] = useState("");
+  const allDefs = useMemo(() => [...BUILTIN_NODE_TYPES, ...customDefs], [customDefs]);
+  const categories = CATEGORY_ORDER.filter((c) => allDefs.some((t) => t.category === c));
+
+  const handleAddCustomDef = () => {
+    if (!customName.trim()) return;
+    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", category: "Custom", color: "var(--node-custom)", icon: Sparkles }]);
+    setCustomName(""); setCustomDesc(""); setShowCustomForm(false);
+  };
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([
     { id: "n1", type: "workflow", position: { x: 60,  y: 100 }, data: { label: "User Prompt",    nodeType: "input",        color: defaultColor("input"), desc: "Start of workflow", status: "idle", prompt: "Build a login form" } },
     { id: "n2", type: "workflow", position: { x: 280, y: 100 }, data: { label: "Requirements",   nodeType: "requirements", color: defaultColor("requirements"), desc: "Parse requirements", status: "idle" } },
     { id: "n3", type: "workflow", position: { x: 500, y: 100 }, data: { label: "Plan Structure", nodeType: "architect",    color: defaultColor("architect"), desc: "Plan structure",     status: "idle" } },
@@ -201,8 +219,8 @@ function WorkflowCanvas() {
 
   // Undo/redo
   const MAX_UNDO = 50;
-  const undoStack = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
-  const redoStack = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  const undoStack = useRef<Array<{ nodes: WorkflowNodeType[]; edges: Edge[] }>>([]);
+  const redoStack = useRef<Array<{ nodes: WorkflowNodeType[]; edges: Edge[] }>>([]);
   const pushUndo = useCallback(() => {
     undoStack.current.push({ nodes: getNodes(), edges: getEdges() });
     if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
@@ -226,7 +244,7 @@ function WorkflowCanvas() {
   // Selected node
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
-  const selectedData = selectedNode?.data as WorkflowNodeData | undefined;
+  const selectedData = selectedNode?.data;
 
   const updateNodeData = useCallback((id: string, patch: Partial<WorkflowNodeData>) => {
     pushUndo();
@@ -244,7 +262,7 @@ function WorkflowCanvas() {
   const duplicateSelected = useCallback(() => {
     if (!selectedNode) return;
     pushUndo();
-    const newNode: Node = {
+    const newNode: WorkflowNodeType = {
       ...selectedNode,
       id: generateId(),
       position: { x: selectedNode.position.x + 40, y: selectedNode.position.y + 40 },
@@ -257,7 +275,7 @@ function WorkflowCanvas() {
   // Context menu
   const [ctxMenu, setCtxMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
 
-  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: WorkflowNodeType) => {
     e.preventDefault();
     setCtxMenu({ nodeId: node.id, x: e.clientX, y: e.clientY });
     setSelectedNodeId(node.id);
@@ -268,7 +286,7 @@ function WorkflowCanvas() {
     setSelectedNodeId(null);
   }, []);
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowNodeType) => {
     setSelectedNodeId(node.id);
     setCtxMenu(null);
   }, []);
@@ -283,12 +301,12 @@ function WorkflowCanvas() {
     e.preventDefault();
     const nodeType = e.dataTransfer.getData("application/workflow-node");
     if (!nodeType) return;
-    const typeDef = BUILTIN_NODE_TYPES.find((t) => t.type === nodeType);
+    const typeDef = allDefs.find((t) => t.type === nodeType);
     if (!typeDef) return;
     const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     pushUndo();
     setNodes((prev) => [...prev, makeNode(typeDef, position)]);
-  }, [screenToFlowPosition, pushUndo, setNodes, makeNode]);
+  }, [screenToFlowPosition, pushUndo, setNodes, makeNode, allDefs]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -333,11 +351,11 @@ function WorkflowCanvas() {
     }
     const execOrder = order.length === currentNodes.length ? order : currentNodes.map((n) => n.id);
     const compDeps = new Map<string, Set<string>>();
-    for (const n of currentNodes) if ((n.data as WorkflowNodeData).nodeType === "composition") compDeps.set(n.id, new Set(radj.get(n.id)!));
+    for (const n of currentNodes) if (n.data.nodeType === "composition") compDeps.set(n.id, new Set(radj.get(n.id)!));
 
     const getPrevOut = (nodeId: string) => {
       const inc = currentEdges.filter((e) => e.target === nodeId);
-      return inc.length ? (currentNodes.find((n) => n.id === inc[0].source)?.data as WorkflowNodeData)?.output ?? "" : "";
+      return inc.length ? (currentNodes.find((n) => n.id === inc[0].source)?.data)?.output ?? "" : "";
     };
 
     const updateStatus = (id: string, patch: Partial<WorkflowNodeData>) =>
@@ -347,7 +365,7 @@ function WorkflowCanvas() {
       if (abortRef.current) return;
       const node = currentNodes.find((n) => n.id === nodeId);
       if (!node) return;
-      const d = node.data as WorkflowNodeData;
+      const d = node.data;
       updateStatus(nodeId, { status: "running", output: undefined });
       const prevOut = getPrevOut(nodeId);
 
@@ -371,7 +389,8 @@ function WorkflowCanvas() {
         };
         const ai = (sys: string, user: string) => streamAI([{ role: "system", content: sys }, { role: "user", content: user }]);
 
-        if (d.nodeType.startsWith("custom_")) {
+        const isCustomType = d.nodeType === "custom" || d.nodeType.startsWith("custom_");
+        if (isCustomType) {
           output = await ai(d.prompt || "Process the input.", prevOut || promptBase);
         } else switch (d.nodeType) {
           case "input":        output = promptBase; break;
@@ -393,7 +412,6 @@ function WorkflowCanvas() {
           case "reference":    output = await ai(customPrompts["workflow-reference-system"]    || "Analyze component references and describe their APIs.", prevOut || promptBase); break;
           case "transform":    output = await ai(customPrompts["workflow-transform-system"]    || "Transform the content per the instruction. Output only transformed content.", `Instruction: ${promptBase}\n\nContent: ${prevOut}`); break;
           case "validate":     output = await ai(customPrompts["workflow-validate-system"]     || "Validate code for errors. If valid, say 'Valid'.", prevOut || "No code to validate"); break;
-          case "custom":       output = await ai(d.prompt || "Process the input.", prevOut || promptBase); break;
           case "bash": { await runShellCommand(generatedPath, d.command || "echo hello"); output = `Ran: ${d.command}`; break; }
           case "fetch": {
             let headers: Record<string, string> = {}; try { headers = JSON.parse(d.headers || "{}"); } catch { /* invalid JSON headers */ }
@@ -413,7 +431,7 @@ function WorkflowCanvas() {
             output = JSON.stringify(h); break;
           }
           case "parallel":    output = `Forked into ${currentEdges.filter((e) => e.source === nodeId).length} branches`; break;
-          case "composition": output = currentEdges.filter((e) => e.target === nodeId).map((e) => (currentNodes.find((n) => n.id === e.source)?.data as WorkflowNodeData)?.output || "").join("\n\n---\n\n") || "No inputs"; break;
+          case "composition": output = currentEdges.filter((e) => e.target === nodeId).map((e) => currentNodes.find((n) => n.id === e.source)?.data?.output || "").join("\n\n---\n\n") || "No inputs"; break;
           case "preview":     output = prevOut || "Nothing to preview"; break;
           case "designSystem": {
             try { const css = await readFile(`projects/${settings.project}/themes/${d.prompt || "default"}/theme.css`); output = `${prevOut ? prevOut + "\n\n" : ""}/* Applied theme: ${d.prompt} */\n${css}`; }
@@ -434,7 +452,7 @@ function WorkflowCanvas() {
 
     const findBranch = (startId: string): string[] => {
       const branch = [startId]; const vis = new Set([startId]);
-      const walk = (id: string) => { for (const nx of adj.get(id)!) { if (!vis.has(nx) && (currentNodes.find((n) => n.id === nx)?.data as WorkflowNodeData)?.nodeType !== "composition") { vis.add(nx); branch.push(nx); walk(nx); } } };
+      const walk = (id: string) => { for (const nx of adj.get(id)!) { if (!vis.has(nx) && currentNodes.find((n) => n.id === nx)?.data?.nodeType !== "composition") { vis.add(nx); branch.push(nx); walk(nx); } } };
       walk(startId); return branch;
     };
 
@@ -447,7 +465,7 @@ function WorkflowCanvas() {
       if (abortRef.current) break;
       const nd = currentNodes.find((n) => n.id === nodeId);
       if (!nd || done.has(nodeId)) continue;
-      const nType = (nd.data as WorkflowNodeData).nodeType;
+      const nType = nd.data.nodeType;
       if (nType === "composition") { const deps = radj.get(nodeId)!; if (!deps.every((d) => done.has(d))) continue; }
       if (nType === "parallel") {
         await execNode(nodeId); done.add(nodeId);
@@ -459,8 +477,8 @@ function WorkflowCanvas() {
     }
     for (const [cid, deps] of compDeps) if (!done.has(cid) && [...deps].some((d) => done.has(d))) { await execNode(cid); done.add(cid); }
     const finalNodes = getNodes();
-    const errorCount = finalNodes.filter((n) => (n.data as WorkflowNodeData).status === "error").length;
-    const doneCount = finalNodes.filter((n) => (n.data as WorkflowNodeData).status === "done").length;
+    const errorCount = finalNodes.filter((n) => n.data.status === "error").length;
+    const doneCount = finalNodes.filter((n) => n.data.status === "done").length;
     setRunSummary({ total: currentNodes.length, done: doneCount, errors: errorCount, elapsed: Date.now() - startTime });
     setRunning(false);
   };
@@ -484,27 +502,7 @@ function WorkflowCanvas() {
 
   useEffect(() => { refreshSavedWorkflows(); }, [refreshSavedWorkflows]);
 
-  useEffect(() => {
-    if (!initialWorkflow) return;
-    handleLoad(initialWorkflow);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialWorkflow]);
-
-  const handleSave = async () => {
-    setSaveError(null);
-    try {
-      const id = workflowId.trim() || "default";
-      setWorkflowId(id);
-      await saveWorkflow(settings.project, id, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
-      await refreshSavedWorkflows();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setSaveError(msg);
-      notify.error("Failed to save workflow", msg);
-    }
-  };
-
-  const handleLoad = async (id: string) => {
+  const handleLoad = useCallback(async (id: string) => {
     setSaveError(null);
     try {
       const data = await loadWorkflow(settings.project, id.replace(".json", ""));
@@ -517,6 +515,25 @@ function WorkflowCanvas() {
       const msg = e instanceof Error ? e.message : String(e);
       setSaveError(msg);
       notify.error("Failed to load workflow", msg);
+    }
+  }, [settings.project, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (!initialWorkflow) return;
+    handleLoad(initialWorkflow);
+  }, [initialWorkflow, handleLoad]);
+
+  const handleSave = async () => {
+    setSaveError(null);
+    try {
+      const id = workflowId.trim() || "default";
+      setWorkflowId(id);
+      await saveWorkflow(settings.project, id, JSON.stringify({ nodes: getNodes(), edges: getEdges() }, null, 2));
+      await refreshSavedWorkflows();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSaveError(msg);
+      notify.error("Failed to save workflow", msg);
     }
   };
 
@@ -539,21 +556,6 @@ function WorkflowCanvas() {
     setEdges([]);
     setWorkflowId(`workflow-${Date.now()}`);
   };
-
-  // ── Custom node defs ────────────────────────────────────────────────────
-  const [showCustomForm, setShowCustomForm] = useState(false);
-  const [customDefs, setCustomDefs] = useState<NodeTypeDef[]>([]);
-  const [customName, setCustomName] = useState("");
-  const [customDesc, setCustomDesc] = useState("");
-
-  const handleAddCustomDef = () => {
-    if (!customName.trim()) return;
-    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", category: "Custom", color: "var(--muted-foreground)", icon: Sparkles }]);
-    setCustomName(""); setCustomDesc(""); setShowCustomForm(false);
-  };
-
-  const allDefs = [...BUILTIN_NODE_TYPES, ...customDefs];
-  const categories = CATEGORY_ORDER.filter((c) => allDefs.some((t) => t.category === c));
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -663,8 +665,8 @@ function WorkflowCanvas() {
             >
               <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
               <Controls />
-              <MiniMap
-                nodeColor={(n) => (n.data as WorkflowNodeData).color || "var(--muted-foreground)"}
+              <MiniMap<WorkflowNodeType>
+                nodeColor={(n) => n.data.color || "var(--node-custom)"}
                 className="!bg-card !border-border rounded-lg overflow-hidden"
                 maskColor="rgba(0,0,0,0.2)"
               />
@@ -693,9 +695,9 @@ function WorkflowCanvas() {
                   <Input value={selectedData.label} onChange={(e) => updateNodeData(selectedNodeId!, { label: e.target.value })} className="h-7 text-xs" />
                 </div>
 
-                {(selectedData.nodeType === "input" || selectedData.nodeType === "custom") && (
+                {(selectedData.nodeType === "input" || selectedData.nodeType === "custom" || selectedData.nodeType.startsWith("custom_")) && (
                   <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">{selectedData.nodeType === "custom" ? "System Prompt" : "Prompt"}</label>
+                    <label className="text-xs text-muted-foreground">{selectedData.nodeType !== "input" ? "System Prompt" : "Prompt"}</label>
                     <Textarea value={selectedData.prompt || ""} onChange={(e) => updateNodeData(selectedNodeId!, { prompt: e.target.value })} className="text-xs min-h-[80px] resize-none" placeholder="Enter prompt…" />
                   </div>
                 )}
@@ -749,10 +751,10 @@ function WorkflowCanvas() {
                 <div className="pt-2 border-t border-border">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Status</div>
                   <div className="flex items-center gap-1.5">
-                    <span className={["w-1.5 h-1.5 rounded-full", selectedData.status === "done" ? "bg-chart-2" : selectedData.status === "error" ? "bg-destructive" : selectedData.status === "running" ? "bg-chart-1 animate-pulse" : "bg-muted-foreground"].join(" ")} />
+                    <span className={["w-1.5 h-1.5 rounded-full", selectedData.status === "done" ? "bg-status-done" : selectedData.status === "error" ? "bg-status-error" : selectedData.status === "running" ? "bg-status-running animate-pulse" : "bg-muted-foreground"].join(" ")} />
                     <span className="text-xs capitalize">{selectedData.status || "idle"}</span>
                   </div>
-                  {selectedData.output && <div className="mt-2 text-[10px] text-muted-foreground bg-muted p-1.5 rounded whitespace-pre-wrap font-mono overflow-y-auto flex-1 max-h-[50vh]">{selectedData.output}</div>}
+                  {selectedData.output && <div className="mt-2 text-[10px] text-muted-foreground bg-muted p-1.5 rounded whitespace-pre-wrap font-mono overflow-y-auto flex-1 min-h-0">{selectedData.output}</div>}
                 </div>
               </div>
             ) : (

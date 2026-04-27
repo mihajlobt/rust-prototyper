@@ -72,6 +72,17 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-node-io: var(--node-io);
+  --color-node-analysis: var(--node-analysis);
+  --color-node-planning: var(--node-planning);
+  --color-node-generation: var(--node-generation);
+  --color-node-composition: var(--node-composition);
+  --color-node-utility: var(--node-utility);
+  --color-node-custom: var(--node-custom);
+  --color-node-terminal: var(--node-terminal);
+  --color-status-running: var(--status-running);
+  --color-status-done: var(--status-done);
+  --color-status-error: var(--status-error);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -123,6 +134,18 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* Workflow node type colours */
+  --node-io: oklch(0.6 0.118 184.704);
+  --node-analysis: oklch(0.398 0.07 227.392);
+  --node-planning: oklch(0.828 0.189 84.429);
+  --node-generation: oklch(0.646 0.222 41.116);
+  --node-composition: oklch(0.6 0.118 184.704);
+  --node-utility: oklch(0.769 0.188 70.08);
+  --node-custom: oklch(0.556 0 0);
+  --node-terminal: oklch(0.577 0.245 27.325);
+  --status-running: oklch(0.646 0.222 41.116);
+  --status-done: oklch(0.6 0.118 184.704);
+  --status-error: oklch(0.577 0.245 27.325);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -157,6 +180,18 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  /* Workflow node type colours (dark) */
+  --node-io: oklch(0.696 0.17 162.48);
+  --node-analysis: oklch(0.769 0.188 70.08);
+  --node-planning: oklch(0.627 0.265 303.9);
+  --node-generation: oklch(0.488 0.243 264.376);
+  --node-composition: oklch(0.696 0.17 162.48);
+  --node-utility: oklch(0.645 0.246 16.439);
+  --node-custom: oklch(0.708 0 0);
+  --node-terminal: oklch(0.704 0.191 22.216);
+  --status-running: oklch(0.488 0.243 264.376);
+  --status-done: oklch(0.696 0.17 162.48);
+  --status-error: oklch(0.704 0.191 22.216);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -275,6 +310,23 @@
 .thinking-dot:nth-child(1) { animation: thinking-dot 1.2s ease-in-out infinite 0s; }
 .thinking-dot:nth-child(2) { animation: thinking-dot 1.2s ease-in-out infinite 0.2s; }
 .thinking-dot:nth-child(3) { animation: thinking-dot 1.2s ease-in-out infinite 0.4s; }
+
+/* React Flow Handle base styles */
+.react-flow__handle.wf-handle {
+  width: 12px;
+  height: 12px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 9999px;
+}
+.react-flow__handle.wf-handle:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.wf-accent-bar {
+  height: 2px;
+  border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+}
 
 /* ─── Loader keyframes (prompt-kit) ─── */
 @keyframes typing {
