@@ -35,20 +35,20 @@ export const PROJECT_PATHS = {
  * https://ui.shadcn.com/docs/cli
  */
 export const SHADCN_ADD_COMMAND: string =
-  "bunx --bun shadcn@latest add --all --yes --overwrite";
+  "bunx --bun shadcn@latest add --all --overwrite";
 
 /**
  * CLI command to initialize shadcn for Vite. Creates a new project subdirectory.
  * -t vite          use the Vite template (NOT Next.js)
  * -b radix         pre-select Radix as the component library (skips interactive prompt)
- * --yes            skip all yes/no confirmation prompts
  * --no-monorepo    suppress the "are you in a monorepo?" interactive prompt
  * --no-rtl         suppress the RTL direction interactive prompt
+ * (-y/--yes defaults to true per CLI docs, no need to pass it)
  *
  * Ref: https://ui.shadcn.com/docs/cli — init options
  */
 export const SHADCN_INIT_COMMAND: string =
-  "bunx --bun shadcn@latest init -t vite -b radix --yes --no-monorepo --no-rtl";
+  "bunx --bun shadcn@latest init -t vite -b radix --no-monorepo --no-rtl";
 
 /**
  * Returns the App.tsx source for the scaffolded project.
