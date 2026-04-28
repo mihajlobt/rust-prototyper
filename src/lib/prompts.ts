@@ -46,6 +46,9 @@ export {
   WORKFLOW_REFERENCE_PROMPT_BASE,
   WORKFLOW_VALIDATE_PROMPT_BASE,
   WORKFLOW_TRANSFORM_PROMPT_BASE,
+  WORKFLOW_SUMMARIZE_PROMPT_BASE,
+  WORKFLOW_CONDITION_PROMPT_BASE,
+  WORKFLOW_LOOP_FIX_PROMPT_BASE,
 } from "./prompts/workflows";
 
 // ─── Prompt definitions — used by SettingsModal for editable prompt slots ────
@@ -66,6 +69,7 @@ import { WORKFLOW_INTERACTION_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_REFERENCE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_VALIDATE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_TRANSFORM_PROMPT_BASE } from "./prompts/workflows";
+import { WORKFLOW_SUMMARIZE_PROMPT_BASE, WORKFLOW_CONDITION_PROMPT_BASE, WORKFLOW_LOOP_FIX_PROMPT_BASE } from "./prompts/workflows";
 
 export type PromptGroup = "Components" | "Screens" | "Themes" | "Workflows";
 
@@ -101,4 +105,7 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
   { key: "workflow-reference-system",        label: "Reference — system",              group: "Workflows",  description: "Analyzes components and libraries, producing structured API documentation.",        getDefault: () => WORKFLOW_REFERENCE_PROMPT_BASE },
   { key: "workflow-validate-system",         label: "Validate — system",               group: "Workflows",  description: "Reviews code for TypeScript errors, missing imports, accessibility, and performance.", getDefault: () => WORKFLOW_VALIDATE_PROMPT_BASE },
   { key: "workflow-transform-system",        label: "Transform — system",              group: "Workflows",  description: "Transforms content per instruction — format conversion, refactoring, extraction.",   getDefault: () => WORKFLOW_TRANSFORM_PROMPT_BASE },
+  { key: "workflow-summarize-system",       label: "Summarize — system",              group: "Workflows",  description: "Compresses long context while preserving all critical facts and code.",              getDefault: () => WORKFLOW_SUMMARIZE_PROMPT_BASE },
+  { key: "workflow-condition-system",       label: "Condition — system",              group: "Workflows",  description: "Binary AI judge: evaluates whether input satisfies a given condition (YES/NO).",     getDefault: () => WORKFLOW_CONDITION_PROMPT_BASE },
+  { key: "workflow-loop-fix-system",        label: "LoopUntil — fix system",          group: "Workflows",  description: "AI code repair prompt used by LoopUntil to fix TypeScript/lint errors iteratively.", getDefault: () => WORKFLOW_LOOP_FIX_PROMPT_BASE },
 ];

@@ -1,14 +1,33 @@
-import { Settings, Copy, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { Settings, Copy, Trash2, X, Edit2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Loader } from "@/components/ui/loader";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageContent } from "@/components/ui/message";
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
-import Frame from "react-frame-component";
+import CodeMirror from "@uiw/react-codemirror";
+import { markdown } from "@codemirror/lang-markdown";
+import { oneDark } from "@codemirror/theme-one-dark";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
+import {
+  InputNodeFields, WriteFileFields, BashFields, FetchFields, FileOpFields,
+  AuthFields, TransformFields, DesignSystemFields, BunFields, RunnerFields,
+  ContextOverrideFields, PreviewFields,
+  ConditionFields, LoopUntilFields, SummarizeFields, DiffFields,
+  JsonExtractFields, LinterFields, GitOpFields, MemoryKeyField,
+} from "@/workflows/NodeFieldSections";
+
+// AI node types that have a per-node system prompt
+const AI_NODE_TYPES = new Set([
+  "requirements", "architect", "structure", "style", "interaction", "reference",
+  "validate", "transform", "custom", "summarize", "condition", "loopuntil",
+]);
+
+const CONTEXT_OVERRIDE_TYPES = new Set([
+  "requirements", "architect", "structure", "style", "interaction", "reference", "validate",
+]);
 
 interface NodePropertiesPanelProps {
   nodeId: string;
@@ -23,9 +42,12 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
   const set = (patch: Partial<WorkflowNodeData>) => onUpdate(nodeId, patch);
   const isRunning = data.status === "running";
   const isError = data.status === "error";
+  const [editingPrompt, setEditingPrompt] = useState(false);
 
-  // nowheel is React Flow's built-in class that disables canvas zoom on scroll
-  // nopan prevents drag-panning when clicking inside the panel
+  const isCustomType = data.nodeType === "custom" || data.nodeType.startsWith("custom_");
+  const hasSystemPrompt = AI_NODE_TYPES.has(data.nodeType) || isCustomType;
+  const hasContextOverride = CONTEXT_OVERRIDE_TYPES.has(data.nodeType);
+
   return (
     <div
       className="nowheel nopan w-[420px] bg-card border border-border rounded-lg flex flex-col shadow-xl"
@@ -42,194 +64,125 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
 
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
         <div className="p-3 space-y-3">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Label</label>
-          <Input value={data.label} onChange={(e) => set({ label: e.target.value })} className="h-7 text-xs" />
-        </div>
+          {/* Label */}
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Label</label>
+            <Input value={data.label} onChange={(e) => set({ label: e.target.value })} className="h-7 text-xs" />
+          </div>
 
-        {(data.nodeType === "input" || data.nodeType === "custom" || data.nodeType.startsWith("custom_")) && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">{data.nodeType !== "input" ? "System Prompt" : "Prompt"}</label>
-            <Textarea value={data.prompt || ""} onChange={(e) => set({ prompt: e.target.value })} className="text-xs min-h-[80px] resize-none" placeholder="Enter prompt…" />
-          </div>
-        )}
-
-        {data.nodeType === "bash" && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Command</label>
-            <Input value={data.command || ""} onChange={(e) => set({ command: e.target.value })} className="h-7 text-xs" placeholder="echo hello" />
-          </div>
-        )}
-
-        {data.nodeType === "writefile" && (<>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Path (relative to generated/)</label>
-            <Input value={data.path || ""} onChange={(e) => set({ path: e.target.value })} className="h-7 text-xs" placeholder="src/App.tsx" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Mode</label>
-            <Select value={String(data.mode ?? "overwrite")} onValueChange={(v) => set({ mode: v })}>
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" side="bottom">
-                <SelectItem value="overwrite" className="text-xs">Overwrite</SelectItem>
-                <SelectItem value="append" className="text-xs">Append</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </>)}
-
-        {data.nodeType === "fetch" && (<>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">URL</label>
-            <Input value={data.url || ""} onChange={(e) => set({ url: e.target.value })} className="h-7 text-xs" placeholder="https://api.example.com" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Method</label>
-            <Input value={data.method || "GET"} onChange={(e) => set({ method: e.target.value })} className="h-7 text-xs" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Headers (JSON)</label>
-            <Textarea value={data.headers || "{}"} onChange={(e) => set({ headers: e.target.value })} className="text-xs min-h-[60px] resize-none font-mono" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Body</label>
-            <Textarea value={data.body || ""} onChange={(e) => set({ body: e.target.value })} className="text-xs min-h-[60px] resize-none" />
-          </div>
-        </>)}
-
-        {data.nodeType === "fileop" && (<>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Operation</label>
-            <Select value={data.operation || "read"} onValueChange={(v) => set({ operation: v })}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent position="popper" side="bottom">
-                <SelectItem value="read" className="text-xs">Read</SelectItem>
-                <SelectItem value="write" className="text-xs">Write</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Path</label>
-            <Input value={data.path || ""} onChange={(e) => set({ path: e.target.value })} className="h-7 text-xs" placeholder="./file.txt" />
-          </div>
-          {data.operation === "write" && (
+          {/* Per-node system prompt (all AI nodes) */}
+          {hasSystemPrompt && (
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Content</label>
-              <Textarea value={data.content || ""} onChange={(e) => set({ content: e.target.value })} className="text-xs min-h-[60px] resize-none" />
-            </div>
-          )}
-        </>)}
-
-        {data.nodeType === "auth" && (<>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Scheme</label>
-            <Select value={data.authScheme || "bearer"} onValueChange={(v) => set({ authScheme: v })}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent position="popper" side="bottom">
-                <SelectItem value="bearer" className="text-xs">Bearer</SelectItem>
-                <SelectItem value="apikey" className="text-xs">API Key</SelectItem>
-                <SelectItem value="basic" className="text-xs">Basic</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Token / Key</label>
-            <Input value={data.authToken || ""} onChange={(e) => set({ authToken: e.target.value })} className="h-7 text-xs" />
-          </div>
-          {data.authScheme === "apikey" && (
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Header Name</label>
-              <Input value={data.authHeaderName || "X-API-Key"} onChange={(e) => set({ authHeaderName: e.target.value })} className="h-7 text-xs" />
-            </div>
-          )}
-        </>)}
-
-        {data.nodeType === "transform" && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Transform Instruction</label>
-            <Textarea value={data.prompt || ""} onChange={(e) => set({ prompt: e.target.value })} className="text-xs min-h-[60px] resize-none" placeholder="Convert to TypeScript…" />
-          </div>
-        )}
-
-        {data.nodeType === "designSystem" && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Theme Name</label>
-            <Input value={data.prompt || ""} onChange={(e) => set({ prompt: e.target.value })} className="h-7 text-xs" placeholder="default, dark, light…" />
-          </div>
-        )}
-
-        {data.nodeType === "bun" && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Bun Command</label>
-            <Input value={data.command || "dev"} onChange={(e) => set({ command: e.target.value })} className="h-7 text-xs" placeholder="dev, build, install" />
-          </div>
-        )}
-
-        {data.nodeType === "runner" && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Port</label>
-            <Input value={String(data.port ?? "5173")} onChange={(e) => set({ port: e.target.value })} className="h-7 text-xs" placeholder="5173" />
-          </div>
-        )}
-
-        {["requirements","architect","structure","style","interaction","reference","validate"].includes(data.nodeType) && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Context Override</label>
-            <Textarea value={data.prompt || ""} onChange={(e) => set({ prompt: e.target.value })} className="text-xs min-h-[60px] resize-none" placeholder="Override input from previous node…" />
-          </div>
-        )}
-
-        {data.nodeType === "preview" && data.output && (
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Preview</label>
-            <div className="border border-border rounded overflow-hidden bg-white" style={{ height: 200 }}>
-              <Frame className="w-full h-full border-0">
-                <div dangerouslySetInnerHTML={{ __html: data.output }} />
-              </Frame>
-            </div>
-          </div>
-        )}
-
-        {/* Status + output */}
-        <div className="pt-2 border-t border-border space-y-2">
-          <div className="flex items-center gap-1.5">
-            <span className={[
-              "w-1.5 h-1.5 rounded-full shrink-0",
-              isRunning                  ? "bg-status-running animate-pulse" :
-              isError                    ? "bg-status-error" :
-              data.status === "done"     ? "bg-status-done" :
-                                           "bg-muted-foreground",
-            ].join(" ")} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider capitalize">{data.status || "idle"}</span>
-          </div>
-
-          {isRunning && !data.output && (
-            <Loader variant="dots" size="sm" text="Generating" />
-          )}
-
-          {isError && data.output && (
-            <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded font-mono whitespace-pre-wrap break-all">
-              {data.output}
-            </div>
-          )}
-
-          {!isError && data.output && (
-            <ChatContainerRoot className="max-h-64 rounded bg-muted">
-              <ChatContainerContent className="p-2">
-                <MessageContent
-                  markdown
-                  isStreaming={isRunning}
-                  className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted-foreground">System Prompt</label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1.5 text-[10px] gap-1"
+                  onClick={() => setEditingPrompt((v) => !v)}
                 >
-                  {data.output}
-                </MessageContent>
-                <ChatContainerScrollAnchor />
-              </ChatContainerContent>
-            </ChatContainerRoot>
+                  {editingPrompt
+                    ? <><Check size={9} />Done</>
+                    : <><Edit2 size={9} />Edit</>
+                  }
+                </Button>
+              </div>
+              {editingPrompt ? (
+                <div className="rounded overflow-hidden border border-border">
+                  <CodeMirror
+                    value={data.systemPrompt ?? ""}
+                    height="200px"
+                    theme={oneDark}
+                    extensions={[markdown()]}
+                    onChange={(val) => set({ systemPrompt: val })}
+                    basicSetup={{ lineNumbers: false, foldGutter: false }}
+                  />
+                </div>
+              ) : (
+                <div className="rounded bg-muted px-2 py-1.5 min-h-[40px]">
+                  {data.systemPrompt ? (
+                    <MessageContent
+                      markdown
+                      className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+                    >
+                      {data.systemPrompt}
+                    </MessageContent>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/60 italic">Using default system prompt — click Edit to override</span>
+                  )}
+                </div>
+              )}
+            </div>
           )}
-        </div>
+
+          {/* Per-type configuration fields */}
+          {data.nodeType === "input"       && <InputNodeFields data={data} set={set} />}
+          {data.nodeType === "writefile"   && <WriteFileFields data={data} set={set} />}
+          {data.nodeType === "bash"        && <BashFields data={data} set={set} />}
+          {data.nodeType === "fetch"       && <FetchFields data={data} set={set} />}
+          {data.nodeType === "fileop"      && <FileOpFields data={data} set={set} />}
+          {data.nodeType === "auth"        && <AuthFields data={data} set={set} />}
+          {data.nodeType === "transform"   && <TransformFields data={data} set={set} />}
+          {data.nodeType === "designSystem"&& <DesignSystemFields data={data} set={set} />}
+          {data.nodeType === "bun"         && <BunFields data={data} set={set} />}
+          {data.nodeType === "runner"      && <RunnerFields data={data} set={set} />}
+          {data.nodeType === "condition"   && <ConditionFields data={data} set={set} />}
+          {data.nodeType === "loopuntil"   && <LoopUntilFields data={data} set={set} />}
+          {data.nodeType === "summarize"   && <SummarizeFields data={data} set={set} />}
+          {data.nodeType === "diff"        && <DiffFields data={data} set={set} />}
+          {data.nodeType === "jsonextract" && <JsonExtractFields data={data} set={set} />}
+          {data.nodeType === "linter"      && <LinterFields data={data} set={set} />}
+          {data.nodeType === "gitop"       && <GitOpFields data={data} set={set} />}
+          {(data.nodeType === "memorystore" || data.nodeType === "memoryload") && <MemoryKeyField data={data} set={set} />}
+          {isCustomType && (
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">User Prompt / Input</label>
+              <Textarea value={data.prompt || ""} onChange={(e) => set({ prompt: e.target.value })} className="text-xs min-h-[80px] resize-none" placeholder="Enter prompt…" />
+            </div>
+          )}
+          {hasContextOverride && (
+            <ContextOverrideFields data={data} set={set} />
+          )}
+          {data.nodeType === "preview" && <PreviewFields data={data} set={set} />}
+
+          {/* Status + output */}
+          <div className="pt-2 border-t border-border space-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className={[
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                isRunning                  ? "bg-status-running animate-pulse" :
+                isError                    ? "bg-status-error" :
+                data.status === "done"     ? "bg-status-done" :
+                                             "bg-muted-foreground",
+              ].join(" ")} />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider capitalize">{data.status || "idle"}</span>
+            </div>
+
+            {isRunning && !data.output && (
+              <Loader variant="dots" size="sm" text="Generating" />
+            )}
+
+            {isError && data.output && (
+              <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded font-mono whitespace-pre-wrap break-all">
+                {data.output}
+              </div>
+            )}
+
+            {!isError && data.output && (
+              <ChatContainerRoot className="max-h-64 rounded bg-muted">
+                <ChatContainerContent className="p-2">
+                  <MessageContent
+                    markdown
+                    isStreaming={isRunning}
+                    className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+                  >
+                    {data.output}
+                  </MessageContent>
+                  <ChatContainerScrollAnchor />
+                </ChatContainerContent>
+              </ChatContainerRoot>
+            )}
+          </div>
         </div>
       </ScrollArea>
     </div>

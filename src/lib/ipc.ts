@@ -25,6 +25,11 @@ export async function runShellCommandSync(cwd: string, command: string): Promise
   return invoke("run_shell_command_sync", { cwd, command });
 }
 
+/** Runs a whitelisted shell command and returns captured stdout+stderr as a string. Does not throw on non-zero exit codes. */
+export async function runShellCommandCapture(cwd: string, command: string): Promise<string> {
+  return invoke("run_shell_command_capture", { cwd, command });
+}
+
 /** Runs `bun install` and awaits completion. */
 export async function bunInstallSync(cwd: string): Promise<void> {
   return invoke("bun_install_sync", { cwd });

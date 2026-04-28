@@ -259,6 +259,68 @@ async fn bun_install_sync(cwd: String, app: AppHandle) -> Result<(), AppError> {
     spawn_bun_command_sync(&app, "bun", vec!["install".into()], cwd.to_string_lossy().to_string()).await
 }
 
+/// Runs a whitelisted shell command and returns the captured stdout+stderr output.
+/// Does not throw on non-zero exit codes — callers inspect the output themselves.
+async fn capture_command_output(
+    app: &AppHandle,
+    cmd: &str,
+    args: Vec<String>,
+    cwd: String,
+) -> Result<String, AppError> {
+    let shell = app.shell();
+    let mut command = shell.command(cmd);
+    for arg in &args {
+        command = command.arg(arg);
+    }
+    let (mut rx, child) = command
+        .current_dir(&cwd)
+        .spawn()
+        .map_err(|e| AppError::Process(e.to_string()))?;
+
+    let pid = child.pid();
+    app.state::<AppState>().active_processes.lock().unwrap().insert(pid, child);
+
+    let mut output = String::new();
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(buf) => {
+                output.push_str(&String::from_utf8_lossy(&buf));
+            }
+            CommandEvent::Stderr(buf) => {
+                output.push_str(&String::from_utf8_lossy(&buf));
+            }
+            CommandEvent::Terminated(_) => {
+                app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
+                break;
+            }
+            _ => {}
+        }
+    }
+    app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
+
+    // Truncate to 100KB to avoid flooding the frontend
+    const MAX_OUTPUT: usize = 100_000;
+    if output.len() > MAX_OUTPUT {
+        output.truncate(MAX_OUTPUT);
+        output.push_str("\n... (output truncated)");
+    }
+    Ok(output)
+}
+
+#[tauri::command]
+async fn run_shell_command_capture(cwd: String, command: String, app: AppHandle) -> Result<String, AppError> {
+    let cwd = resolve_cwd(&app, &cwd)?;
+    let parts = shlex::split(&command).ok_or_else(|| AppError::Process("Invalid shell syntax".into()))?;
+    if parts.is_empty() {
+        return Err(AppError::Process("Empty command".into()));
+    }
+    if !ALLOWED_SHELL_COMMANDS.contains(&parts[0].as_str()) {
+        return Err(AppError::Security(format!("Command '{}' not allowed", parts[0])));
+    }
+    let args = parts.iter().skip(1).map(|s| s.to_string()).collect();
+    capture_command_output(&app, &parts[0], args, cwd.to_string_lossy().to_string()).await
+}
+
 #[tauri::command]
 async fn kill_process(pid: u32, state: State<'_, AppState>) -> Result<(), AppError> {
     let mut processes = state.active_processes.lock().unwrap();
@@ -1578,7 +1640,7 @@ pub fn run() {
             http_client,
         })
         .invoke_handler(tauri::generate_handler![
-            bun_dev, bun_build, bun_install, bun_install_sync, run_shell_command, run_shell_command_sync, kill_process, kill_all_processes, kill_port,
+            bun_dev, bun_build, bun_install, bun_install_sync, run_shell_command, run_shell_command_sync, run_shell_command_capture, kill_process, kill_all_processes, kill_port,
             read_dir, read_file, write_file, create_dir, delete_file, delete_dir, rename_file, reveal_in_explorer,
             http_request,
             generate_completion, generate_completion_stream, list_ollama_models,

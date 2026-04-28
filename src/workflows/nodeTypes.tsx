@@ -11,8 +11,8 @@ import {
   LogIn, LogOut, FileOutput, ListChecks, Palette, BookOpen, Compass,
   Layout, Paintbrush, MousePointerClick, GitBranch, Merge,
   Terminal, Globe, Lock, Wand2, ShieldCheck, Eye, Package, Play, Sparkles,
-  FolderOpen,
-  Settings,
+  FolderOpen, Settings, GitFork, Repeat2, AlignLeft, Braces, FileDiff,
+  FileJson, ScanLine, GitCommit, Database, HardDrive,
 } from "lucide-react";
 import {
   WORKFLOW_REQUIREMENTS_PROMPT_BASE,
@@ -21,7 +21,6 @@ import {
   WORKFLOW_STYLE_PROMPT_BASE,
   WORKFLOW_INTERACTION_PROMPT_BASE,
   WORKFLOW_REFERENCE_PROMPT_BASE,
-  WORKFLOW_VALIDATE_PROMPT_BASE,
   WORKFLOW_TRANSFORM_PROMPT_BASE,
 } from "@/lib/prompts";
 
@@ -44,27 +43,44 @@ export interface NodeTypeDef {
 }
 
 export const BUILTIN_NODE_TYPES: NodeTypeDef[] = [
+  // IO
   { type: "input",        label: "Input",         desc: "Start of workflow",       tooltip: "Start of the workflow — receives user input",       category: "IO",          color: "var(--node-io)",         icon: LogIn },
   { type: "output",       label: "Output",        desc: "End of workflow",         tooltip: "End of the workflow — produces final output",      category: "IO",          color: "var(--node-io)",         icon: LogOut },
   { type: "writefile",    label: "Write File",    desc: "Write output to file",    tooltip: "Write output to file",                              category: "IO",          color: "var(--node-io)",         icon: FileOutput },
+  // Analysis
   { type: "requirements", label: "Requirements",  desc: "Parse requirements",      tooltip: extractRole(WORKFLOW_REQUIREMENTS_PROMPT_BASE),    category: "Analysis",    color: "var(--node-analysis)",    icon: ListChecks },
   { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      tooltip: "Apply theme tokens",                                category: "Analysis",    color: "var(--node-analysis)",    icon: Palette },
   { type: "reference",    label: "Reference",     desc: "Analyze components",      tooltip: extractRole(WORKFLOW_REFERENCE_PROMPT_BASE),       category: "Analysis",    color: "var(--node-analysis)",    icon: BookOpen },
+  // Planning
   { type: "architect",    label: "Architect",     desc: "Plan structure",          tooltip: extractRole(WORKFLOW_ARCHITECT_PROMPT_BASE),      category: "Planning",    color: "var(--node-planning)",    icon: Compass },
+  // Generation
   { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       tooltip: extractRole(WORKFLOW_STRUCTURE_PROMPT_BASE),      category: "Generation",  color: "var(--node-generation)",  icon: Layout },
   { type: "style",        label: "Style",         desc: "Apply CSS classes",       tooltip: extractRole(WORKFLOW_STYLE_PROMPT_BASE),          category: "Generation",  color: "var(--node-generation)",  icon: Paintbrush },
   { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         tooltip: extractRole(WORKFLOW_INTERACTION_PROMPT_BASE),    category: "Generation",  color: "var(--node-terminal)",    icon: MousePointerClick },
+  // Composition
   { type: "parallel",     label: "Parallel",      desc: "Branch execution",        tooltip: "Branch execution into parallel paths",               category: "Composition", color: "var(--node-composition)", icon: GitBranch },
   { type: "composition",  label: "Composition",   desc: "Merge outputs",           tooltip: "Merge outputs from parallel branches",                category: "Composition", color: "var(--node-composition)", icon: Merge },
+  { type: "condition",    label: "Condition",     desc: "Branch on condition",     tooltip: "Evaluates a JS expression or AI judge against input — passes or blocks flow", category: "Composition", color: "var(--node-composition)", icon: GitFork },
+  { type: "loopuntil",    label: "Loop Until",    desc: "Retry until condition",   tooltip: "Runs validation command; if it fails, AI-fixes the code and retries up to N times", category: "Composition", color: "var(--node-composition)", icon: Repeat2 },
+  // Utility
   { type: "bash",         label: "Bash",          desc: "Run shell command",       tooltip: "Run shell command",                                  category: "Utility",     color: "var(--node-utility)",     icon: Terminal },
   { type: "fetch",        label: "Fetch",         desc: "HTTP request",            tooltip: "HTTP request",                                       category: "Utility",     color: "var(--node-utility)",     icon: Globe },
   { type: "fileop",       label: "File Op",       desc: "Read / write files",      tooltip: "Read / write files",                                 category: "Utility",     color: "var(--node-utility)",     icon: FolderOpen },
   { type: "auth",         label: "Auth",          desc: "Authentication header",   tooltip: "Authentication header",                              category: "Utility",     color: "var(--node-terminal)",    icon: Lock },
   { type: "transform",    label: "Transform",     desc: "Transform content via AI", tooltip: extractRole(WORKFLOW_TRANSFORM_PROMPT_BASE),       category: "Utility",     color: "var(--node-utility)",     icon: Wand2 },
-  { type: "validate",     label: "Validate",      desc: "Validate code output",    tooltip: extractRole(WORKFLOW_VALIDATE_PROMPT_BASE),       category: "Utility",     color: "var(--node-analysis)",    icon: ShieldCheck },
+  { type: "validate",     label: "Validate",      desc: "Run tsc + eslint",        tooltip: "Runs bun tsc --noEmit and eslint, capturing real compiler output", category: "Utility", color: "var(--node-analysis)", icon: ShieldCheck },
   { type: "preview",      label: "Preview",       desc: "Render HTML output",      tooltip: "Render HTML output",                                  category: "Utility",     color: "var(--node-io)",          icon: Eye },
   { type: "bun",          label: "Bun",           desc: "Bun dev / build",         tooltip: "Bun dev / build",                                     category: "Utility",     color: "var(--node-utility)",     icon: Package },
   { type: "runner",       label: "Runner",        desc: "Start dev server",        tooltip: "Start dev server",                                    category: "Utility",     color: "var(--node-generation)",  icon: Play },
+  { type: "summarize",    label: "Summarize",     desc: "Compress long context",   tooltip: "AI-compresses large outputs to prevent context overflow in downstream nodes", category: "Utility", color: "var(--node-utility)", icon: AlignLeft },
+  { type: "codeextract",  label: "Code Extract",  desc: "Strip markdown fences",   tooltip: "Strips markdown code fences from AI output — extracts raw code", category: "Utility", color: "var(--node-utility)", icon: Braces },
+  { type: "diff",         label: "Diff",          desc: "Unified diff",            tooltip: "Computes a unified diff between base content and previous node output", category: "Utility", color: "var(--node-utility)", icon: FileDiff },
+  { type: "jsonextract",  label: "JSON Extract",  desc: "Extract JSON path",       tooltip: "Parses JSON from input and extracts a dot-notation path (e.g. data.items.0.name)", category: "Utility", color: "var(--node-utility)", icon: FileJson },
+  { type: "linter",       label: "Linter",        desc: "Run eslint/prettier",     tooltip: "Runs eslint and/or prettier on the generated project, capturing results with line numbers", category: "Utility", color: "var(--node-analysis)", icon: ScanLine },
+  { type: "gitop",        label: "Git Op",        desc: "Git operations",          tooltip: "Run git status, add, or commit — commit message can come from previous node", category: "Utility", color: "var(--node-utility)", icon: GitCommit },
+  { type: "memorystore",  label: "Memory Store",  desc: "Store to scratchpad",     tooltip: "Stores previous node output in a named workflow-run scratchpad key", category: "Utility", color: "var(--node-utility)", icon: Database },
+  { type: "memoryload",   label: "Memory Load",   desc: "Load from scratchpad",    tooltip: "Loads a value from the workflow-run scratchpad by key", category: "Utility", color: "var(--node-utility)", icon: HardDrive },
+  // Custom
   { type: "custom",       label: "Custom",        desc: "Custom AI node",          tooltip: "Custom AI node",                                      category: "Custom",      color: "var(--node-custom)",      icon: Sparkles },
 ];
 
@@ -79,6 +95,8 @@ export interface WorkflowNodeData {
   desc: string;
   status: "idle" | "running" | "done" | "error";
   output?: string;
+  /** Per-node system prompt override. Overrides the global prompt for AI nodes. */
+  systemPrompt?: string;
   prompt?: string;
   command?: string;
   url?: string;
@@ -93,6 +111,25 @@ export interface WorkflowNodeData {
   authHeaderName?: string;
   mode?: string;
   port?: string;
+  // Condition node
+  conditionMode?: "expression" | "ai";
+  expression?: string;
+  judgePrompt?: string;
+  // LoopUntil node
+  maxIterations?: number;
+  validationCommand?: string;
+  fixPrompt?: string;
+  // Diff node
+  baseContent?: string;
+  // JSON Extract node
+  jsonPath?: string;
+  // Linter node
+  lintTarget?: "tsc" | "eslint" | "both";
+  // Git Op node
+  gitCommand?: string;
+  commitMessage?: string;
+  // Memory nodes
+  memoryKey?: string;
   [key: string]: unknown;
 }
 
