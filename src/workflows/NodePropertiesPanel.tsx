@@ -18,8 +18,29 @@ import {
   ConditionFields, LoopUntilFields, SummarizeFields, DiffFields,
   JsonExtractFields, LinterFields, GitOpFields, MemoryKeyField,
 } from "@/workflows/NodeFieldSections";
+import {
+  WORKFLOW_REQUIREMENTS_PROMPT_BASE, WORKFLOW_ARCHITECT_PROMPT_BASE,
+  WORKFLOW_STRUCTURE_PROMPT_BASE, WORKFLOW_STYLE_PROMPT_BASE,
+  WORKFLOW_INTERACTION_PROMPT_BASE, WORKFLOW_REFERENCE_PROMPT_BASE,
+  WORKFLOW_VALIDATE_PROMPT_BASE, WORKFLOW_TRANSFORM_PROMPT_BASE,
+  WORKFLOW_SUMMARIZE_PROMPT_BASE, WORKFLOW_CONDITION_PROMPT_BASE,
+  WORKFLOW_LOOP_FIX_PROMPT_BASE,
+} from "@/lib/prompts";
 
-// AI node types that have a per-node system prompt
+const DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
+  requirements: WORKFLOW_REQUIREMENTS_PROMPT_BASE,
+  architect:    WORKFLOW_ARCHITECT_PROMPT_BASE,
+  structure:    WORKFLOW_STRUCTURE_PROMPT_BASE,
+  style:        WORKFLOW_STYLE_PROMPT_BASE,
+  interaction:  WORKFLOW_INTERACTION_PROMPT_BASE,
+  reference:    WORKFLOW_REFERENCE_PROMPT_BASE,
+  validate:     WORKFLOW_VALIDATE_PROMPT_BASE,
+  transform:    WORKFLOW_TRANSFORM_PROMPT_BASE,
+  summarize:    WORKFLOW_SUMMARIZE_PROMPT_BASE,
+  condition:    WORKFLOW_CONDITION_PROMPT_BASE,
+  loopuntil:    WORKFLOW_LOOP_FIX_PROMPT_BASE,
+};
+
 const AI_NODE_TYPES = new Set([
   "requirements", "architect", "structure", "style", "interaction", "reference",
   "validate", "transform", "custom", "summarize", "condition", "loopuntil",
@@ -43,10 +64,21 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
   const isRunning = data.status === "running";
   const isError = data.status === "error";
   const [editingPrompt, setEditingPrompt] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState("");
 
   const isCustomType = data.nodeType === "custom" || data.nodeType.startsWith("custom_");
   const hasSystemPrompt = AI_NODE_TYPES.has(data.nodeType) || isCustomType;
   const hasContextOverride = CONTEXT_OVERRIDE_TYPES.has(data.nodeType);
+
+  const openEditor = () => {
+    setDraftPrompt(data.systemPrompt || DEFAULT_SYSTEM_PROMPTS[data.nodeType] || "");
+    setEditingPrompt(true);
+  };
+
+  const closeEditor = () => {
+    set({ systemPrompt: draftPrompt });
+    setEditingPrompt(false);
+  };
 
   return (
     <div
@@ -79,7 +111,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
                   variant="ghost"
                   size="sm"
                   className="h-5 px-1.5 text-[10px] gap-1"
-                  onClick={() => setEditingPrompt((v) => !v)}
+                  onClick={editingPrompt ? closeEditor : openEditor}
                 >
                   {editingPrompt
                     ? <><Check size={9} />Done</>
@@ -90,11 +122,11 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
               {editingPrompt ? (
                 <div className="rounded overflow-hidden border border-border">
                   <CodeMirror
-                    value={data.systemPrompt ?? ""}
+                    value={draftPrompt}
                     height="200px"
                     theme={oneDark}
                     extensions={[markdown()]}
-                    onChange={(val) => set({ systemPrompt: val })}
+                    onChange={setDraftPrompt}
                     basicSetup={{ lineNumbers: false, foldGutter: false }}
                   />
                 </div>
