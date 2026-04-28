@@ -11,11 +11,8 @@ import { useAppStore } from "@/stores/appStore";
  *
  * @param key        Unique key under `settings.layout[key]`.
  * @param paneCount  Expected number of panes; ignores stale arrays with wrong length.
- * @param paneVisible Per-pane visibility flags. Pass `false` for panes that are
- *                    currently hidden (visible={false}). The corresponding entry in
- *                    defaultSizes is forced to 0 so Allotment never allocates space
- *                    to them on first layout, preventing the flash where a hidden pane
- *                    briefly appears at full size before being collapsed.
+ * @param paneVisible Per-pane visibility flags matching visible={} props. `false` entries
+ *                    force defaultSizes to 0 so hidden panes never flash on mount.
  */
 export function useAllotmentLayout(key: string, paneCount?: number, paneVisible?: boolean[]) {
   const ref = useRef<AllotmentHandle>(null);
@@ -30,12 +27,7 @@ export function useAllotmentLayout(key: string, paneCount?: number, paneVisible?
   const defaultSizes: number[] | undefined = (() => {
     if (!paneVisible) return rawSizes;
     if (rawSizes) return rawSizes.map((s, i) => paneVisible[i] === false ? 0 : s);
-    // No saved layout but some panes are hidden — synthesize sizes so hidden panes
-    // start at 0. Without this, Allotment uses preferredSize for all panes on mount,
-    // paints that frame, then collapses hidden panes after a ResizeObserver re-render.
-    if (paneVisible.some((v) => v === false)) {
-      return paneVisible.map((v) => (v === false ? 0 : 1));
-    }
+    if (paneVisible.some((v) => v === false)) return paneVisible.map((v) => v === false ? 0 : 1);
     return undefined;
   })();
 
