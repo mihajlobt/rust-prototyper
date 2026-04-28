@@ -11,8 +11,7 @@ import { useAppStore } from "@/stores/appStore";
  *
  * @param key        Unique key under `settings.layout[key]`.
  * @param paneCount  Expected number of panes; ignores stale arrays with wrong length.
- * @param paneVisible Per-pane visibility flags matching visible={} props. `false` entries
- *                    force defaultSizes to 0 so hidden panes never flash on mount.
+ * @param paneVisible Per-pane visibility flags matching the visible={} props on each pane.
  */
 export function useAllotmentLayout(key: string, paneCount?: number, paneVisible?: boolean[]) {
   const ref = useRef<AllotmentHandle>(null);
