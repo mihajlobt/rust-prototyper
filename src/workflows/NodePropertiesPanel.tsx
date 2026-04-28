@@ -77,7 +77,8 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
   };
 
   const closeEditor = () => {
-    set({ systemPrompt: draftPrompt });
+    const defaultPrompt = DEFAULT_SYSTEM_PROMPTS[data.nodeType] || "";
+    set({ systemPrompt: draftPrompt === defaultPrompt ? undefined : draftPrompt });
     setEditingPrompt(false);
   };
 
