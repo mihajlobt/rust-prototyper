@@ -206,7 +206,7 @@ bunx tsc --noEmit    # type-check
 - **`resize()` is only safe in event handlers (click, drag).** NEVER call `resize()` in `useEffect` or `requestAnimationFrame` — it crashes with `TypeError: undefined is not an object (evaluating 'pane.minimumSize')` because panes haven't laid out yet.
 - **`preferredSize` is NOT reactive.** It only affects initial mount sizing and `reset()`. Do not set it dynamically based on state to try to resize panes — it won't work after mount.
 - **For collapse/expand patterns with a visible header:** Split into two `Allotment.Pane` elements — one locked-size header pane (`minSize={28} maxSize={28}`) and one content pane with `visible={isOpen}`. This is the proper documented pattern, not `resize([9999, size])`.
-- **`useAllotmentLayout` hook** persists pane sizes via `onDragEnd` and restores them via `defaultSizes`. When changing pane count, update the `paneCount` parameter accordingly. Pass `paneVisible` (e.g. `[true, true, isOpen]`) for any Allotment that has collapsible panes — this ensures hidden panes start at 0 in `defaultSizes` so Allotment never allocates space to them on initial layout.
+- **`useAllotmentLayout` hook** persists pane sizes via `onDragEnd` and restores them via `defaultSizes`. When changing pane count, update the `paneCount` parameter accordingly. Pass `paneVisible` (e.g. `[true, true, isOpen]`).
 
 ## Dead Code
 

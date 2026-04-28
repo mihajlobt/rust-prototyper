@@ -308,7 +308,7 @@ export function ScreensPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(i, v) => { if (i === 2) setPs({ screensShowInspector: v }); }}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
@@ -335,18 +335,16 @@ export function ScreensPanel() {
                 {screensShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>
-            <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160}>
-              {screensShowInspector && (
-                <PromptInspector
-                  model={settings.modelId}
-                  messages={[
-                    { role: "system", content: systemContent },
-                    ...messages.map((m) => ({ role: m.role, content: m.content })),
-                  ]}
-                  host={getHostForProvider(settings.provider, settings.host)}
-                  provider={settings.provider}
-                />
-              )}
+            <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160} snap>
+              <PromptInspector
+                model={settings.modelId}
+                messages={[
+                  { role: "system", content: systemContent },
+                  ...messages.map((m) => ({ role: m.role, content: m.content })),
+                ]}
+                host={getHostForProvider(settings.provider, settings.host)}
+                provider={settings.provider}
+              />
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>

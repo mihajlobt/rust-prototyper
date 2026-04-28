@@ -201,7 +201,7 @@ export function ThemesPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(i, v) => { if (i === 2) setPs({ themesShowInspector: v }); }}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
@@ -245,21 +245,19 @@ export function ThemesPanel() {
                 {themesShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>
-            <Allotment.Pane visible={themesShowInspector} preferredSize={240} minSize={160}>
-              {themesShowInspector && (
-                <PromptInspector
-                  model={settings.modelId}
-                  messages={messages.map((m) => ({ role: m.role, content: m.content }))}
-                  host={getHostForProvider(settings.provider, settings.host)}
-                  provider={settings.provider}
-                />
-              )}
+            <Allotment.Pane visible={themesShowInspector} preferredSize={240} minSize={160} snap>
+              <PromptInspector
+                model={settings.modelId}
+                messages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                host={getHostForProvider(settings.provider, settings.host)}
+                provider={settings.provider}
+              />
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(i, v) => { if (i === 2) setPs({ themesCodeOpen: v }); }}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
@@ -406,7 +404,7 @@ body { margin: 0; font-family: sans-serif; }
                 {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </PaneHeader>
             </Allotment.Pane>
-            <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100}>
+            <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100} snap>
               <div className="h-full overflow-hidden">
                 <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
               </div>
