@@ -458,15 +458,17 @@ export function ComponentsPanel() {
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={componentsShowInspector} preferredSize={240} minSize={160} snap>
-              <PromptInspector
-                model={settings.modelId}
-                messages={[
-                  { role: "system", content: systemContent },
-                  ...messages.map((m) => ({ role: m.role, content: m.content })),
-                ]}
-                host={getHostForProvider(settings.provider, settings.host)}
-                provider={settings.provider}
-              />
+              {componentsShowInspector && (
+                <PromptInspector
+                  model={settings.modelId}
+                  messages={[
+                    { role: "system", content: systemContent },
+                    ...messages.map((m) => ({ role: m.role, content: m.content })),
+                  ]}
+                  host={getHostForProvider(settings.provider, settings.host)}
+                  provider={settings.provider}
+                />
+              )}
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
@@ -568,9 +570,11 @@ export function ComponentsPanel() {
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={componentsCodeOpen} preferredSize={252} minSize={100} snap>
-              <div className="h-full overflow-hidden">
-                <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
-              </div>
+              {componentsCodeOpen && (
+                <div className="h-full overflow-hidden">
+                  <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
+                </div>
+              )}
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>

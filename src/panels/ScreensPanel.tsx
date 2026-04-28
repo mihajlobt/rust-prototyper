@@ -336,15 +336,17 @@ export function ScreensPanel() {
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160} snap>
-              <PromptInspector
-                model={settings.modelId}
-                messages={[
-                  { role: "system", content: systemContent },
-                  ...messages.map((m) => ({ role: m.role, content: m.content })),
-                ]}
-                host={getHostForProvider(settings.provider, settings.host)}
-                provider={settings.provider}
-              />
+              {screensShowInspector && (
+                <PromptInspector
+                  model={settings.modelId}
+                  messages={[
+                    { role: "system", content: systemContent },
+                    ...messages.map((m) => ({ role: m.role, content: m.content })),
+                  ]}
+                  host={getHostForProvider(settings.provider, settings.host)}
+                  provider={settings.provider}
+                />
+              )}
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>

@@ -246,12 +246,14 @@ export function ThemesPanel() {
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={themesShowInspector} preferredSize={240} minSize={160} snap>
-              <PromptInspector
-                model={settings.modelId}
-                messages={messages.map((m) => ({ role: m.role, content: m.content }))}
-                host={getHostForProvider(settings.provider, settings.host)}
-                provider={settings.provider}
-              />
+              {themesShowInspector && (
+                <PromptInspector
+                  model={settings.modelId}
+                  messages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                  host={getHostForProvider(settings.provider, settings.host)}
+                  provider={settings.provider}
+                />
+              )}
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
@@ -405,9 +407,11 @@ body { margin: 0; font-family: sans-serif; }
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100} snap>
-              <div className="h-full overflow-hidden">
-                <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
-              </div>
+              {themesCodeOpen && (
+                <div className="h-full overflow-hidden">
+                  <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
+                </div>
+              )}
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
