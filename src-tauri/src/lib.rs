@@ -1559,7 +1559,7 @@ pub fn run() {
         .build()
         .expect("Failed to build HTTP client");
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         // tauri_plugin_fs and tauri_plugin_http are initialized for frontend JS API access
         // even though Rust backend uses tokio::fs and reqwest directly for better control
@@ -1567,7 +1567,12 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(debug_assertions)]
+    let builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+
+    builder
         .manage(AppState {
             active_processes: Mutex::new(HashMap::new()),
             http_client,
