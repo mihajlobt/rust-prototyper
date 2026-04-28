@@ -9,6 +9,7 @@ import { MessageContent } from "@/components/ui/message";
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
+import { EditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 import {
@@ -126,7 +127,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
                     height="200px"
                     style={{ width: "100%" }}
                     theme={oneDark}
-                    extensions={[markdown()]}
+                    extensions={[markdown(), EditorView.lineWrapping]}
                     onChange={setDraftPrompt}
                     basicSetup={{ lineNumbers: false, foldGutter: false }}
                   />
