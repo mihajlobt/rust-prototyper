@@ -432,7 +432,7 @@ export function APIsPanel() {
                 <Plus size={14} />
               </Button>
             </div>
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <div className="p-2 space-y-1">
                 {apis.length === 0 && (
                   <div className="text-xs text-muted-foreground px-1">No saved APIs</div>
@@ -495,7 +495,7 @@ export function APIsPanel() {
                     Save
                   </Button>
                 </div>
-                <ScrollArea className="flex-1">
+                <ScrollArea className="flex-1 overflow-hidden">
                   <div className="p-3 space-y-3">
                     <Input
                       placeholder="API Name"
@@ -761,7 +761,7 @@ export function APIsPanel() {
                   </TabsContent>
 
                   <TabsContent value="history" className="flex-1 mt-0">
-                    <ScrollArea className="h-full">
+                    <ScrollArea className="h-full overflow-hidden">
                       <div className="p-3">
                         {history.length > 0 ? (
                           <div className="space-y-1">

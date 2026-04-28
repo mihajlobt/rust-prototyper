@@ -196,7 +196,7 @@ export function SidebarRail() {
     <div className="h-full flex flex-col bg-card border-r border-border">
       <ContextMenu>
         <ContextMenuTrigger             asChild>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 overflow-hidden">
             <div className="py-2">
               <div className="px-2 space-y-0.5">
                 <div className="flex items-center justify-between px-2 mb-1">

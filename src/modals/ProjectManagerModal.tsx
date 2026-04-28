@@ -191,7 +191,7 @@ export function ProjectManagerModal() {
           </div>
 
           {/* List */}
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 overflow-hidden">
             <div className="p-2 space-y-2">
               {loading && (
                 <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">

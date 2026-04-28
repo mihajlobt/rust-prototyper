@@ -370,7 +370,7 @@ function WorkflowCanvas() {
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-0.5">Node Palette</div>
                 <div className="text-[10px] text-muted-foreground px-1">Drag onto canvas or click to add</div>
               </div>
-              <ScrollArea className="h-[calc(100%-3rem)]">
+              <ScrollArea className="h-[calc(100%-3rem)] overflow-hidden">
               <TooltipProvider delayDuration={400}>
               <div className="p-2 space-y-3">
                 {categories.map((cat) => (
@@ -520,7 +520,7 @@ function WorkflowCanvas() {
               <p className="text-[10px] text-muted-foreground px-0.5">{nodes.length} nodes · {edges.length} edges</p>
               {saveError && <p className="text-[10px] text-destructive px-0.5 break-all">{saveError}</p>}
             </div>
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <div className="p-2 space-y-1">
                 {savedWorkflows.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-xs gap-2 opacity-60">

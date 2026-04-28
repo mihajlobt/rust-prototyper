@@ -225,7 +225,7 @@ export function LibraryPanel() {
         </TabsList>
 
         <TabsContent value={activeTab} className="flex-1 overflow-hidden mt-2">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {filtered.map((item) => (
                 <div

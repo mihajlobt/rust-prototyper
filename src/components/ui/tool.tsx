@@ -178,7 +178,7 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
                 <h4 className="text-muted-foreground mb-2 text-sm font-medium">
                   Output
                 </h4>
-                <ScrollArea className="max-h-60">
+                <ScrollArea className="max-h-60 overflow-hidden">
                   <div className="bg-background rounded border p-2 font-mono text-sm">
                     <pre className="whitespace-pre-wrap">
                       {formatValue(output)}

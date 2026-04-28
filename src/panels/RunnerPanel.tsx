@@ -333,7 +333,7 @@ export function RunnerPanel() {
         <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
           {/* File Tree */}
           <Allotment.Pane preferredSize={200} minSize={150}>
-            <ScrollArea className="h-full"><div className="p-2 bg-card border-r border-border">
+            <ScrollArea className="h-full overflow-hidden"><div className="p-2 bg-card border-r border-border">
               <div className="flex items-center justify-between mb-2 px-1">
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
@@ -399,7 +399,7 @@ export function RunnerPanel() {
                           <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none" onClick={zoomReset} title="Reset zoom">{Math.round(runnerZoom * 100)}%</button>
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomIn} title="Zoom in"><Plus size={11} /></Button>
                         </div>
-                        <ScrollArea className="flex-1"><div className="p-2 bg-muted/30 flex justify-center">
+                        <ScrollArea className="flex-1 overflow-hidden"><div className="p-2 bg-muted/30 flex justify-center">
                           {devUrl ? (
                             <div
                               className="h-full bg-background shadow-lg border border-border overflow-hidden"
@@ -457,7 +457,7 @@ export function RunnerPanel() {
                         className={runnerActiveTab === "terminal" ? "" : "hidden"}
                       />
                       {runnerActiveTab === "logs" && (
-                        <ScrollArea className="h-full"><div className="p-2 space-y-0.5 bg-black font-mono text-xs">
+                        <ScrollArea className="h-full overflow-hidden"><div className="p-2 space-y-0.5 bg-black font-mono text-xs">
                           {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
                             <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : "text-green-400"].join(" ")}>
                               {item.line}
@@ -469,7 +469,7 @@ export function RunnerPanel() {
                         </div></ScrollArea>
                       )}
                       {runnerActiveTab === "network" && (
-                        <ScrollArea className="h-full"><div className="p-2 space-y-1 bg-black font-mono text-xs">
+                        <ScrollArea className="h-full overflow-hidden"><div className="p-2 space-y-1 bg-black font-mono text-xs">
                           {(() => {
                             const requests = logLinesRef.current.map((item) => {
                               const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);

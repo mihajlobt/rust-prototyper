@@ -126,7 +126,7 @@ export function SettingsModal() {
           </TabsList>
 
           <TabsContent value="general" className="flex-1 mt-4">
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <div className="space-y-6">
 
                 {/* Appearance */}
@@ -298,7 +298,7 @@ export function SettingsModal() {
           </TabsContent>
 
           <TabsContent value="ai" className="flex-1 mt-4">
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <div className="space-y-6">
 
                 {/* Providers — 2-col grid */}
@@ -375,7 +375,7 @@ export function SettingsModal() {
           </TabsContent>
 
           <TabsContent value="directories" className="flex-1 mt-4">
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <div className="space-y-6">
                 <p className="text-xs text-muted-foreground">
                   Paths where generated files are written inside the Runner project, relative to{" "}
@@ -417,7 +417,7 @@ export function SettingsModal() {
           </TabsContent>
 
           <TabsContent value="styles" className="flex-1 mt-4">
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <div className="space-y-2">
                 <Label>New Style Preset</Label>
                 <div className="flex gap-2">
@@ -450,7 +450,7 @@ export function SettingsModal() {
           </TabsContent>
 
           <TabsContent value="prompts" className="flex-1 mt-4">
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 overflow-hidden">
               <p className="text-xs text-muted-foreground mb-4">
                 Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
                 Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
