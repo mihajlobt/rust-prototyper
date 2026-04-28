@@ -54,8 +54,8 @@ export function MentionPicker({ query, projectPath, onSelect, onClose }: Mention
   if (filtered.length === 0) return null
 
   return (
-    <ScrollArea className="absolute bottom-full mb-1 left-0 z-50 w-64 rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-hidden">
-      <div>
+    <ScrollArea className="mention-picker-scroll">
+      <div className="p-1">
         {filtered.map((asset, i) => (
           <button
             key={asset.id}

@@ -210,6 +210,12 @@
     @apply border-b border-border flex items-center shrink-0;
   }
 
+  /* Mention picker dropdown — positioned above text area, scrollable list */
+  .mention-picker-scroll {
+    @apply absolute bottom-full mb-1 left-0 z-50 w-64 max-h-48 overflow-hidden rounded-md border border-border bg-popover shadow-lg;
+  }
+  }
+
   /* Chat input textarea */
   .chat-textarea {
     @apply w-full resize-none bg-transparent px-3 pt-2.5 pb-1;

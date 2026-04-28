@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader } from "@/components/ui/loader";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageContent } from "@/components/ui/message";
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
@@ -39,7 +40,8 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose} title="Close"><X size={12} /></Button>
       </div>
 
-      <div className="flex-1 overflow-auto p-3 space-y-3 min-h-0">
+      <ScrollArea className="flex-1 overflow-hidden min-h-0">
+        <div className="p-3 space-y-3">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Label</label>
           <Input value={data.label} onChange={(e) => set({ label: e.target.value })} className="h-7 text-xs" />
@@ -228,7 +230,8 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
             </ChatContainerRoot>
           )}
         </div>
-      </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 }
