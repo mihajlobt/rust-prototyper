@@ -210,8 +210,6 @@
     @apply border-b border-border flex items-center shrink-0;
   }
 
-  }
-
   /* Chat input textarea */
   .chat-textarea {
     @apply w-full resize-none bg-transparent px-3 pt-2.5 pb-1;
