@@ -45,6 +45,8 @@ import { useAppStore } from "@/stores/appStore";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ─── Main view (needs ReactFlowProvider) ──────────────────────────────────
 
@@ -96,7 +98,7 @@ function WorkflowCanvas() {
 
   const handleAddCustomDef = () => {
     if (!customName.trim()) return;
-    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", category: "Custom", color: "var(--node-custom)", icon: Sparkles }]);
+    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", tooltip: customDesc.trim() || "Custom AI node", category: "Custom", color: "var(--node-custom)", icon: Sparkles }]);
     setCustomName(""); setCustomDesc(""); setShowCustomForm(false);
   };
 
@@ -202,12 +204,11 @@ function WorkflowCanvas() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); if (e.shiftKey) { handleRedo(); } else { handleUndo(); } }
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId && !["INPUT","TEXTAREA"].includes((e.target as HTMLElement).tagName)) deleteSelected();
       if (e.key === "Escape") setCtxMenu(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleUndo, handleRedo, deleteSelected, selectedNodeId]);
+  }, [handleUndo, handleRedo]);
 
   // ── Execution engine (delegated to extracted hook) ───────────────────────
   const { running, runSummary, runWorkflow, stopWorkflow } = useWorkflowExecution({
@@ -364,33 +365,39 @@ function WorkflowCanvas() {
         <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
           {/* Palette */}
           <Allotment.Pane preferredSize={200} minSize={160}>
-            <div className="h-full border-r border-border bg-card overflow-auto">
+            <div className="h-full border-r border-border bg-card">
               <div className="p-2 border-b border-border">
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-0.5">Node Palette</div>
                 <div className="text-[10px] text-muted-foreground px-1">Drag onto canvas or click to add</div>
               </div>
+              <ScrollArea className="h-[calc(100%-3rem)]">
+              <TooltipProvider delayDuration={400}>
               <div className="p-2 space-y-3">
                 {categories.map((cat) => (
                   <div key={cat}>
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1">{cat}</div>
                     <div className="space-y-0.5">
                       {allDefs.filter((t) => t.category === cat).map((t) => (
-                        <div
-                          key={t.type}
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData("application/workflow-node", t.type)}
-                          onClick={() => {
-                            pushUndo();
-                            setNodes((prev) => [...prev, makeNode(t, { x: 100 + prev.length * 30, y: 100 + prev.length * 30 })]);
-                          }}
-                          className="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-grab active:cursor-grabbing transition-colors"
-                        >
-                          <t.icon size={14} className="mt-0.5 shrink-0" style={{ color: t.color }} />
-                          <div className="min-w-0">
-                            <div className="text-xs font-medium leading-tight">{t.label}</div>
-                            <div className="text-[10px] text-muted-foreground leading-tight">{t.desc}</div>
-                          </div>
-                        </div>
+                        <Tooltip key={t.type}>
+                          <TooltipTrigger asChild>
+                            <div
+                              draggable
+                              onDragStart={(e) => e.dataTransfer.setData("application/workflow-node", t.type)}
+                              onClick={() => {
+                                pushUndo();
+                                setNodes((prev) => [...prev, makeNode(t, { x: 100 + prev.length * 30, y: 100 + prev.length * 30 })]);
+                              }}
+                              className="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-grab active:cursor-grabbing transition-colors"
+                            >
+                              <t.icon size={14} className="mt-0.5 shrink-0" style={{ color: t.color }} />
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium leading-tight">{t.label}</div>
+                                <div className="text-[10px] text-muted-foreground leading-tight">{t.desc}</div>
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[240px]">{t.tooltip}</TooltipContent>
+                        </Tooltip>
                       ))}
                     </div>
                   </div>
@@ -413,6 +420,8 @@ function WorkflowCanvas() {
                   )}
                 </div>
               </div>
+              </TooltipProvider>
+              </ScrollArea>
             </div>
           </Allotment.Pane>
 
@@ -435,7 +444,8 @@ function WorkflowCanvas() {
               snapToGrid
               snapGrid={[16, 16]}
               defaultEdgeOptions={{ type: "smoothstep", animated: false }}
-              deleteKeyCode={null}
+              deleteKeyCode={["Backspace", "Delete"]}
+              onEdgesDelete={() => pushUndo()}
               proOptions={{ hideAttribution: true }}
               className="bg-muted/10"
             >

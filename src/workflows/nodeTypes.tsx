@@ -14,6 +14,22 @@ import {
   FolderOpen,
   Settings,
 } from "lucide-react";
+import {
+  WORKFLOW_REQUIREMENTS_PROMPT_BASE,
+  WORKFLOW_ARCHITECT_PROMPT_BASE,
+  WORKFLOW_STRUCTURE_PROMPT_BASE,
+  WORKFLOW_STYLE_PROMPT_BASE,
+  WORKFLOW_INTERACTION_PROMPT_BASE,
+  WORKFLOW_REFERENCE_PROMPT_BASE,
+  WORKFLOW_VALIDATE_PROMPT_BASE,
+  WORKFLOW_TRANSFORM_PROMPT_BASE,
+} from "@/lib/prompts";
+
+/** Extract the ROLE description from a workflow prompt (first line after "ROLE:"). */
+function extractRole(prompt: string): string {
+  const match = prompt.match(/ROLE:\s*\n\s*-\s*(.+)/);
+  return match ? match[1].trim() : "";
+}
 
 // ─── Node type definitions ─────────────────────────────────────────────────
 
@@ -21,34 +37,35 @@ export interface NodeTypeDef {
   type: string;
   label: string;
   desc: string;
+  tooltip: string;
   category: string;
   color: string;
   icon: LucideIcon;
 }
 
 export const BUILTIN_NODE_TYPES: NodeTypeDef[] = [
-  { type: "input",        label: "Input",         desc: "Start of workflow",       category: "IO",          color: "var(--node-io)",         icon: LogIn },
-  { type: "output",       label: "Output",        desc: "End of workflow",         category: "IO",          color: "var(--node-io)",         icon: LogOut },
-  { type: "writefile",    label: "Write File",    desc: "Write output to file",    category: "IO",          color: "var(--node-io)",         icon: FileOutput },
-  { type: "requirements", label: "Requirements",  desc: "Parse requirements",      category: "Analysis",    color: "var(--node-analysis)",    icon: ListChecks },
-  { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      category: "Analysis",    color: "var(--node-analysis)",    icon: Palette },
-  { type: "reference",    label: "Reference",     desc: "Analyze components",      category: "Analysis",    color: "var(--node-analysis)",    icon: BookOpen },
-  { type: "architect",    label: "Architect",     desc: "Plan structure",          category: "Planning",    color: "var(--node-planning)",    icon: Compass },
-  { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       category: "Generation",  color: "var(--node-generation)",  icon: Layout },
-  { type: "style",        label: "Style",         desc: "Apply CSS classes",       category: "Generation",  color: "var(--node-generation)",  icon: Paintbrush },
-  { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         category: "Generation",  color: "var(--node-terminal)",    icon: MousePointerClick },
-  { type: "parallel",     label: "Parallel",      desc: "Branch execution",        category: "Composition", color: "var(--node-composition)", icon: GitBranch },
-  { type: "composition",  label: "Composition",   desc: "Merge outputs",           category: "Composition", color: "var(--node-composition)", icon: Merge },
-  { type: "bash",         label: "Bash",          desc: "Run shell command",       category: "Utility",     color: "var(--node-utility)",     icon: Terminal },
-  { type: "fetch",        label: "Fetch",         desc: "HTTP request",            category: "Utility",     color: "var(--node-utility)",     icon: Globe },
-  { type: "fileop",       label: "File Op",       desc: "Read / write files",      category: "Utility",     color: "var(--node-utility)",     icon: FolderOpen },
-  { type: "auth",         label: "Auth",          desc: "Authentication header",   category: "Utility",     color: "var(--node-terminal)",    icon: Lock },
-  { type: "transform",    label: "Transform",     desc: "Transform content via AI","category": "Utility",    color: "var(--node-utility)",     icon: Wand2 },
-  { type: "validate",     label: "Validate",      desc: "Validate code output",    category: "Utility",     color: "var(--node-analysis)",    icon: ShieldCheck },
-  { type: "preview",      label: "Preview",       desc: "Render HTML output",      category: "Utility",     color: "var(--node-io)",          icon: Eye },
-  { type: "bun",          label: "Bun",           desc: "Bun dev / build",         category: "Utility",     color: "var(--node-utility)",     icon: Package },
-  { type: "runner",       label: "Runner",        desc: "Start dev server",        category: "Utility",     color: "var(--node-generation)",  icon: Play },
-  { type: "custom",       label: "Custom",        desc: "Custom AI node",          category: "Custom",      color: "var(--node-custom)",      icon: Sparkles },
+  { type: "input",        label: "Input",         desc: "Start of workflow",       tooltip: "Start of the workflow — receives user input",       category: "IO",          color: "var(--node-io)",         icon: LogIn },
+  { type: "output",       label: "Output",        desc: "End of workflow",         tooltip: "End of the workflow — produces final output",      category: "IO",          color: "var(--node-io)",         icon: LogOut },
+  { type: "writefile",    label: "Write File",    desc: "Write output to file",    tooltip: "Write output to file",                              category: "IO",          color: "var(--node-io)",         icon: FileOutput },
+  { type: "requirements", label: "Requirements",  desc: "Parse requirements",      tooltip: extractRole(WORKFLOW_REQUIREMENTS_PROMPT_BASE),    category: "Analysis",    color: "var(--node-analysis)",    icon: ListChecks },
+  { type: "designSystem", label: "Design System", desc: "Apply theme tokens",      tooltip: "Apply theme tokens",                                category: "Analysis",    color: "var(--node-analysis)",    icon: Palette },
+  { type: "reference",    label: "Reference",     desc: "Analyze components",      tooltip: extractRole(WORKFLOW_REFERENCE_PROMPT_BASE),       category: "Analysis",    color: "var(--node-analysis)",    icon: BookOpen },
+  { type: "architect",    label: "Architect",     desc: "Plan structure",          tooltip: extractRole(WORKFLOW_ARCHITECT_PROMPT_BASE),      category: "Planning",    color: "var(--node-planning)",    icon: Compass },
+  { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       tooltip: extractRole(WORKFLOW_STRUCTURE_PROMPT_BASE),      category: "Generation",  color: "var(--node-generation)",  icon: Layout },
+  { type: "style",        label: "Style",         desc: "Apply CSS classes",       tooltip: extractRole(WORKFLOW_STYLE_PROMPT_BASE),          category: "Generation",  color: "var(--node-generation)",  icon: Paintbrush },
+  { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         tooltip: extractRole(WORKFLOW_INTERACTION_PROMPT_BASE),    category: "Generation",  color: "var(--node-terminal)",    icon: MousePointerClick },
+  { type: "parallel",     label: "Parallel",      desc: "Branch execution",        tooltip: "Branch execution into parallel paths",               category: "Composition", color: "var(--node-composition)", icon: GitBranch },
+  { type: "composition",  label: "Composition",   desc: "Merge outputs",           tooltip: "Merge outputs from parallel branches",                category: "Composition", color: "var(--node-composition)", icon: Merge },
+  { type: "bash",         label: "Bash",          desc: "Run shell command",       tooltip: "Run shell command",                                  category: "Utility",     color: "var(--node-utility)",     icon: Terminal },
+  { type: "fetch",        label: "Fetch",         desc: "HTTP request",            tooltip: "HTTP request",                                       category: "Utility",     color: "var(--node-utility)",     icon: Globe },
+  { type: "fileop",       label: "File Op",       desc: "Read / write files",      tooltip: "Read / write files",                                 category: "Utility",     color: "var(--node-utility)",     icon: FolderOpen },
+  { type: "auth",         label: "Auth",          desc: "Authentication header",   tooltip: "Authentication header",                              category: "Utility",     color: "var(--node-terminal)",    icon: Lock },
+  { type: "transform",    label: "Transform",     desc: "Transform content via AI", tooltip: extractRole(WORKFLOW_TRANSFORM_PROMPT_BASE),       category: "Utility",     color: "var(--node-utility)",     icon: Wand2 },
+  { type: "validate",     label: "Validate",      desc: "Validate code output",    tooltip: extractRole(WORKFLOW_VALIDATE_PROMPT_BASE),       category: "Utility",     color: "var(--node-analysis)",    icon: ShieldCheck },
+  { type: "preview",      label: "Preview",       desc: "Render HTML output",      tooltip: "Render HTML output",                                  category: "Utility",     color: "var(--node-io)",          icon: Eye },
+  { type: "bun",          label: "Bun",           desc: "Bun dev / build",         tooltip: "Bun dev / build",                                     category: "Utility",     color: "var(--node-utility)",     icon: Package },
+  { type: "runner",       label: "Runner",        desc: "Start dev server",        tooltip: "Start dev server",                                    category: "Utility",     color: "var(--node-generation)",  icon: Play },
+  { type: "custom",       label: "Custom",        desc: "Custom AI node",          tooltip: "Custom AI node",                                      category: "Custom",      color: "var(--node-custom)",      icon: Sparkles },
 ];
 
 export const CATEGORY_ORDER = ["IO", "Analysis", "Planning", "Generation", "Composition", "Utility", "Custom"];
