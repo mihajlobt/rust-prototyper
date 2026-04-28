@@ -133,7 +133,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
                   />
                 </div>
               ) : (
-                <div className="rounded bg-muted px-2 py-1.5 min-h-[40px]">
+                <div className="rounded bg-muted px-2 py-1.5 min-h-[40px] max-h-[160px] overflow-y-auto">
                   {data.systemPrompt ? (
                     <MessageContent
                       markdown
