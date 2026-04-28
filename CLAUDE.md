@@ -200,6 +200,13 @@ bunx tsc --noEmit    # type-check
 - **CRITICAL: NEVER use `setTimeout` or any other timing hack to "defer" rendering or "wait for mount" in React.** If code needs to wait for a component to mount, use the correct React pattern (effects with proper dependencies, state-driven rendering, refs with layout effects, or library-specific declarative APIs). Timing hacks are brittle, cause race conditions, and mask the real problem.
 - **CRITICAL: NEVER EVER redefine types or recreate interfaces when they already exist in external packages.** ALWAYS import and reuse types from the source package. Do not create local copies of library types just to "make TypeScript happy" — fix the root cause or use the library's exported types correctly.
 
+## ScrollArea (shadcn/Radix)
+
+- **Golden pattern:** `<ScrollArea className="layout overflow-hidden"><div className="padding">content</div></ScrollArea>`
+- `overflow-hidden` on the ScrollArea root is **required** — without it, content expands the container instead of scrolling (Radix Viewport uses `size-full` which needs clipping).
+- Never put `overflow-auto`, `overflow-y-auto`, or padding on the ScrollArea itself. Move padding/background to the inner div.
+- Skip `chat-container.tsx` (StickToBottom needs native `overflow-y-auto`) and `code-block.tsx` (Shiki HTML incompatible with ScrollArea wrapping).
+
 ## Allotment (Split Pane Library)
 
 - **Use `visible` prop on `Allotment.Pane` for declarative show/hide.** Never use imperative `resize()` for collapse/expand toggles.
