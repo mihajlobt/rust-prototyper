@@ -201,7 +201,7 @@ export function ThemesPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(i, v) => { if (i === 2) setPs({ themesShowInspector: v }); }}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_i, v) => setPs({ themesShowInspector: v })}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
@@ -259,7 +259,7 @@ export function ThemesPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(i, v) => { if (i === 2) setPs({ themesCodeOpen: v }); }}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setPs({ themesCodeOpen: v })}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">

@@ -308,7 +308,7 @@ export function ScreensPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(i, v) => { if (i === 2) setPs({ screensShowInspector: v }); }}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_i, v) => setPs({ screensShowInspector: v })}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
