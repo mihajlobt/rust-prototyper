@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Copy, Code2, RefreshCw, Trash2 } from "lucide-react"
+import { Copy, Code2, RefreshCw, Trash2, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /** Small action button used inside message action rows. */
@@ -78,6 +78,17 @@ export function MessageList({
   messages, isStreaming, thinkingContent,
   onApplyCode, onRegenerate, onDeleteFrom,
 }: MessageListProps) {
+  if (messages.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+          <Sparkles size={20} strokeWidth={1.5} />
+          <p className="text-sm">Send a message to start</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex-1 min-h-0">
       <ChatContainerRoot className="h-full">
