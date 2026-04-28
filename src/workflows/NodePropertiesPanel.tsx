@@ -106,46 +106,43 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
           {/* Per-node system prompt (all AI nodes) */}
           {hasSystemPrompt && (
             <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-muted-foreground">System Prompt</label>
+              <label className="text-xs text-muted-foreground">System Prompt</label>
+              <div className="relative">
+                {editingPrompt ? (
+                  <div className="rounded border border-border overflow-hidden w-full">
+                    <CodeMirror
+                      value={draftPrompt}
+                      height="200px"
+                      style={{ width: "100%" }}
+                      theme={oneDark}
+                      extensions={[markdown(), EditorView.lineWrapping]}
+                      onChange={setDraftPrompt}
+                      basicSetup={{ lineNumbers: false, foldGutter: false }}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded bg-muted px-2 py-1.5 min-h-[40px] max-h-[160px] overflow-y-auto">
+                    {data.systemPrompt ? (
+                      <MessageContent
+                        markdown
+                        className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+                      >
+                        {data.systemPrompt}
+                      </MessageContent>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/60 italic">Using default system prompt — click Edit to override</span>
+                    )}
+                  </div>
+                )}
                 <Button
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
-                  className="h-5 px-1.5 text-[10px] gap-1"
+                  className="absolute top-1.5 right-1.5 h-5 px-1.5 text-[10px] gap-1 z-10 opacity-80 hover:opacity-100"
                   onClick={editingPrompt ? closeEditor : openEditor}
                 >
-                  {editingPrompt
-                    ? <><Check size={9} />Done</>
-                    : <><Edit2 size={9} />Edit</>
-                  }
+                  {editingPrompt ? <><Check size={9} />Done</> : <><Edit2 size={9} />Edit</>}
                 </Button>
               </div>
-              {editingPrompt ? (
-                <div className="rounded border border-border overflow-hidden w-full">
-                  <CodeMirror
-                    value={draftPrompt}
-                    height="200px"
-                    style={{ width: "100%" }}
-                    theme={oneDark}
-                    extensions={[markdown(), EditorView.lineWrapping]}
-                    onChange={setDraftPrompt}
-                    basicSetup={{ lineNumbers: false, foldGutter: false }}
-                  />
-                </div>
-              ) : (
-                <div className="rounded bg-muted px-2 py-1.5 min-h-[40px] max-h-[160px] overflow-y-auto">
-                  {data.systemPrompt ? (
-                    <MessageContent
-                      markdown
-                      className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
-                    >
-                      {data.systemPrompt}
-                    </MessageContent>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground/60 italic">Using default system prompt — click Edit to override</span>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
