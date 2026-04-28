@@ -27,9 +27,17 @@ export function useAllotmentLayout(key: string, paneCount?: number, paneVisible?
       ? saved
       : undefined;
 
-  const defaultSizes: number[] | undefined = rawSizes && paneVisible
-    ? rawSizes.map((s, i) => paneVisible[i] === false ? 0 : s)
-    : rawSizes;
+  const defaultSizes: number[] | undefined = (() => {
+    if (!paneVisible) return rawSizes;
+    if (rawSizes) return rawSizes.map((s, i) => paneVisible[i] === false ? 0 : s);
+    // No saved layout but some panes are hidden — synthesize sizes so hidden panes
+    // start at 0. Without this, Allotment uses preferredSize for all panes on mount,
+    // paints that frame, then collapses hidden panes after a ResizeObserver re-render.
+    if (paneVisible.some((v) => v === false)) {
+      return paneVisible.map((v) => (v === false ? 0 : 1));
+    }
+    return undefined;
+  })();
 
   // Listen for global reset event
   useEffect(() => {
