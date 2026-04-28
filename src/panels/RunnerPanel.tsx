@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import {
   readDir,
@@ -135,7 +136,7 @@ export function RunnerPanel() {
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
-  }, []);
+  }, [devUrl]);
 
   const handleSelectFile = async (path: string) => {
     setSelectedFile(path);
@@ -332,7 +333,7 @@ export function RunnerPanel() {
         <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
           {/* File Tree */}
           <Allotment.Pane preferredSize={200} minSize={150}>
-            <div className="h-full overflow-auto p-2 bg-card border-r border-border">
+            <ScrollArea className="h-full"><div className="p-2 bg-card border-r border-border">
               <div className="flex items-center justify-between mb-2 px-1">
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
@@ -354,7 +355,7 @@ export function RunnerPanel() {
               </div>
               {files.length === 0 && <div className="text-xs text-muted-foreground px-1">No files yet</div>}
               <FileTree entries={files} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={handleSelectFile} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={handleNewFileInDir} onNewFolder={startNewFolder} onCollapse={(path) => { expandedDirs.delete(path); setExpandedDirs(new Set(expandedDirs)); }} onReveal={(path) => revealInExplorer(path)} depth={0} nonce={fileTreeNonce} />
-            </div>
+            </div></ScrollArea>
           </Allotment.Pane>
 
           {/* Editor + Preview + Terminal */}
@@ -398,7 +399,7 @@ export function RunnerPanel() {
                           <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none" onClick={zoomReset} title="Reset zoom">{Math.round(runnerZoom * 100)}%</button>
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomIn} title="Zoom in"><Plus size={11} /></Button>
                         </div>
-                        <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
+                        <ScrollArea className="flex-1"><div className="p-2 bg-muted/30 flex justify-center">
                           {devUrl ? (
                             <div
                               className="h-full bg-background shadow-lg border border-border overflow-hidden"
@@ -415,7 +416,7 @@ export function RunnerPanel() {
                               </div>
                             </div>
                           )}
-                        </div>
+                        </div></ScrollArea>
                       </div>
                     </Allotment.Pane>
                   </Allotment>
@@ -456,7 +457,7 @@ export function RunnerPanel() {
                         className={runnerActiveTab === "terminal" ? "" : "hidden"}
                       />
                       {runnerActiveTab === "logs" && (
-                        <div className="h-full overflow-auto p-2 space-y-0.5 bg-black font-mono text-xs">
+                        <ScrollArea className="h-full"><div className="p-2 space-y-0.5 bg-black font-mono text-xs">
                           {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
                             <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : "text-green-400"].join(" ")}>
                               {item.line}
@@ -465,10 +466,10 @@ export function RunnerPanel() {
                           {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && (
                             <div className="text-green-400 opacity-40">No log events yet…</div>
                           )}
-                        </div>
+                        </div></ScrollArea>
                       )}
                       {runnerActiveTab === "network" && (
-                        <div className="h-full overflow-auto p-2 space-y-1 bg-black font-mono text-xs">
+                        <ScrollArea className="h-full"><div className="p-2 space-y-1 bg-black font-mono text-xs">
                           {(() => {
                             const requests = logLinesRef.current.map((item) => {
                               const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
@@ -486,7 +487,7 @@ export function RunnerPanel() {
                               </div>
                             ));
                           })()}
-                        </div>
+                        </div></ScrollArea>
                       )}
                     </div>
                   </div>

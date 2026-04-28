@@ -65,7 +65,6 @@ export async function withScaffoldNotifications(
   try {
     await fn(onStep);
     unlisten?.();
-    unlisten = null;
     toast.success(title, {
       id: toastId,
       description: "Done",
@@ -73,7 +72,6 @@ export async function withScaffoldNotifications(
     });
   } catch (e) {
     unlisten?.();
-    unlisten = null;
     const msg = e instanceof Error ? e.message : String(e);
     toast.error(title, {
       id: toastId,

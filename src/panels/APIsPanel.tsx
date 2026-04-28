@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { httpRequest, readFile, writeFile, createDir } from "@/lib/ipc";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -431,50 +432,52 @@ export function APIsPanel() {
                 <Plus size={14} />
               </Button>
             </div>
-            <div className="flex-1 overflow-auto p-2 space-y-1">
-              {apis.length === 0 && (
-                <div className="text-xs text-muted-foreground px-1">No saved APIs</div>
-              )}
-              {apis.map((api) => (
-                <div
-                  key={api.id}
-                  className={[
-                    "group flex items-center gap-2 px-2 py-1.5 text-xs rounded cursor-pointer transition-colors",
-                    selectedApiId === api.id
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-muted text-muted-foreground",
-                  ].join(" ")}
-                  onClick={() => selectApi(api)}
-                >
-                  <span
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-1">
+                {apis.length === 0 && (
+                  <div className="text-xs text-muted-foreground px-1">No saved APIs</div>
+                )}
+                {apis.map((api) => (
+                  <div
+                    key={api.id}
                     className={[
-                      "text-[10px] font-bold px-1 py-0.5 rounded",
-                      api.method === "GET"
-                        ? "bg-green-500/10 text-green-600"
-                        : api.method === "POST"
-                        ? "bg-blue-500/10 text-blue-600"
-                        : api.method === "DELETE"
-                        ? "bg-red-500/10 text-red-600"
-                        : "bg-muted text-muted-foreground",
+                      "group flex items-center gap-2 px-2 py-1.5 text-xs rounded cursor-pointer transition-colors",
+                      selectedApiId === api.id
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-muted text-muted-foreground",
                     ].join(" ")}
+                    onClick={() => selectApi(api)}
                   >
-                    {api.method}
-                  </span>
-                  <span className="flex-1 truncate">{api.name}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 opacity-0 group-hover:opacity-100"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteApi(api.id);
-                    }}
-                  >
-                    <Trash2 size={10} className="text-red-500" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                    <span
+                      className={[
+                        "text-[10px] font-bold px-1 py-0.5 rounded",
+                        api.method === "GET"
+                          ? "bg-green-500/10 text-green-600"
+                          : api.method === "POST"
+                          ? "bg-blue-500/10 text-blue-600"
+                          : api.method === "DELETE"
+                          ? "bg-red-500/10 text-red-600"
+                          : "bg-muted text-muted-foreground",
+                      ].join(" ")}
+                    >
+                      {api.method}
+                    </span>
+                    <span className="flex-1 truncate">{api.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteApi(api.id);
+                      }}
+                    >
+                      <Trash2 size={10} className="text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
         </Allotment.Pane>
 
@@ -492,184 +495,186 @@ export function APIsPanel() {
                     Save
                   </Button>
                 </div>
-                <div className="flex-1 overflow-auto p-3 space-y-3">
-                  <Input
-                    placeholder="API Name"
-                    value={name}
-                    onChange={(e) => setPs({ apisName: e.target.value })}
-                    className="h-8 text-sm"
-                  />
-
-                  <div className="flex gap-2">
-                    <Select value={method} onValueChange={(v) => setPs({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
-                      <SelectTrigger className="w-[100px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent position="popper" side="bottom">
-                        {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
-                          <SelectItem key={m} value={m}>
-                            {m}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <ScrollArea className="flex-1">
+                  <div className="p-3 space-y-3">
                     <Input
-                      placeholder="https://api.example.com/endpoint"
-                      value={url}
-                      onChange={(e) => setPs({ apisUrl: e.target.value })}
+                      placeholder="API Name"
+                      value={name}
+                      onChange={(e) => setPs({ apisName: e.target.value })}
+                      className="h-8 text-sm"
                     />
-                    <Button onClick={send} disabled={loading}>
-                      <Send size={14} />
-                    </Button>
-                  </div>
 
-                  {/* cURL Paste */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Paste cURL</label>
                     <div className="flex gap-2">
-                      <Input
-                        value={curlPaste}
-                        onChange={(e) => setUI({ apisCurlPaste: e.target.value })}
-                        placeholder="curl -X GET https://api.example.com"
-                        className="h-7 text-xs"
-                      />
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={applyCurl}>
-                        Parse
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* OpenAPI Import */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Import OpenAPI (YAML/JSON)</label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={openapiPaste}
-                        onChange={(e) => setUI({ apisOpenapiPaste: e.target.value })}
-                        placeholder="Paste OpenAPI spec..."
-                        className="h-7 text-xs"
-                      />
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={applyOpenapi}>
-                        Import
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Auth */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">Authentication</label>
-                    <div className="flex gap-2">
-                      <Select
-                        value={authType}
-                        onValueChange={(v) => setPs({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}
-                      >
-                        <SelectTrigger className="w-[120px]">
+                      <Select value={method} onValueChange={(v) => setPs({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
+                        <SelectTrigger className="w-[100px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" side="bottom">
-                          <SelectItem value="none">None</SelectItem>
-                          <SelectItem value="bearer">Bearer</SelectItem>
-                          <SelectItem value="apikey">API Key</SelectItem>
-                          <SelectItem value="basic">Basic</SelectItem>
-                          <SelectItem value="oauth2">OAuth2</SelectItem>
+                          {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
-                      {authType === "bearer" && (
-                        <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
-                      )}
-                      {authType === "apikey" && (
+                      <Input
+                        placeholder="https://api.example.com/endpoint"
+                        value={url}
+                        onChange={(e) => setPs({ apisUrl: e.target.value })}
+                      />
+                      <Button onClick={send} disabled={loading}>
+                        <Send size={14} />
+                      </Button>
+                    </div>
+
+                    {/* cURL Paste */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Paste cURL</label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={curlPaste}
+                          onChange={(e) => setUI({ apisCurlPaste: e.target.value })}
+                          placeholder="curl -X GET https://api.example.com"
+                          className="h-7 text-xs"
+                        />
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={applyCurl}>
+                          Parse
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* OpenAPI Import */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Import OpenAPI (YAML/JSON)</label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={openapiPaste}
+                          onChange={(e) => setUI({ apisOpenapiPaste: e.target.value })}
+                          placeholder="Paste OpenAPI spec..."
+                          className="h-7 text-xs"
+                        />
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={applyOpenapi}>
+                          Import
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Auth */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Authentication</label>
+                      <div className="flex gap-2">
+                        <Select
+                          value={authType}
+                          onValueChange={(v) => setPs({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}
+                        >
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper" side="bottom">
+                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="bearer">Bearer</SelectItem>
+                            <SelectItem value="apikey">API Key</SelectItem>
+                            <SelectItem value="basic">Basic</SelectItem>
+                            <SelectItem value="oauth2">OAuth2</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {authType === "bearer" && (
+                          <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                        )}
+                        {authType === "apikey" && (
+                          <div className="flex gap-2">
+                            <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setPs({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
+                            <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                          </div>
+                        )}
+                        {authType === "oauth2" && (
+                          <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                        )}
+                      </div>
+                      {authType === "basic" && (
                         <div className="flex gap-2">
-                          <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setPs({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
-                          <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                          <Input placeholder="Username" value={authUsername} onChange={(e) => setPs({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
+                          <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setPs({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
                         </div>
                       )}
                       {authType === "oauth2" && (
-                        <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                        <div className="space-y-2">
+                          <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setPs({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
+                          <div className="flex gap-2">
+                            <Input placeholder="Client ID" value={authClientId} onChange={(e) => setPs({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
+                            <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setPs({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
+                          </div>
+                          <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>
+                            Authorize
+                          </Button>
+                        </div>
                       )}
                     </div>
-                    {authType === "basic" && (
-                      <div className="flex gap-2">
-                        <Input placeholder="Username" value={authUsername} onChange={(e) => setPs({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
-                        <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setPs({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
-                      </div>
-                    )}
-                    {authType === "oauth2" && (
-                      <div className="space-y-2">
-                        <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setPs({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
-                        <div className="flex gap-2">
-                          <Input placeholder="Client ID" value={authClientId} onChange={(e) => setPs({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
-                          <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setPs({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
-                        </div>
-                        <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
-                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>
-                          Authorize
-                        </Button>
-                      </div>
-                    )}
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Headers (JSON)</label>
-                    <div className="h-32 border rounded overflow-hidden">
-                      <CodeMirrorEditor value={headersText} onChange={(v) => setPs({ apisHeadersText: v })} mode="json" />
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Headers (JSON)</label>
+                      <div className="h-32 border rounded overflow-hidden">
+                        <CodeMirrorEditor value={headersText} onChange={(v) => setPs({ apisHeadersText: v })} mode="json" />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Body</label>
-                    <Textarea
-                      value={body}
-                      onChange={(e) => setPs({ apisBody: e.target.value })}
-                      placeholder="Request body... (use {{VAR_NAME}} for env vars)"
-                      className="min-h-[120px] text-sm font-mono"
-                    />
-                  </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Body</label>
+                      <Textarea
+                        value={body}
+                        onChange={(e) => setPs({ apisBody: e.target.value })}
+                        placeholder="Request body... (use {{VAR_NAME}} for env vars)"
+                        className="min-h-[120px] text-sm font-mono"
+                      />
+                    </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">Environment Variables</label>
-                    {Object.entries(envVars).map(([key, value]) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded w-28 truncate">{key}</span>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Environment Variables</label>
+                      {Object.entries(envVars).map(([key, value]) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded w-28 truncate">{key}</span>
+                          <Input
+                            value={value}
+                            onChange={(e) => setUI({ apisEnvVars: { ...envVars, [key]: e.target.value } })}
+                            className="h-7 text-xs flex-1"
+                          />
+                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
+                            const next = { ...envVars };
+                            delete next[key];
+                            setUI({ apisEnvVars: next });
+                          }}>
+                            <Trash2 size={10} />
+                          </Button>
+                        </div>
+                      ))}
+                      <div className="flex gap-2">
                         <Input
-                          value={value}
-                          onChange={(e) => setUI({ apisEnvVars: { ...envVars, [key]: e.target.value } })}
+                          placeholder="Key (e.g. BASE_URL)"
+                          value={newEnvKey}
+                          onChange={(e) => setUI({ apisNewEnvKey: e.target.value })}
+                          className="h-7 text-xs"
+                        />
+                        <Input
+                          placeholder="Value"
+                          value={newEnvValue}
+                          onChange={(e) => setUI({ apisNewEnvValue: e.target.value })}
                           className="h-7 text-xs flex-1"
                         />
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
-                          const next = { ...envVars };
-                          delete next[key];
-                          setUI({ apisEnvVars: next });
-                        }}>
-                          <Trash2 size={10} />
+                        <Button size="sm" className="h-7" onClick={() => {
+                          if (!newEnvKey.trim()) return;
+                          setUI({
+                            apisEnvVars: { ...envVars, [newEnvKey.trim()]: newEnvValue },
+                            apisNewEnvKey: "",
+                            apisNewEnvValue: "",
+                          });
+                        }} disabled={!newEnvKey.trim()}>
+                          <Plus size={14} />
                         </Button>
                       </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Key (e.g. BASE_URL)"
-                        value={newEnvKey}
-                        onChange={(e) => setUI({ apisNewEnvKey: e.target.value })}
-                        className="h-7 text-xs"
-                      />
-                      <Input
-                        placeholder="Value"
-                        value={newEnvValue}
-                        onChange={(e) => setUI({ apisNewEnvValue: e.target.value })}
-                        className="h-7 text-xs flex-1"
-                      />
-                      <Button size="sm" className="h-7" onClick={() => {
-                        if (!newEnvKey.trim()) return;
-                        setUI({
-                          apisEnvVars: { ...envVars, [newEnvKey.trim()]: newEnvValue },
-                          apisNewEnvKey: "",
-                          apisNewEnvValue: "",
-                        });
-                      }} disabled={!newEnvKey.trim()}>
-                        <Plus size={14} />
-                      </Button>
                     </div>
                   </div>
-                </div>
+                </ScrollArea>
               </div>
             </Allotment.Pane>
 
@@ -755,39 +760,43 @@ export function APIsPanel() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="history" className="flex-1 overflow-auto p-3 mt-0">
-                    {history.length > 0 ? (
-                      <div className="space-y-1">
-                        {history.map((h, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
-                          >
-                            <span
-                              className={[
-                                "font-bold px-1 py-0.5 rounded",
-                                h.status >= 200 && h.status < 300
-                                  ? "bg-green-500/10 text-green-600"
-                                  : h.status >= 400
-                                  ? "bg-red-500/10 text-red-600"
-                                  : "bg-muted text-muted-foreground",
-                              ].join(" ")}
-                            >
-                              {h.status}
-                            </span>
-                            <span className="font-medium w-12">{h.method}</span>
-                            <span className="flex-1 truncate text-muted-foreground">{h.url}</span>
-                            <span className="text-muted-foreground">
-                              {h.duration}ms · {new Date(h.timestamp).toLocaleTimeString()}
-                            </span>
+                  <TabsContent value="history" className="flex-1 mt-0">
+                    <ScrollArea className="h-full">
+                      <div className="p-3">
+                        {history.length > 0 ? (
+                          <div className="space-y-1">
+                            {history.map((h, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
+                              >
+                                <span
+                                  className={[
+                                    "font-bold px-1 py-0.5 rounded",
+                                    h.status >= 200 && h.status < 300
+                                      ? "bg-green-500/10 text-green-600"
+                                      : h.status >= 400
+                                      ? "bg-red-500/10 text-red-600"
+                                      : "bg-muted text-muted-foreground",
+                                  ].join(" ")}
+                                >
+                                  {h.status}
+                                </span>
+                                <span className="font-medium w-12">{h.method}</span>
+                                <span className="flex-1 truncate text-muted-foreground">{h.url}</span>
+                                <span className="text-muted-foreground">
+                                  {h.duration}ms · {new Date(h.timestamp).toLocaleTimeString()}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        ) : (
+                          <div className="flex items-center justify-center text-muted-foreground text-sm">
+                            No request history
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                        No request history
-                      </div>
-                    )}
+                    </ScrollArea>
                   </TabsContent>
                 </Tabs>
               </div>

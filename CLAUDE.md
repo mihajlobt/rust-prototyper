@@ -144,6 +144,7 @@ bunx tsc --noEmit    # type-check
 - The limit applies to ALL files: components, hooks, utilities, stores, types, styles.
 - When splitting, prefer domain-based groupings (e.g., `prompts/screens.ts`, `prompts/workflows.ts`) over arbitrary line-count splits.
 - **Re-export from barrel files** so that import paths don't change for consumers.
+- No one or two letter variables or too short varialbe names like "Ps" or "SavePs"
 
 ## CRITICAL — CONSULT DOCS FOR EVERY STEP
 - **CONSULT Context7 OR OFFICIAL DOCS for EVERY file you edit and EVERY library/API you use.**

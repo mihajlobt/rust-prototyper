@@ -23,6 +23,7 @@ import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/selec
 import { useSettings } from "@/hooks/useSettings";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { notify } from "@/hooks/useToast";
 import { readFile, writeFile, bunInstall } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
@@ -124,382 +125,392 @@ export function SettingsModal() {
             <TabsTrigger value="prompts" className="text-[11px]">Prompts</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="flex-1 overflow-auto mt-4">
-            <div className="space-y-6">
+          <TabsContent value="general" className="flex-1 mt-4">
+            <ScrollArea className="flex-1">
+              <div className="space-y-6">
 
-              {/* Appearance */}
-              <section className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Appearance</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  {/* Dark mode */}
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">Dark mode</Label>
-                    <ToggleSwitch checked={settings.dark} onCheckedChange={(v) => setSettings({ dark: v })} />
+                {/* Appearance */}
+                <section className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Appearance</p>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                    {/* Dark mode */}
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">Dark mode</Label>
+                      <ToggleSwitch checked={settings.dark} onCheckedChange={(v) => setSettings({ dark: v })} />
+                    </div>
+                    {/* AMOLED */}
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">AMOLED black</Label>
+                      <ToggleSwitch checked={settings.amoled} onCheckedChange={(v) => setSettings({ amoled: v })} />
+                    </div>
+                    {/* Glow */}
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Glow</Label>
+                      <div className="flex gap-1">
+                        {(["off", "subtle", "full"] as const).map((g) => (
+                          <button key={g} onClick={() => setSettings({ glow: g })}
+                            className={["px-3 py-1 rounded text-xs border transition-colors capitalize", settings.glow === g ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"].join(" ")}>
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Editor theme */}
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Editor theme</Label>
+                      <Select value={settings.editorTheme} onValueChange={(v) => setSettings({ editorTheme: v })}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper" side="bottom">
+                          <SelectGroup>
+                            <SelectLabel className="text-xs text-muted-foreground">Dark</SelectLabel>
+                            {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => dark).map(([key, { label }]) => (
+                              <SelectItem key={key} value={key}>
+                                <span className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-border bg-zinc-800" />
+                                  {label}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                          <SelectSeparator />
+                          <SelectGroup>
+                            <SelectLabel className="text-xs text-muted-foreground">Light</SelectLabel>
+                            {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => !dark).map(([key, { label }]) => (
+                              <SelectItem key={key} value={key}>
+                                <span className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-border bg-zinc-100" />
+                                  {label}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  {/* AMOLED */}
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">AMOLED black</Label>
-                    <ToggleSwitch checked={settings.amoled} onCheckedChange={(v) => setSettings({ amoled: v })} />
-                  </div>
-                  {/* Glow */}
+
+                  {/* Accent — full width, color swatches */}
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Glow</Label>
-                    <div className="flex gap-1">
-                      {(["off", "subtle", "full"] as const).map((g) => (
-                        <button key={g} onClick={() => setSettings({ glow: g })}
-                          className={["px-3 py-1 rounded text-xs border transition-colors capitalize", settings.glow === g ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"].join(" ")}>
-                          {g}
-                        </button>
+                    <Label className="text-sm">Accent color</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: "Indigo",   value: "oklch(0.488 0.243 264.376)" },
+                        { label: "Blue",     value: "oklch(0.55 0.22 240)" },
+                        { label: "Sky",      value: "oklch(0.62 0.19 220)" },
+                        { label: "Cyan",     value: "oklch(0.60 0.16 210)" },
+                        { label: "Teal",     value: "oklch(0.56 0.15 185)" },
+                        { label: "Emerald",  value: "oklch(0.55 0.18 155)" },
+                        { label: "Green",    value: "oklch(0.52 0.18 145)" },
+                        { label: "Lime",     value: "oklch(0.62 0.18 125)" },
+                        { label: "Yellow",   value: "oklch(0.72 0.17 90)" },
+                        { label: "Amber",    value: "oklch(0.68 0.19 65)" },
+                        { label: "Orange",   value: "oklch(0.65 0.20 50)" },
+                        { label: "Red",      value: "oklch(0.58 0.22 25)" },
+                        { label: "Rose",     value: "oklch(0.55 0.22 15)" },
+                        { label: "Pink",     value: "oklch(0.58 0.22 345)" },
+                        { label: "Fuchsia",  value: "oklch(0.55 0.25 320)" },
+                        { label: "Violet",   value: "oklch(0.52 0.25 300)" },
+                        { label: "Purple",   value: "oklch(0.50 0.24 285)" },
+                        { label: "Zinc",     value: "oklch(0.55 0.01 250)" },
+                      ].map(({ label, value }) => (
+                        <button key={value} title={label} onClick={() => setSettings({ accent: value })}
+                          className={["h-7 w-7 rounded-full border-2 transition-all", settings.accent === value ? "border-foreground scale-110" : "border-transparent hover:scale-105"].join(" ")}
+                          style={{ backgroundColor: value }} />
                       ))}
                     </div>
                   </div>
-                  {/* Editor theme */}
+                </section>
+
+                {/* Dev Server */}
+                <section className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dev Server</p>
+                  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="devServerPort" className="text-sm">Component Preview Port</Label>
+                      <Input
+                        id="devServerPort"
+                        type="number"
+                        min={1024}
+                        max={65535}
+                        value={ps.devServerPort}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1024 && val <= 65535) {
+                            setPs({ devServerPort: val });
+                          }
+                        }}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="screensPreviewPort" className="text-sm">Screen Preview Port</Label>
+                      <Input
+                        id="screensPreviewPort"
+                        type="number"
+                        min={1024}
+                        max={65535}
+                        value={ps.screensPreviewPort}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1024 && val <= 65535) {
+                            setPs({ screensPreviewPort: val });
+                          }
+                        }}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="runnerPort" className="text-sm">Runner Port</Label>
+                      <Input
+                        id="runnerPort"
+                        type="number"
+                        min={1024}
+                        max={65535}
+                        value={ps.runnerPort}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1024 && val <= 65535) {
+                            setPs({ runnerPort: val });
+                          }
+                        }}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Restart dev servers for port changes to take effect.</p>
+                </section>
+
+                {/* Danger */}
+                <section className="border-t border-border pt-4 space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Layout</p>
+                  <div className="flex items-center gap-4">
+                    <Button variant="outline" size="sm"
+                      onClick={() => { setSettings({ layout: {} }); window.dispatchEvent(new CustomEvent("prototyper:reset-layout")); }}>
+                      Reset Layout
+                    </Button>
+                    <p className="text-xs text-muted-foreground">Resets all panel pane positions to defaults</p>
+                  </div>
+                </section>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="ai" className="flex-1 mt-4">
+            <ScrollArea className="flex-1">
+              <div className="space-y-6">
+
+                {/* Providers — 2-col grid */}
+                <section className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Providers</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Server size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium">Ollama Local</span>
+                      </div>
+                      <Input value={settings.host} onChange={(e) => setSettings({ host: e.target.value })}
+                        placeholder="http://localhost:11434" className="h-8 text-xs" />
+                    </div>
+                    <div className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Cloud size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium">Ollama Cloud</span>
+                      </div>
+                      <Input type="password" value={settings.apiKeys["ollama"] ?? ""}
+                        onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, ollama: e.target.value } })}
+                        placeholder="API key" className="h-8 text-xs" />
+                    </div>
+                    <div className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Zap size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium">OpenAI</span>
+                      </div>
+                      <Input type="password" value={settings.apiKeys["openai"] ?? ""}
+                        onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, openai: e.target.value } })}
+                        placeholder="sk-..." className="h-8 text-xs" />
+                    </div>
+                    <div className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Bot size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium">Anthropic</span>
+                      </div>
+                      <Input type="password" value={settings.apiKeys["claude"] ?? ""}
+                        onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, claude: e.target.value } })}
+                        placeholder="sk-ant-..." className="h-8 text-xs" />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Icon Library */}
+                <section className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Icon Library</p>
+                  <div className="flex items-start gap-6">
+                    <div className="w-64 space-y-1.5">
+                      <Select value={settings.iconLibrary} onValueChange={(v) => setSettings({ iconLibrary: v as IconLibrary })}>
+                        <SelectTrigger className="text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <Library size={12} />
+                            <SelectValue placeholder="Select icon library" />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent position="popper" side="bottom">
+                          <SelectItem value="lucide" className="text-xs">lucide-react (React components)</SelectItem>
+                          <SelectItem value="tabler" className="text-xs">Tabler Icons (CSS font)</SelectItem>
+                          <SelectItem value="fontawesome" className="text-xs">Font Awesome (CSS font)</SelectItem>
+                          <SelectItem value="bootstrap" className="text-xs">Bootstrap Icons (CSS font)</SelectItem>
+                          <SelectItem value="material" className="text-xs">Material Symbols (CSS font)</SelectItem>
+                          <SelectItem value="none" className="text-xs">None</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1.5">
+                      Auto-installed in the generated folder.<br />Affects component and screen generation prompts.
+                    </p>
+                  </div>
+                </section>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="directories" className="flex-1 mt-4">
+            <ScrollArea className="flex-1">
+              <div className="space-y-6">
+                <p className="text-xs text-muted-foreground">
+                  Paths where generated files are written inside the Runner project, relative to{" "}
+                  <code className="text-[11px] bg-muted px-1 py-0.5 rounded">generated/</code>.
+                  Directories are created automatically.
+                </p>
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Editor theme</Label>
-                    <Select value={settings.editorTheme} onValueChange={(v) => setSettings({ editorTheme: v })}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent position="popper" side="bottom">
-                        <SelectGroup>
-                          <SelectLabel className="text-xs text-muted-foreground">Dark</SelectLabel>
-                          {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => dark).map(([key, { label }]) => (
-                            <SelectItem key={key} value={key}>
-                              <span className="flex items-center gap-2">
-                                <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-border bg-zinc-800" />
-                                {label}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectSeparator />
-                        <SelectGroup>
-                          <SelectLabel className="text-xs text-muted-foreground">Light</SelectLabel>
-                          {Object.entries(EDITOR_THEMES).filter(([, { dark }]) => !dark).map(([key, { label }]) => (
-                            <SelectItem key={key} value={key}>
-                              <span className="flex items-center gap-2">
-                                <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-border bg-zinc-100" />
-                                {label}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="dir-themes" className="text-sm">Themes</Label>
+                    <Input id="dir-themes" value={ps.directories.themes}
+                      onChange={(e) => setPs({ directories: { ...ps.directories, themes: e.target.value } })}
+                      placeholder="src/styles/themes" className="font-mono text-xs" />
+                    <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.themes || "…"}/name.css`}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dir-components" className="text-sm">Components</Label>
+                    <Input id="dir-components" value={ps.directories.components}
+                      onChange={(e) => setPs({ directories: { ...ps.directories, components: e.target.value } })}
+                      placeholder="src/components" className="font-mono text-xs" />
+                    <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.components || "…"}/name.tsx`}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dir-screens" className="text-sm">Screens</Label>
+                    <Input id="dir-screens" value={ps.directories.screens}
+                      onChange={(e) => setPs({ directories: { ...ps.directories, screens: e.target.value } })}
+                      placeholder="src/screens" className="font-mono text-xs" />
+                    <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.screens || "…"}/name.tsx`}</p>
                   </div>
                 </div>
-
-                {/* Accent — full width, color swatches */}
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Accent color</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: "Indigo",   value: "oklch(0.488 0.243 264.376)" },
-                      { label: "Blue",     value: "oklch(0.55 0.22 240)" },
-                      { label: "Sky",      value: "oklch(0.62 0.19 220)" },
-                      { label: "Cyan",     value: "oklch(0.60 0.16 210)" },
-                      { label: "Teal",     value: "oklch(0.56 0.15 185)" },
-                      { label: "Emerald",  value: "oklch(0.55 0.18 155)" },
-                      { label: "Green",    value: "oklch(0.52 0.18 145)" },
-                      { label: "Lime",     value: "oklch(0.62 0.18 125)" },
-                      { label: "Yellow",   value: "oklch(0.72 0.17 90)" },
-                      { label: "Amber",    value: "oklch(0.68 0.19 65)" },
-                      { label: "Orange",   value: "oklch(0.65 0.20 50)" },
-                      { label: "Red",      value: "oklch(0.58 0.22 25)" },
-                      { label: "Rose",     value: "oklch(0.55 0.22 15)" },
-                      { label: "Pink",     value: "oklch(0.58 0.22 345)" },
-                      { label: "Fuchsia",  value: "oklch(0.55 0.25 320)" },
-                      { label: "Violet",   value: "oklch(0.52 0.25 300)" },
-                      { label: "Purple",   value: "oklch(0.50 0.24 285)" },
-                      { label: "Zinc",     value: "oklch(0.55 0.01 250)" },
-                    ].map(({ label, value }) => (
-                      <button key={value} title={label} onClick={() => setSettings({ accent: value })}
-                        className={["h-7 w-7 rounded-full border-2 transition-all", settings.accent === value ? "border-foreground scale-110" : "border-transparent hover:scale-105"].join(" ")}
-                        style={{ backgroundColor: value }} />
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              {/* Dev Server */}
-              <section className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dev Server</p>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="devServerPort" className="text-sm">Component Preview Port</Label>
-                    <Input
-                      id="devServerPort"
-                      type="number"
-                      min={1024}
-                      max={65535}
-                      value={ps.devServerPort}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 1024 && val <= 65535) {
-                          setPs({ devServerPort: val });
-                        }
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="screensPreviewPort" className="text-sm">Screen Preview Port</Label>
-                    <Input
-                      id="screensPreviewPort"
-                      type="number"
-                      min={1024}
-                      max={65535}
-                      value={ps.screensPreviewPort}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 1024 && val <= 65535) {
-                          setPs({ screensPreviewPort: val });
-                        }
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="runnerPort" className="text-sm">Runner Port</Label>
-                    <Input
-                      id="runnerPort"
-                      type="number"
-                      min={1024}
-                      max={65535}
-                      value={ps.runnerPort}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 1024 && val <= 65535) {
-                          setPs({ runnerPort: val });
-                        }
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">Restart dev servers for port changes to take effect.</p>
-              </section>
-
-              {/* Danger */}
-              <section className="border-t border-border pt-4 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Layout</p>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 border-t border-border pt-4">
                   <Button variant="outline" size="sm"
-                    onClick={() => { setSettings({ layout: {} }); window.dispatchEvent(new CustomEvent("prototyper:reset-layout")); }}>
-                    Reset Layout
+                    onClick={() => setPs({ directories: { themes: "src/styles/themes", components: "src/components", screens: "src/screens" } })}>
+                    Reset to defaults
                   </Button>
-                  <p className="text-xs text-muted-foreground">Resets all panel pane positions to defaults</p>
+                  <p className="text-xs text-muted-foreground">Restore the default output paths</p>
                 </div>
-              </section>
-            </div>
+              </div>
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="ai" className="flex-1 overflow-auto mt-4">
-            <div className="space-y-6">
-
-              {/* Providers — 2-col grid */}
-              <section className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Providers</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-border p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Server size={13} className="text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium">Ollama Local</span>
-                    </div>
-                    <Input value={settings.host} onChange={(e) => setSettings({ host: e.target.value })}
-                      placeholder="http://localhost:11434" className="h-8 text-xs" />
-                  </div>
-                  <div className="rounded-lg border border-border p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Cloud size={13} className="text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium">Ollama Cloud</span>
-                    </div>
-                    <Input type="password" value={settings.apiKeys["ollama"] ?? ""}
-                      onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, ollama: e.target.value } })}
-                      placeholder="API key" className="h-8 text-xs" />
-                  </div>
-                  <div className="rounded-lg border border-border p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Zap size={13} className="text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium">OpenAI</span>
-                    </div>
-                    <Input type="password" value={settings.apiKeys["openai"] ?? ""}
-                      onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, openai: e.target.value } })}
-                      placeholder="sk-..." className="h-8 text-xs" />
-                  </div>
-                  <div className="rounded-lg border border-border p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Bot size={13} className="text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium">Anthropic</span>
-                    </div>
-                    <Input type="password" value={settings.apiKeys["claude"] ?? ""}
-                      onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, claude: e.target.value } })}
-                      placeholder="sk-ant-..." className="h-8 text-xs" />
-                  </div>
+          <TabsContent value="styles" className="flex-1 mt-4">
+            <ScrollArea className="flex-1">
+              <div className="space-y-2">
+                <Label>New Style Preset</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Name"
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Value"
+                    value={newPresetValue}
+                    onChange={(e) => setNewPresetValue(e.target.value)}
+                  />
+                  <Button size="sm" onClick={addPreset}>
+                    <Plus size={14} />
+                  </Button>
                 </div>
-              </section>
-
-              {/* Icon Library */}
-              <section className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Icon Library</p>
-                <div className="flex items-start gap-6">
-                  <div className="w-64 space-y-1.5">
-                    <Select value={settings.iconLibrary} onValueChange={(v) => setSettings({ iconLibrary: v as IconLibrary })}>
-                      <SelectTrigger className="text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <Library size={12} />
-                          <SelectValue placeholder="Select icon library" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent position="popper" side="bottom">
-                        <SelectItem value="lucide" className="text-xs">lucide-react (React components)</SelectItem>
-                        <SelectItem value="tabler" className="text-xs">Tabler Icons (CSS font)</SelectItem>
-                        <SelectItem value="fontawesome" className="text-xs">Font Awesome (CSS font)</SelectItem>
-                        <SelectItem value="bootstrap" className="text-xs">Bootstrap Icons (CSS font)</SelectItem>
-                        <SelectItem value="material" className="text-xs">Material Symbols (CSS font)</SelectItem>
-                        <SelectItem value="none" className="text-xs">None</SelectItem>
-                      </SelectContent>
-                    </Select>
+              </div>
+              <div className="space-y-1">
+                {settings.styles.map((preset, i) => (
+                  <div key={i} className="flex items-center justify-between p-2 rounded bg-muted">
+                    <span className="text-sm">{preset.name}</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removePreset(i)}>
+                      <Trash2 size={12} />
+                    </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground pt-1.5">
-                    Auto-installed in the generated folder.<br />Affects component and screen generation prompts.
-                  </p>
-                </div>
-              </section>
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="directories" className="flex-1 overflow-auto mt-4">
-            <div className="space-y-6">
-              <p className="text-xs text-muted-foreground">
-                Paths where generated files are written inside the Runner project, relative to{" "}
-                <code className="text-[11px] bg-muted px-1 py-0.5 rounded">generated/</code>.
-                Directories are created automatically.
+          <TabsContent value="prompts" className="flex-1 mt-4">
+            <ScrollArea className="flex-1">
+              <p className="text-xs text-muted-foreground mb-4">
+                Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
+                Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
               </p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="dir-themes" className="text-sm">Themes</Label>
-                  <Input id="dir-themes" value={ps.directories.themes}
-                    onChange={(e) => setPs({ directories: { ...ps.directories, themes: e.target.value } })}
-                    placeholder="src/styles/themes" className="font-mono text-xs" />
-                  <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.themes || "…"}/name.css`}</p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="dir-components" className="text-sm">Components</Label>
-                  <Input id="dir-components" value={ps.directories.components}
-                    onChange={(e) => setPs({ directories: { ...ps.directories, components: e.target.value } })}
-                    placeholder="src/components" className="font-mono text-xs" />
-                  <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.components || "…"}/name.tsx`}</p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="dir-screens" className="text-sm">Screens</Label>
-                  <Input id="dir-screens" value={ps.directories.screens}
-                    onChange={(e) => setPs({ directories: { ...ps.directories, screens: e.target.value } })}
-                    placeholder="src/screens" className="font-mono text-xs" />
-                  <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.screens || "…"}/name.tsx`}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 border-t border-border pt-4">
-                <Button variant="outline" size="sm"
-                  onClick={() => setPs({ directories: { themes: "src/styles/themes", components: "src/components", screens: "src/screens" } })}>
-                  Reset to defaults
-                </Button>
-                <p className="text-xs text-muted-foreground">Restore the default output paths</p>
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="styles" className="flex-1 overflow-auto space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>New Style Preset</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Name"
-                  value={newPresetName}
-                  onChange={(e) => setNewPresetName(e.target.value)}
-                />
-                <Input
-                  placeholder="Value"
-                  value={newPresetValue}
-                  onChange={(e) => setNewPresetValue(e.target.value)}
-                />
-                <Button size="sm" onClick={addPreset}>
-                  <Plus size={14} />
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-1">
-              {settings.styles.map((preset, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded bg-muted">
-                  <span className="text-sm">{preset.name}</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removePreset(i)}>
-                    <Trash2 size={12} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="prompts" className="flex-1 overflow-auto mt-4">
-            <p className="text-xs text-muted-foreground mb-4">
-              Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
-              Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
-            </p>
-            {(["Components", "Screens", "Themes", "Workflows"] as PromptGroup[]).map((group) => {
-              const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
-              return (
-                <div key={group} className="mb-5">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 px-0.5">{group}</p>
-                  <div className="space-y-1">
-                    {defs.map((def) => {
-                      const isCustom = !!settings.prompts[def.key];
-                      const isExpanded = expandedPrompt === def.key;
-                      return (
-                        <div key={def.key} className="rounded-lg border border-border overflow-hidden">
-                          <button
-                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors"
-                            onClick={() => setExpandedPrompt(isExpanded ? null : def.key)}
-                          >
-                            <span className="flex-1 text-sm font-medium">{def.label}</span>
-                            <span className={[
-                              "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                              isCustom
-                                ? "bg-primary/15 text-primary"
-                                : "bg-muted text-muted-foreground",
-                            ].join(" ")}>
-                              {isCustom ? "Custom" : "Default"}
-                            </span>
-                          </button>
-                          {isExpanded && (
-                            <div className="px-3 pb-3 space-y-2 border-t border-border bg-muted/20">
-                              <p className="text-[11px] text-muted-foreground pt-2">{def.description}</p>
-                              <Textarea
-                                className="font-mono text-xs min-h-[180px] resize-y"
-                                placeholder={def.getDefault()}
-                                value={settings.prompts[def.key] ?? ""}
-                                onChange={(e) => setPrompt(def.key, e.target.value)}
-                              />
-                              <div className="flex justify-end">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs gap-1.5"
-                                  disabled={!isCustom}
-                                  onClick={() => resetPrompt(def.key)}
-                                >
-                                  <RotateCcw size={11} />
-                                  Reset to default
-                                </Button>
+              {(["Components", "Screens", "Themes", "Workflows"] as PromptGroup[]).map((group) => {
+                const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
+                return (
+                  <div key={group} className="mb-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 px-0.5">{group}</p>
+                    <div className="space-y-1">
+                      {defs.map((def) => {
+                        const isCustom = !!settings.prompts[def.key];
+                        const isExpanded = expandedPrompt === def.key;
+                        return (
+                          <div key={def.key} className="rounded-lg border border-border overflow-hidden">
+                            <button
+                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted transition-colors"
+                              onClick={() => setExpandedPrompt(isExpanded ? null : def.key)}
+                            >
+                              <span className="flex-1 text-sm font-medium">{def.label}</span>
+                              <span className={[
+                                "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                                isCustom
+                                  ? "bg-primary/15 text-primary"
+                                  : "bg-muted text-muted-foreground",
+                              ].join(" ")}>
+                                {isCustom ? "Custom" : "Default"}
+                              </span>
+                            </button>
+                            {isExpanded && (
+                              <div className="px-3 pb-3 space-y-2 border-t border-border bg-muted/20">
+                                <p className="text-[11px] text-muted-foreground pt-2">{def.description}</p>
+                                <Textarea
+                                  className="font-mono text-xs min-h-[180px] resize-y"
+                                  placeholder={def.getDefault()}
+                                  value={settings.prompts[def.key] ?? ""}
+                                  onChange={(e) => setPrompt(def.key, e.target.value)}
+                                />
+                                <div className="flex justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1.5"
+                                    disabled={!isCustom}
+                                    onClick={() => resetPrompt(def.key)}
+                                  >
+                                    <RotateCcw size={11} />
+                                    Reset to default
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </ScrollArea>
           </TabsContent>
         </Tabs>
       </DialogContent>

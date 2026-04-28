@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Folder, Plus, Trash2, Loader2, Layout, Box, Palette, Workflow, Globe, CheckCircle2 } from "lucide-react";
 import { readDir, createDir, writeFile, deleteDir, readFile } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -190,112 +191,114 @@ export function ProjectManagerModal() {
           </div>
 
           {/* List */}
-          <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
-            {loading && (
-              <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-sm">Loading projects…</span>
-              </div>
-            )}
-            {!loading && projects.length === 0 && (
-              <div className="text-sm text-muted-foreground text-center py-8">
-                No projects yet. Create one above.
-              </div>
-            )}
-            {projects.map((project) => {
-              const active = project.id === settings.project;
-              const total = Object.values(project.counts).reduce((s, n) => s + n, 0);
-              return (
-                <div
-                  key={project.id}
-                  className={[
-                    "rounded-lg border p-3 transition-colors",
-                    active ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:bg-muted/40",
-                  ].join(" ")}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Main info */}
-                    <button className="flex-1 text-left min-w-0" onClick={() => switchProject(project.id)}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {active && <CheckCircle2 size={15} className="text-primary shrink-0" />}
-                        <span className="text-base font-semibold truncate">{project.name}</span>
-                        {project.name !== project.id && (
-                          <span className="text-xs text-muted-foreground font-mono truncate">{project.id}</span>
-                        )}
-                        {active && (
-                          <span className="ml-auto text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-medium shrink-0">
-                            active
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Asset counts */}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-                        {total === 0 ? (
-                          <span>Empty project</span>
-                        ) : (
-                          <>
-                            {project.counts.screens > 0 && (
-                              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Layout size={12} />
-                                {project.counts.screens} screen{project.counts.screens !== 1 ? "s" : ""}
-                              </span>
-                            )}
-                            {project.counts.components > 0 && (
-                              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Box size={12} />
-                                {project.counts.components} component{project.counts.components !== 1 ? "s" : ""}
-                              </span>
-                            )}
-                            {project.counts.themes > 0 && (
-                              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Palette size={12} />
-                                {project.counts.themes} theme{project.counts.themes !== 1 ? "s" : ""}
-                              </span>
-                            )}
-                            {project.counts.workflows > 0 && (
-                              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Workflow size={12} />
-                                {project.counts.workflows} workflow{project.counts.workflows !== 1 ? "s" : ""}
-                              </span>
-                            )}
-                            {project.counts.apis > 0 && (
-                              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Globe size={12} />
-                                {project.counts.apis} API{project.counts.apis !== 1 ? "s" : ""}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-
-                      {/* Dates */}
-                      {project.created && (
-                        <div className="text-xs text-muted-foreground/60 mt-1.5">
-                          Created {formatDate(project.created)}
-                          {project.updated && project.updated !== project.created && (
-                            <> · Updated {formatDate(project.updated)}</>
+          <ScrollArea className="flex-1">
+            <div className="p-2 space-y-2">
+              {loading && (
+                <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-sm">Loading projects…</span>
+                </div>
+              )}
+              {!loading && projects.length === 0 && (
+                <div className="text-sm text-muted-foreground text-center py-8">
+                  No projects yet. Create one above.
+                </div>
+              )}
+              {projects.map((project) => {
+                const active = project.id === settings.project;
+                const total = Object.values(project.counts).reduce((s, n) => s + n, 0);
+                return (
+                  <div
+                    key={project.id}
+                    className={[
+                      "rounded-lg border p-3 transition-colors",
+                      active ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:bg-muted/40",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Main info */}
+                      <button className="flex-1 text-left min-w-0" onClick={() => switchProject(project.id)}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {active && <CheckCircle2 size={15} className="text-primary shrink-0" />}
+                          <span className="text-base font-semibold truncate">{project.name}</span>
+                          {project.name !== project.id && (
+                            <span className="text-xs text-muted-foreground font-mono truncate">{project.id}</span>
+                          )}
+                          {active && (
+                            <span className="ml-auto text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-medium shrink-0">
+                              active
+                            </span>
                           )}
                         </div>
-                      )}
-                    </button>
 
-                    {/* Actions */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => deleteProject(project.id)}
-                      disabled={active}
-                      title={active ? "Cannot delete active project" : `Delete ${project.name}`}
-                    >
-                      <Trash2 size={12} />
-                    </Button>
+                        {/* Asset counts */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+                          {total === 0 ? (
+                            <span>Empty project</span>
+                          ) : (
+                            <>
+                              {project.counts.screens > 0 && (
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <Layout size={12} />
+                                  {project.counts.screens} screen{project.counts.screens !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                              {project.counts.components > 0 && (
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <Box size={12} />
+                                  {project.counts.components} component{project.counts.components !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                              {project.counts.themes > 0 && (
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <Palette size={12} />
+                                  {project.counts.themes} theme{project.counts.themes !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                              {project.counts.workflows > 0 && (
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <Workflow size={12} />
+                                  {project.counts.workflows} workflow{project.counts.workflows !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                              {project.counts.apis > 0 && (
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <Globe size={12} />
+                                  {project.counts.apis} API{project.counts.apis !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Dates */}
+                        {project.created && (
+                          <div className="text-xs text-muted-foreground/60 mt-1.5">
+                            Created {formatDate(project.created)}
+                            {project.updated && project.updated !== project.created && (
+                              <> · Updated {formatDate(project.updated)}</>
+                            )}
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Actions */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => deleteProject(project.id)}
+                        disabled={active}
+                        title={active ? "Cannot delete active project" : `Delete ${project.name}`}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>

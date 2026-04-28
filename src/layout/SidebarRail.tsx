@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -194,32 +195,34 @@ export function SidebarRail() {
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
       <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="flex-1 overflow-y-auto py-2">
-            <div className="px-2 space-y-0.5">
-              <div className="flex items-center justify-between px-2 mb-1">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  Project
-                </span>
-                <button
-                  onClick={refreshAll}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  title="Refresh"
-                >
-                  <RefreshCw size={10} />
-                </button>
+        <ContextMenuTrigger             asChild>
+          <ScrollArea className="flex-1">
+            <div className="py-2">
+              <div className="px-2 space-y-0.5">
+                <div className="flex items-center justify-between px-2 mb-1">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Project
+                  </span>
+                  <button
+                    onClick={refreshAll}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    title="Refresh"
+                  >
+                    <RefreshCw size={10} />
+                  </button>
+                </div>
+                <ProjectExplorer
+                  onSelectAsset={handleSelectAsset}
+                  onSetDefaultTheme={handleSetDefaultTheme}
+                  onRename={startRename}
+                  onDelete={handleDelete}
+                  onDuplicate={handleDuplicate}
+                  onNewItem={openNewDialogFor}
+                  onRefresh={refreshAll}
+                />
               </div>
-              <ProjectExplorer
-                onSelectAsset={handleSelectAsset}
-                onSetDefaultTheme={handleSetDefaultTheme}
-                onRename={startRename}
-                onDelete={handleDelete}
-                onDuplicate={handleDuplicate}
-                onNewItem={openNewDialogFor}
-                onRefresh={refreshAll}
-              />
             </div>
-          </div>
+          </ScrollArea>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => openNewDialogFor(newItemType)}>

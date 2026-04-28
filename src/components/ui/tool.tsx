@@ -7,6 +7,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   CheckCircle,
   ChevronDown,
@@ -177,11 +178,13 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
                 <h4 className="text-muted-foreground mb-2 text-sm font-medium">
                   Output
                 </h4>
-                <div className="bg-background max-h-60 overflow-auto rounded border p-2 font-mono text-sm">
-                  <pre className="whitespace-pre-wrap">
-                    {formatValue(output)}
-                  </pre>
-                </div>
+                <ScrollArea className="max-h-60">
+                  <div className="bg-background rounded border p-2 font-mono text-sm">
+                    <pre className="whitespace-pre-wrap">
+                      {formatValue(output)}
+                    </pre>
+                  </div>
+                </ScrollArea>
               </div>
             )}
 

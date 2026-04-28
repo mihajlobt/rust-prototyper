@@ -520,39 +520,41 @@ function WorkflowCanvas() {
               <p className="text-[10px] text-muted-foreground px-0.5">{nodes.length} nodes · {edges.length} edges</p>
               {saveError && <p className="text-[10px] text-destructive px-0.5 break-all">{saveError}</p>}
             </div>
-            <div className="flex-1 overflow-auto p-2 space-y-1">
-              {savedWorkflows.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-xs gap-2 opacity-60">
-                  <FolderOpen size={20} />No saved workflows yet
-                </div>
-              )}
-              {savedWorkflows.map((wf) => {
-                const name = wf.name.replace(".json", "");
-                const isActive = workflowId === name;
-                const isConfirm = deleteConfirm === wf.name;
-                return (
-                  <div key={wf.path} className={["rounded-md border transition-colors", isActive ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/40"].join(" ")}>
-                    <div className="flex items-center gap-2 px-2 py-1.5">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium truncate">{name}</div>
-                        {isActive && <div className="text-[10px] text-primary">currently loaded</div>}
-                      </div>
-                      {!isConfirm ? (
-                        <div className="flex gap-0.5 shrink-0">
-                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleLoad(wf.name)}>Load</Button>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setDeleteConfirm(wf.name)}><Trash2 size={10} /></Button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1 shrink-0">
-                          <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleDelete(wf.name)}>Delete</Button>
-                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-                        </div>
-                      )}
-                    </div>
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-1">
+                {savedWorkflows.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-xs gap-2 opacity-60">
+                    <FolderOpen size={20} />No saved workflows yet
                   </div>
-                );
-              })}
-            </div>
+                )}
+                {savedWorkflows.map((wf) => {
+                  const name = wf.name.replace(".json", "");
+                  const isActive = workflowId === name;
+                  const isConfirm = deleteConfirm === wf.name;
+                  return (
+                    <div key={wf.path} className={["rounded-md border transition-colors", isActive ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/40"].join(" ")}>
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium truncate">{name}</div>
+                          {isActive && <div className="text-[10px] text-primary">currently loaded</div>}
+                        </div>
+                        {!isConfirm ? (
+                          <div className="flex gap-0.5 shrink-0">
+                            <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleLoad(wf.name)}>Load</Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setDeleteConfirm(wf.name)}><Trash2 size={10} /></Button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1 shrink-0">
+                            <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2" onClick={() => handleDelete(wf.name)}>Delete</Button>
+                            <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
             <div className="p-2 border-t border-border space-y-1.5">
               <Button variant="outline" size="sm" className="w-full h-7 text-xs gap-1" onClick={handleNew}><FilePlus size={11} />New blank workflow</Button>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-0.5 pt-1">Templates</p>

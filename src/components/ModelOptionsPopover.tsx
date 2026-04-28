@@ -3,6 +3,7 @@ import { Settings2, RotateCcw, Trash2, Plus, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Popover,
   PopoverContent,
@@ -196,7 +197,7 @@ export function ModelOptionsPopover() {
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[560px] p-0 overflow-hidden">
+      <PopoverContent align="end" className="w-[560px] p-0">
         <div className="flex h-[420px]">
 
           {/* ── Left: parameter form ── */}
@@ -211,28 +212,30 @@ export function ModelOptionsPopover() {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-3">
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                {FIELDS.map(({ key, label, hint, step, min, max }) => (
-                  <div key={key} className="space-y-0.5">
-                    <div className="flex items-baseline justify-between">
-                      <Label className="text-[10px] font-medium leading-none">{label}</Label>
-                      <span className="text-[9px] text-muted-foreground">{hint}</span>
+            <ScrollArea className="flex-1 overflow-hidden">
+              <div className="p-3">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  {FIELDS.map(({ key, label, hint, step, min, max }) => (
+                    <div key={key} className="space-y-0.5">
+                      <div className="flex items-baseline justify-between">
+                        <Label className="text-[10px] font-medium leading-none">{label}</Label>
+                        <span className="text-[9px] text-muted-foreground">{hint}</span>
+                      </div>
+                      <Input
+                        type="number"
+                        step={step}
+                        min={min}
+                        {...(max !== undefined ? { max } : {})}
+                        value={opts[key] ?? ""}
+                        placeholder="—"
+                        onChange={(e) => setField(key, e.target.value)}
+                        className="h-7 text-xs px-2"
+                      />
                     </div>
-                    <Input
-                      type="number"
-                      step={step}
-                      min={min}
-                      {...(max !== undefined ? { max } : {})}
-                      value={opts[key] ?? ""}
-                      placeholder="—"
-                      onChange={(e) => setField(key, e.target.value)}
-                      className="h-7 text-xs px-2"
-                    />
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            </ScrollArea>
 
             <div className="px-3 py-2 border-t border-border">
               <p className="text-[9px] text-muted-foreground">Empty = Ollama default</p>
@@ -245,36 +248,38 @@ export function ModelOptionsPopover() {
               <p className="text-xs font-semibold">Presets</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              {/* Built-in presets */}
-              <div className="px-2 pt-2 pb-1">
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground px-1 mb-1">Built-in</p>
-                {BUILT_IN_PRESETS.map((preset) => (
-                  <PresetRow
-                    key={preset.id}
-                    preset={preset}
-                    active={activePresetId === preset.id}
-                    onApply={() => applyPreset(preset)}
-                  />
-                ))}
-              </div>
-
-              {/* User presets */}
-              {userPresets.length > 0 && (
-                <div className="px-2 pt-1 pb-2">
-                  <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground px-1 mb-1">Saved</p>
-                  {userPresets.map((preset) => (
+            <ScrollArea className="flex-1 overflow-hidden">
+              <div>
+                {/* Built-in presets */}
+                <div className="px-2 pt-2 pb-1">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground px-1 mb-1">Built-in</p>
+                  {BUILT_IN_PRESETS.map((preset) => (
                     <PresetRow
                       key={preset.id}
                       preset={preset}
                       active={activePresetId === preset.id}
                       onApply={() => applyPreset(preset)}
-                      onDelete={() => deleteUserPreset(preset.id)}
                     />
                   ))}
                 </div>
-              )}
-            </div>
+
+                {/* User presets */}
+                {userPresets.length > 0 && (
+                  <div className="px-2 pt-1 pb-2">
+                    <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground px-1 mb-1">Saved</p>
+                    {userPresets.map((preset) => (
+                      <PresetRow
+                        key={preset.id}
+                        preset={preset}
+                        active={activePresetId === preset.id}
+                        onApply={() => applyPreset(preset)}
+                        onDelete={() => deleteUserPreset(preset.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
 
             {/* Save current as preset */}
             <div className="px-3 py-2 border-t border-border flex items-center gap-2">
