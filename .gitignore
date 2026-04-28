@@ -3,6 +3,7 @@ node_modules/
 
 # Opencode
 *.opencode/
+thoughts/sessions/*
 
 # Build output
 dist/
