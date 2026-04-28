@@ -95,7 +95,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
       </div>
 
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
-        <div className="p-3 space-y-3">
+        <div className="p-3 space-y-3 min-w-0">
           {/* Label */}
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Label</label>
@@ -120,10 +120,11 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
                 </Button>
               </div>
               {editingPrompt ? (
-                <div className="rounded overflow-hidden border border-border">
+                <div className="rounded border border-border overflow-hidden w-full">
                   <CodeMirror
                     value={draftPrompt}
                     height="200px"
+                    style={{ width: "100%" }}
                     theme={oneDark}
                     extensions={[markdown()]}
                     onChange={setDraftPrompt}
