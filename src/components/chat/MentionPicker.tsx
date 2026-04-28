@@ -54,26 +54,28 @@ export function MentionPicker({ query, projectPath, onSelect, onClose }: Mention
   if (filtered.length === 0) return null
 
   return (
-    <ScrollArea className="mention-picker-scroll">
-      <div className="p-1">
-        {filtered.map((asset, i) => (
-          <button
-            key={asset.id}
-            className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent/10 ${
-              i === activeIndex ? "bg-accent/10" : ""
-            }`}
-            onMouseDown={(e) => {
-              e.preventDefault() // don't blur textarea
-              onSelect(asset)
-            }}
-          >
-            {TYPE_ICONS[asset.type]}
-            <span className="flex-1 text-left truncate">{asset.name}</span>
-            <span className="text-xs text-muted-foreground">{asset.type}</span>
-          </button>
-        ))}
-      </div>
-    </ScrollArea>
+    <div className="absolute bottom-full mb-1 left-0 z-50 w-64 max-h-48 rounded-md border border-border bg-popover shadow-lg">
+      <ScrollArea className="h-full">
+        <div className="p-1">
+          {filtered.map((asset, i) => (
+            <button
+              key={asset.id}
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent/10 ${
+                i === activeIndex ? "bg-accent/10" : ""
+              }`}
+              onMouseDown={(e) => {
+                e.preventDefault() // don't blur textarea
+                onSelect(asset)
+              }}
+            >
+              {TYPE_ICONS[asset.type]}
+              <span className="flex-1 text-left truncate">{asset.name}</span>
+              <span className="text-xs text-muted-foreground">{asset.type}</span>
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
   )
 }
 
