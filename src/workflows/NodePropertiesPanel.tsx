@@ -198,25 +198,23 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
             )}
 
             {!isError && data.output && (
-              <div className="relative min-w-0">
-                <ChatContainerRoot className="max-h-64 rounded bg-muted overflow-x-auto">
-                  <ChatContainerContent className="p-2 min-w-0">
-                    <Message>
-                      <MessageContent
-                        markdown
-                        isStreaming={isRunning}
-                        className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
-                      >
-                        {data.output}
-                      </MessageContent>
-                    </Message>
-                    <ChatContainerScrollAnchor />
-                  </ChatContainerContent>
-                  <div className="absolute right-2 bottom-2 z-10">
-                    <ScrollButton />
-                  </div>
-                </ChatContainerRoot>
-              </div>
+              <ChatContainerRoot className="max-h-64 rounded bg-muted">
+                <ChatContainerContent className="p-2">
+                  <Message>
+                    <MessageContent
+                      markdown
+                      isStreaming={isRunning}
+                      className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+                    >
+                      {data.output}
+                    </MessageContent>
+                  </Message>
+                  <ChatContainerScrollAnchor />
+                </ChatContainerContent>
+                <div className="absolute right-2 bottom-2 z-10">
+                  <ScrollButton />
+                </div>
+              </ChatContainerRoot>
             )}
           </div>
         </div>
