@@ -198,8 +198,8 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
             )}
 
             {!isError && data.output && (
-              <ChatContainerRoot className="max-h-64 rounded bg-muted">
-                <ChatContainerContent className="p-2">
+              <ChatContainerRoot className="max-h-64 rounded bg-muted overflow-x-auto">
+                <ChatContainerContent className="p-2 min-w-0">
                   <Message>
                     <MessageContent
                       markdown
