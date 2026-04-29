@@ -221,12 +221,12 @@ fn parse_show_response(json: &serde_json::Value) -> OllamaModelDetails {
         let mi = json.get("model_info");
         let mut found: Option<u64> = None;
         if !family.is_empty() {
-            found = mi.and_then(|m| m.get(&format!("{}.context_length", family))).and_then(|v| v.as_u64());
+            found = mi.and_then(|m| m.get(format!("{}.context_length", family).as_str())).and_then(|v| v.as_u64());
         }
         if found.is_none() {
             for f in &families {
                 if f == &family { continue; }
-                found = mi.and_then(|m| m.get(&format!("{}.context_length", f))).and_then(|v| v.as_u64());
+                found = mi.and_then(|m| m.get(format!("{}.context_length", f).as_str())).and_then(|v| v.as_u64());
                 if found.is_some() { break; }
             }
         }
