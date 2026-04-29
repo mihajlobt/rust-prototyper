@@ -174,20 +174,23 @@ export function useWorkflowExecution({
         const customPrompts = settings.prompts;
 
         const streamAI = async (sysprompt: string, userMsg: string): Promise<string> => {
-          const channel = new Channel<CompletionEvent>();
-          let acc = "";
-          let errorMsg: string | null = null;
-          channel.onmessage = (msg) => {
-            if (msg.event === "Chunk") { acc += msg.data.text; updateStatus(nodeId, { output: acc }); }
-            if (msg.event === "Error") { errorMsg = msg.data.message; }
-          };
-          await generateCompletionStream(
-            model,
-            [{ role: "system", content: sysprompt }, { role: "user", content: userMsg }] satisfies Message[],
-            host, apiKey, channel, undefined, undefined, settings.provider as Provider,
-          );
-          if (errorMsg) throw new Error(errorMsg);
-          return acc;
+          // Since commit 906be08, generateCompletionStream returns immediately with a
+          // request_id (Rust side uses tokio::spawn). We must await the "Done" Channel
+          // event instead of the invoke promise to collect the full response.
+          return new Promise((resolve, reject) => {
+            const channel = new Channel<CompletionEvent>();
+            let acc = "";
+            channel.onmessage = (msg) => {
+              if (msg.event === "Chunk") { acc += msg.data.text; updateStatus(nodeId, { output: acc }); }
+              if (msg.event === "Done") { resolve(acc); }
+              if (msg.event === "Error") { reject(new Error(msg.data.message)); }
+            };
+            generateCompletionStream(
+              model,
+              [{ role: "system", content: sysprompt }, { role: "user", content: userMsg }] satisfies Message[],
+              host, apiKey, channel, undefined, undefined, settings.provider as Provider,
+            ).catch(reject);
+          });
         };
 
         const resolveSystem = (globalKey: string, base: string): string =>
