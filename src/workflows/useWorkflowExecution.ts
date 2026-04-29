@@ -160,7 +160,7 @@ export function useWorkflowExecution({
       if (!node) return;
       const d = node.data;
       updateStatus(nodeId, { status: "running", output: undefined });
-      const prevOut = getPrevOut(nodeId);
+      const prevOut = d.nodeType === "composition" ? "" : getPrevOut(nodeId);
 
       try {
         let output = "";
@@ -267,7 +267,7 @@ export function useWorkflowExecution({
           case "composition": output = currentEdges.filter((e) => e.target === nodeId).map((e) => {
             if (e.sourceHandle) return nodeOutputMap.get(`${e.source}:${e.sourceHandle}`) ?? nodeOutputMap.get(e.source) ?? "";
             return nodeOutputMap.get(e.source) ?? "";
-          }).filter(Boolean).join("\n\n---\n\n") || "No inputs"; break;
+          }).filter(Boolean).join("\n\n") || "No inputs"; break;
           case "preview":     output = prevOut || "Nothing to preview"; break;
           case "designSystem": {
             try {
