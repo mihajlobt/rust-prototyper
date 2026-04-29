@@ -450,11 +450,11 @@ export function SettingsModal() {
           </TabsContent>
 
           <TabsContent value="prompts" className="flex-1 mt-4">
-            <ScrollArea className="flex-1 overflow-hidden">
-              <p className="text-xs text-muted-foreground mb-4">
-                Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
-                Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
-              </p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
+              Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
+            </p>
+            <ScrollArea className="h-100 px-4 py-2">
               {(["Components", "Screens", "Themes", "Workflows"] as PromptGroup[]).map((group) => {
                 const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
                 return (
