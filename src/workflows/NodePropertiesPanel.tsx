@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageContent } from "@/components/ui/message";
+import { Message, MessageContent } from "@/components/ui/message";
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
+import { ScrollButton } from "@/components/ui/scroll-button";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 import {
@@ -197,18 +198,25 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
             )}
 
             {!isError && data.output && (
-              <ChatContainerRoot className="max-h-64 rounded bg-muted">
-                <ChatContainerContent className="p-2">
-                  <MessageContent
-                    markdown
-                    isStreaming={isRunning}
-                    className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
-                  >
-                    {data.output}
-                  </MessageContent>
-                  <ChatContainerScrollAnchor />
-                </ChatContainerContent>
-              </ChatContainerRoot>
+              <div className="relative min-w-0">
+                <ChatContainerRoot className="max-h-64 rounded bg-muted overflow-x-auto">
+                  <ChatContainerContent className="p-2 min-w-0">
+                    <Message>
+                      <MessageContent
+                        markdown
+                        isStreaming={isRunning}
+                        className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
+                      >
+                        {data.output}
+                      </MessageContent>
+                    </Message>
+                    <ChatContainerScrollAnchor />
+                  </ChatContainerContent>
+                  <div className="absolute right-2 bottom-2 z-10">
+                    <ScrollButton />
+                  </div>
+                </ChatContainerRoot>
+              </div>
             )}
           </div>
         </div>
