@@ -94,7 +94,7 @@ src-tauri/
 - **7 Views**: Screens, Components, Themes, Workflows, APIs, Runner, Library
 - **Resizable Panels**: VS Code-style splits via `allotment`
 - **AI Generation**: Connects to Ollama for code/CSS generation
-- **Runner Panel**: Spawns real `bun dev` processes with live terminal output
+- **Real `bun dev`**: Spawns real `bun dev` processes with live terminal output
 - **Project Manager**: Directory-based project storage
 - **Export**: Generate framework-specific project bundles
 - **Settings Persistence**: Cross-session via `tauri-plugin-store`
