@@ -13,7 +13,17 @@ import {
   Terminal, Globe, Lock, Wand2, ShieldCheck, Eye, Package, Play, Sparkles,
   FolderOpen, Settings, GitFork, Repeat2, AlignLeft, Braces, FileDiff,
   FileJson, ScanLine, GitCommit, Database, HardDrive,
+  Copy, Trash2, Unplug,
 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { useWorkflowActions } from "@/workflows/WorkflowActionsContext";
 import {
   WORKFLOW_REQUIREMENTS_PROMPT_BASE,
   WORKFLOW_ARCHITECT_PROMPT_BASE,
@@ -93,7 +103,7 @@ export interface WorkflowNodeData {
   nodeType: string;
   color: string;
   desc: string;
-  status: "idle" | "running" | "done" | "error";
+  status: "idle" | "running" | "done" | "error" | "paused";
   output?: string;
   /** Per-node system prompt override. Overrides the global prompt for AI nodes. */
   systemPrompt?: string;
@@ -130,6 +140,10 @@ export interface WorkflowNodeData {
   commitMessage?: string;
   // Memory nodes
   memoryKey?: string;
+  /** Persisted :pass branch output for validate/condition nodes (survives pause/resume). */
+  passOutput?: string;
+  /** Persisted :fail branch output for validate/condition nodes (survives pause/resume). */
+  failOutput?: string;
   [key: string]: unknown;
 }
 
@@ -139,12 +153,14 @@ export type WorkflowNodeType = Node<WorkflowNodeData, "workflow">;
 
 const BRANCHING_NODE_TYPES = new Set(["validate", "condition"]);
 
-export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
+export function WorkflowNode({ data, selected, id }: NodeProps<WorkflowNodeType>) {
   const d = data;
+  const actions = useWorkflowActions();
   const borderColor =
     d.status === "done"    ? "var(--status-done)" :
     d.status === "error"   ? "var(--status-error)" :
     d.status === "running" ? "var(--status-running)" :
+    d.status === "paused"  ? "var(--status-paused)" :
     selected               ? "var(--primary)" :
                                 "var(--border)";
 
@@ -152,7 +168,7 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
   const Icon = def?.icon ?? Settings;
   const isBranching = BRANCHING_NODE_TYPES.has(d.nodeType);
 
-  return (
+  const inner = (
     <div
       className="bg-card rounded-lg shadow-md relative cursor-pointer"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
@@ -182,6 +198,9 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
               <span className="thinking-dot w-1 h-1 rounded-full inline-block bg-status-running" />
             </span>
           )}
+          {d.status === "paused" && (
+            <span className="text-[9px] font-semibold shrink-0" style={{ color: "var(--status-paused)" }}>PAUSED</span>
+          )}
         </div>
         <div className="text-[9px] text-muted-foreground truncate mt-0.5">
           {d.status === "error" && d.output ? d.desc : (d.output || d.desc)}
@@ -197,6 +216,30 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {inner}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuGroup>
+          <ContextMenuItem onClick={() => actions?.duplicateNode(id)}>
+            <Copy />Duplicate
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => actions?.disconnectEdges(id)}>
+            <Unplug />Disconnect Edges
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem variant="destructive" onClick={() => actions?.deleteNode(id)}>
+            <Trash2 />Delete Node
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

@@ -30,6 +30,7 @@ function StatusBadge({ status }: { status: WorkflowNodeData["status"] }) {
     },
     done: { label: "Complete", cls: "bg-status-done/15 text-status-done" },
     error: { label: "Error", cls: "bg-destructive/15 text-destructive" },
+    paused: { label: "Paused", cls: "bg-status-paused/15 text-status-paused" },
   };
   const { label, cls } = map[status];
   return (

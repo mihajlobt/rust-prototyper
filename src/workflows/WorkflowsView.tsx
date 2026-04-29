@@ -1,37 +1,32 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, Fragment } from "react";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/workflows/templates";
 import { NodePropertiesPanel } from "@/workflows/NodePropertiesPanel";
 import { OutputChatPanel } from "@/workflows/OutputChatPanel";
 import { BUILTIN_NODE_TYPES, CATEGORY_ORDER, nodeTypes, generateId, type NodeTypeDef, type WorkflowNodeData, type WorkflowNodeType } from "@/workflows/nodeTypes";
 import { useWorkflowExecution } from "@/workflows/useWorkflowExecution";
+import { WorkflowActionsContext } from "@/workflows/WorkflowActionsContext";
+import { useWorkflowPersistence } from "@/workflows/useWorkflowPersistence";
 import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, type Edge, type Connection, BackgroundVariant, Panel, useReactFlow, ReactFlowProvider, NodeToolbar, Position } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Allotment } from "allotment";
-import { Play, Square, Save, Trash2, Undo2, Redo2, Plus, X, Copy, FolderOpen, FilePlus, RotateCw, Sparkles } from "lucide-react";
+import { Play, Square, Pause, Save, Trash2, Undo2, Redo2, Plus, X, FolderOpen, FilePlus, RotateCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { saveWorkflow, loadWorkflow, listWorkflows, type FileEntry } from "@/lib/ipc";
-import { useAppStore } from "@/stores/appStore";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
-import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
-
-import { notify } from "@/hooks/useToast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ─── Main view (needs ReactFlowProvider) ──────────────────────────────────
 
 function WorkflowCanvas() {
-  const { settings } = useAppStore();
-  const { ps: { activeWorkflow: initialWorkflow }, setPs } = useProjectSettingsStore();
-
   // Output chat panel
   const [outputPanelNodeId, setOutputPanelNodeId] = useState<string | null>(null);
   const outputPanelOpen = !!outputPanelNodeId;
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
   const { ref: outputRef, onDragEnd: outputOnDragEnd, defaultSizes: outputDefault } = useAllotmentLayout("workflows-output", 2, [true, outputPanelOpen]);
-  const { screenToFlowPosition, getNodes, getEdges, fitView } = useReactFlow<WorkflowNodeType, Edge>();
+  const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
 
   const flowContainerRef = useRef<HTMLDivElement>(null);
   const [flowReady, setFlowReady] = useState(false);
@@ -44,11 +39,6 @@ function WorkflowCanvas() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  // Refs for auto-save on unmount (avoids stale closures in cleanup)
-  const latestStateRef = useRef<{ nodes: WorkflowNodeType[]; edges: Edge[]; workflowId: string }>({ nodes: [], edges: [], workflowId: "" });
-  const projectRef = useRef(settings.project);
-  useEffect(() => { projectRef.current = settings.project; }, [settings.project]);
 
   // ── Custom node defs ────────────────────────────────────────────────────
   const [showCustomForm, setShowCustomForm] = useState(false);
@@ -144,23 +134,20 @@ function WorkflowCanvas() {
     setNodes((prev) => [...prev, newNode]);
   }, [selectedNode, pushUndo, setNodes]);
 
-  // Context menu
-  const [ctxMenu, setCtxMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  const disconnectEdges = useCallback((nodeId: string) => {
+    pushUndo();
+    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, [pushUndo, setEdges]);
 
-  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: WorkflowNodeType) => {
-    e.preventDefault();
-    setCtxMenu({ nodeId: node.id, x: e.clientX, y: e.clientY });
-    setSelectedNodeId(node.id);
-  }, []);
+  // Pane right-click: capture flow position for canvas ContextMenu
+  const [paneContextMenuFlowPos, setPaneContextMenuFlowPos] = useState<{ x: number; y: number } | null>(null);
 
   const onPaneClick = useCallback(() => {
-    setCtxMenu(null);
     setSelectedNodeId(null);
   }, []);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowNodeType) => {
     setSelectedNodeId(node.id);
-    setCtxMenu(null);
   }, []);
 
   // Drag from palette onto canvas
@@ -184,14 +171,23 @@ function WorkflowCanvas() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); if (e.shiftKey) { handleRedo(); } else { handleUndo(); } }
-      if (e.key === "Escape") setCtxMenu(null);
+      if (e.key === "Escape") setSelectedNodeId(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [handleUndo, handleRedo]);
 
+  // ── Save / load (delegated to extracted hook) ────────────────────────────
+  const {
+    workflowId, setWorkflowId,
+    savedWorkflows, showWorkflowsPanel, setShowWorkflowsPanel,
+    deleteConfirm, setDeleteConfirm, saveError,
+    handleLoad, handleSave, handleDelete, refreshSavedWorkflows,
+    settings, setPs,
+  } = useWorkflowPersistence({ nodes, setNodes, edges, setEdges });
+
   // ── Execution engine (delegated to extracted hook) ───────────────────────
-  const { running, runSummary, runWorkflow, stopWorkflow } = useWorkflowExecution({
+  const { running, paused, runSummary, runWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow } = useWorkflowExecution({
     settings: {
       project: settings.project,
       modelId: settings.modelId,
@@ -204,97 +200,6 @@ function WorkflowCanvas() {
     getEdges,
     setNodes,
   });
-
-  // ── Save / load ─────────────────────────────────────────────────────────
-  const [workflowId, setWorkflowId] = useState("default");
-  const [savedWorkflows, setSavedWorkflows] = useState<FileEntry[]>([]);
-  const [showWorkflowsPanel, setShowWorkflowsPanel] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Keep latest state in a ref so the unmount cleanup can read it without stale closures
-  useEffect(() => { latestStateRef.current = { nodes, edges, workflowId }; }, [nodes, edges, workflowId]);
-
-  // Auto-save current workflow when navigating away (only if it was explicitly loaded/saved)
-  const activeWorkflowRef = useRef(initialWorkflow);
-  useEffect(() => { activeWorkflowRef.current = initialWorkflow; }, [initialWorkflow]);
-
-  useEffect(() => {
-    return () => {
-      const { nodes: ns, edges: es, workflowId: wid } = latestStateRef.current;
-      const project = projectRef.current;
-      if (!project || !wid || !activeWorkflowRef.current || ns.length === 0) return;
-      const cleanNodes = ns.map((n) => ({ ...n, data: { ...n.data, status: "idle" as const, output: undefined } }));
-      saveWorkflow(project, wid, JSON.stringify({ nodes: cleanNodes, edges: es }, null, 2)).catch(() => {});
-    };
-  }, []);
-
-  const refreshSavedWorkflows = useCallback(async () => {
-    try { setSavedWorkflows(await listWorkflows(settings.project)); } catch { setSavedWorkflows([]); }
-  }, [settings.project]);
-
-  useEffect(() => { refreshSavedWorkflows(); }, [refreshSavedWorkflows]);
-
-  const handleLoad = useCallback(async (id: string, silent = false) => {
-    setSaveError(null);
-    const cleanId = id.replace(".json", "");
-    try {
-      const data = await loadWorkflow(settings.project, cleanId);
-      const parsed = JSON.parse(data);
-      const loadedNodes: WorkflowNodeType[] = (parsed.nodes ?? []).map((n: WorkflowNodeType) => ({
-        ...n, data: { ...n.data, status: "idle" as const, output: undefined },
-      }));
-      setNodes(loadedNodes);
-      setEdges(parsed.edges ?? []);
-      setWorkflowId(cleanId);
-      setShowWorkflowsPanel(false);
-      setPs({ activeWorkflow: cleanId });
-      fitView({ padding: 0.1 });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!silent) {
-        setSaveError(msg);
-        notify.error("Failed to load workflow", msg);
-      }
-    }
-  }, [settings.project, setNodes, setEdges, setPs, fitView]);
-
-  const autoLoadedRef = useRef(false);
-  useEffect(() => {
-    if (!initialWorkflow || !settings.project || autoLoadedRef.current) return;
-    autoLoadedRef.current = true;
-    handleLoad(initialWorkflow, true);
-  }, [initialWorkflow, settings.project, handleLoad]);
-
-  const handleSave = async () => {
-    setSaveError(null);
-    try {
-      const id = workflowId.trim() || "default";
-      setWorkflowId(id);
-      const cleanNodes = getNodes().map((n) => ({ ...n, data: { ...n.data, status: "idle" as const, output: undefined } }));
-      await saveWorkflow(settings.project, id, JSON.stringify({ nodes: cleanNodes, edges: getEdges() }, null, 2));
-      setPs({ activeWorkflow: id });
-      await refreshSavedWorkflows();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setSaveError(msg);
-      notify.error("Failed to save workflow", msg);
-    }
-  };
-
-  const handleDelete = async (name: string) => {
-    try {
-      const { deleteFile } = await import("@/lib/ipc");
-      await deleteFile(`projects/${settings.project}/workflows/${name}`);
-      await refreshSavedWorkflows();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setSaveError(msg);
-      notify.error("Failed to delete workflow", msg);
-    }
-    setDeleteConfirm(null);
-  };
 
   const handleNew = () => {
     pushUndo();
@@ -313,14 +218,80 @@ function WorkflowCanvas() {
     setPs({ activeWorkflow: null });
   };
 
+  // Pane context menu: capture flow position for node placement
+  const handlePaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    setPaneContextMenuFlowPos(flowPos);
+  }, [screenToFlowPosition]);
+
+  const addNodeAtPos = useCallback((typeDef: NodeTypeDef) => {
+    pushUndo();
+    const position = paneContextMenuFlowPos ?? { x: 200, y: 200 };
+    setNodes((prev) => [...prev, makeNode(typeDef, position)]);
+  }, [pushUndo, setNodes, makeNode, paneContextMenuFlowPos]);
+
+  // Node action helpers for WorkflowActionsContext (used by WorkflowNode context menu)
+  const deleteNodeById = useCallback((nodeId: string) => {
+    pushUndo();
+    setNodes((prev) => prev.filter((n) => n.id !== nodeId));
+    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    if (outputPanelNodeId === nodeId) setOutputPanelNodeId(null);
+    if (selectedNodeId === nodeId) setSelectedNodeId(null);
+  }, [pushUndo, setNodes, setEdges, outputPanelNodeId, selectedNodeId]);
+
+  const duplicateNodeById = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    pushUndo();
+    const newNode: WorkflowNodeType = {
+      ...node,
+      id: generateId(),
+      position: { x: node.position.x + 40, y: node.position.y + 40 },
+      data: { ...node.data, status: "idle", output: undefined },
+      selected: false,
+    };
+    setNodes((prev) => [...prev, newNode]);
+  }, [nodes, pushUndo, setNodes]);
+
+  const workflowActions = useMemo(() => ({
+    pushUndo, setNodes, setEdges,
+    deleteNode: deleteNodeById,
+    duplicateNode: duplicateNodeById,
+    disconnectEdges,
+    makeNode,
+  }), [pushUndo, setNodes, setEdges, deleteNodeById, duplicateNodeById, disconnectEdges, makeNode]);
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col" onClick={() => setCtxMenu(null)}>
+    <WorkflowActionsContext.Provider value={workflowActions}>
+    <div className="h-full flex flex-col">
       {/* Toolbar */}
       <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
-        <Button variant={running ? "destructive" : "default"} size="sm" className="h-7 text-xs gap-1" onClick={running ? stopWorkflow : runWorkflow}>
-          {running ? <><Square size={12} />Stop</> : <><Play size={12} />Run</>}
-        </Button>
+        {!running && !paused && (
+          <Button variant="default" size="sm" className="h-7 text-xs gap-1" onClick={runWorkflow}>
+            <Play size={12} />Run
+          </Button>
+        )}
+        {running && !paused && (
+          <>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={pauseWorkflow}>
+              <Pause size={12} />Pause
+            </Button>
+            <Button variant="destructive" size="sm" className="h-7 text-xs gap-1" onClick={stopWorkflow}>
+              <Square size={12} />Stop
+            </Button>
+          </>
+        )}
+        {paused && (
+          <>
+            <Button variant="default" size="sm" className="h-7 text-xs gap-1" onClick={resumeWorkflow}>
+              <Play size={12} />Resume
+            </Button>
+            <Button variant="destructive" size="sm" className="h-7 text-xs gap-1" onClick={stopWorkflow}>
+              <Square size={12} />Stop
+            </Button>
+          </>
+        )}
         <div className="w-px h-4 bg-border mx-1" />
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleUndo} title="Undo"><Undo2 size={12} /></Button>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRedo} title="Redo"><Redo2 size={12} /></Button>
@@ -409,60 +380,83 @@ function WorkflowCanvas() {
           <Allotment.Pane>
             <Allotment ref={outputRef} onDragEnd={outputOnDragEnd} defaultSizes={outputDefault} onVisibleChange={(_index, visible) => { if (!visible) setOutputPanelNodeId(null); }}>
               <Allotment.Pane>
-                <div ref={flowContainerRef} className="w-full h-full">
-                {flowReady && <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={onNodeClick}
-              onNodeContextMenu={onNodeContextMenu}
-              onPaneClick={onPaneClick}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              nodeTypes={nodeTypes}
-              fitView
-              snapToGrid
-              snapGrid={[16, 16]}
-              defaultEdgeOptions={{ type: "smoothstep", animated: false }}
-              deleteKeyCode={["Backspace", "Delete"]}
-              onEdgesDelete={() => pushUndo()}
-              proOptions={{ hideAttribution: true }}
-              className="bg-muted/10"
-            >
-              <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
-              <Controls />
-              <MiniMap<WorkflowNodeType>
-                nodeColor={(n) => n.data.color || "var(--node-custom)"}
-                className="!bg-card !border-border rounded-lg overflow-hidden"
-                maskColor="rgba(0,0,0,0.2)"
-              />
-              {nodes.length === 0 && (
-                <Panel position="top-center">
-                  <div className="text-muted-foreground text-xs mt-8">Drag nodes from the palette or click to add</div>
-                </Panel>
-              )}
-              <NodeToolbar
-                nodeId={selectedNodeId ?? ""}
-                isVisible={!!selectedNodeId && !!selectedData}
-                position={Position.Right}
-                offset={12}
-              >
-                {selectedData && selectedNodeId && (
-                  <NodePropertiesPanel
-                    nodeId={selectedNodeId}
-                    data={selectedData}
-                    onUpdate={updateNodeData}
-                    onDuplicate={duplicateSelected}
-                    onDelete={deleteSelected}
-                    onClose={() => setSelectedNodeId(null)}
-                    onViewOutput={() => setOutputPanelNodeId(selectedNodeId)}
-                  />
-                )}
-              </NodeToolbar>
-            </ReactFlow>}
-                </div>
+                <ContextMenu onOpenChange={(open) => { if (!open) setPaneContextMenuFlowPos(null); }}>
+                  <ContextMenuTrigger asChild>
+                    <div ref={flowContainerRef} className="w-full h-full">
+                      {flowReady && <ReactFlow
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onConnect={onConnect}
+                        onNodeClick={onNodeClick}
+                        onPaneContextMenu={handlePaneContextMenu}
+                        onPaneClick={onPaneClick}
+                        onDrop={onDrop}
+                        onDragOver={onDragOver}
+                        nodeTypes={nodeTypes}
+                        fitView
+                        snapToGrid
+                        snapGrid={[16, 16]}
+                        defaultEdgeOptions={{ type: "smoothstep", animated: false }}
+                        deleteKeyCode={["Backspace", "Delete"]}
+                        onEdgesDelete={() => pushUndo()}
+                        proOptions={{ hideAttribution: true }}
+                        className="bg-muted/10"
+                      >
+                        <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
+                        <Controls />
+                        <MiniMap<WorkflowNodeType>
+                          nodeColor={(n) => n.data.color || "var(--node-custom)"}
+                          className="!bg-card !border-border rounded-lg overflow-hidden"
+                          maskColor="rgba(0,0,0,0.2)"
+                        />
+                        {nodes.length === 0 && (
+                          <Panel position="top-center">
+                            <div className="text-muted-foreground text-xs mt-8">Drag nodes from the palette or right-click to add</div>
+                          </Panel>
+                        )}
+                        <NodeToolbar
+                          nodeId={selectedNodeId ?? ""}
+                          isVisible={!!selectedNodeId && !!selectedData}
+                          position={Position.Right}
+                          offset={12}
+                        >
+                          {selectedData && selectedNodeId && (
+                            <NodePropertiesPanel
+                              nodeId={selectedNodeId}
+                              data={selectedData}
+                              onUpdate={updateNodeData}
+                              onDuplicate={duplicateSelected}
+                              onDelete={deleteSelected}
+                              onClose={() => setSelectedNodeId(null)}
+                              onViewOutput={() => setOutputPanelNodeId(selectedNodeId)}
+                            />
+                          )}
+                        </NodeToolbar>
+                      </ReactFlow>}
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    {categories.map((cat, catIndex) => (
+                      <Fragment key={cat}>
+                        <ContextMenuGroup>
+                          <ContextMenuLabel>{cat}</ContextMenuLabel>
+                          {allDefs.filter((t) => t.category === cat).map((t) => (
+                            <ContextMenuItem key={t.type} onClick={() => addNodeAtPos(t)}>
+                              <t.icon style={{ color: t.color }} />
+                              <div className="min-w-0">
+                                <div>{t.label}</div>
+                                <div className="text-muted-foreground">{t.desc}</div>
+                              </div>
+                            </ContextMenuItem>
+                          ))}
+                        </ContextMenuGroup>
+                        {catIndex < categories.length - 1 && <ContextMenuSeparator />}
+                      </Fragment>
+                    ))}
+                  </ContextMenuContent>
+                </ContextMenu>
               </Allotment.Pane>
 
               {/* Output chat panel */}
@@ -481,25 +475,6 @@ function WorkflowCanvas() {
           </Allotment.Pane>
 
         </Allotment>
-
-        {/* Context menu */}
-        {ctxMenu && (
-          <div
-            className="fixed z-50 bg-popover border border-border rounded-md shadow-lg py-1 min-w-[150px] text-xs"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button className="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2" onClick={() => { duplicateSelected(); setCtxMenu(null); }}><Copy size={11} />Duplicate</button>
-            <button className="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center gap-2" onClick={() => {
-              if (!ctxMenu) return;
-              pushUndo();
-              setEdges((prev) => prev.filter((e) => e.source !== ctxMenu.nodeId && e.target !== ctxMenu.nodeId));
-              setCtxMenu(null);
-            }}><X size={11} />Disconnect edges</button>
-            <div className="my-1 h-px bg-border" />
-            <button className="w-full text-left px-3 py-1.5 hover:bg-muted text-destructive flex items-center gap-2" onClick={() => { deleteSelected(); setCtxMenu(null); }}><Trash2 size={11} />Delete node</button>
-          </div>
-        )}
 
         {/* Workflows panel */}
         {showWorkflowsPanel && (
@@ -571,6 +546,7 @@ function WorkflowCanvas() {
         )}
       </div>
     </div>
+    </WorkflowActionsContext.Provider>
   );
 }
 

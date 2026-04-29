@@ -75,7 +75,9 @@ export default function App() {
                 {ps.activeView === "screens"    && <ScreensPanel />}
                 {ps.activeView === "components" && <ComponentsPanel />}
                 {ps.activeView === "themes"     && <ThemesPanel />}
-                {ps.activeView === "workflows"  && <WorkflowsView />}
+                <div style={{ display: ps.activeView === "workflows" ? "contents" : "none" }}>
+                  <WorkflowsView />
+                </div>
                 {ps.activeView === "apis"       && <APIsPanel />}
                 {ps.activeView === "runner"     && <RunnerPanel />}
                 {ps.activeView === "library"    && <LibraryPanel />}

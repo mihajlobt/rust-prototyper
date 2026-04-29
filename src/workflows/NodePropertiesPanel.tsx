@@ -71,6 +71,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
       case "running": return "input-streaming";
       case "done": return "output-available";
       case "error": return "output-error";
+      case "paused": return "input-available";
       default: return "input-available";
     }
   }

@@ -34,8 +34,11 @@ export interface RunSummary {
 
 export interface WorkflowExecutionApi {
   running: boolean;
+  paused: boolean;
   runSummary: RunSummary | null;
   runWorkflow: () => Promise<void>;
+  pauseWorkflow: () => void;
+  resumeWorkflow: () => Promise<void>;
   stopWorkflow: () => void;
 }
 
@@ -105,21 +108,33 @@ export function useWorkflowExecution({
   setNodes,
 }: UseWorkflowExecutionParams): WorkflowExecutionApi {
   const [running, setRunning] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
   const abortRef = useRef(false);
+  const pauseRef = useRef(false);
 
   const runWorkflow = async () => {
     setRunning(true);
+    setPaused(false);
     setRunSummary(null);
     abortRef.current = false;
+    pauseRef.current = false;
     const generatedPath = `projects/${settings.project}/generated`;
     const startTime = Date.now();
+
+    // Reset paused nodes to idle, preserve done nodes (for resume)
+    setNodes((prev) => prev.map((n) =>
+      n.data.status === "paused"
+        ? { ...n, data: { ...n.data, status: "idle" } }
+        : n.data.status === "done"
+          ? n
+          : { ...n, data: { ...n.data, status: "idle", output: undefined } }
+    ));
+
     const currentNodes = getNodes();
     const currentEdges = getEdges();
 
     const workflowMemory = new Map<string, string>();
-
-    setNodes((prev) => prev.map((n) => ({ ...n, data: { ...n.data, status: "idle", output: undefined } })));
 
     const adj  = new Map<string, string[]>();
     const radj = new Map<string, string[]>();
@@ -140,6 +155,16 @@ export function useWorkflowExecution({
     for (const n of currentNodes) if (n.data.nodeType === "composition") compDeps.set(n.id, new Set(radj.get(n.id)!));
 
     const nodeOutputMap = new Map<string, string>();
+    // Rebuild output map from done/paused nodes (for resume)
+    // Branch outputs (:pass/:fail) are persisted as passOutput/failOutput in node data
+    // so they survive pause/resume without guessing
+    for (const n of currentNodes) {
+      if ((n.data.status === "done" || n.data.status === "paused") && n.data.output) {
+        nodeOutputMap.set(n.id, n.data.output);
+        if (n.data.passOutput !== undefined) nodeOutputMap.set(`${n.id}:pass`, n.data.passOutput);
+        if (n.data.failOutput !== undefined) nodeOutputMap.set(`${n.id}:fail`, n.data.failOutput);
+      }
+    }
 
     const getPrevOut = (nodeId: string) => {
       const inc = currentEdges.filter((e) => e.target === nodeId);
@@ -237,10 +262,13 @@ export function useWorkflowExecution({
               output = aiReview ? `✅ tsc: no errors\n\n${aiReview}` : (prevOut || "✅ tsc: no errors");
               nodeOutputMap.set(`${nodeId}:pass`, prevOut);
               nodeOutputMap.set(`${nodeId}:fail`, "");
+              updateStatus(nodeId, { passOutput: prevOut, failOutput: "" });
             } else {
               output = `❌ tsc errors:\n${tscOut}\n\nCODE:\n${prevOut}`;
+              const failContent = `ERRORS:\n${tscOut}\n\nCODE:\n${prevOut}`;
               nodeOutputMap.set(`${nodeId}:pass`, "");
-              nodeOutputMap.set(`${nodeId}:fail`, `ERRORS:\n${tscOut}\n\nCODE:\n${prevOut}`);
+              nodeOutputMap.set(`${nodeId}:fail`, failContent);
+              updateStatus(nodeId, { passOutput: "", failOutput: failContent });
             }
             break;
           }
@@ -377,6 +405,7 @@ export function useWorkflowExecution({
             output = passed ? prevOut : `❌ Condition failed\n\n${prevOut.slice(0, 500)}`;
             nodeOutputMap.set(`${nodeId}:pass`, passed ? prevOut : "");
             nodeOutputMap.set(`${nodeId}:fail`, passed ? "" : prevOut);
+            updateStatus(nodeId, { passOutput: passed ? prevOut : "", failOutput: passed ? "" : prevOut });
             break;
           }
 
@@ -472,6 +501,23 @@ export function useWorkflowExecution({
 
     for (const nodeId of execOrder) {
       if (abortRef.current) break;
+      // Resume: skip nodes that are already done from a prior run
+      const existingNode = currentNodes.find((n) => n.id === nodeId);
+      if (existingNode?.data.status === "done") { done.add(nodeId); continue; }
+      if (pauseRef.current) {
+        // Mark this node and remaining idle nodes as paused
+        updateStatus(nodeId, { status: existingNode?.data.status === "running" ? "paused" : "paused" });
+        for (const remainingId of execOrder) {
+          if (!done.has(remainingId) && remainingId !== nodeId) {
+            const remNode = currentNodes.find((n) => n.id === remainingId);
+            if (remNode?.data.status === "idle" || !remNode?.data.status) {
+              updateStatus(remainingId, { status: "paused" });
+            }
+          }
+        }
+        setPaused(true);
+        return;
+      }
       const nd = currentNodes.find((n) => n.id === nodeId);
       if (!nd || done.has(nodeId)) continue;
       const nType = nd.data.nodeType;
@@ -504,10 +550,31 @@ export function useWorkflowExecution({
     setRunning(false);
   };
 
-  const stopWorkflow = () => {
-    abortRef.current = true; setRunning(false);
-    setNodes((prev) => prev.map((n) => n.data.status === "running" ? { ...n, data: { ...n.data, status: "idle" } } : n));
+  const pauseWorkflow = () => {
+    // Signal the running loop to pause after current node finishes
+    pauseRef.current = true;
   };
 
-  return { running, runSummary, runWorkflow, stopWorkflow };
+  const resumeWorkflow = async () => {
+    // Reset pause state and re-run, skipping nodes that are already done
+    pauseRef.current = false;
+    abortRef.current = false;
+    setPaused(false);
+    // Call runWorkflow which will skip done nodes
+    await runWorkflow();
+  };
+
+  const stopWorkflow = () => {
+    abortRef.current = true;
+    pauseRef.current = false;
+    setRunning(false);
+    setPaused(false);
+    setNodes((prev) => prev.map((n) =>
+      n.data.status === "running" || n.data.status === "paused"
+        ? { ...n, data: { ...n.data, status: "idle" } }
+        : n
+    ));
+  };
+
+  return { running, paused, runSummary, runWorkflow, pauseWorkflow, resumeWorkflow, stopWorkflow };
 }
