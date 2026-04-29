@@ -7,10 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageContent } from "@/components/ui/message";
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
-import CodeMirror from "@uiw/react-codemirror";
-import { markdown } from "@codemirror/lang-markdown";
-import { EditorView } from "@codemirror/view";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 import {
   InputNodeFields, WriteFileFields, BashFields, FetchFields, FileOpFields,
@@ -111,14 +108,13 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
               <div className="relative">
                 {editingPrompt ? (
                   <div className="rounded border border-border overflow-hidden w-full">
-                    <CodeMirror
+                    <CodeMirrorEditor
                       value={draftPrompt}
-                      height="200px"
-                      style={{ width: "100%" }}
-                      theme={oneDark}
-                      extensions={[markdown(), EditorView.lineWrapping]}
                       onChange={setDraftPrompt}
-                      basicSetup={{ lineNumbers: false, foldGutter: false }}
+                      mode="markdown"
+                      height="200px"
+                      lineWrapping
+                      minimal
                     />
                   </div>
                 ) : (

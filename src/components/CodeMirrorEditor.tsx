@@ -5,6 +5,7 @@ import { css } from "@codemirror/lang-css";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { yaml } from "@codemirror/lang-yaml";
+import { EditorView } from "@codemirror/view";
 import {
   abcdef, abyss, androidstudio, andromeda, atomone, aura,
   basicDark, basicLight, bbedit, bespin,
@@ -22,23 +23,46 @@ import {
   xcodeDark, xcodeLight,
 } from "@uiw/codemirror-themes-all";
 import type { Extension } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
 import { useSettings } from "@/hooks/useSettings";
 
-const modeMap: Record<string, Extension> = {
-  javascript: javascript(),
-  jsx: javascript({ jsx: true }),
-  typescript: javascript({ typescript: true }),
-  tsx: javascript({ jsx: true, typescript: true }),
-  css: css(),
-  json: json(),
-  markdown: markdown(),
-  yaml: yaml(),
-  shell: javascript(),
+// ─── Language detection ────────────────────────────────────────────────────
+
+const EXT_TO_MODE: Record<string, string> = {
+  ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx",
+  css: "css", scss: "css", less: "css",
+  json: "json", jsonc: "json",
+  md: "markdown", mdx: "markdown", markdown: "markdown",
+  yaml: "yaml", yml: "yaml",
+  sh: "shell", bash: "shell", zsh: "shell",
+  html: "html", htm: "html",
+  txt: "markdown",
+  env: "shell",
+  toml: "yaml",
+  rs: "javascript",
+  py: "javascript",
 };
 
+export function getLanguageFromPath(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return EXT_TO_MODE[ext] ?? "javascript";
+}
+
+const MODE_TO_EXT: Record<string, Extension> = {
+  javascript: javascript(),
+  jsx:        javascript({ jsx: true }),
+  typescript: javascript({ typescript: true }),
+  tsx:        javascript({ jsx: true, typescript: true }),
+  css:        css(),
+  json:       json(),
+  markdown:   markdown(),
+  yaml:       yaml(),
+  shell:      javascript(),
+  html:       markdown(),
+};
+
+// ─── Theme registry ────────────────────────────────────────────────────────
+
 export const EDITOR_THEMES: Record<string, { label: string; ext: Extension; dark: boolean }> = {
-  // Dark themes
   vscodeDark:        { label: "VS Code Dark",        ext: vscodeDark,        dark: true  },
   dracula:           { label: "Dracula",             ext: dracula,           dark: true  },
   tokyoNight:        { label: "Tokyo Night",         ext: tokyoNight,        dark: true  },
@@ -69,7 +93,6 @@ export const EDITOR_THEMES: Record<string, { label: string; ext: Extension; dark
   red:               { label: "Red",                 ext: red,               dark: true  },
   whiteDark:         { label: "White Dark",          ext: whiteDark,         dark: true  },
   xcodeDark:         { label: "Xcode Dark",          ext: xcodeDark,         dark: true  },
-  // Light themes
   tokyoNightDay:     { label: "Tokyo Night Day",     ext: tokyoNightDay,     dark: false },
   gruvboxLight:      { label: "Gruvbox Light",       ext: gruvboxLight,      dark: false },
   githubLight:       { label: "GitHub Light",        ext: githubLight,       dark: false },
@@ -87,14 +110,25 @@ export const EDITOR_THEMES: Record<string, { label: string; ext: Extension; dark
   whiteLight:        { label: "White Light",         ext: whiteLight,        dark: false },
 };
 
+// ─── Component ────────────────────────────────────────────────────────────
+
 interface CodeMirrorEditorProps {
   value: string;
   onChange?: (value: string) => void;
   onBlur?: () => void;
+  /** Language mode string e.g. "tsx", "css". Ignored if `filename` is provided. */
   mode?: string;
+  /** Auto-detect language from file extension. Takes precedence over `mode`. */
+  filename?: string;
   readOnly?: boolean;
   className?: string;
   placeholder?: string;
+  /** Editor height. Defaults to "100%". */
+  height?: string;
+  /** Soft-wrap long lines instead of scrolling horizontally. */
+  lineWrapping?: boolean;
+  /** Compact mode — no line numbers, no fold gutter. For inline/embedded editors. */
+  minimal?: boolean;
 }
 
 export function CodeMirrorEditor({
@@ -102,19 +136,26 @@ export function CodeMirrorEditor({
   onChange,
   onBlur,
   mode = "javascript",
+  filename,
   readOnly = false,
   className = "",
   placeholder,
+  height = "100%",
+  lineWrapping = false,
+  minimal = false,
 }: CodeMirrorEditorProps) {
   const { settings } = useSettings();
 
+  const resolvedMode = filename ? getLanguageFromPath(filename) : mode;
+
   const extensions = useMemo(() => {
     const result: Extension[] = [];
-    const lang = modeMap[mode];
+    const lang = MODE_TO_EXT[resolvedMode];
     if (lang) result.push(lang);
+    if (lineWrapping) result.push(EditorView.lineWrapping);
     if (onBlur) result.push(EditorView.domEventHandlers({ blur: () => { onBlur(); } }));
     return result;
-  }, [mode, onBlur]);
+  }, [resolvedMode, lineWrapping, onBlur]);
 
   const handleChange = useCallback((val: string) => { onChange?.(val); }, [onChange]);
 
@@ -124,18 +165,18 @@ export function CodeMirrorEditor({
   return (
     <CodeMirror
       value={value}
-      height="100%"
+      height={height}
       theme={activeTheme}
       extensions={extensions}
       onChange={handleChange}
       readOnly={readOnly}
       placeholder={placeholder}
-      className={["h-full text-sm", className].join(" ")}
+      className={[height === "100%" ? "h-full" : "", "text-sm", className].join(" ").trim()}
       basicSetup={{
-        lineNumbers: true,
-        highlightActiveLineGutter: true,
-        highlightActiveLine: true,
-        foldGutter: true,
+        lineNumbers: !minimal,
+        highlightActiveLineGutter: !minimal,
+        highlightActiveLine: !minimal,
+        foldGutter: !minimal,
       }}
     />
   );

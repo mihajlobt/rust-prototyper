@@ -46,6 +46,8 @@ export interface ProjectSettings {
   runnerZoom: number;
   runnerTerminalOpen: boolean;
   runnerActiveTab: "terminal" | "logs" | "network";
+  runnerEditorTabs: string[];
+  runnerEditorActiveTabPath: string | null;
 
   // APIs panel — persistent editor state
   apisName: string;
@@ -106,6 +108,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerZoom: 1,
   runnerTerminalOpen: true,
   runnerActiveTab: "terminal",
+  runnerEditorTabs: [],
+  runnerEditorActiveTabPath: null,
 
   apisName: "",
   apisMethod: "GET",
