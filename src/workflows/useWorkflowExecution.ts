@@ -144,11 +144,14 @@ export function useWorkflowExecution({
     const getPrevOut = (nodeId: string) => {
       const inc = currentEdges.filter((e) => e.target === nodeId);
       if (!inc.length) return "";
-      const edge = inc[0];
-      if (edge.sourceHandle) {
-        return nodeOutputMap.get(`${edge.source}:${edge.sourceHandle}`) ?? nodeOutputMap.get(edge.source) ?? "";
-      }
-      return nodeOutputMap.get(edge.source) ?? "";
+      // Aggregate all incoming edges so nodes with multiple inputs receive combined content.
+      // For the common single-edge case this behaves identically to the old inc[0] approach.
+      return inc.map((edge) => {
+        if (edge.sourceHandle) {
+          return nodeOutputMap.get(`${edge.source}:${edge.sourceHandle}`) ?? nodeOutputMap.get(edge.source) ?? "";
+        }
+        return nodeOutputMap.get(edge.source) ?? "";
+      }).filter(Boolean).join("\n\n");
     };
 
     const updateStatus = (id: string, patch: Partial<WorkflowNodeData>) =>
@@ -226,11 +229,13 @@ export function useWorkflowExecution({
               const aiReview = prevOut.length > 0
                 ? await ai("workflow-validate-system", WORKFLOW_VALIDATE_PROMPT_BASE, prevOut)
                 : "";
-              output = aiReview ? `✅ tsc: no errors\n\n${aiReview}` : "✅ tsc: no errors";
+              // Main output includes content so old edges without sourceHandle still get the actual code.
+              // Branch outputs for explicit pass/fail routing via sourceHandle-aware edges.
+              output = aiReview ? `✅ tsc: no errors\n\n${aiReview}` : (prevOut || "✅ tsc: no errors");
               nodeOutputMap.set(`${nodeId}:pass`, prevOut);
               nodeOutputMap.set(`${nodeId}:fail`, "");
             } else {
-              output = `❌ tsc errors:\n${tscOut}`;
+              output = `❌ tsc errors:\n${tscOut}\n\nCODE:\n${prevOut}`;
               nodeOutputMap.set(`${nodeId}:pass`, "");
               nodeOutputMap.set(`${nodeId}:fail`, `ERRORS:\n${tscOut}\n\nCODE:\n${prevOut}`);
             }
@@ -366,7 +371,7 @@ export function useWorkflowExecution({
               );
               passed = verdict.trim().toUpperCase().startsWith("YES");
             }
-            output = passed ? "✅ Condition passed" : "❌ Condition failed";
+            output = passed ? prevOut : `❌ Condition failed\n\n${prevOut.slice(0, 500)}`;
             nodeOutputMap.set(`${nodeId}:pass`, passed ? prevOut : "");
             nodeOutputMap.set(`${nodeId}:fail`, passed ? "" : prevOut);
             break;
