@@ -137,6 +137,8 @@ export type WorkflowNodeType = Node<WorkflowNodeData, "workflow">;
 
 // ─── Custom node component ─────────────────────────────────────────────────
 
+const BRANCHING_NODE_TYPES = new Set(["validate", "condition"]);
+
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
   const d = data;
   const borderColor =
@@ -148,14 +150,25 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
 
   const def = BUILTIN_NODE_TYPES.find((t) => t.type === d.nodeType);
   const Icon = def?.icon ?? Settings;
+  const isBranching = BRANCHING_NODE_TYPES.has(d.nodeType);
 
   return (
     <div
       className="bg-card rounded-lg shadow-md relative cursor-pointer"
       style={{ width: 160, minHeight: 60, border: `1.5px solid ${borderColor}` }}
     >
-      <Handle type="target" position={Position.Left}  style={{ width: 12, height: 12, borderColor }} />
-      <Handle type="source" position={Position.Right} style={{ width: 12, height: 12, borderColor }} />
+      <Handle type="target" position={Position.Left} style={{ width: 12, height: 12, borderColor }} />
+
+      {isBranching ? (
+        <>
+          <Handle type="source" id="pass" position={Position.Right}
+            style={{ top: "33%", width: 10, height: 10, background: "var(--status-done)", borderColor: "var(--status-done)" }} />
+          <Handle type="source" id="fail" position={Position.Right}
+            style={{ top: "67%", width: 10, height: 10, background: "var(--status-error)", borderColor: "var(--status-error)" }} />
+        </>
+      ) : (
+        <Handle type="source" position={Position.Right} style={{ width: 12, height: 12, borderColor }} />
+      )}
 
       <div className="px-3 pt-1.5 pb-2">
         <div className="wf-accent-bar mb-1.5" style={{ background: d.color }} />
@@ -175,6 +188,12 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
         </div>
         {d.status === "error" && d.output && (
           <div className="text-[9px] text-destructive truncate">{d.output.slice(0, 80)}</div>
+        )}
+        {isBranching && (
+          <div className="absolute right-2 inset-y-0 flex flex-col justify-around pointer-events-none">
+            <span className="text-[7px] font-bold leading-none" style={{ color: "var(--status-done)" }}>pass</span>
+            <span className="text-[7px] font-bold leading-none" style={{ color: "var(--status-error)" }}>fail</span>
+          </div>
         )}
       </div>
     </div>

@@ -34,6 +34,14 @@ const e = (id: string, source: string, target: string): Edge => ({
   type: "smoothstep",
 });
 
+const eh = (id: string, source: string, target: string, sourceHandle: string): Edge => ({
+  id,
+  source,
+  target,
+  type: "smoothstep",
+  sourceHandle,
+});
+
 // ─── CSS color variable references ───────────────────────────────────────────
 
 const C = {
@@ -129,8 +137,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       e("t3-e5", "t3-n4", "t3-n6"),
       e("t3-e6", "t3-n5", "t3-n7"),
       e("t3-e7", "t3-n6", "t3-n7"),
-      e("t3-e8", "t3-n7", "t3-n8"),
-      e("t3-e9", "t3-n8", "t3-n9"),
+      e("t3-e8",  "t3-n7", "t3-n8"),
+      eh("t3-e9", "t3-n8", "t3-n9", "pass"),
     ],
   },
 
@@ -179,12 +187,34 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     ],
     edges: [
       e("t5-e1", "t5-n1", "t5-n2"),
-      e("t5-e2", "t5-n2", "t5-n3"),
-      e("t5-e3", "t5-n3", "t5-n4"),
-      e("t5-e4", "t5-n4", "t5-n5"),
-      e("t5-e5", "t5-n5", "t5-n6"),
-      e("t5-e6", "t5-n6", "t5-n7"),
-      e("t5-e7", "t5-n7", "t5-n8"),
+      e("t5-e2",  "t5-n2", "t5-n3"),
+      eh("t5-e3", "t5-n3", "t5-n4", "fail"),
+      e("t5-e4",  "t5-n4", "t5-n5"),
+      e("t5-e5",  "t5-n5", "t5-n6"),
+      eh("t5-e6", "t5-n6", "t5-n7", "pass"),
+      e("t5-e7",  "t5-n7", "t5-n8"),
+    ],
+  },
+
+  // ── 6. Auto-Fix Pipeline ─────────────────────────────────────────────────
+  {
+    id: "auto-fix-pipeline",
+    label: "Auto-Fix Pipeline",
+    description: "Validate with dual outputs: pass branch previews immediately, fail branch routes through LoopUntil to auto-fix TypeScript errors then preview",
+    nodes: [
+      n("t6-n1", "input",     "User Prompt", "Start of workflow",   C.io,          60,  200, { prompt: "Create a reusable Modal component with a title, body slot, close button, and backdrop click-to-dismiss. Include TypeScript props interface." }),
+      n("t6-n2", "structure", "Structure",   "Generate TSX",        C.generation,  280, 200),
+      n("t6-n3", "validate",  "Validate",    "Run tsc + AI review", C.analysis,    500, 200),
+      n("t6-n4", "preview",   "Preview ✓",   "Render clean code",   C.io,          760,  80),
+      n("t6-n5", "loopuntil", "Loop Until",  "Auto-fix errors",     C.composition, 760, 320, { validationCommand: "bun tsc --noEmit", maxIterations: 3 }),
+      n("t6-n6", "preview",   "Preview ✗",   "Render fixed code",   C.io,          980, 320),
+    ],
+    edges: [
+      e("t6-e1",  "t6-n1", "t6-n2"),
+      e("t6-e2",  "t6-n2", "t6-n3"),
+      eh("t6-e3", "t6-n3", "t6-n4", "pass"),
+      eh("t6-e4", "t6-n3", "t6-n5", "fail"),
+      e("t6-e5",  "t6-n5", "t6-n6"),
     ],
   },
 

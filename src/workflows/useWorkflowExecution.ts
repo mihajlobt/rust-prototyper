@@ -143,7 +143,12 @@ export function useWorkflowExecution({
 
     const getPrevOut = (nodeId: string) => {
       const inc = currentEdges.filter((e) => e.target === nodeId);
-      return inc.length ? (nodeOutputMap.get(inc[0].source) ?? "") : "";
+      if (!inc.length) return "";
+      const edge = inc[0];
+      if (edge.sourceHandle) {
+        return nodeOutputMap.get(`${edge.source}:${edge.sourceHandle}`) ?? nodeOutputMap.get(edge.source) ?? "";
+      }
+      return nodeOutputMap.get(edge.source) ?? "";
     };
 
     const updateStatus = (id: string, patch: Partial<WorkflowNodeData>) =>
@@ -217,13 +222,17 @@ export function useWorkflowExecution({
           case "validate": {
             const tscOut = await runShellCommandCapture(generatedPath, "bun tsc --noEmit").catch((e: unknown) => `tsc failed: ${String(e)}`);
             const tscClean = tscOut.trim().length === 0;
-            const badge = tscClean ? "✅ tsc: no errors" : `❌ tsc errors:\n${tscOut}`;
-            if (tscClean && (prevOut || "").length > 0) {
-              // tsc passed — also run AI deep review if code was passed in
-              const aiReview = await ai("workflow-validate-system", WORKFLOW_VALIDATE_PROMPT_BASE, prevOut || "No code to validate");
-              output = `${badge}\n\n${aiReview}`;
+            if (tscClean) {
+              const aiReview = prevOut.length > 0
+                ? await ai("workflow-validate-system", WORKFLOW_VALIDATE_PROMPT_BASE, prevOut)
+                : "";
+              output = aiReview ? `✅ tsc: no errors\n\n${aiReview}` : "✅ tsc: no errors";
+              nodeOutputMap.set(`${nodeId}:pass`, prevOut);
+              nodeOutputMap.set(`${nodeId}:fail`, "");
             } else {
-              output = badge;
+              output = `❌ tsc errors:\n${tscOut}`;
+              nodeOutputMap.set(`${nodeId}:pass`, "");
+              nodeOutputMap.set(`${nodeId}:fail`, `ERRORS:\n${tscOut}\n\nCODE:\n${prevOut}`);
             }
             break;
           }
@@ -255,7 +264,10 @@ export function useWorkflowExecution({
             break;
           }
           case "parallel":    output = `Forked into ${currentEdges.filter((e) => e.source === nodeId).length} branches`; break;
-          case "composition": output = currentEdges.filter((e) => e.target === nodeId).map((e) => nodeOutputMap.get(e.source) ?? "").join("\n\n---\n\n") || "No inputs"; break;
+          case "composition": output = currentEdges.filter((e) => e.target === nodeId).map((e) => {
+            if (e.sourceHandle) return nodeOutputMap.get(`${e.source}:${e.sourceHandle}`) ?? nodeOutputMap.get(e.source) ?? "";
+            return nodeOutputMap.get(e.source) ?? "";
+          }).filter(Boolean).join("\n\n---\n\n") || "No inputs"; break;
           case "preview":     output = prevOut || "Nothing to preview"; break;
           case "designSystem": {
             try {
@@ -343,27 +355,31 @@ export function useWorkflowExecution({
               );
               passed = verdict.trim().toUpperCase().startsWith("YES");
             }
-            output = passed ? prevOut : `CONDITION_FAILED: condition evaluated to false\n\nInput was:\n${prevOut.slice(0, 500)}`;
+            output = passed ? "✅ Condition passed" : "❌ Condition failed";
+            nodeOutputMap.set(`${nodeId}:pass`, passed ? prevOut : "");
+            nodeOutputMap.set(`${nodeId}:fail`, passed ? "" : prevOut);
             break;
           }
 
           case "loopuntil": {
             const maxIter = d.maxIterations ?? 3;
             const valCmd = d.validationCommand || "bun tsc --noEmit";
-            let code = prevOut;
-            let lastErrors = "";
+            // If input is from validate's fail branch it arrives as "ERRORS:\n...\nCODE:\n..."
+            // Extract just the code section; otherwise use prevOut as-is.
+            const codeMatch = prevOut.match(/^ERRORS:[\s\S]*?\nCODE:\n([\s\S]*)$/);
+            let code = codeMatch ? codeMatch[1].trim() : prevOut;
             for (let iter = 0; iter < maxIter; iter++) {
               const valOut = await runShellCommandCapture(generatedPath, valCmd).catch((e: unknown) => String(e));
               if (valOut.trim().length === 0) {
-                output = `✅ Passed after ${iter === 0 ? "first" : `${iter + 1}`} iteration(s)\n\n${code}`;
+                updateStatus(nodeId, { output: `✅ Passed after ${iter === 0 ? "first" : `${iter + 1}`} iteration(s)` });
+                output = code;
                 break;
               }
-              lastErrors = valOut;
               updateStatus(nodeId, { output: `Iteration ${iter + 1}/${maxIter} — fixing errors…\n\n${valOut.slice(0, 300)}` });
               const fixSys = resolveSystem("workflow-loop-fix-system", WORKFLOW_LOOP_FIX_PROMPT_BASE);
               code = await streamAI(fixSys, `ERRORS:\n${valOut}\n\nCODE:\n${code}`);
               if (iter === maxIter - 1) {
-                output = `⚠️ Max iterations reached (${maxIter}). Last errors:\n\n${lastErrors.slice(0, 500)}\n\nFinal code:\n\n${code}`;
+                output = code;
               }
             }
             if (!output) output = code;
