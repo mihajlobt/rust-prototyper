@@ -9,6 +9,7 @@ use ollama_rs::{
     },
 };
 use tauri::ipc::Channel;
+use tokio_util::sync::CancellationToken;
 use crate::{AppError, CompletionEvent};
 use super::{executor::execute_tool, tools::build_tools};
 
@@ -24,11 +25,15 @@ fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     }
 }
 
+/// Stream a single agent turn, returning any tool calls the model made.
+/// Checks CancellationToken between stream chunks using tokio::select!
+/// so cancellation takes effect promptly.
 async fn stream_turn(
     ollama: &Ollama,
     history: Arc<Mutex<Vec<OllamaChatMessage>>>,
     request: ChatMessageRequest,
     channel: &Channel<CompletionEvent>,
+    cancel_token: &CancellationToken,
 ) -> Result<Vec<ollama_rs::generation::tools::ToolCall>, AppError> {
     let mut tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
 
@@ -37,30 +42,47 @@ async fn stream_turn(
         .await
         .map_err(|e| AppError::Http(e.to_string()))?;
 
-    while let Some(result) = stream.next().await {
-        let response = result.map_err(|_| AppError::Http("Ollama stream error".into()))?;
-        if !response.message.tool_calls.is_empty() {
-            tool_calls = response.message.tool_calls.clone();
-        }
-        let thinking = response.message.thinking.filter(|t| !t.is_empty());
-        let text = response.message.content;
-        if thinking.is_some() || !text.is_empty() {
-            let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+    loop {
+        tokio::select! {
+            result = stream.next() => {
+                match result {
+                    Some(Ok(response)) => {
+                        if !response.message.tool_calls.is_empty() {
+                            tool_calls = response.message.tool_calls.clone();
+                        }
+                        let thinking = response.message.thinking.filter(|t| !t.is_empty());
+                        let text = response.message.content;
+                        if thinking.is_some() || !text.is_empty() {
+                            let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+                        }
+                    }
+                    Some(Err(_)) => return Err(AppError::Http("Ollama stream error".into())),
+                    None => return Ok(tool_calls),
+                }
+            }
+            _ = cancel_token.cancelled() => {
+                // Cancellation — drop stream to close the HTTP connection
+                drop(stream);
+                return Ok(tool_calls);
+            }
         }
     }
-
-    Ok(tool_calls)
 }
 
-pub async fn run_agent_loop(
-    ollama: &Ollama,
-    model: &str,
-    initial_messages: Vec<OllamaChatMessage>,
-    think: Option<bool>,
-    app_data_dir: &Path,
-    output_path: &str,
-    channel: &Channel<CompletionEvent>,
-) -> Result<(), AppError> {
+/// Parameters for the agent loop, grouped to avoid too_many_arguments clippy warning.
+pub struct AgentLoopParams<'a> {
+    pub ollama: &'a Ollama,
+    pub model: &'a str,
+    pub initial_messages: Vec<OllamaChatMessage>,
+    pub think: Option<bool>,
+    pub app_data_dir: &'a Path,
+    pub output_path: &'a str,
+    pub channel: &'a Channel<CompletionEvent>,
+    pub cancel_token: &'a CancellationToken,
+}
+
+pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
+    let AgentLoopParams { ollama, model, initial_messages, think, app_data_dir, output_path, channel, cancel_token } = params;
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
 
@@ -76,7 +98,19 @@ pub async fn run_agent_loop(
     let mut iteration: u8 = 0;
 
     loop {
-        let tool_calls = stream_turn(ollama, history.clone(), request, channel).await?;
+        // Check cancellation before starting a new iteration
+        if cancel_token.is_cancelled() {
+            let _ = channel.send(CompletionEvent::Done);
+            return Ok(());
+        }
+
+        let tool_calls = stream_turn(ollama, history.clone(), request, channel, cancel_token).await?;
+
+        // If cancelled during stream_turn, exit cleanly
+        if cancel_token.is_cancelled() {
+            let _ = channel.send(CompletionEvent::Done);
+            return Ok(());
+        }
 
         // No tool calls → model produced a text response → done
         if tool_calls.is_empty() {
@@ -93,6 +127,12 @@ pub async fn run_agent_loop(
         let mut wrote_file = false;
 
         for call in &tool_calls {
+            // Check cancellation before each tool execution
+            if cancel_token.is_cancelled() {
+                let _ = channel.send(CompletionEvent::Done);
+                return Ok(());
+            }
+
             let name = &call.function.name;
             let args = &call.function.arguments;
 
@@ -135,7 +175,7 @@ pub async fn run_agent_loop(
                 }
                 r
             };
-            stream_turn(ollama, history.clone(), closing, channel).await?;
+            stream_turn(ollama, history.clone(), closing, channel, cancel_token).await?;
             break;
         }
 

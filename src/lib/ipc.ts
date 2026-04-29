@@ -130,6 +130,10 @@ export interface Message {
   content: string;
   thinking?: string;
   images?: string[];
+  /** Tool calls made by the assistant (Ollama provider only) */
+  toolCalls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
+  /** Tool name for tool-role messages (Ollama provider only) */
+  toolName?: string;
 }
 
 export interface OllamaModel {
@@ -208,7 +212,9 @@ export interface OllamaModelOptions {
   tfsZ?: number;
 }
 
-/** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel */
+/** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel.
+ *  Returns a request ID that can be passed to stopGenerationRequest to cancel
+ *  the stream server-side. */
 export async function generateCompletionStream(
   model: string,
   messages: Message[],
@@ -219,7 +225,7 @@ export async function generateCompletionStream(
   outputPath?: string,
   provider: Provider = "ollama-local",
   options?: OllamaModelOptions
-): Promise<void> {
+): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
       model,
@@ -233,6 +239,13 @@ export async function generateCompletionStream(
     },
     onEvent,
   });
+}
+
+/** Cancel a running generation stream by its request ID.
+ *  Signals the Rust backend's CancellationToken, which drops the HTTP
+ *  connection and stops Ollama/OpenAI/Claude from continuing to generate. */
+export async function stopGenerationRequest(requestId: number): Promise<void> {
+  return invoke("stop_generation_stream", { requestId });
 }
 
 /** List all local Ollama models, including capabilities & context_length from /api/show */

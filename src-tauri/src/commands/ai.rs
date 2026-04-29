@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use futures_util::future::join_all;
+use std::sync::atomic::{AtomicU32, Ordering};
 use tauri::{AppHandle, Manager};
 use tauri::ipc::Channel;
 use ollama_rs::{
@@ -7,10 +8,9 @@ use ollama_rs::{
     generation::{
         chat::{ChatMessage as OllamaChatMessage, request::ChatMessageRequest},
         images::Image,
-        parameters::ThinkType,
     },
-    models::ModelOptions,
 };
+use tokio_util::sync::CancellationToken;
 use crate::{AppState, AppError, app_data_dir};
 use super::ai_providers::{chat_completion_openai, chat_completion_claude};
 
@@ -23,6 +23,13 @@ pub struct Message {
     pub thinking: Option<String>,
     #[serde(default)]
     pub images: Vec<String>,
+    /// Tool calls made by the assistant — Ollama provider only.
+    /// Matches the Ollama API "tool_calls" field format:
+    /// https://github.com/ollama/ollama/blob/main/docs/api.md
+    #[serde(default)]
+    pub tool_calls: Vec<ollama_rs::generation::tools::ToolCall>,
+    /// Tool name for tool-role messages — Ollama provider only.
+    pub tool_name: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -130,14 +137,60 @@ pub(crate) fn build_ollama_client(host: &str, api_key: &str) -> Result<Ollama, A
     }
 }
 
-pub(crate) fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
+/// Convert frontend messages to JSON values suitable for the Ollama /api/chat endpoint.
+/// Handles tool_calls in assistant messages and tool_name in tool role messages
+/// per the Ollama API format:
+/// https://github.com/ollama/ollama/blob/main/docs/api.md
+///
+/// The ollama-rs ChatMessage type lacks a `tool_name` field, so we build
+/// raw JSON instead to support the full multi-turn tool calling format.
+pub(crate) fn messages_to_ollama_json(messages: &[Message]) -> Vec<serde_json::Value> {
+    messages.iter().map(|m| {
+        let mut obj = serde_json::Map::new();
+        obj.insert("role".to_string(), serde_json::Value::String(m.role.clone()));
+        obj.insert("content".to_string(), serde_json::Value::String(m.content.clone()));
+
+        if let Some(thinking) = &m.thinking {
+            obj.insert("thinking".to_string(), serde_json::Value::String(thinking.clone()));
+        }
+
+        if !m.images.is_empty() {
+            obj.insert("images".to_string(), serde_json::Value::Array(
+                m.images.iter().map(|b| serde_json::Value::String(b.clone())).collect()
+            ));
+        }
+
+        // Assistant messages with tool_calls
+        if m.role == "assistant" && !m.tool_calls.is_empty() {
+            obj.insert("tool_calls".to_string(), serde_json::to_value(&m.tool_calls).unwrap_or_default());
+        }
+
+        // Tool role messages must include tool_name per Ollama API docs:
+        // {"role": "tool", "tool_name": "write_file", "content": "..."}
+        if m.role == "tool" {
+            if let Some(tool_name) = &m.tool_name {
+                obj.insert("tool_name".to_string(), serde_json::Value::String(tool_name.clone()));
+            }
+        }
+
+        serde_json::Value::Object(obj)
+    }).collect()
+}
+
+// ─── Ollama streaming ─────────────────────────────────────────────────────────
+
+/// Monotonically increasing counter for assigning unique request IDs.
+static NEXT_REQUEST_ID: AtomicU32 = AtomicU32::new(1);
+
+/// Convert frontend messages to ollama-rs ChatMessage for the agent loop path.
+/// The agent loop manages its own history internally and doesn't need tool_name.
+fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
     messages.iter().map(|m| {
         let mut msg = match m.role.as_str() {
             "assistant" => OllamaChatMessage::assistant(m.content.clone()),
             "system" => OllamaChatMessage::system(m.content.clone()),
             _ => OllamaChatMessage::user(m.content.clone()),
         };
-        // thinking must be included for assistant history so the model continues reasoning
         msg.thinking = m.thinking.clone();
         if !m.images.is_empty() {
             msg = msg.with_images(m.images.iter().map(|b| Image::from_base64(b.clone())).collect());
@@ -146,62 +199,138 @@ pub(crate) fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage>
     }).collect()
 }
 
-// ─── Ollama streaming ─────────────────────────────────────────────────────────
-
 async fn generate_ollama_completion_stream(
     request: &CompletionRequest,
     app_data_dir: &std::path::Path,
     channel: &Channel<CompletionEvent>,
+    cancel_token: &CancellationToken,
+    http_client: &reqwest::Client,
 ) -> Result<(), AppError> {
-    let ollama = build_ollama_client(&request.host, &request.api_key)?;
-    let ollama_messages = to_ollama_messages(&request.messages);
-
     if let Some(path) = request.output_path.as_deref() {
-        crate::agent::run_agent_loop(
-            &ollama, &request.model, ollama_messages, request.think, app_data_dir, path, channel,
-        ).await
+        // Agent loop path: uses ollama-rs directly (manages its own history)
+        let ollama = build_ollama_client(&request.host, &request.api_key)?;
+        let ollama_messages = to_ollama_messages(&request.messages);
+        crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
+            ollama: &ollama,
+            model: &request.model,
+            initial_messages: ollama_messages,
+            think: request.think,
+            app_data_dir,
+            output_path: path,
+            channel,
+            cancel_token,
+        }).await
     } else {
-        let mut chat_request = ChatMessageRequest::new(request.model.clone(), ollama_messages);
+        // Direct HTTP path: builds raw JSON messages to support tool_name
+        // in tool role messages, which ollama-rs ChatMessage doesn't support.
+        // Per Ollama API docs:
+        // https://github.com/ollama/ollama/blob/main/docs/api.md
+        let json_messages = messages_to_ollama_json(&request.messages);
+
+        let mut body = serde_json::json!({
+            "model": request.model,
+            "messages": json_messages,
+            "stream": true,
+        });
+
         if let Some(true) = request.think {
-            chat_request = chat_request.think(ThinkType::True);
+            body["think"] = serde_json::Value::Bool(true);
         }
+
         if let Some(opts) = &request.options {
-            let mut model_opts = ModelOptions::default();
-            if let Some(v) = opts.temperature    { model_opts = model_opts.temperature(v); }
-            if let Some(v) = opts.top_k          { model_opts = model_opts.top_k(v); }
-            if let Some(v) = opts.top_p          { model_opts = model_opts.top_p(v); }
-            if let Some(v) = opts.num_ctx        { model_opts = model_opts.num_ctx(v); }
-            if let Some(v) = opts.num_predict    { model_opts = model_opts.num_predict(v); }
-            if let Some(v) = opts.repeat_penalty { model_opts = model_opts.repeat_penalty(v); }
-            if let Some(v) = opts.repeat_last_n  { model_opts = model_opts.repeat_last_n(v); }
-            if let Some(v) = opts.seed           { model_opts = model_opts.seed(v); }
-            if let Some(v) = opts.mirostat       { model_opts = model_opts.mirostat(v); }
-            if let Some(v) = opts.mirostat_tau   { model_opts = model_opts.mirostat_tau(v); }
-            if let Some(v) = opts.mirostat_eta   { model_opts = model_opts.mirostat_eta(v); }
-            if let Some(v) = opts.tfs_z          { model_opts = model_opts.tfs_z(v); }
-            chat_request = chat_request.options(model_opts);
+            let mut options_obj = serde_json::Map::new();
+            if let Some(v) = opts.temperature    { options_obj.insert("temperature".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.top_k          { options_obj.insert("top_k".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.top_p          { options_obj.insert("top_p".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.num_ctx        { options_obj.insert("num_ctx".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.num_predict    { options_obj.insert("num_predict".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.repeat_penalty { options_obj.insert("repeat_penalty".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.repeat_last_n  { options_obj.insert("repeat_last_n".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.seed           { options_obj.insert("seed".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.mirostat       { options_obj.insert("mirostat".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.mirostat_tau   { options_obj.insert("mirostat_tau".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.mirostat_eta   { options_obj.insert("mirostat_eta".into(), serde_json::json!(v)); }
+            if let Some(v) = opts.tfs_z          { options_obj.insert("tfs_z".into(), serde_json::json!(v)); }
+            body["options"] = serde_json::Value::Object(options_obj);
         }
 
-        let mut stream = ollama
-            .send_chat_messages_stream(chat_request)
-            .await
-            .map_err(|e| AppError::Http(e.to_string()))?;
+        let url = format!("{}/api/chat", request.host);
+        let mut req_builder = http_client.post(&url).json(&body);
+        if !request.api_key.is_empty() {
+            req_builder = req_builder.header("Authorization", format!("Bearer {}", request.api_key));
+        }
 
-        while let Some(result) = stream.next().await {
-            match result {
-                Ok(response) => {
-                    let thinking = response.message.thinking.filter(|t| !t.is_empty());
-                    let text = response.message.content;
-                    if thinking.is_some() || !text.is_empty() {
-                        let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+        let res = req_builder.send().await.map_err(|e| AppError::Http(e.to_string()))?;
+        if !res.status().is_success() {
+            let err_body = res.text().await.unwrap_or_default();
+            return Err(AppError::Http(err_body));
+        }
+
+        let mut byte_stream = res.bytes_stream();
+        let mut buffer = String::new();
+
+        loop {
+            tokio::select! {
+                chunk_result = byte_stream.next() => {
+                    match chunk_result {
+                        Some(Ok(chunk)) => {
+                            if let Ok(chunk_str) = String::from_utf8(chunk.to_vec()) {
+                                buffer.push_str(&chunk_str);
+                                // Process complete newline-delimited JSON lines
+                                let mut start = 0;
+                                while let Some(pos) = buffer[start..].find('\n') {
+                                    let line = buffer[start..start + pos].trim().to_string();
+                                    start = start + pos + 1;
+                                    if line.is_empty() { continue; }
+                                    if let Ok(response) = serde_json::from_str::<OllamaStreamChunk>(&line) {
+                                        let thinking = response.message.thinking.filter(|t| !t.is_empty());
+                                        let text = response.message.content;
+                                        if thinking.is_some() || !text.is_empty() {
+                                            let _ = channel.send(CompletionEvent::Chunk { text, thinking });
+                                        }
+                                        if response.done {
+                                            let _ = channel.send(CompletionEvent::Done);
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                                buffer = buffer[start..].to_string();
+                            }
+                        }
+                        Some(Err(e)) => return Err(AppError::Http(e.to_string())),
+                        None => {
+                            let _ = channel.send(CompletionEvent::Done);
+                            return Ok(());
+                        }
                     }
                 }
-                Err(_) => return Err(AppError::Http("Ollama stream error".into())),
+                _ = cancel_token.cancelled() => {
+                    // Cancellation requested — dropping the byte stream closes
+                    // the HTTP connection. Per Ollama API docs there is no
+                    // /api/abort endpoint; dropping the connection is the
+                    // standard way to stop generation:
+                    // https://github.com/ollama/ollama/blob/main/docs/api.md
+                    drop(byte_stream);
+                    let _ = channel.send(CompletionEvent::Done);
+                    return Ok(());
+                }
             }
         }
-        let _ = channel.send(CompletionEvent::Done);
-        Ok(())
     }
+}
+
+/// Minimal struct for deserializing the Ollama /api/chat streaming response.
+/// Only the fields we need — role, content, thinking, done.
+#[derive(serde::Deserialize)]
+struct OllamaStreamChunk {
+    message: OllamaStreamMessage,
+    done: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct OllamaStreamMessage {
+    content: String,
+    thinking: Option<String>,
 }
 
 // ─── Model listing ────────────────────────────────────────────────────────────
@@ -317,11 +446,13 @@ pub async fn generate_completion(
         }
         "openai" => {
             if api_key.is_empty() { return Err(AppError::Http("OpenAI API key required".into())); }
-            chat_completion_openai(client, &api_key, &model, &messages, false, None).await
+            let cancel_token = CancellationToken::new();
+            chat_completion_openai(client, &api_key, &model, &messages, false, None, &cancel_token).await
         }
         "claude" => {
             if api_key.is_empty() { return Err(AppError::Http("Claude API key required".into())); }
-            chat_completion_claude(client, &api_key, &model, &messages, false, None).await
+            let cancel_token = CancellationToken::new();
+            chat_completion_claude(client, &api_key, &model, &messages, false, None, &cancel_token).await
         }
         _ => Err(AppError::Http("Unsupported provider".into())),
     }
@@ -332,34 +463,105 @@ pub async fn generate_completion_stream(
     request: CompletionRequest,
     on_event: Channel<CompletionEvent>,
     app: AppHandle,
-) -> Result<(), AppError> {
+) -> Result<u32, AppError> {
     let state = app.state::<AppState>();
-    let client = &state.http_client;
+    let client = state.http_client.clone();
     let host = if request.host.is_empty() { "http://localhost:11434".to_string() } else { request.host.trim_end_matches('/').to_string() };
     let mut normalized = request.clone();
     normalized.host = host;
 
-    let app_data = app_data_dir(&app)?;
+    // Create and register a CancellationToken for this request.
+    // The request_id is returned IMMEDIATELY so the frontend can call
+    // stop_generation_stream to cancel mid-flight. The actual streaming
+    // work is spawned as a detached Tokio task — it sends events through
+    // the Channel independently of this function's return value.
+    // Per tokio_util docs, CancellationToken supports cooperative
+    // cancellation via clone + cancel():
+    // https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html
+    let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancellationToken::new();
+
+    let app_data = match app_data_dir(&app) {
+        Ok(path) => path,
+        Err(e) => {
+            // Token not yet registered, safe to return error directly
+            return Err(e);
+        }
+    };
+
+    state.cancellation_tokens.lock().unwrap().insert(request_id, cancel_token.clone());
+
+    // Spawn the streaming work as a detached task. The Channel keeps
+    // receiving events regardless of when this function returns.
+    // This matches the Tauri Channel pattern shown in the official docs:
+    // https://v2.tauri.app/develop/calling-frontend
+    // Per Tauri state management docs, AppHandle is Clone and can be
+    // moved into spawned tasks to access managed state:
+    // https://v2.tauri.app/develop/state-management
+    let app_handle = app.clone();
     let result = match normalized.provider.as_str() {
         "ollama" => {
-            generate_ollama_completion_stream(&normalized, &app_data, &on_event).await.map(|_| String::new())
+            let cancel_clone = cancel_token.clone();
+            tokio::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let result = generate_ollama_completion_stream(&normalized, &app_data, &on_event, &cancel_clone, &client).await;
+                // Clean up the registered token regardless of outcome
+                state.cancellation_tokens.lock().unwrap().remove(&request_id);
+                if let Err(e) = result {
+                    let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
+                }
+            });
+            Ok(String::new())
         }
         "openai" => {
             if normalized.api_key.is_empty() { return Err(AppError::Http("OpenAI API key required".into())); }
-            chat_completion_openai(client, &normalized.api_key, &normalized.model, &normalized.messages, true, Some(&on_event)).await
+            let cancel_clone = cancel_token.clone();
+            tokio::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let result = chat_completion_openai(&client, &normalized.api_key, &normalized.model, &normalized.messages, true, Some(&on_event), &cancel_clone).await;
+                state.cancellation_tokens.lock().unwrap().remove(&request_id);
+                if let Err(e) = result {
+                    let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
+                }
+            });
+            Ok(String::new())
         }
         "claude" => {
             if normalized.api_key.is_empty() { return Err(AppError::Http("Claude API key required".into())); }
-            chat_completion_claude(client, &normalized.api_key, &normalized.model, &normalized.messages, true, Some(&on_event)).await
+            let cancel_clone = cancel_token.clone();
+            tokio::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let result = chat_completion_claude(&client, &normalized.api_key, &normalized.model, &normalized.messages, true, Some(&on_event), &cancel_clone).await;
+                state.cancellation_tokens.lock().unwrap().remove(&request_id);
+                if let Err(e) = result {
+                    let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
+                }
+            });
+            Ok(String::new())
         }
         _ => Err(AppError::Http("Unsupported provider".into())),
     };
 
     if let Err(e) = result {
-        let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
+        state.cancellation_tokens.lock().unwrap().remove(&request_id);
         return Err(e);
     }
-    Ok(())
+    Ok(request_id)
+}
+
+/// Cancel a running generation stream by request_id.
+/// Signals the CancellationToken which causes the stream loop to break,
+/// dropping the HTTP response body and closing the TCP connection.
+#[tauri::command]
+pub async fn stop_generation_stream(request_id: u32, app: AppHandle) -> Result<(), AppError> {
+    let state = app.state::<AppState>();
+    let tokens = state.cancellation_tokens.lock().unwrap();
+    if let Some(token) = tokens.get(&request_id) {
+        token.cancel();
+        Ok(())
+    } else {
+        Err(AppError::NotFound(format!("No active generation with request_id {request_id}")))
+    }
 }
 
 #[tauri::command]

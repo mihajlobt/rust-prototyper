@@ -6,17 +6,78 @@ function stripFences(content: string): string {
     .replace(/\r?\n?```\s*$/, "")
     .trim()
 }
+
+/** Build API messages for the completion request.
+ *  For Ollama provider, includes tool_calls in assistant messages and
+ *  tool role messages with tool_name after them, per the Ollama API format:
+ *  https://github.com/ollama/ollama/blob/main/docs/api.md
+ *  "Chat request (With history, with tools)" */
+function buildApiMessages(
+  messages: ChatMessage[],
+  systemPrompt: string,
+  isOllama: boolean,
+): Message[] {
+  const system: Message = { role: "system", content: systemPrompt }
+  if (!isOllama) {
+    // Non-Ollama providers: simple flat mapping (no tool history support yet)
+    return [
+      system,
+      ...messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
+        ...(m.images?.length ? { images: m.images } : {}),
+      })),
+    ]
+  }
+
+  // Ollama: include tool_calls and tool role messages for multi-turn context
+  const result: Message[] = [system]
+  for (const m of messages) {
+    if (m.role === "assistant" && m.toolCalls?.length) {
+      // Assistant message with tool calls
+      result.push({
+        role: "assistant",
+        content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
+        toolCalls: m.toolCalls.map((tc) => ({
+          function: { name: tc.tool, arguments: tc.arguments },
+        })),
+      })
+      // Insert tool role messages after the assistant's tool_calls
+      for (const tc of m.toolCalls) {
+        if (tc.result !== undefined) {
+          result.push({
+            role: "tool",
+            content: tc.result,
+            toolName: tc.tool,
+          })
+        }
+      }
+    } else {
+      result.push({
+        role: m.role,
+        content: m.content,
+        ...(m.thinking ? { thinking: m.thinking } : {}),
+        ...(m.images?.length ? { images: m.images } : {}),
+      })
+    }
+  }
+  return result
+}
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
 import {
   generateCompletionStream,
+  stopGenerationRequest,
   readFile,
   writeFile,
   getHostForProvider,
   getApiKeyForProvider,
   type CompletionEvent,
   type Provider,
+  type Message,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
@@ -44,6 +105,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   // Shared stop flag — set to true to abort the current stream mid-flight
   const stopRef = useRef(false) as RefObject<boolean>
+  // Active request ID returned by the Rust backend — used to cancel
+  // the stream server-side via stopGenerationRequest
+  const activeRequestId = useRef<number | null>(null)
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
@@ -131,17 +195,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     setAttachments([])
     setMentions([])
 
-    const apiMessages = [
-      { role: "system", content: systemPrompt },
-      ...updatedMessages.slice(0, -1).map((m) => ({
-        role: m.role,
-        content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
-        ...(m.images?.length ? { images: m.images } : {}),
-      })),
-    ]
-
     const { modelId, host, apiKeys, provider } = settings
+    const isOllama = (provider as Provider).startsWith("ollama")
+    const apiMessages = buildApiMessages(
+      updatedMessages.slice(0, -1),
+      systemPrompt,
+      isOllama,
+    )
+
     const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
@@ -158,6 +219,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const finalize = (content: string, thinking: string) => {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+      activeRequestId.current = null
       // Preserve toolCalls attached by attachToolCall (which updated the store mid-stream)
       const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
       const currentLast = msgs[msgs.length - 1]
@@ -216,18 +278,19 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       } else if (msg.event === "Error") {
         finalize(`⚠ ${msg.data.message}`, "")
         notify.error("Generation failed", msg.data.message)
-      }
-    }
+       }
+     }
 
-    const isOllama = (provider as Provider).startsWith("ollama")
     try {
-      await generateCompletionStream(
+      const requestId = await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
         isOllama ? settings.modelOptions : undefined,
       )
+      activeRequestId.current = requestId
     } catch (e) {
+      activeRequestId.current = null
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))
@@ -250,6 +313,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     ;(stopRef as MutableRefObject<boolean>).current = true
     useChatStore.getState().setStreaming(entityId, false)
     useChatStore.getState().setStreamingThinking(entityId, "")
+    // Cancel the backend stream — signals the Rust CancellationToken which
+    // drops the HTTP connection, stopping generation at the source.
+    // Per Ollama API docs there is no /api/abort; dropping the connection
+    // is the standard cancellation pattern.
+    if (activeRequestId.current !== null) {
+      stopGenerationRequest(activeRequestId.current).catch(() => {})
+      activeRequestId.current = null
+    }
   }, [entityId])
 
   const regenerate = useCallback(async () => {
@@ -273,17 +344,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     useChatStore.getState().setStreaming(entityId, true)
     useChatStore.getState().setStreamingThinking(entityId, "")
 
-    const apiMessages = [
-      { role: "system", content: systemPrompt },
-      ...updatedMessages.slice(0, -1).map((m) => ({
-        role: m.role,
-        content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
-        ...(m.images?.length ? { images: m.images } : {}),
-      })),
-    ]
-
     const { modelId, host, apiKeys, provider } = settings
+    const isOllamaRegen = (provider as Provider).startsWith("ollama")
+    const apiMessages = buildApiMessages(
+      updatedMessages.slice(0, -1),
+      systemPrompt,
+      isOllamaRegen,
+    )
+
     const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = thinkEnabled && caps.thinking
@@ -295,8 +363,10 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     let toolWrittenRegen = false
     let rafId: number | null = null
     let rafThinkingId: number | null = null
+    ;(stopRef as MutableRefObject<boolean>).current = false
 
     channel.onmessage = (msg) => {
+      if ((stopRef as MutableRefObject<boolean>).current) return
       if (msg.event === "Chunk") {
         if (msg.data.thinking) {
           thinkingAccumulated += msg.data.thinking
@@ -328,6 +398,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
         }
       } else if (msg.event === "Done") {
+        activeRequestId.current = null
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
         const currentLast = msgs[msgs.length - 1]
@@ -344,6 +415,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
         if (!toolWrittenRegen) onOutputRef.current?.(contentAccumulated)
       } else if (msg.event === "Error") {
+        activeRequestId.current = null
         useChatStore.getState().setMessages(entityId, [...updatedMessages.slice(0, -1), { role: "assistant" as const, content: `⚠ ${msg.data.message}` }])
         useChatStore.getState().setStreaming(entityId, false)
         useChatStore.getState().setStreamingThinking(entityId, "")
@@ -351,15 +423,16 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       }
     }
 
-    const isOllama = (provider as Provider).startsWith("ollama")
     try {
-      await generateCompletionStream(
+      const requestId = await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
-        isOllama ? settings.modelOptions : undefined,
+        isOllamaRegen ? settings.modelOptions : undefined,
       )
+      activeRequestId.current = requestId
     } catch (e) {
+      activeRequestId.current = null
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", e instanceof Error ? e.message : String(e))

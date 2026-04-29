@@ -6,9 +6,11 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_shell::process::CommandChild;
+use tokio_util::sync::CancellationToken;
 
 pub struct AppState {
     pub active_processes: Mutex<HashMap<u32, CommandChild>>,
+    pub cancellation_tokens: Mutex<HashMap<u32, CancellationToken>>,
     pub http_client: reqwest::Client,
 }
 
@@ -98,6 +100,7 @@ pub fn run() {
     builder
         .manage(AppState {
             active_processes: Mutex::new(HashMap::new()),
+            cancellation_tokens: Mutex::new(HashMap::new()),
             http_client,
         })
         .invoke_handler(tauri::generate_handler![
@@ -122,6 +125,7 @@ pub fn run() {
             commands::http::http_request,
             commands::ai::generate_completion,
             commands::ai::generate_completion_stream,
+            commands::ai::stop_generation_stream,
             commands::ai::list_ollama_models,
             commands::ai::save_model_presets,
             commands::ai::load_model_presets,
