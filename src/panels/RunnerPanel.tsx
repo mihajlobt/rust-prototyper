@@ -372,7 +372,7 @@ export function RunnerPanel() {
                             })}
                             <div className="flex-1" />
                             {activeTabPath && (
-                              <Button variant="ghost" size="icon" className="h-full w-8 rounded-none shrink-0" onClick={handleSaveFile} title="Save (Ctrl+S)"><Save size={11} /></Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mr-1 shrink-0" onClick={handleSaveFile} title="Save (Ctrl+S)"><Save size={11} /></Button>
                             )}
                           </div>
                         )}
