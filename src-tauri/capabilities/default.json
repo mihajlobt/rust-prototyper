@@ -7,6 +7,7 @@
     "core:default",
     "shell:default",
     "fs:default",
+    "fs:allow-watch",
     "http:default",
     "store:default",
     "clipboard:default",

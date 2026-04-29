@@ -13,7 +13,7 @@ import { writeFile, createDir, readDir, readFile, getHostForProvider } from "@/l
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
-import { useUIStore } from "@/stores/uiStore";
+
 import { useComponentCode } from "@/hooks/useProjectFiles";
 import { useQueryClient } from "@tanstack/react-query";
 import { projectKeys } from "@/lib/queryKeys";
@@ -287,8 +287,6 @@ export function ComponentsPanel() {
       const previewDir = componentPreviewDir;
       await createDir(`${previewDir}/src/components`);
       await writeFile(`${previewDir}/src/components/Generated.tsx`, extracted);
-
-      useUIStore.setState((s) => ({ runnerFileTreeNonce: s.runnerFileTreeNonce + 1 }));
 
       if (selectedComponent) {
         const compDir = `projects/${settings.project}/components/${selectedComponent}`;

@@ -28,6 +28,7 @@ import { useAppStore } from "@/stores/appStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import { watch, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { hasGeneratedScaffold, scaffoldGenerated } from "@/lib/scaffold";
@@ -41,7 +42,6 @@ export function RunnerPanel() {
   const { settings } = useAppStore();
   const { ps, setPs } = useProjectSettingsStore();
   const generatedDir = `projects/${settings.project}/generated`;
-  const fileTreeNonce = useUIStore((s) => s.runnerFileTreeNonce);
   const devServerStore = useDevServerStore();
   const running = devServerStore.runnerStatus === "running" || devServerStore.runnerStatus === "starting";
   const devUrl = devServerStore.runnerUrl;
@@ -76,8 +76,36 @@ export function RunnerPanel() {
     try { setFiles(await readDir(generatedDir)); } catch { setFiles([]); }
   }, [generatedDir]);
 
-  useEffect(() => { loadFiles(); }, [loadFiles]);
-  useEffect(() => { if (fileTreeNonce > 0) loadFiles(); }, [fileTreeNonce, loadFiles]);
+  const fileTreeRefreshKey = useUIStore((s) => s.fileTreeRefreshKey);
+
+  useEffect(() => { loadFiles(); }, [loadFiles, fileTreeRefreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let stopFn: (() => void) | null = null;
+    (async () => {
+      try {
+        const unwatch = await watch(
+          generatedDir,
+          () => {
+            if (!cancelled) {
+              useUIStore.setState((s) => ({ fileTreeRefreshKey: s.fileTreeRefreshKey + 1 }));
+            }
+          },
+          { baseDir: BaseDirectory.AppData, recursive: true, delayMs: 500 },
+        );
+        if (cancelled) { unwatch(); return; }
+        stopFn = unwatch;
+      } catch (error) {
+        // Expected when generated/ doesn't exist yet; log for debugging other failures
+        console.warn("[watcher] failed to start:", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopFn?.();
+    };
+  }, [generatedDir]);
 
   useEffect(() => {
     if (activeTabPath && !tabContents[activeTabPath]) {
@@ -319,7 +347,7 @@ export function RunnerPanel() {
                   </div>
                 </div>
                 {files.length === 0 && <div className="text-xs text-muted-foreground px-1">No files yet</div>}
-                <FileTree entries={files} selectedFile={activeTabPath} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={openTab} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={(p) => { setNewFileParentDir(p); setNewFileName(""); setShowNewFile(true); }} onNewFolder={startNewFolder} onCollapse={(p) => { expandedDirs.delete(p); setExpandedDirs(new Set(expandedDirs)); }} onReveal={revealInExplorer} depth={0} nonce={fileTreeNonce} />
+                <FileTree entries={files} selectedFile={activeTabPath} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={openTab} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={(p) => { setNewFileParentDir(p); setNewFileName(""); setShowNewFile(true); }} onNewFolder={startNewFolder} onCollapse={(p) => { expandedDirs.delete(p); setExpandedDirs(new Set(expandedDirs)); }} onReveal={revealInExplorer} depth={0} />
               </div>
             </ScrollArea>
           </Allotment.Pane>

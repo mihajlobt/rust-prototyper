@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/context-menu";
 import { readDir, type FileEntry } from "@/lib/ipc";
 import type { MentionAsset } from "@/types/chat";
+import { useUIStore } from "@/stores/uiStore";
 
 export function getAssetType(filePath: string): MentionAsset["type"] | null {
   if (filePath.includes("/components/")) return "component";
@@ -27,10 +28,9 @@ export interface FileTreeProps {
   onCollapse: (path: string) => void;
   onReveal: (path: string) => void;
   depth: number;
-  nonce: number;
 }
 
-export function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, onReveal, depth, nonce }: FileTreeProps) {
+export function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onSelectFile, onDeleteEntry, onRename, onNewFile, onNewFolder, onCollapse, onReveal, depth }: FileTreeProps) {
   return (
     <>
       {entries.map((file) => (
@@ -71,7 +71,7 @@ export function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onS
             </ContextMenuContent>
           </ContextMenu>
           {file.is_dir && expandedDirs.has(file.path) && (
-            <AsyncDirChildren path={file.path} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={onToggleDir} onSelectFile={onSelectFile} onDeleteEntry={onDeleteEntry} onRename={onRename} onNewFile={onNewFile} onNewFolder={onNewFolder} onCollapse={onCollapse} onReveal={onReveal} depth={depth + 1} nonce={nonce} />
+            <AsyncDirChildren path={file.path} selectedFile={selectedFile} expandedDirs={expandedDirs} onToggleDir={onToggleDir} onSelectFile={onSelectFile} onDeleteEntry={onDeleteEntry} onRename={onRename} onNewFile={onNewFile} onNewFolder={onNewFolder} onCollapse={onCollapse} onReveal={onReveal} depth={depth + 1} />
           )}
         </div>
       ))}
@@ -80,11 +80,12 @@ export function FileTree({ entries, selectedFile, expandedDirs, onToggleDir, onS
 }
 
 function AsyncDirChildren(props: Omit<FileTreeProps, "entries"> & { path: string }) {
+  const refreshKey = useUIStore((s) => s.fileTreeRefreshKey);
   const [children, setChildren] = useState<FileEntry[]>([]);
   useEffect(() => {
     let cancelled = false;
     readDir(props.path).then((entries) => { if (!cancelled) setChildren(entries); }).catch(() => { if (!cancelled) setChildren([]); });
     return () => { cancelled = true; };
-  }, [props.path, props.nonce]);
+  }, [props.path, refreshKey]);
   return <FileTree entries={children} {...props} />;
 }

@@ -22,8 +22,8 @@ interface UIState {
   apisCurlPaste: string;
   apisOpenapiPaste: string;
 
-  // Runner panel
-  runnerFileTreeNonce: number;
+  // Runner panel — file tree refresh counter (incremented by filesystem watcher)
+  fileTreeRefreshKey: number;
 
   // Workflows panel
   workflowsShowPanel: boolean;
@@ -38,7 +38,7 @@ export const useUIStore = create<UIState>()(() => ({
   apisCurlPaste: "",
   apisOpenapiPaste: "",
 
-  runnerFileTreeNonce: 0,
+  fileTreeRefreshKey: 0,
 
   workflowsShowPanel: false,
 }));
