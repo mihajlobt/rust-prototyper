@@ -17,7 +17,7 @@ import {
 } from "@/lib/prompts";
 import {
   generateCompletionStream, getApiKeyForProvider, getHostForProvider,
-  httpRequest, runShellCommand, runShellCommandCapture,
+  httpRequest, runShellCommandCapture,
   readFile, writeFile, createDir, bunDev,
   type CompletionEvent, type Message, type Provider,
 } from "@/lib/ipc";
@@ -238,21 +238,29 @@ export function useWorkflowExecution({
           }
 
           case "bash": {
-            await runShellCommand(generatedPath, d.command || "echo hello");
-            output = `Ran: ${d.command}`;
+            output = await runShellCommandCapture(generatedPath, d.command || "echo hello").catch((e: unknown) => `bash error: ${String(e)}`);
+            if (!output.trim()) output = `(no output)`;
             break;
           }
           case "fetch": {
             let headers: Record<string, string> = {};
             try { headers = JSON.parse(d.headers || "{}"); } catch { /* invalid JSON headers */ }
-            const res = await httpRequest(d.method || "GET", d.url || "https://api.github.com", headers, d.body || undefined);
-            output = `Status: ${res.status}\n${res.body.slice(0, 2000)}`;
+            const method = d.method || "GET";
+            const bodyMethods = new Set(["POST", "PUT", "PATCH"]);
+            const body = d.body || (bodyMethods.has(method) ? prevOut : undefined) || undefined;
+            const res = await httpRequest(method, d.url || "https://api.github.com", headers, body);
+            output = res.body;
             break;
           }
           case "fileop": {
             const filePath = d.path?.startsWith("projects/") ? d.path : `${generatedPath}/${d.path || "test.txt"}`;
-            if ((d.operation || "read") === "read") output = (await readFile(filePath)).slice(0, 2000);
-            else { await writeFile(filePath, d.content || ""); output = `Wrote to ${d.path}`; }
+            if ((d.operation || "read") === "read") {
+              output = await readFile(filePath);
+            } else {
+              const content = d.content || prevOut;
+              await writeFile(filePath, content);
+              output = content;
+            }
             break;
           }
           case "auth": {
@@ -278,7 +286,10 @@ export function useWorkflowExecution({
           }
           case "bun": {
             if (d.command === "dev") { await bunDev(generatedPath, 5173); output = "Started bun dev"; }
-            else { await runShellCommand(generatedPath, `bun ${d.command || "build"}`); output = `Ran bun ${d.command}`; }
+            else {
+              output = await runShellCommandCapture(generatedPath, `bun ${d.command || "build"}`).catch((e: unknown) => `bun error: ${String(e)}`);
+              if (!output.trim()) output = `bun ${d.command || "build"} completed`;
+            }
             break;
           }
           case "runner": {
@@ -408,7 +419,7 @@ export function useWorkflowExecution({
           case "memorystore": {
             const key = d.memoryKey || "default";
             workflowMemory.set(key, prevOut);
-            output = `Stored to key: "${key}" (${prevOut.length} chars)`;
+            output = prevOut;
             break;
           }
 
