@@ -5,6 +5,7 @@ import { css } from "@codemirror/lang-css";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { yaml } from "@codemirror/lang-yaml";
+import { html } from "@codemirror/lang-html";
 import { EditorView } from "@codemirror/view";
 import {
   abcdef, abyss, androidstudio, andromeda, atomone, aura,
@@ -34,7 +35,7 @@ const EXT_TO_MODE: Record<string, string> = {
   md: "markdown", mdx: "markdown", markdown: "markdown",
   yaml: "yaml", yml: "yaml",
   sh: "shell", bash: "shell", zsh: "shell",
-  html: "html", htm: "html",
+  html: "html", htm: "html", svg: "html",
   txt: "markdown",
   env: "shell",
   toml: "yaml",
@@ -57,7 +58,7 @@ const MODE_TO_EXT: Record<string, Extension> = {
   markdown:   markdown(),
   yaml:       yaml(),
   shell:      javascript(),
-  html:       markdown(),
+  html:       html(),
 };
 
 // ─── Theme registry ────────────────────────────────────────────────────────

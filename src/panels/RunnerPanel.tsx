@@ -78,15 +78,14 @@ export function RunnerPanel() {
   useEffect(() => { loadFiles(); }, [loadFiles]);
   useEffect(() => { if (fileTreeNonce > 0) loadFiles(); }, [fileTreeNonce, loadFiles]);
 
-  const tabContentsRef = useRef(tabContents);
-  useEffect(() => { tabContentsRef.current = tabContents; }, [tabContents]);
-
   useEffect(() => {
-    if (activeTabPath && !tabContentsRef.current[activeTabPath]) {
+    if (activeTabPath && !tabContents[activeTabPath]) {
       readFile(activeTabPath).then((content) => {
         setTabContents((prev) => ({ ...prev, [activeTabPath]: content }));
       }).catch(() => {});
     }
+    // only run when activeTabPath changes — including tabContents would cause an infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabPath]);
 
   const runningRef = useRef(running);
