@@ -322,6 +322,7 @@ export function RunnerPanel() {
                                 <button
                                   key={path}
                                   onClick={() => openTab(path)}
+                                  onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
                                   className={["flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors", isActive ? "bg-background text-foreground border-b-2 border-b-primary -mb-px" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
                                 >
                                   {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
