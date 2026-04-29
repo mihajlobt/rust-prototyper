@@ -1,49 +1,20 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/workflows/templates";
 import { NodePropertiesPanel } from "@/workflows/NodePropertiesPanel";
-import {
-  BUILTIN_NODE_TYPES,
-  CATEGORY_ORDER,
-  nodeTypes,
-  generateId,
-  type NodeTypeDef,
-  type WorkflowNodeData,
-  type WorkflowNodeType,
-} from "@/workflows/nodeTypes";
+import { OutputChatPanel } from "@/workflows/OutputChatPanel";
+import { BUILTIN_NODE_TYPES, CATEGORY_ORDER, nodeTypes, generateId, type NodeTypeDef, type WorkflowNodeData, type WorkflowNodeType } from "@/workflows/nodeTypes";
 import { useWorkflowExecution } from "@/workflows/useWorkflowExecution";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  addEdge,
-  useNodesState,
-  useEdgesState,
-  type Edge,
-  type Connection,
-  BackgroundVariant,
-  Panel,
-  useReactFlow,
-  ReactFlowProvider,
-  NodeToolbar,
-  Position,
-} from "@xyflow/react";
+import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, type Edge, type Connection, BackgroundVariant, Panel, useReactFlow, ReactFlowProvider, NodeToolbar, Position } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Allotment } from "allotment";
-import {
-  Play, Square, Save, Trash2, Undo2, Redo2,
-  Plus, X, Copy, FolderOpen, FilePlus, RotateCw,
-  Sparkles,
-} from "lucide-react";
+import { Play, Square, Save, Trash2, Undo2, Redo2, Plus, X, Copy, FolderOpen, FilePlus, RotateCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  saveWorkflow, loadWorkflow, listWorkflows,
-  type FileEntry,
-} from "@/lib/ipc";
+import { saveWorkflow, loadWorkflow, listWorkflows, type FileEntry } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
+
 import { notify } from "@/hooks/useToast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -53,7 +24,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 function WorkflowCanvas() {
   const { settings } = useAppStore();
   const { ps: { activeWorkflow: initialWorkflow }, setPs } = useProjectSettingsStore();
+
+  // Output chat panel
+  const [outputPanelNodeId, setOutputPanelNodeId] = useState<string | null>(null);
+  const outputPanelOpen = !!outputPanelNodeId;
+
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
+  const { ref: outputRef, onDragEnd: outputOnDragEnd, defaultSizes: outputDefault } = useAllotmentLayout("workflows-output", 2, [true, outputPanelOpen]);
   const { screenToFlowPosition, getNodes, getEdges, fitView } = useReactFlow<WorkflowNodeType, Edge>();
 
   const flowContainerRef = useRef<HTMLDivElement>(null);
@@ -105,6 +82,8 @@ function WorkflowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  const outputPanelNode = nodes.find((n) => n.id === outputPanelNodeId) ?? null;
+
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => addEdge({ ...connection, type: "smoothstep" }, eds));
   }, [setEdges]);
@@ -148,8 +127,9 @@ function WorkflowCanvas() {
     pushUndo();
     setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
     setEdges((prev) => prev.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId));
+    if (outputPanelNodeId === selectedNodeId) setOutputPanelNodeId(null);
     setSelectedNodeId(null);
-  }, [selectedNodeId, pushUndo, setNodes, setEdges]);
+  }, [selectedNodeId, outputPanelNodeId, pushUndo, setNodes, setEdges]);
 
   const duplicateSelected = useCallback(() => {
     if (!selectedNode) return;
@@ -425,10 +405,12 @@ function WorkflowCanvas() {
             </div>
           </Allotment.Pane>
 
-          {/* React Flow canvas */}
+          {/* React Flow canvas + output panel */}
           <Allotment.Pane>
-            <div ref={flowContainerRef} className="w-full h-full">
-            {flowReady && <ReactFlow
+            <Allotment ref={outputRef} onDragEnd={outputOnDragEnd} defaultSizes={outputDefault} onVisibleChange={(_index, visible) => { if (!visible) setOutputPanelNodeId(null); }}>
+              <Allotment.Pane>
+                <div ref={flowContainerRef} className="w-full h-full">
+                {flowReady && <ReactFlow
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChange}
@@ -475,11 +457,27 @@ function WorkflowCanvas() {
                     onDuplicate={duplicateSelected}
                     onDelete={deleteSelected}
                     onClose={() => setSelectedNodeId(null)}
+                    onViewOutput={() => setOutputPanelNodeId(selectedNodeId)}
                   />
                 )}
               </NodeToolbar>
             </ReactFlow>}
-            </div>
+                </div>
+              </Allotment.Pane>
+
+              {/* Output chat panel */}
+              <Allotment.Pane visible={outputPanelOpen} preferredSize={480} minSize={320} snap>
+                {outputPanelOpen && outputPanelNode && (
+                  <OutputChatPanel
+                    label={outputPanelNode.data.label}
+                    color={outputPanelNode.data.color}
+                    status={outputPanelNode.data.status}
+                    output={outputPanelNode.data.output}
+                    onClose={() => setOutputPanelNodeId(null)}
+                  />
+                )}
+              </Allotment.Pane>
+            </Allotment>
           </Allotment.Pane>
 
         </Allotment>

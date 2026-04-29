@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { Settings, Copy, Trash2, X, Edit2, Check } from "lucide-react";
+import { Settings, Copy, Trash2, X, Edit2, Check, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader } from "@/components/ui/loader";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Message, MessageContent } from "@/components/ui/message";
-import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container";
-import { ScrollButton } from "@/components/ui/scroll-button";
+import { MessageContent } from "@/components/ui/message";
+import { Tool, type ToolPart } from "@/components/ui/tool";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 import {
@@ -56,14 +55,32 @@ interface NodePropertiesPanelProps {
   onDuplicate: () => void;
   onDelete: () => void;
   onClose: () => void;
+  onViewOutput: () => void;
 }
 
-export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDelete, onClose }: NodePropertiesPanelProps) {
+export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDelete, onClose, onViewOutput }: NodePropertiesPanelProps) {
   const set = (patch: Partial<WorkflowNodeData>) => onUpdate(nodeId, patch);
   const isRunning = data.status === "running";
   const isError = data.status === "error";
+  const hasOutput = !!data.output;
   const [editingPrompt, setEditingPrompt] = useState(false);
   const [draftPrompt, setDraftPrompt] = useState("");
+
+  function statusToToolState(): ToolPart["state"] {
+    switch (data.status) {
+      case "running": return "input-streaming";
+      case "done": return "output-available";
+      case "error": return "output-error";
+      default: return "input-available";
+    }
+  }
+
+  const toolPart: ToolPart = {
+    type: data.label,
+    state: statusToToolState(),
+    ...(hasOutput && { output: { content: data.output!.slice(0, 200) } }),
+    ...(isError && data.output && { errorText: data.output.slice(0, 200) }),
+  };
 
   const isCustomType = data.nodeType === "custom" || data.nodeType.startsWith("custom_");
   const hasSystemPrompt = AI_NODE_TYPES.has(data.nodeType) || isCustomType;
@@ -176,45 +193,18 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
 
           {/* Status + output */}
           <div className="pt-2 border-t border-border space-y-2">
-            <div className="flex items-center gap-1.5">
-              <span className={[
-                "w-1.5 h-1.5 rounded-full shrink-0",
-                isRunning                  ? "bg-status-running animate-pulse" :
-                isError                    ? "bg-status-error" :
-                data.status === "done"     ? "bg-status-done" :
-                                             "bg-muted-foreground",
-              ].join(" ")} />
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider capitalize">{data.status || "idle"}</span>
-            </div>
+            <Tool toolPart={toolPart} defaultOpen={isRunning || isError} className="text-xs" />
 
-            {isRunning && !data.output && (
-              <Loader variant="dots" size="sm" text="Generating" />
-            )}
-
-            {isError && data.output && (
-              <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded font-mono whitespace-pre-wrap break-all">
-                {data.output}
-              </div>
-            )}
-
-            {!isError && data.output && (
-              <ChatContainerRoot className="max-h-64 rounded bg-muted overflow-x-auto">
-                <ChatContainerContent className="p-2 min-w-0">
-                  <Message>
-                    <MessageContent
-                      markdown
-                      isStreaming={isRunning}
-                      className="text-[11px] text-muted-foreground bg-transparent p-0 prose-headings:text-foreground"
-                    >
-                      {data.output}
-                    </MessageContent>
-                  </Message>
-                  <ChatContainerScrollAnchor />
-                </ChatContainerContent>
-                <div className="absolute right-2 bottom-2 z-10">
-                  <ScrollButton />
-                </div>
-              </ChatContainerRoot>
+            {(hasOutput || isRunning) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-7 text-xs gap-1.5"
+                onClick={onViewOutput}
+              >
+                <MessageSquare size={12} />
+                {isRunning && !hasOutput ? "View Progress" : "View Output"}
+              </Button>
             )}
           </div>
         </div>
