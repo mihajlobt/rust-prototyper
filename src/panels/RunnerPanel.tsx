@@ -361,8 +361,11 @@ export function RunnerPanel() {
                                     <ContextMenuItem onClick={() => closeTabsToRight(path)} disabled={isLast}>Close to the Right</ContextMenuItem>
                                     <ContextMenuItem onClick={closeAllTabs}>Close All</ContextMenuItem>
                                     <ContextMenuSeparator />
-                                    <ContextMenuItem onClick={() => revealInExplorer(path)}>Reveal in File Explorer</ContextMenuItem>
+                                    <ContextMenuItem onClick={() => revealInExplorer(path)}>Show in File Explorer</ContextMenuItem>
+                                    <ContextMenuItem onClick={() => startRename(path)}>Rename…</ContextMenuItem>
                                     <ContextMenuItem onClick={() => navigator.clipboard.writeText(path)}>Copy Path</ContextMenuItem>
+                                    <ContextMenuSeparator />
+                                    <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteFile(path)}>Delete</ContextMenuItem>
                                   </ContextMenuContent>
                                 </ContextMenu>
                               );
