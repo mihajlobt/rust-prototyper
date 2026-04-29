@@ -6,7 +6,12 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { yaml } from "@codemirror/lang-yaml";
 import { html } from "@codemirror/lang-html";
+import { rust } from "@codemirror/lang-rust";
+import { python } from "@codemirror/lang-python";
+import { StreamLanguage } from "@codemirror/language";
+import { shell as shellMode } from "@codemirror/legacy-modes/mode/shell";
 import { EditorView } from "@codemirror/view";
+import { oneDark } from "@codemirror/theme-one-dark";
 import {
   abcdef, abyss, androidstudio, andromeda, atomone, aura,
   basicDark, basicLight, bbedit, bespin,
@@ -39,14 +44,16 @@ const EXT_TO_MODE: Record<string, string> = {
   txt: "markdown",
   env: "shell",
   toml: "yaml",
-  rs: "javascript",
-  py: "javascript",
+  rs: "rust",
+  py: "python",
 };
 
 export function getLanguageFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   return EXT_TO_MODE[ext] ?? "javascript";
 }
+
+const shellExtension = StreamLanguage.define(shellMode);
 
 const MODE_TO_EXT: Record<string, Extension> = {
   javascript: javascript(),
@@ -57,13 +64,16 @@ const MODE_TO_EXT: Record<string, Extension> = {
   json:       json(),
   markdown:   markdown(),
   yaml:       yaml(),
-  shell:      javascript(),
+  shell:      shellExtension,
   html:       html(),
+  rust:       rust(),
+  python:     python(),
 };
 
 // ─── Theme registry ────────────────────────────────────────────────────────
 
 export const EDITOR_THEMES: Record<string, { label: string; ext: Extension; dark: boolean }> = {
+  oneDark:           { label: "One Dark",            ext: oneDark,            dark: true  },
   vscodeDark:        { label: "VS Code Dark",        ext: vscodeDark,        dark: true  },
   dracula:           { label: "Dracula",             ext: dracula,           dark: true  },
   tokyoNight:        { label: "Tokyo Night",         ext: tokyoNight,        dark: true  },
@@ -161,7 +171,7 @@ export function CodeMirrorEditor({
   const handleChange = useCallback((val: string) => { onChange?.(val); }, [onChange]);
 
   const themeEntry = EDITOR_THEMES[settings.editorTheme];
-  const activeTheme = themeEntry ? themeEntry.ext : "dark";
+  const activeTheme = themeEntry ? themeEntry.ext : EDITOR_THEMES.oneDark.ext;
 
   return (
     <CodeMirror

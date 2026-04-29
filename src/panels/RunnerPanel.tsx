@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
 import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
@@ -70,7 +70,7 @@ export function RunnerPanel() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const activeTabPath = ps.runnerEditorActiveTabPath;
-  const openTabs = ps.runnerEditorTabs ?? [];
+  const openTabs = useMemo(() => ps.runnerEditorTabs ?? [], [ps.runnerEditorTabs]);
 
   const loadFiles = useCallback(async () => {
     try { setFiles(await readDir(generatedDir)); } catch { setFiles([]); }

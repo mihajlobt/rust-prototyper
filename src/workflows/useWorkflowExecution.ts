@@ -330,11 +330,10 @@ export function useWorkflowExecution({
             if (mode === "expression") {
               try {
                 // Safe-ish: runs in browser JS context; expression gets `input` as the previous output
-                // eslint-disable-next-line no-new-func
                 const fn = new Function("input", `return !!(${d.expression || "true"});`);
                 passed = Boolean(fn(prevOut));
               } catch (err) {
-                throw new Error(`Condition expression error: ${String(err)}`);
+                throw new Error(`Condition expression error: ${String(err)}`, { cause: err });
               }
             } else {
               const judgeInput = `Condition: ${d.judgePrompt || "Is this valid?"}\nInput: ${prevOut}`;
