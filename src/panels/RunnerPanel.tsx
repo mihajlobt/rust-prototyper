@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import {
@@ -373,7 +374,14 @@ export function RunnerPanel() {
                             })}
                             </div>
                             {activeTabPath && (
-                              <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mx-1 shrink-0" onClick={handleSaveFile}><Save size={11} /></Button>
+                              <TooltipProvider delayDuration={400}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mx-1 shrink-0" onClick={handleSaveFile}><Save size={11} /></Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Save (Ctrl+S)</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </div>
                         )}
