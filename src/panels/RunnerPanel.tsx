@@ -373,7 +373,7 @@ export function RunnerPanel() {
                             })}
                             </div>
                             {activeTabPath && (
-                              <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mx-1 shrink-0" onClick={handleSaveFile} title="Save (Ctrl+S)"><Save size={11} /></Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mx-1 shrink-0" onClick={handleSaveFile}><Save size={11} /></Button>
                             )}
                           </div>
                         )}
