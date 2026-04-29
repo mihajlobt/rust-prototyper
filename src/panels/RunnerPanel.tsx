@@ -334,7 +334,8 @@ export function RunnerPanel() {
                       <div className="h-full flex flex-col">
                         {/* Tab bar */}
                         {openTabs.length > 0 && (
-                          <div className="flex items-stretch border-b border-border bg-card overflow-x-auto shrink-0 min-h-0" style={{ height: 32 }}>
+                          <div className="flex items-stretch border-b border-border bg-card shrink-0" style={{ height: 32 }}>
+                            <div className="flex items-stretch overflow-x-auto flex-1 min-w-0">
                             {openTabs.map((path) => {
                               const name = path.split("/").pop() ?? path;
                               const isActive = path === activeTabPath;
@@ -370,9 +371,9 @@ export function RunnerPanel() {
                                 </ContextMenu>
                               );
                             })}
-                            <div className="flex-1" />
+                            </div>
                             {activeTabPath && (
-                              <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mr-1 shrink-0" onClick={handleSaveFile} title="Save (Ctrl+S)"><Save size={11} /></Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mx-1 shrink-0" onClick={handleSaveFile} title="Save (Ctrl+S)"><Save size={11} /></Button>
                             )}
                           </div>
                         )}
