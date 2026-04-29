@@ -127,6 +127,27 @@ export function RunnerPanel() {
     setDirtyTabs((prev) => { const next = new Set(prev); next.delete(path); return next; });
   }, [openTabs, activeTabPath, setPs]);
 
+  const closeOtherTabs = useCallback((path: string) => {
+    setPs({ runnerEditorTabs: [path], runnerEditorActiveTabPath: path });
+    setTabContents((prev) => ({ [path]: prev[path] ?? "" }));
+    setDirtyTabs((prev) => { const next = new Set<string>(); if (prev.has(path)) next.add(path); return next; });
+  }, [setPs]);
+
+  const closeTabsToRight = useCallback((path: string) => {
+    const idx = openTabs.indexOf(path);
+    const newTabs = openTabs.slice(0, idx + 1);
+    const newActive = newTabs.includes(activeTabPath ?? "") ? activeTabPath : path;
+    setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
+    setTabContents((prev) => Object.fromEntries(newTabs.map((p) => [p, prev[p] ?? ""])));
+    setDirtyTabs((prev) => { const next = new Set<string>(); for (const p of newTabs) if (prev.has(p)) next.add(p); return next; });
+  }, [openTabs, activeTabPath, setPs]);
+
+  const closeAllTabs = useCallback(() => {
+    setPs({ runnerEditorTabs: [], runnerEditorActiveTabPath: null });
+    setTabContents({});
+    setDirtyTabs(new Set());
+  }, [setPs]);
+
   const handleContentChange = useCallback((content: string) => {
     if (!activeTabPath) return;
     setTabContents((prev) => ({ ...prev, [activeTabPath]: content }));
@@ -318,21 +339,32 @@ export function RunnerPanel() {
                               const name = path.split("/").pop() ?? path;
                               const isActive = path === activeTabPath;
                               const isDirty = dirtyTabs.has(path);
+                              const isLast = openTabs.indexOf(path) === openTabs.length - 1;
                               return (
-                                <button
-                                  key={path}
-                                  onClick={() => openTab(path)}
-                                  onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
-                                  className={["flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors", isActive ? "bg-background text-foreground border-b-2 border-b-primary -mb-px" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                                >
-                                  {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                                  <span className="truncate">{name}</span>
-                                  <X
-                                    size={10}
-                                    className="shrink-0 opacity-50 hover:opacity-100"
-                                    onClick={(e) => closeTab(path, e)}
-                                  />
-                                </button>
+                                <ContextMenu key={path}>
+                                  <ContextMenuTrigger asChild>
+                                    <button
+                                      onClick={() => openTab(path)}
+                                      onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
+                                      className={["flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors", isActive ? "bg-background text-foreground border-b-2 border-b-primary -mb-px" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                                    >
+                                      {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                                      <span className="truncate">{name}</span>
+                                      <X size={10} className="shrink-0 opacity-50 hover:opacity-100" onClick={(e) => closeTab(path, e)} />
+                                    </button>
+                                  </ContextMenuTrigger>
+                                  <ContextMenuContent>
+                                    <ContextMenuItem onClick={() => handleSaveFile()}>Save</ContextMenuItem>
+                                    <ContextMenuSeparator />
+                                    <ContextMenuItem onClick={() => closeTab(path)}>Close</ContextMenuItem>
+                                    <ContextMenuItem onClick={() => closeOtherTabs(path)} disabled={openTabs.length <= 1}>Close Others</ContextMenuItem>
+                                    <ContextMenuItem onClick={() => closeTabsToRight(path)} disabled={isLast}>Close to the Right</ContextMenuItem>
+                                    <ContextMenuItem onClick={closeAllTabs}>Close All</ContextMenuItem>
+                                    <ContextMenuSeparator />
+                                    <ContextMenuItem onClick={() => revealInExplorer(path)}>Reveal in File Explorer</ContextMenuItem>
+                                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(path)}>Copy Path</ContextMenuItem>
+                                  </ContextMenuContent>
+                                </ContextMenu>
                               );
                             })}
                             <div className="flex-1" />
