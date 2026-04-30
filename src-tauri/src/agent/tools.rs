@@ -31,7 +31,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "write_file".to_string(),
-                description: "Write raw source code to the output file. Pass only the content parameter — the destination path is fixed by the system. The content must be raw code — NOT a JSON object, NOT wrapped in an envelope with code/commentary keys. Just the raw code itself.".to_string(),
+                description: "Write raw source code to the output file. Pass only the content parameter — the destination path is fixed by the system. The content must be raw code — NOT a JSON object, NOT wrapped in an envelope. IMPORTANT: If the file already exists, use read_file first to see the current code before making changes.".to_string(),
                 parameters: make_schema::<WriteFileArgs>(),
             },
         },
@@ -47,7 +47,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "bash".to_string(),
-                description: "Run a shell command in the project directory. Use for checking files, running linters, or inspecting the directory structure. 30-second timeout.".to_string(),
+                description: "Run a shell command in the project directory. Use for checking files, running linters or type-checkers (e.g. 'bun tsc --noEmit'), or inspecting directory structure. After writing code with write_file, run 'bun tsc --noEmit' to verify there are no TypeScript errors. 30-second timeout.".to_string(),
                 parameters: make_schema::<BashArgs>(),
             },
         },

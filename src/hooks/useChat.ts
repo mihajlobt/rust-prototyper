@@ -245,7 +245,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
-    const useThinking = thinkEnabled && caps.thinking
+    const useThinking: boolean | "low" | "medium" | "high" | undefined = thinkEnabled && caps.thinking
+      ? (caps.thinkLevel ?? true)
+      : undefined
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
     const channel = new Channel<CompletionEvent>()
@@ -401,7 +403,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
-    const useThinking = thinkEnabled && caps.thinking
+    const useThinking: boolean | "low" | "medium" | "high" | undefined = thinkEnabled && caps.thinking
+      ? (caps.thinkLevel ?? true)
+      : undefined
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
     const channel = new Channel<CompletionEvent>()

@@ -3,6 +3,36 @@ use tokio::time::{timeout, Duration};
 use tokio::process::Command;
 use super::tools::{WriteFileArgs, ReadFileArgs, BashArgs};
 
+/// Classified tool error categories inspired by Cursor's agent harness taxonomy.
+/// Each variant produces a clear, actionable message so the model can self-correct.
+///
+/// See: https://www.cursor.com/blog/continually-improving-agent-harness
+enum ToolError {
+    /// The tool call arguments were invalid (e.g. bad JSON, missing field).
+    InvalidArguments(String),
+    /// A shell command exceeded the time limit.
+    Timeout { command: String, seconds: u64 },
+    /// File system I/O errors (permission denied, disk full, etc.).
+    FileSystem(String),
+    /// Security violations (path traversal, forbidden path).
+    Security(String),
+}
+
+impl std::fmt::Display for ToolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolError::InvalidArguments(detail) =>
+                write!(f, "Invalid arguments: {detail}. Check the parameter names and types."),
+            ToolError::Timeout { command, seconds } =>
+                write!(f, "Command timed out after {seconds}s: '{command}'. Try a simpler command or break it into smaller steps."),
+            ToolError::FileSystem(detail) =>
+                write!(f, "File system error: {detail}"),
+            ToolError::Security(detail) =>
+                write!(f, "Security error: {detail}"),
+        }
+    }
+}
+
 pub struct ToolExecutionResult {
     pub success: bool,
     pub output: String,
@@ -23,7 +53,7 @@ pub async fn execute_tool(
         "bash" => execute_bash(args, project_dir).await,
         _ => ToolExecutionResult {
             success: false,
-            output: format!("Unknown tool: {name}"),
+            output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
             written_path: None,
             written_content: None,
         },
@@ -39,7 +69,7 @@ async fn execute_write_file(
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
             success: false,
-            output: format!("write_file: invalid arguments: {e}"),
+            output: format!("write_file: {}", ToolError::InvalidArguments(e.to_string())),
             written_path: None,
             written_content: None,
         },
@@ -53,7 +83,7 @@ async fn execute_write_file(
     if rel_path.contains("..") {
         return ToolExecutionResult {
             success: false,
-            output: "write_file: path traversal not allowed".to_string(),
+            output: format!("write_file: {}", ToolError::Security("path traversal not allowed".into())),
             written_path: None,
             written_content: None,
         };
@@ -65,23 +95,31 @@ async fn execute_write_file(
         if let Err(e) = tokio::fs::create_dir_all(parent).await {
             return ToolExecutionResult {
                 success: false,
-                output: format!("write_file: failed to create directories: {e}"),
+                output: format!("write_file: {}", ToolError::FileSystem(format!("failed to create directories: {e}"))),
                 written_path: None,
                 written_content: None,
             };
         }
     }
 
+    let file_already_existed = target.exists();
+
     match tokio::fs::write(&target, &parsed.content).await {
-        Ok(()) => ToolExecutionResult {
-            success: true,
-            output: format!("Written: {rel_path}"),
-            written_path: Some(target),
-            written_content: Some(parsed.content),
-        },
+        Ok(()) => {
+            let mut output = format!("Written: {rel_path}");
+            if file_already_existed {
+                output.push_str("\n\nNote: This file already existed. For better edits, use read_file first to see the current code before writing changes.");
+            }
+            ToolExecutionResult {
+                success: true,
+                output,
+                written_path: Some(target),
+                written_content: Some(parsed.content),
+            }
+        }
         Err(e) => ToolExecutionResult {
             success: false,
-            output: format!("write_file: {e}"),
+            output: format!("write_file: {}", ToolError::FileSystem(e.to_string())),
             written_path: None,
             written_content: None,
         },
@@ -96,7 +134,7 @@ async fn execute_read_file(
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
             success: false,
-            output: format!("read_file: invalid arguments: {e}"),
+            output: format!("read_file: {}", ToolError::InvalidArguments(e.to_string())),
             written_path: None,
             written_content: None,
         },
@@ -105,7 +143,7 @@ async fn execute_read_file(
     if parsed.path.contains("..") {
         return ToolExecutionResult {
             success: false,
-            output: "read_file: path traversal not allowed".to_string(),
+            output: format!("read_file: {}", ToolError::Security("path traversal not allowed".into())),
             written_path: None,
             written_content: None,
         };
@@ -122,7 +160,7 @@ async fn execute_read_file(
         },
         Err(e) => ToolExecutionResult {
             success: false,
-            output: format!("read_file: {e}"),
+            output: format!("read_file: {}", ToolError::FileSystem(e.to_string())),
             written_path: None,
             written_content: None,
         },
@@ -137,7 +175,7 @@ async fn execute_bash(
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
             success: false,
-            output: format!("bash: invalid arguments: {e}"),
+            output: format!("bash: {}", ToolError::InvalidArguments(e.to_string())),
             written_path: None,
             written_content: None,
         },
@@ -155,7 +193,7 @@ async fn execute_bash(
         Ok(c) => c,
         Err(e) => return ToolExecutionResult {
             success: false,
-            output: format!("bash: failed to spawn: {e}"),
+            output: format!("bash: {}", ToolError::FileSystem(format!("failed to spawn process: {e}"))),
             written_path: None,
             written_content: None,
         },
@@ -181,13 +219,13 @@ async fn execute_bash(
         }
         Ok(Err(e)) => ToolExecutionResult {
             success: false,
-            output: format!("bash: {e}"),
+            output: format!("bash: {}", ToolError::FileSystem(e.to_string())),
             written_path: None,
             written_content: None,
         },
         Err(_) => ToolExecutionResult {
             success: false,
-            output: "bash: timed out after 30 seconds".to_string(),
+            output: format!("bash: {}", ToolError::Timeout { command: parsed.command.clone(), seconds: 30 }),
             written_path: None,
             written_content: None,
         },

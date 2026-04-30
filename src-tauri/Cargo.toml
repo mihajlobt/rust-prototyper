@@ -33,3 +33,7 @@ ollama-rs = { version = "0.3", features = ["stream", "macros", "headers"] }
 schemars = "1"
 zip = { version = "8.5.1", features = ["deflate"] }
 shlex = "1.3"
+
+[[bin]]
+name = "test_cursor_chat"
+path = "../scripts/test_cursor_chat.rs"

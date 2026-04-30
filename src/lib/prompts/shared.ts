@@ -69,7 +69,14 @@ CRITICAL — THE content PARAMETER IS RAW CODE, NOT JSON:
     write_file(content="function App() { return <div>Hello</div>; }")
 
   The content parameter is WRITTEN TO DISK as-is. JSON will cause a syntax error.
-  Code fences and JSON wrappers are syntax errors — the content is saved as a raw .tsx/.css file.`;
+  Code fences and JSON wrappers are syntax errors — the content is saved as a raw .tsx/.css file.
+
+VALIDATION — After writing code:
+After calling write_file, you SHOULD call bash to run 'bun tsc --noEmit' to verify the code has no TypeScript errors. If errors are found, read_file the file, fix the errors, and write_file the corrected version.
+
+IMPORTANT WORKFLOW:
+When asked to UPDATE an existing file, you MUST first read_file to see the current code,
+then explain what you will change, then write_file the updated version.`;
 
 // ─── Shadcn component catalog (used by shadcn-mode prompts) ──────────────────
 

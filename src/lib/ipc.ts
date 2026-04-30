@@ -212,6 +212,8 @@ export interface OllamaModelOptions {
   tfsZ?: number;
 }
 
+export type ThinkParam = boolean | "low" | "medium" | "high"
+
 /** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel.
  *  Returns a request ID that can be passed to stopGenerationRequest to cancel
  *  the stream server-side. */
@@ -221,7 +223,7 @@ export async function generateCompletionStream(
   host: string,
   apiKey: string,
   onEvent: Channel<CompletionEvent>,
-  think?: boolean,
+  think?: ThinkParam,
   outputPath?: string,
   provider: Provider = "ollama-local",
   options?: OllamaModelOptions

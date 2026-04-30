@@ -1,20 +1,20 @@
 use futures_util::StreamExt;
-use futures_util::future::join_all;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tauri::{AppHandle, Manager};
 use tauri::ipc::Channel;
 use ollama_rs::{
-    Ollama,
     generation::{
         chat::{ChatMessage as OllamaChatMessage, request::ChatMessageRequest},
         images::Image,
+        parameters::ThinkType,
     },
 };
 use tokio_util::sync::CancellationToken;
 use crate::{AppState, AppError, app_data_dir};
 use super::ai_providers::{chat_completion_openai, chat_completion_claude};
+use super::ai_ollama::{OllamaOptions, build_ollama_client};
 
-// ─── Shared types ─────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 #[derive(serde::Deserialize, Clone)]
 pub struct Message {
@@ -44,31 +44,7 @@ pub enum CompletionEvent {
 
 // ─── Request / response types ─────────────────────────────────────────────────
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OllamaOptions {
-    pub temperature: Option<f32>,
-    pub top_k: Option<u32>,
-    pub top_p: Option<f32>,
-    pub num_ctx: Option<u64>,
-    pub num_predict: Option<i32>,
-    pub repeat_penalty: Option<f32>,
-    pub repeat_last_n: Option<i32>,
-    pub seed: Option<i32>,
-    pub mirostat: Option<u8>,
-    pub mirostat_tau: Option<f32>,
-    pub mirostat_eta: Option<f32>,
-    pub tfs_z: Option<f32>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelPreset {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub options: OllamaOptions,
-}
+// OllamaOptions, ModelPreset, OllamaModel, OllamaModelDetails are defined in ai_ollama.rs
 
 #[derive(serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -78,64 +54,53 @@ pub struct CompletionRequest {
     pub host: String,
     pub api_key: String,
     pub provider: String,
-    pub think: Option<bool>,
+    /// Accepts `true`, `false`, `"low"`, `"medium"`, or `"high"`.
+    /// GPT-OSS requires string levels; other models use boolean.
+    pub think: Option<serde_json::Value>,
     pub output_path: Option<String>,
     pub options: Option<OllamaOptions>,
 }
 
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OllamaModel {
-    pub id: String,
-    pub name: String,
-    pub capabilities: Vec<String>,
-    pub family: String,
-    pub families: Vec<String>,
-    pub context_length: Option<u64>,
-    pub provider: String,
+/// Convert a JSON value from the frontend think parameter to a ThinkType
+/// for the ollama-rs agent loop. Supports:
+///   - `true`  → ThinkType::True   (most models)
+///   - `false` → ThinkType::False   (most models)
+///   - `"low"` → ThinkType::Low     (GPT-OSS)
+///   - `"medium"` → ThinkType::Medium (GPT-OSS)
+///   - `"high"` → ThinkType::High    (GPT-OSS)
+fn think_type_from_value(v: &serde_json::Value) -> Option<ThinkType> {
+    match v {
+        serde_json::Value::Bool(true) => Some(ThinkType::True),
+        serde_json::Value::Bool(false) => Some(ThinkType::False),
+        serde_json::Value::String(s) => match s.as_str() {
+            "low" => Some(ThinkType::Low),
+            "medium" => Some(ThinkType::Medium),
+            "high" => Some(ThinkType::High),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
-struct OllamaModelDetails {
-    capabilities: Vec<String>,
-    family: String,
-    families: Vec<String>,
-    context_length: Option<u64>,
-}
+// ─── Ollama message conversion ─────────────────────────────────────────────────
 
-// ─── Ollama helpers ───────────────────────────────────────────────────────────
-
-fn parse_ollama_host(raw: &str) -> (String, u16) {
-    let (scheme, rest) = if let Some(s) = raw.strip_prefix("https://") {
-        ("https", s)
-    } else if let Some(s) = raw.strip_prefix("http://") {
-        ("http", s)
-    } else {
-        ("http", raw)
-    };
-    if let Some(colon) = rest.rfind(':') {
-        let host_part = &rest[..colon];
-        if let Ok(port) = rest[colon + 1..].parse::<u16>() {
-            return (format!("{}://{}", scheme, host_part), port);
+/// Convert frontend messages to ollama-rs ChatMessage for the non-streaming path.
+fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
+    messages.iter().map(|m| {
+        let mut msg = match m.role.as_str() {
+            "assistant" => OllamaChatMessage::assistant(m.content.clone()),
+            "system" => OllamaChatMessage::system(m.content.clone()),
+            _ => OllamaChatMessage::user(m.content.clone()),
+        };
+        msg.thinking = m.thinking.clone();
+        if !m.images.is_empty() {
+            msg = msg.with_images(m.images.iter().map(|b| Image::from_base64(b.clone())).collect());
         }
-    }
-    let default_port = if scheme == "https" { 443u16 } else { 11434u16 };
-    (format!("{}://{}", scheme, rest), default_port)
+        msg
+    }).collect()
 }
 
-pub(crate) fn build_ollama_client(host: &str, api_key: &str) -> Result<Ollama, AppError> {
-    let (base_url, port) = parse_ollama_host(host);
-    if !api_key.is_empty() {
-        use ollama_rs::headers::{HeaderMap, AUTHORIZATION};
-        let mut headers = HeaderMap::new();
-        let header_val = format!("Bearer {}", api_key)
-            .parse()
-            .map_err(|_| AppError::Http("Invalid API key format".into()))?;
-        headers.insert(AUTHORIZATION, header_val);
-        Ok(Ollama::new_with_request_headers(base_url, port, headers))
-    } else {
-        Ok(Ollama::new(base_url, port))
-    }
-}
+// ─── Message serialization ────────────────────────────────────────────────────
 
 /// Convert frontend messages to JSON values suitable for the Ollama /api/chat endpoint.
 /// Handles tool_calls in assistant messages and tool_name in tool role messages
@@ -182,23 +147,6 @@ pub(crate) fn messages_to_ollama_json(messages: &[Message]) -> Vec<serde_json::V
 /// Monotonically increasing counter for assigning unique request IDs.
 static NEXT_REQUEST_ID: AtomicU32 = AtomicU32::new(1);
 
-/// Convert frontend messages to ollama-rs ChatMessage for the agent loop path.
-/// The agent loop manages its own history internally and doesn't need tool_name.
-fn to_ollama_messages(messages: &[Message]) -> Vec<OllamaChatMessage> {
-    messages.iter().map(|m| {
-        let mut msg = match m.role.as_str() {
-            "assistant" => OllamaChatMessage::assistant(m.content.clone()),
-            "system" => OllamaChatMessage::system(m.content.clone()),
-            _ => OllamaChatMessage::user(m.content.clone()),
-        };
-        msg.thinking = m.thinking.clone();
-        if !m.images.is_empty() {
-            msg = msg.with_images(m.images.iter().map(|b| Image::from_base64(b.clone())).collect());
-        }
-        msg
-    }).collect()
-}
-
 async fn generate_ollama_completion_stream(
     request: &CompletionRequest,
     app_data_dir: &std::path::Path,
@@ -207,14 +155,17 @@ async fn generate_ollama_completion_stream(
     http_client: &reqwest::Client,
 ) -> Result<(), AppError> {
     if let Some(path) = request.output_path.as_deref() {
-        // Agent loop path: uses ollama-rs directly (manages its own history)
-        let ollama = build_ollama_client(&request.host, &request.api_key)?;
-        let ollama_messages = to_ollama_messages(&request.messages);
+        // Agent loop path: uses raw HTTP to include tool_name in tool messages,
+        // which ollama-rs ChatMessage does not support.
+        // Per Ollama API docs: https://github.com/ollama/ollama/blob/main/docs/api.md
+        let json_messages = messages_to_ollama_json(&request.messages);
         crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
-            ollama: &ollama,
+            http_client,
+            host: &request.host,
+            api_key: &request.api_key,
             model: &request.model,
-            initial_messages: ollama_messages,
-            think: request.think,
+            initial_messages_json: json_messages,
+            think: request.think.as_ref().and_then(|v| think_type_from_value(v)),
             app_data_dir,
             output_path: path,
             channel,
@@ -233,8 +184,8 @@ async fn generate_ollama_completion_stream(
             "stream": true,
         });
 
-        if let Some(true) = request.think {
-            body["think"] = serde_json::Value::Bool(true);
+        if let Some(think_val) = &request.think {
+            body["think"] = think_val.clone();
         }
 
         if let Some(opts) = &request.options {
@@ -276,7 +227,6 @@ async fn generate_ollama_completion_stream(
                         Some(Ok(chunk)) => {
                             if let Ok(chunk_str) = String::from_utf8(chunk.to_vec()) {
                                 buffer.push_str(&chunk_str);
-                                // Process complete newline-delimited JSON lines
                                 let mut start = 0;
                                 while let Some(pos) = buffer[start..].find('\n') {
                                     let line = buffer[start..start + pos].trim().to_string();
@@ -305,11 +255,6 @@ async fn generate_ollama_completion_stream(
                     }
                 }
                 _ = cancel_token.cancelled() => {
-                    // Cancellation requested — dropping the byte stream closes
-                    // the HTTP connection. Per Ollama API docs there is no
-                    // /api/abort endpoint; dropping the connection is the
-                    // standard way to stop generation:
-                    // https://github.com/ollama/ollama/blob/main/docs/api.md
                     drop(byte_stream);
                     let _ = channel.send(CompletionEvent::Done);
                     return Ok(());
@@ -320,7 +265,7 @@ async fn generate_ollama_completion_stream(
 }
 
 /// Minimal struct for deserializing the Ollama /api/chat streaming response.
-/// Only the fields we need — role, content, thinking, done.
+/// Only the fields we need — content, thinking, done.
 #[derive(serde::Deserialize)]
 struct OllamaStreamChunk {
     message: OllamaStreamMessage,
@@ -333,95 +278,7 @@ struct OllamaStreamMessage {
     thinking: Option<String>,
 }
 
-// ─── Model listing ────────────────────────────────────────────────────────────
-
-fn parse_show_response(json: &serde_json::Value) -> OllamaModelDetails {
-    let capabilities = json["capabilities"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-
-    let details = &json["details"];
-    let family = details["family"].as_str().unwrap_or("").to_string();
-    let families = details["families"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
-
-    let context_length = {
-        let mi = json.get("model_info");
-        let mut found: Option<u64> = None;
-        if !family.is_empty() {
-            found = mi.and_then(|m| m.get(format!("{}.context_length", family).as_str())).and_then(|v| v.as_u64());
-        }
-        if found.is_none() {
-            for f in &families {
-                if f == &family { continue; }
-                found = mi.and_then(|m| m.get(format!("{}.context_length", f).as_str())).and_then(|v| v.as_u64());
-                if found.is_some() { break; }
-            }
-        }
-        if found.is_none() {
-            if let Some(mi_obj) = mi.and_then(|v| v.as_object()) {
-                for (key, val) in mi_obj {
-                    if key.ends_with(".context_length") {
-                        if let Some(n) = val.as_u64() { found = Some(n); break; }
-                    }
-                }
-            }
-        }
-        found
-    };
-
-    OllamaModelDetails { capabilities, family, families, context_length }
-}
-
-async fn fetch_model_details(
-    client: &reqwest::Client,
-    host: &str,
-    api_key: &str,
-    model_name: &str,
-) -> Result<OllamaModelDetails, AppError> {
-    let url = format!("{}/api/show", host);
-    let mut req = client.post(&url).json(&serde_json::json!({ "model": model_name }));
-    if !api_key.is_empty() {
-        req = req.header("Authorization", format!("Bearer {}", api_key));
-    }
-    let res = req.send().await.map_err(|e| {
-        AppError::Http(format!("/api/show request failed for {}: {}", model_name, e))
-    })?;
-
-    if !res.status().is_success() {
-        let code = res.status().as_u16();
-        let err_body = res.text().await.unwrap_or_default();
-        return Err(AppError::Http(format!("Ollama /api/show returned HTTP {} for model {}: {}", code, model_name, &err_body[..err_body.len().min(200)])));
-    }
-
-    // Use .text() + from_str instead of .json() for better error diagnostics
-    let resp_body = res.text().await.map_err(|e| {
-        AppError::Http(format!("/api/show body read failed for {}: {}", model_name, e))
-    })?;
-    let json: serde_json::Value = serde_json::from_str(&resp_body).map_err(|e| {
-        AppError::Http(format!("/api/show JSON parse failed for {}: {}", model_name, e))
-    })?;
-    Ok(parse_show_response(&json))
-}
-
 // ─── Commands ─────────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn save_model_presets(presets: Vec<ModelPreset>, app: AppHandle) -> Result<(), AppError> {
-    let path = app_data_dir(&app)?.join("model-presets.json");
-    let json = serde_json::to_string_pretty(&presets)
-        .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
-    std::fs::write(&path, json.as_bytes()).map_err(AppError::Io)
-}
-
-#[tauri::command]
-pub async fn load_model_presets(app: AppHandle) -> Result<Vec<ModelPreset>, AppError> {
-    let path = app_data_dir(&app)?.join("model-presets.json");
-    if !path.exists() { return Ok(vec![]); }
-    let json = std::fs::read_to_string(&path).map_err(AppError::Io)?;
-    serde_json::from_str(&json).map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))
-}
 
 #[tauri::command]
 pub async fn generate_completion(
@@ -470,34 +327,18 @@ pub async fn generate_completion_stream(
     let mut normalized = request.clone();
     normalized.host = host;
 
-    // Create and register a CancellationToken for this request.
-    // The request_id is returned IMMEDIATELY so the frontend can call
-    // stop_generation_stream to cancel mid-flight. The actual streaming
-    // work is spawned as a detached Tokio task — it sends events through
-    // the Channel independently of this function's return value.
-    // Per tokio_util docs, CancellationToken supports cooperative
-    // cancellation via clone + cancel():
-    // https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html
     let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
     let cancel_token = CancellationToken::new();
 
     let app_data = match app_data_dir(&app) {
         Ok(path) => path,
         Err(e) => {
-            // Token not yet registered, safe to return error directly
             return Err(e);
         }
     };
 
     state.cancellation_tokens.lock().unwrap().insert(request_id, cancel_token.clone());
 
-    // Spawn the streaming work as a detached task. The Channel keeps
-    // receiving events regardless of when this function returns.
-    // This matches the Tauri Channel pattern shown in the official docs:
-    // https://v2.tauri.app/develop/calling-frontend
-    // Per Tauri state management docs, AppHandle is Clone and can be
-    // moved into spawned tasks to access managed state:
-    // https://v2.tauri.app/develop/state-management
     let app_handle = app.clone();
     let result = match normalized.provider.as_str() {
         "ollama" => {
@@ -505,7 +346,6 @@ pub async fn generate_completion_stream(
             tokio::spawn(async move {
                 let state = app_handle.state::<AppState>();
                 let result = generate_ollama_completion_stream(&normalized, &app_data, &on_event, &cancel_clone, &client).await;
-                // Clean up the registered token regardless of outcome
                 state.cancellation_tokens.lock().unwrap().remove(&request_id);
                 if let Err(e) = result {
                     let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
@@ -564,34 +404,4 @@ pub async fn stop_generation_stream(request_id: u32, app: AppHandle) -> Result<(
     }
 }
 
-#[tauri::command]
-pub async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -> Result<Vec<OllamaModel>, AppError> {
-    let state = app.state::<AppState>();
-    let client = &state.http_client;
-    let host = if host.is_empty() { "http://localhost:11434".to_string() } else { host.trim_end_matches('/').to_string() };
-    let provider = if host == "https://ollama.com" { "ollama-cloud".to_string() } else { "ollama-local".to_string() };
-
-    let ollama = build_ollama_client(&host, &api_key)?;
-    let local_models = ollama.list_local_models().await.map_err(|e| AppError::Http(e.to_string()))?;
-    let model_names: Vec<String> = local_models.iter().map(|m| m.name.clone()).collect();
-    if model_names.is_empty() { return Ok(vec![]); }
-
-    let client_clone = client.clone();
-    let host_owned = host.to_string();
-    let detail_futures: Vec<_> = model_names.iter().map(|name| {
-        let name = name.clone();
-        let host = host_owned.clone();
-        let api_key = api_key.clone();
-        let client = client_clone.clone();
-        async move { (name.clone(), fetch_model_details(&client, &host, &api_key, &name).await) }
-    }).collect();
-
-    let results = join_all(detail_futures).await;
-
-    Ok(results.into_iter().map(|(name, detail_result)| {
-        match detail_result {
-            Ok(d) => OllamaModel { id: name.clone(), name, capabilities: d.capabilities, family: d.family, families: d.families, context_length: d.context_length, provider: provider.clone() },
-            Err(_) => OllamaModel { id: name.clone(), name, capabilities: vec![], family: String::new(), families: vec![], context_length: None, provider: provider.clone() },
-        }
-    }).collect())
-}
+// save_model_presets, load_model_presets, list_ollama_models are in ai_ollama.rs

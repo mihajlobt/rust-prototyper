@@ -5,8 +5,11 @@ import {
 } from "@/lib/ipc"
 import { useAppStore } from "@/stores/appStore"
 
+type ThinkLevel = "low" | "medium" | "high"
+
 type Capabilities = {
   thinking: boolean
+  thinkLevel?: ThinkLevel
   vision: boolean
   tools: boolean
   contextLength?: number
@@ -22,8 +25,10 @@ const EMPTY_CAPS: Capabilities = { thinking: false, vision: false, tools: false,
 
 function toCaps(model: OllamaModel): Capabilities {
   const c = model.capabilities
+  const isGptOss = model.id.toLowerCase().includes("gpt-oss")
   return {
     thinking: c.includes("thinking"),
+    thinkLevel: isGptOss && c.includes("thinking") ? "medium" : undefined,
     vision: c.includes("vision"),
     tools: c.includes("tools"),
     contextLength: model.contextLength,
@@ -82,7 +87,8 @@ export function useModelCapabilities(modelId: string): Capabilities {
   // Model not found in either list — fall back to known capability heuristics
   // This handles cases where list_ollama_models doesn't return the expected model
   if (isKnownToolCapableModel(modelId)) {
-    return { thinking: false, vision: false, tools: true, loading: false }
+    const isGptOss = modelId.toLowerCase().includes("gpt-oss")
+    return { thinking: isGptOss, thinkLevel: isGptOss ? "medium" as ThinkLevel : undefined, vision: false, tools: true, loading: false }
   }
 
   return EMPTY_CAPS
