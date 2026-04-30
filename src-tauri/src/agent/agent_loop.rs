@@ -165,17 +165,6 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
         }
 
         if wrote_file {
-            // Closing turn: no tools offered — forces the model to produce a text
-            // description instead of calling tools again. Mirrors the original
-            // Prototyper two-turn pattern that was confirmed working in research.
-            let closing = {
-                let mut r = ChatMessageRequest::new(model.to_string(), vec![]);
-                if let Some(true) = think {
-                    r = r.think(ThinkType::True);
-                }
-                r
-            };
-            stream_turn(ollama, history.clone(), closing, channel, cancel_token).await?;
             break;
         }
 

@@ -65,6 +65,7 @@ function buildApiMessages(
   }
   return result
 }
+import { flushSync } from "react-dom"
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -259,7 +260,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           })
         }
       } else if (msg.event === "ToolCall") {
-        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+        flushSync(() => {
+          useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+        })
       } else if (msg.event === "ToolResult") {
         const { tool, success, output, path, content } = msg.data
         useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
@@ -385,7 +388,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           })
         }
       } else if (msg.event === "ToolCall") {
-        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+        flushSync(() => {
+          useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+        })
       } else if (msg.event === "ToolResult") {
         const { tool, success, output, path, content } = msg.data
         useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
