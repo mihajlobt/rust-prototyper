@@ -247,3 +247,11 @@ bunx tsc --noEmit    # type-check
 - **NEVER create custom SVG icon components.** Use lucide-react icons exclusively.
 - If lucide doesn't have a suitable icon, pick the closest match from lucide. Do not create inline SVG, icon fonts, or icon files.
 - This keeps the icon set consistent and avoids maintenance burden.
+
+## CRITICAL — BACK UP CLAIMS WITH DOCUMENTATION
+
+- **NEVER make unsubstantiated claims about library behavior, CSS rules, or framework internals.**
+- Every architectural decision, positioning claim, or behavioral assertion MUST cite a specific source: official docs URL, Context7 query result, MDN reference, GitHub issue, or source code line.
+- Code comments explaining "why" must include the reference inline (e.g. `// React 18 event delegation dispatches to root container — see https://github.com/facebook/react/blob/xxx`).
+- If you cannot find a reference, state the uncertainty explicitly instead of presenting an assumption as fact.
+- This applies to: CSS layout claims (transform/fixed containing blocks), React internals (event delegation, batching), library API capabilities (controlled vs uncontrolled props), and framework behavior (event bubbling, portal rendering).
