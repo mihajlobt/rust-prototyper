@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo, Fragment } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/workflows/templates";
 import { NodePropertiesPanel } from "@/workflows/NodePropertiesPanel";
 import { OutputChatPanel } from "@/workflows/OutputChatPanel";
@@ -12,15 +12,12 @@ import { Allotment } from "allotment";
 import { Play, Square, Pause, Save, Trash2, Undo2, Redo2, Plus, X, FolderOpen, FilePlus, RotateCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-// ─── Main view (needs ReactFlowProvider) ──────────────────────────────────
-
 function WorkflowCanvas() {
-  // Output chat panel
   const [outputPanelNodeId, setOutputPanelNodeId] = useState<string | null>(null);
   const outputPanelOpen = !!outputPanelNodeId;
 
@@ -40,7 +37,6 @@ function WorkflowCanvas() {
     return () => ro.disconnect();
   }, []);
 
-  // ── Custom node defs ────────────────────────────────────────────────────
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customDefs, setCustomDefs] = useState<NodeTypeDef[]>([]);
   const [customName, setCustomName] = useState("");
@@ -139,11 +135,13 @@ function WorkflowCanvas() {
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
   }, [pushUndo, setEdges]);
 
-  // Pane right-click: capture flow position for canvas ContextMenu
-  const [paneContextMenuFlowPos, setPaneContextMenuFlowPos] = useState<{ x: number; y: number } | null>(null);
+  // Pane right-click context menu state (flow = node placement coords, screen = anchor position)
+  const [paneContextMenuPos, setPaneContextMenuPos] = useState<{ flowX: number; flowY: number; screenX: number; screenY: number } | null>(null);
+  const [menuKey, setMenuKey] = useState(0); // forces DropdownMenuContent remount so Popper re-measures trigger
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setPaneContextMenuPos(null);
   }, []);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowNodeType) => {
@@ -218,17 +216,20 @@ function WorkflowCanvas() {
     setPs({ activeWorkflow: null });
   };
 
-  // Pane context menu: capture flow position for node placement
+  // Pane context menu: capture both flow position (for node placement) and screen position (for anchor)
   const handlePaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    event.preventDefault(); // suppress browser native context menu
     const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    setPaneContextMenuFlowPos(flowPos);
+    setPaneContextMenuPos({ flowX: flowPos.x, flowY: flowPos.y, screenX: event.clientX, screenY: event.clientY });
+    setMenuKey((k) => k + 1); // force DropdownMenuContent remount so Popper re-measures trigger at new position
   }, [screenToFlowPosition]);
 
   const addNodeAtPos = useCallback((typeDef: NodeTypeDef) => {
     pushUndo();
-    const position = paneContextMenuFlowPos ?? { x: 200, y: 200 };
+    const position = paneContextMenuPos ? { x: paneContextMenuPos.flowX, y: paneContextMenuPos.flowY } : { x: 200, y: 200 };
     setNodes((prev) => [...prev, makeNode(typeDef, position)]);
-  }, [pushUndo, setNodes, makeNode, paneContextMenuFlowPos]);
+    setPaneContextMenuPos(null);
+  }, [pushUndo, setNodes, makeNode, paneContextMenuPos]);
 
   // Node action helpers for WorkflowActionsContext (used by WorkflowNode context menu)
   const deleteNodeById = useCallback((nodeId: string) => {
@@ -380,83 +381,97 @@ function WorkflowCanvas() {
           <Allotment.Pane>
             <Allotment ref={outputRef} onDragEnd={outputOnDragEnd} defaultSizes={outputDefault} onVisibleChange={(_index, visible) => { if (!visible) setOutputPanelNodeId(null); }}>
               <Allotment.Pane>
-                <ContextMenu onOpenChange={(open) => { if (!open) setPaneContextMenuFlowPos(null); }}>
-                  <ContextMenuTrigger asChild>
-                    <div ref={flowContainerRef} className="w-full h-full">
-                      {flowReady && <ReactFlow
-                        nodes={nodes}
-                        edges={edges}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
-                        onConnect={onConnect}
-                        onNodeClick={onNodeClick}
-                        onPaneContextMenu={handlePaneContextMenu}
-                        onPaneClick={onPaneClick}
-                        onDrop={onDrop}
-                        onDragOver={onDragOver}
-                        nodeTypes={nodeTypes}
-                        fitView
-                        snapToGrid
-                        snapGrid={[16, 16]}
-                        defaultEdgeOptions={{ type: "smoothstep", animated: false }}
-                        deleteKeyCode={["Backspace", "Delete"]}
-                        onEdgesDelete={() => pushUndo()}
-                        proOptions={{ hideAttribution: true }}
-                        className="bg-muted/10"
+                <DropdownMenu open={!!paneContextMenuPos} modal={false} onOpenChange={(open) => { if (!open) setPaneContextMenuPos(null); }}>
+                  <DropdownMenuTrigger asChild>
+                    {/* Invisible anchor positioned at right-click location for Radix Popper */}
+                    <div
+                      style={{
+                        position: "fixed",
+                        left: paneContextMenuPos ? `${paneContextMenuPos.screenX}px` : 0,
+                        top: paneContextMenuPos ? `${paneContextMenuPos.screenY}px` : 0,
+                        width: 0,
+                        height: 0,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  </DropdownMenuTrigger>
+                  <div ref={flowContainerRef} className="w-full h-full">
+                    {flowReady && <ReactFlow
+                      nodes={nodes}
+                      edges={edges}
+                      onNodesChange={onNodesChange}
+                      onEdgesChange={onEdgesChange}
+                      onConnect={onConnect}
+                      onNodeClick={onNodeClick}
+                      onPaneContextMenu={handlePaneContextMenu}
+                      onPaneClick={onPaneClick}
+                      onDrop={onDrop}
+                      onDragOver={onDragOver}
+                      nodeTypes={nodeTypes}
+                      fitView
+                      snapToGrid
+                      snapGrid={[16, 16]}
+                      defaultEdgeOptions={{ type: "smoothstep", animated: false }}
+                      deleteKeyCode={["Backspace", "Delete"]}
+                      onEdgesDelete={() => pushUndo()}
+                      proOptions={{ hideAttribution: true }}
+                      className="bg-muted/10"
+                    >
+                      <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
+                      <Controls />
+                      <MiniMap<WorkflowNodeType>
+                        nodeColor={(n) => n.data.color || "var(--node-custom)"}
+                        className="!bg-card !border-border rounded-lg overflow-hidden"
+                        maskColor="rgba(0,0,0,0.2)"
+                      />
+                      {nodes.length === 0 && (
+                        <Panel position="top-center">
+                          <div className="text-muted-foreground text-xs mt-8">Drag nodes from the palette or right-click to add</div>
+                        </Panel>
+                      )}
+                      <NodeToolbar
+                        nodeId={selectedNodeId ?? ""}
+                        isVisible={!!selectedNodeId && !!selectedData}
+                        position={Position.Right}
+                        offset={12}
                       >
-                        <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
-                        <Controls />
-                        <MiniMap<WorkflowNodeType>
-                          nodeColor={(n) => n.data.color || "var(--node-custom)"}
-                          className="!bg-card !border-border rounded-lg overflow-hidden"
-                          maskColor="rgba(0,0,0,0.2)"
-                        />
-                        {nodes.length === 0 && (
-                          <Panel position="top-center">
-                            <div className="text-muted-foreground text-xs mt-8">Drag nodes from the palette or right-click to add</div>
-                          </Panel>
+                        {selectedData && selectedNodeId && (
+                          <NodePropertiesPanel
+                            nodeId={selectedNodeId}
+                            data={selectedData}
+                            onUpdate={updateNodeData}
+                            onDuplicate={duplicateSelected}
+                            onDelete={deleteSelected}
+                            onClose={() => setSelectedNodeId(null)}
+                            onViewOutput={() => setOutputPanelNodeId(selectedNodeId)}
+                          />
                         )}
-                        <NodeToolbar
-                          nodeId={selectedNodeId ?? ""}
-                          isVisible={!!selectedNodeId && !!selectedData}
-                          position={Position.Right}
-                          offset={12}
-                        >
-                          {selectedData && selectedNodeId && (
-                            <NodePropertiesPanel
-                              nodeId={selectedNodeId}
-                              data={selectedData}
-                              onUpdate={updateNodeData}
-                              onDuplicate={duplicateSelected}
-                              onDelete={deleteSelected}
-                              onClose={() => setSelectedNodeId(null)}
-                              onViewOutput={() => setOutputPanelNodeId(selectedNodeId)}
-                            />
-                          )}
-                        </NodeToolbar>
-                      </ReactFlow>}
-                    </div>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    {categories.map((cat, catIndex) => (
-                      <Fragment key={cat}>
-                        <ContextMenuGroup>
-                          <ContextMenuLabel>{cat}</ContextMenuLabel>
-                          {allDefs.filter((t) => t.category === cat).map((t) => (
-                            <ContextMenuItem key={t.type} onClick={() => addNodeAtPos(t)}>
-                              <t.icon style={{ color: t.color }} />
-                              <div className="min-w-0">
-                                <div>{t.label}</div>
-                                <div className="text-muted-foreground">{t.desc}</div>
-                              </div>
-                            </ContextMenuItem>
-                          ))}
-                        </ContextMenuGroup>
-                        {catIndex < categories.length - 1 && <ContextMenuSeparator />}
-                      </Fragment>
+                      </NodeToolbar>
+                    </ReactFlow>}
+                  </div>
+                  <DropdownMenuContent key={menuKey} className="w-72" onCloseAutoFocus={(e) => e.preventDefault()}>
+                    {categories.map((cat) => (
+                      <DropdownMenuSub key={cat}>
+                        <DropdownMenuSubTrigger>{cat}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuGroup>
+                            {allDefs.filter((t) => t.category === cat).map((t) => (
+                              <DropdownMenuItem key={t.type} onSelect={() => addNodeAtPos(t)}>
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                  <span className="font-medium inline-flex items-center gap-1.5">
+                                    <t.icon style={{ color: t.color }} />{t.label}
+                                  </span>
+                                  <span className="text-muted-foreground">{t.desc}</span>
+                                  <span className="text-muted-foreground/70">{t.tooltip}</span>
+                                </div>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuGroup>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
                     ))}
-                  </ContextMenuContent>
-                </ContextMenu>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </Allotment.Pane>
 
               {/* Output chat panel */}
