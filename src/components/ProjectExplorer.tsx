@@ -148,7 +148,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
       lookup[sectionName] = {
         name: SECTION_LABELS[sectionName],
         path: `projects/${project}/${sectionName}`,
-        hasChildren: entries.length > 0,
+        hasChildren: true,
         section: sectionName,
         assetType: null,
       };
