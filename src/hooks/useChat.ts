@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, useCallback, type MutableRefObject, type RefObject } from "react"
 
+interface PendingToolResult {
+  tool: string
+  success: boolean
+  output: string
+  path: string | undefined
+  content: string | undefined
+}
+
 function stripFences(content: string): string {
   return content
     .replace(/^```[\w]*\r?\n?/, "")
@@ -140,6 +148,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   // Track which entityIds we've already loaded from disk
   const loadedRef = useRef<Set<string>>(new Set())
 
+  // Queue of ToolResult payloads waiting for a post-paint flush.
+  // Written synchronously from channel.onmessage; drained by the effect below
+  // or synchronously by finalize() before writing to disk.
+  const pendingToolResultsRef = useRef<PendingToolResult[]>([])
+  // Incrementing this causes the post-paint useEffect to drain the queue.
+  const [toolResultTick, setToolResultTick] = useState(0)
+
   // Cold start: load from disk the first time this entityId is accessed
   useEffect(() => {
     if (loadedRef.current.has(entityId)) return
@@ -159,6 +174,31 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       .catch(() => {})
     return () => { cancelled = true }
   }, [entityId, chatPath])
+
+  // Drain pending tool results after the browser has painted so the pending
+  // spinner (Tool card "input-streaming" state) is visible for at least one frame.
+  //
+  // The Tauri Channel while-loop dispatches ToolCall + ToolResult synchronously
+  // in a single JS call stack. Any React state update inside that stack can't
+  // produce a visible paint until JS yields. Queuing the visual store update
+  // here and applying it in useEffect — which React guarantees fires after the
+  // browser has painted (react.dev/reference/react/useEffect) — breaks the
+  // synchronous batch and ensures the spinner paints first.
+  //
+  // finalize() also drains the queue synchronously before writing to disk,
+  // so the persisted chat.json always has pending=false on tool calls.
+  useEffect(() => {
+    if (toolResultTick === 0) return
+    for (const result of pendingToolResultsRef.current.splice(0)) {
+      useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
+      if (result.tool === "write_file" && result.content) {
+        if (useChatStore.getState().chats[entityId]?.isStreaming) {
+          useChatStore.getState().setStreamingContent(entityId, "")
+        }
+        useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
+      }
+    }
+  }, [toolResultTick, entityId])
 
   const sendMessage = useCallback(async () => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -220,7 +260,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
       activeRequestId.current = null
-      // Preserve toolCalls attached by attachToolCall (which updated the store mid-stream)
+      // Flush any queued tool results synchronously so the finalized message
+      // has pending=false and the correct path before we persist to disk.
+      // (The useEffect drainer fires post-paint, which may be after Done arrives.)
+      for (const result of pendingToolResultsRef.current.splice(0)) {
+        useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
+        useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
+      }
+      // Preserve toolCalls (now correctly flushed) in the finalized message
       const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
       const currentLast = msgs[msgs.length - 1]
       const finalMessage: ChatMessage = {
@@ -269,19 +316,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
           onOutputRef.current?.(stripFences(content))
         }
-        // Defer visual store updates to next macrotask so the pending spinner
-        // gets at least one paint frame before being replaced by the result state.
-        // The Tauri Channel while-loop batches ToolCall+ToolResult synchronously,
-        // preventing any paint between them — setTimeout(0) breaks out of that.
-        setTimeout(() => {
-          useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
-          if (tool === "write_file" && content) {
-            if (useChatStore.getState().chats[entityId]?.isStreaming) {
-              useChatStore.getState().setStreamingContent(entityId, "")
-            }
-            useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
-          }
-        }, 0)
+        // Queue visual update; useEffect([toolResultTick]) drains it post-paint
+        pendingToolResultsRef.current.push({ tool, success, output, path, content })
+        setToolResultTick((tick) => tick + 1)
       } else if (msg.event === "Done") {
         finalize(contentAccumulated, thinkingAccumulated)
         if (!toolWritten) onOutputRef.current?.(contentAccumulated)
@@ -404,18 +441,15 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
           onOutputRef.current?.(stripFences(content))
         }
-        setTimeout(() => {
-          useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
-          if (tool === "write_file" && content) {
-            if (useChatStore.getState().chats[entityId]?.isStreaming) {
-              useChatStore.getState().setStreamingContent(entityId, "")
-            }
-            useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
-          }
-        }, 0)
+        pendingToolResultsRef.current.push({ tool, success, output, path, content })
+        setToolResultTick((tick) => tick + 1)
       } else if (msg.event === "Done") {
         activeRequestId.current = null
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        for (const result of pendingToolResultsRef.current.splice(0)) {
+          useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
+          useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
+        }
         const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
         const currentLast = msgs[msgs.length - 1]
         const finalMessage: ChatMessage = {
