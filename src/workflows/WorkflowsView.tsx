@@ -1,27 +1,31 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/workflows/templates";
+import {
+  WORKFLOW_TEMPLATES,
+  type WorkflowTemplate,
+} from "@/workflows/templates";
 import { NodePropertiesPanel } from "@/workflows/NodePropertiesPanel";
 import { OutputChatPanel } from "@/workflows/OutputChatPanel";
 import { BUILTIN_NODE_TYPES, CATEGORY_ORDER, nodeTypes, generateId, type NodeTypeDef, type WorkflowNodeData, type WorkflowNodeType } from "@/workflows/nodeTypes";
 import { useWorkflowExecution } from "@/workflows/useWorkflowExecution";
 import { WorkflowActionsContext } from "@/workflows/WorkflowActionsContext";
 import { useWorkflowPersistence } from "@/workflows/useWorkflowPersistence";
-import { ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState, type Edge, type Connection, BackgroundVariant, Panel, useReactFlow, ReactFlowProvider, NodeToolbar, Position } from "@xyflow/react";
+import { ReactFlow, Background, Controls, ControlButton, MiniMap, addEdge, useNodesState, useEdgesState, type Edge, type Connection, BackgroundVariant, Panel, useReactFlow, ReactFlowProvider, NodeToolbar, Position, SelectionMode } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Allotment } from "allotment";
-import { Play, Square, Pause, Save, Trash2, Undo2, Redo2, Plus, X, FolderOpen, FilePlus, RotateCw, Sparkles } from "lucide-react";
+import { Play, Square, Pause, Save, Trash2, Undo2, Redo2, X, FolderOpen, FilePlus, RotateCw, Lasso as LassoIcon, MousePointer2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Lasso } from "@/workflows/Lasso";
 
 function WorkflowCanvas() {
   const [outputPanelNodeId, setOutputPanelNodeId] = useState<string | null>(null);
   const outputPanelOpen = !!outputPanelNodeId;
+  const [lassoMode, setLassoMode] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
 
-  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("workflows", 2);
   const { ref: outputRef, onDragEnd: outputOnDragEnd, defaultSizes: outputDefault } = useAllotmentLayout("workflows-output", 2, [true, outputPanelOpen]);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
 
@@ -37,14 +41,9 @@ function WorkflowCanvas() {
     return () => ro.disconnect();
   }, []);
 
-  const [showCustomForm, setShowCustomForm] = useState(false);
-  const [customDefs, setCustomDefs] = useState<NodeTypeDef[]>([]);
-  const [customName, setCustomName] = useState("");
-  const [customDesc, setCustomDesc] = useState("");
-  const allDefs = useMemo(() => [...BUILTIN_NODE_TYPES, ...customDefs], [customDefs]);
-  const categories = CATEGORY_ORDER.filter((c) => allDefs.some((t) => t.category === c));
+  const categories = CATEGORY_ORDER.filter((c) => BUILTIN_NODE_TYPES.some((t) => t.category === c));
 
-  const defaultColor = (type: string) => allDefs.find((t) => t.type === type)?.color ?? "var(--node-custom)";
+  const defaultColor = (type: string) => BUILTIN_NODE_TYPES.find((t) => t.type === type)?.color ?? "var(--node-custom)";
 
   const makeNode = useCallback((typeDef: NodeTypeDef, position = { x: 200, y: 200 }): WorkflowNodeType => ({
     id: generateId(),
@@ -58,12 +57,6 @@ function WorkflowCanvas() {
       status: "idle",
     } satisfies WorkflowNodeData,
   }), []);
-
-  const handleAddCustomDef = () => {
-    if (!customName.trim()) return;
-    setCustomDefs((prev) => [...prev, { type: `custom_${Date.now()}`, label: customName.trim(), desc: customDesc.trim() || "Custom AI node", tooltip: customDesc.trim() || "Custom AI node", category: "Custom", color: "var(--node-custom)", icon: Sparkles }]);
-    setCustomName(""); setCustomDesc(""); setShowCustomForm(false);
-  };
 
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -158,12 +151,12 @@ function WorkflowCanvas() {
     e.preventDefault();
     const nodeType = e.dataTransfer.getData("application/workflow-node");
     if (!nodeType) return;
-    const typeDef = allDefs.find((t) => t.type === nodeType);
+    const typeDef = BUILTIN_NODE_TYPES.find((t) => t.type === nodeType);
     if (!typeDef) return;
     const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
     pushUndo();
     setNodes((prev) => [...prev, makeNode(typeDef, position)]);
-  }, [screenToFlowPosition, pushUndo, setNodes, makeNode, allDefs]);
+  }, [screenToFlowPosition, pushUndo, setNodes, makeNode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -314,72 +307,7 @@ function WorkflowCanvas() {
       )}
 
       <div className="flex-1 overflow-hidden relative">
-        <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
-          {/* Palette */}
-          <Allotment.Pane preferredSize={200} minSize={160}>
-            <div className="h-full border-r border-border bg-card">
-              <div className="p-2 border-b border-border">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-0.5">Node Palette</div>
-                <div className="text-[10px] text-muted-foreground px-1">Drag onto canvas or click to add</div>
-              </div>
-              <ScrollArea className="h-[calc(100%-3rem)] overflow-hidden">
-              <TooltipProvider delayDuration={400}>
-              <div className="p-2 space-y-3">
-                {categories.map((cat) => (
-                  <div key={cat}>
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1">{cat}</div>
-                    <div className="space-y-0.5">
-                      {allDefs.filter((t) => t.category === cat).map((t) => (
-                        <Tooltip key={t.type}>
-                          <TooltipTrigger asChild>
-                            <div
-                              draggable
-                              onDragStart={(e) => e.dataTransfer.setData("application/workflow-node", t.type)}
-                              onClick={() => {
-                                pushUndo();
-                                setNodes((prev) => [...prev, makeNode(t, { x: 100 + prev.length * 30, y: 100 + prev.length * 30 })]);
-                              }}
-                              className="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-grab active:cursor-grabbing transition-colors"
-                            >
-                              <t.icon size={14} className="mt-0.5 shrink-0" style={{ color: t.color }} />
-                              <div className="min-w-0">
-                                <div className="text-xs font-medium leading-tight">{t.label}</div>
-                                <div className="text-[10px] text-muted-foreground leading-tight">{t.desc}</div>
-                              </div>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-[240px]">{t.tooltip}</TooltipContent>
-                        </Tooltip>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <div>
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1">Custom</div>
-                  {!showCustomForm ? (
-                    <button onClick={() => setShowCustomForm(true)} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded border border-dashed border-border hover:border-primary hover:text-primary transition-colors">
-                      <Plus size={10} />Add custom node type
-                    </button>
-                  ) : (
-                    <div className="space-y-1.5 p-2 bg-muted rounded">
-                      <Input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Node name" className="h-6 text-xs" autoFocus />
-                      <Input value={customDesc} onChange={(e) => setCustomDesc(e.target.value)} placeholder="Description" className="h-6 text-xs" />
-                      <div className="flex gap-1">
-                        <Button size="sm" className="h-6 text-xs flex-1" onClick={handleAddCustomDef} disabled={!customName.trim()}>Add</Button>
-                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowCustomForm(false)}><X size={10} /></Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              </TooltipProvider>
-              </ScrollArea>
-            </div>
-          </Allotment.Pane>
-
-          {/* React Flow canvas + output panel */}
-          <Allotment.Pane>
-            <Allotment ref={outputRef} onDragEnd={outputOnDragEnd} defaultSizes={outputDefault} onVisibleChange={(_index, visible) => { if (!visible) setOutputPanelNodeId(null); }}>
+        <Allotment ref={outputRef} onDragEnd={outputOnDragEnd} defaultSizes={outputDefault} onVisibleChange={(_index, visible) => { if (!visible) setOutputPanelNodeId(null); }}>
               <Allotment.Pane>
                 <DropdownMenu open={!!paneContextMenuPos} modal={false} onOpenChange={(open) => { if (!open) setPaneContextMenuPos(null); }}>
                   <DropdownMenuTrigger asChild>
@@ -416,9 +344,33 @@ function WorkflowCanvas() {
                       onEdgesDelete={() => pushUndo()}
                       proOptions={{ hideAttribution: true }}
                       className="bg-muted/10"
+                      panOnDrag={lassoMode || selectionMode ? [1, 2] : true}
+                      selectionOnDrag={selectionMode}
+                      selectionMode={SelectionMode.Full}
                     >
                       <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-30" />
-                      <Controls />
+                      
+                      <Controls>
+                        <ControlButton
+                          onClick={() => {
+                            setLassoMode((v) => !v);
+                            setSelectionMode(false);
+                          }}
+                          title="Lasso selection"
+                        >
+                          <LassoIcon size={14} className={lassoMode ? "text-primary" : undefined} />
+                        </ControlButton>
+                        <ControlButton
+                          onClick={() => {
+                            setSelectionMode((v) => !v);
+                            setLassoMode(false);
+                          }}
+                          title="Selection mode"
+                        >
+                          <MousePointer2 size={14} className={selectionMode ? "text-primary" : undefined} />
+                        </ControlButton>
+                      </Controls>
+                      {lassoMode && <Lasso partial />}
                       <MiniMap<WorkflowNodeType>
                         nodeColor={(n) => n.data.color || "var(--node-custom)"}
                         className="!bg-card !border-border rounded-lg overflow-hidden"
@@ -426,7 +378,7 @@ function WorkflowCanvas() {
                       />
                       {nodes.length === 0 && (
                         <Panel position="top-center">
-                          <div className="text-muted-foreground text-xs mt-8">Drag nodes from the palette or right-click to add</div>
+                          <div className="text-muted-foreground text-xs mt-8">Right-click to add nodes</div>
                         </Panel>
                       )}
                       <NodeToolbar
@@ -455,7 +407,7 @@ function WorkflowCanvas() {
                         <DropdownMenuSubTrigger>{cat}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           <DropdownMenuGroup>
-                            {allDefs.filter((t) => t.category === cat).map((t, i, arr) => [
+                            {BUILTIN_NODE_TYPES.filter((t) => t.category === cat).map((t, i, arr) => [
                               <DropdownMenuItem key={t.type} onSelect={() => addNodeAtPos(t)}>
                                 <div className="min-w-0 flex flex-col gap-0.5">
                                   <span className="font-medium inline-flex items-center gap-1.5">
@@ -488,9 +440,6 @@ function WorkflowCanvas() {
                 )}
               </Allotment.Pane>
             </Allotment>
-          </Allotment.Pane>
-
-        </Allotment>
 
         {/* Workflows panel */}
         {showWorkflowsPanel && (
