@@ -65,7 +65,6 @@ function buildApiMessages(
   }
   return result
 }
-import { flushSync } from "react-dom"
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -260,21 +259,29 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           })
         }
       } else if (msg.event === "ToolCall") {
-        flushSync(() => {
-          useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
-        })
+        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       } else if (msg.event === "ToolResult") {
         const { tool, success, output, path, content } = msg.data
-        useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
+        // Logical flags update synchronously — Done handler depends on toolWritten
         if (tool === "write_file" && content) {
           toolWritten = true
           contentAccumulated = ""
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-          useChatStore.getState().setStreamingContent(entityId, "")
           onOutputRef.current?.(stripFences(content))
-          // patch path onto the tool call record now that we have it
-          useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
         }
+        // Defer visual store updates to next macrotask so the pending spinner
+        // gets at least one paint frame before being replaced by the result state.
+        // The Tauri Channel while-loop batches ToolCall+ToolResult synchronously,
+        // preventing any paint between them — setTimeout(0) breaks out of that.
+        setTimeout(() => {
+          useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
+          if (tool === "write_file" && content) {
+            if (useChatStore.getState().chats[entityId]?.isStreaming) {
+              useChatStore.getState().setStreamingContent(entityId, "")
+            }
+            useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
+          }
+        }, 0)
       } else if (msg.event === "Done") {
         finalize(contentAccumulated, thinkingAccumulated)
         if (!toolWritten) onOutputRef.current?.(contentAccumulated)
@@ -388,20 +395,24 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           })
         }
       } else if (msg.event === "ToolCall") {
-        flushSync(() => {
-          useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
-        })
+        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       } else if (msg.event === "ToolResult") {
         const { tool, success, output, path, content } = msg.data
-        useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
         if (tool === "write_file" && content) {
           toolWrittenRegen = true
           contentAccumulated = ""
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-          useChatStore.getState().setStreamingContent(entityId, "")
           onOutputRef.current?.(stripFences(content))
-          useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
         }
+        setTimeout(() => {
+          useChatStore.getState().updateLastToolResult(entityId, tool, output, success)
+          if (tool === "write_file" && content) {
+            if (useChatStore.getState().chats[entityId]?.isStreaming) {
+              useChatStore.getState().setStreamingContent(entityId, "")
+            }
+            useChatStore.getState().patchLastToolCallPath(entityId, tool, path ?? "")
+          }
+        }, 0)
       } else if (msg.event === "Done") {
         activeRequestId.current = null
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
