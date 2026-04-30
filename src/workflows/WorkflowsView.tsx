@@ -12,7 +12,7 @@ import { Allotment } from "allotment";
 import { Play, Square, Pause, Save, Trash2, Undo2, Redo2, Plus, X, FolderOpen, FilePlus, RotateCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -455,7 +455,7 @@ function WorkflowCanvas() {
                         <DropdownMenuSubTrigger>{cat}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                           <DropdownMenuGroup>
-                            {allDefs.filter((t) => t.category === cat).map((t) => (
+                            {allDefs.filter((t) => t.category === cat).map((t, i, arr) => [
                               <DropdownMenuItem key={t.type} onSelect={() => addNodeAtPos(t)}>
                                 <div className="min-w-0 flex flex-col gap-0.5">
                                   <span className="font-medium inline-flex items-center gap-1.5">
@@ -464,8 +464,9 @@ function WorkflowCanvas() {
                                   <span className="text-muted-foreground">{t.desc}</span>
                                   <span className="text-muted-foreground/70">{t.tooltip}</span>
                                 </div>
-                              </DropdownMenuItem>
-                            ))}
+                              </DropdownMenuItem>,
+                              i < arr.length - 1 && <DropdownMenuSeparator key={`${t.type}-sep`} className="mx-2" />
+                            ])}
                           </DropdownMenuGroup>
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>

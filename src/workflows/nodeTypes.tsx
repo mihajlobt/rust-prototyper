@@ -23,6 +23,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { Separator } from "@/components/ui/separator";
 import { useWorkflowActions } from "@/workflows/WorkflowActionsContext";
 import {
   WORKFLOW_REQUIREMENTS_PROMPT_BASE,
@@ -202,7 +203,8 @@ export function WorkflowNode({ data, selected, id }: NodeProps<WorkflowNodeType>
             <span className="text-[9px] font-semibold shrink-0" style={{ color: "var(--status-paused)" }}>PAUSED</span>
           )}
         </div>
-        <div className="text-[9px] text-muted-foreground truncate mt-0.5">
+        <Separator className="my-1 opacity-40" />
+        <div className="text-[9px] text-muted-foreground truncate">
           {d.status === "error" && d.output ? d.desc : (d.output || d.desc)}
         </div>
         {d.status === "error" && d.output && (
