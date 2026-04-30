@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use ollama_rs::{
     Ollama,
@@ -26,38 +25,71 @@ fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
 }
 
 /// Stream a single agent turn, returning any tool calls the model made.
-/// Checks CancellationToken between stream chunks using tokio::select!
-/// so cancellation takes effect promptly.
+///
+/// Manages history manually instead of delegating to
+/// `send_chat_messages_with_history_stream` because that method only accumulates
+/// text content and pushes `ChatMessage::assistant(content)` — it does NOT
+/// preserve `tool_calls` in the history entry (ollama-rs src/generation/chat/mod.rs:181).
+/// Without tool_calls in the assistant history message, the Ollama API receives
+/// a malformed multi-turn conversation (tool role with no prior tool_call), which
+/// breaks scenarios where the model calls read_file before write_file.
 async fn stream_turn(
     ollama: &Ollama,
-    history: Arc<Mutex<Vec<OllamaChatMessage>>>,
-    request: ChatMessageRequest,
+    history: &mut Vec<OllamaChatMessage>,
+    mut request: ChatMessageRequest,
     channel: &Channel<CompletionEvent>,
     cancel_token: &CancellationToken,
 ) -> Result<Vec<ollama_rs::generation::tools::ToolCall>, AppError> {
-    let mut tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
+    // Push new messages from the request into history, then send the full history.
+    // Mirrors the message-prepend logic in send_chat_messages_with_history_stream
+    // (ollama-rs src/generation/chat/mod.rs:158-164).
+    for m in std::mem::take(&mut request.messages) {
+        history.push(m);
+    }
+    request.messages = history.clone();
 
     let mut stream = ollama
-        .send_chat_messages_with_history_stream(history, request)
+        .send_chat_messages_stream(request)
         .await
         .map_err(|e| AppError::Http(e.to_string()))?;
+
+    let mut tool_calls: Vec<ollama_rs::generation::tools::ToolCall> = vec![];
+    let mut content_accumulated = String::new();
 
     loop {
         tokio::select! {
             result = stream.next() => {
                 match result {
                     Some(Ok(response)) => {
+                        // Tool calls arrive on the done=true chunk (final chunk only)
                         if !response.message.tool_calls.is_empty() {
                             tool_calls = response.message.tool_calls.clone();
                         }
                         let thinking = response.message.thinking.filter(|t| !t.is_empty());
-                        let text = response.message.content;
+                        let text = response.message.content.clone();
+                        if !text.is_empty() {
+                            content_accumulated.push_str(&text);
+                        }
                         if thinking.is_some() || !text.is_empty() {
                             let _ = channel.send(CompletionEvent::Chunk { text, thinking });
                         }
+                        if response.done {
+                            // Push the correct assistant message — content + tool_calls.
+                            // This is the fix for the missing tool_calls bug described above.
+                            let mut assistant_msg = OllamaChatMessage::assistant(content_accumulated.clone());
+                            assistant_msg.tool_calls = tool_calls.clone();
+                            history.push(assistant_msg);
+                            break;
+                        }
                     }
                     Some(Err(_)) => return Err(AppError::Http("Ollama stream error".into())),
-                    None => return Ok(tool_calls),
+                    None => {
+                        // Stream ended without a done=true chunk — push what we have
+                        let mut assistant_msg = OllamaChatMessage::assistant(content_accumulated.clone());
+                        assistant_msg.tool_calls = tool_calls.clone();
+                        history.push(assistant_msg);
+                        break;
+                    }
                 }
             }
             _ = cancel_token.cancelled() => {
@@ -67,6 +99,8 @@ async fn stream_turn(
             }
         }
     }
+
+    Ok(tool_calls)
 }
 
 /// Parameters for the agent loop, grouped to avoid too_many_arguments clippy warning.
@@ -86,7 +120,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
 
-    let history: Arc<Mutex<Vec<OllamaChatMessage>>> = Arc::new(Mutex::new(vec![]));
+    let mut history: Vec<OllamaChatMessage> = vec![];
     let tools = build_tools();
 
     let mut request = ChatMessageRequest::new(model.to_string(), initial_messages)
@@ -98,15 +132,13 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
     let mut iteration: u8 = 0;
 
     loop {
-        // Check cancellation before starting a new iteration
         if cancel_token.is_cancelled() {
             let _ = channel.send(CompletionEvent::Done);
             return Ok(());
         }
 
-        let tool_calls = stream_turn(ollama, history.clone(), request, channel, cancel_token).await?;
+        let tool_calls = stream_turn(ollama, &mut history, request, channel, cancel_token).await?;
 
-        // If cancelled during stream_turn, exit cleanly
         if cancel_token.is_cancelled() {
             let _ = channel.send(CompletionEvent::Done);
             return Ok(());
@@ -127,7 +159,6 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
         let mut wrote_file = false;
 
         for call in &tool_calls {
-            // Check cancellation before each tool execution
             if cancel_token.is_cancelled() {
                 let _ = channel.send(CompletionEvent::Done);
                 return Ok(());
@@ -161,7 +192,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 wrote_file = true;
             }
 
-            history.lock().unwrap().push(OllamaChatMessage::tool(result.output));
+            history.push(OllamaChatMessage::tool(result.output));
         }
 
         if wrote_file {
