@@ -16,7 +16,7 @@
 export const PROJECT_PATHS = {
   PACKAGE_JSON: "package.json",
   COMPONENTS_JSON: "components.json",
-  ESLINT_CONFIG_TS: "eslint.config.ts",
+  ESLINT_CONFIG_JS: "eslint.config.js",
   VITE_PKG: "node_modules/vite/package.json",
   SRC: {
     APP_TSX: "src/App.tsx",
@@ -56,48 +56,30 @@ export const SHADCN_INIT_COMMAND: string =
   "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer --reinstall";
 
 /**
- * ESLint flat config for scaffolded projects.
- * Matches the host project's eslint.config.ts — React 19 + TypeScript + react-hooks.
- * Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
- * - @eslint/js recommended: https://github.com/eslint/eslint/blob/main/docs/src/use/configure/migration-guide.md
- * - typescript-eslint: https://github.com/typescript-eslint/typescript-eslint
- * - eslint-plugin-react flat config: https://github.com/eslint/eslint/blob/main/docs/src/extend/plugins.md
+ * Patches shadcn's eslint.config.js to add globalIgnores for shadcn's own files.
+ * Shadcn components trigger react-refresh/only-export-components and
+ * react-hooks/set-state-in-effect — both false positives in library code.
+ * Refs: https://github.com/shadcn-ui/ui/issues/7736
+ *       https://github.com/shadcn-ui/ui/issues/8739
+ *       https://eslint.org/docs/latest/use/configure/configuration-files#globally-ignore-files-with-ignores
  */
-export function getEslintConfig(): string {
-  return `import js from "@eslint/js";
-import globals from "globals";
-import tseslint from "typescript-eslint";
-import pluginReact from "eslint-plugin-react";
-import pluginReactHooks from "eslint-plugin-react-hooks";
-import { defineConfig } from "eslint/config";
-
-export default defineConfig([
-  { files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"], plugins: { js }, extends: ["js/recommended"], languageOptions: { globals: globals.browser } },
-  tseslint.configs.recommended,
-  pluginReact.configs.flat.recommended,
-  pluginReact.configs.flat["jsx-runtime"],
-  {
-    settings: {
-      react: { version: "19.1.0" },
-    },
-  },
-  {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
-    plugins: {
-      "react-hooks": pluginReactHooks,
-    },
-    rules: {
-      "react-hooks/rules-of-hooks": "error",
-      "react-hooks/exhaustive-deps": "warn",
-    },
-  },
-]);
-`;
+export function patchEslintConfig(config: string): string {
+  return config.replace(
+    /globalIgnores\(\[(.*?)\]\)/s,
+    (_match, inner) => {
+      const existing = inner
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      const additions = [
+        "'src/components/ui/**'",
+        "'src/hooks/use-mobile.ts'",
+      ];
+      const merged = [...new Set([...existing, ...additions])];
+      return `globalIgnores([${merged.join(", ")}])`;
+    }
+  );
 }
-
-/** CLI command to install ESLint dev dependencies in scaffolded projects. */
-export const ESLINT_INSTALL_COMMAND: string =
-  "bun add -D eslint @eslint/js typescript-eslint eslint-plugin-react eslint-plugin-react-hooks globals";
 
 /**
  * Returns the App.tsx for the component-preview/ or screen-preview/ project.

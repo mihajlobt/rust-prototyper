@@ -376,7 +376,7 @@ export function useWorkflowExecution({
               parts.push(`## TypeScript\n${tscResult.trim() || "✅ No errors"}`);
             }
             if (target === "eslint" || target === "both") {
-              const eslintResult = await runShellCommandCapture(generatedPath, "bunx eslint . --ext .ts,.tsx --max-warnings=0").catch((e: unknown) => `eslint error: ${String(e)}`);
+              const eslintResult = await runShellCommandCapture(generatedPath, "bunx eslint . --max-warnings=0").catch((e: unknown) => `eslint error: ${String(e)}`);
               parts.push(`## ESLint\n${eslintResult.trim() || "✅ No warnings"}`);
             }
             output = parts.join("\n\n");

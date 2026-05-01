@@ -1,16 +1,15 @@
-import { readFile, writeFile, createDir, bunInstallSync, runShellCommandSync, deleteDir } from "@/lib/ipc";
+import { readFile, writeFile, createDir, bunInstallSync, runShellCommandSync, deleteDir, deleteFile } from "@/lib/ipc";
 import { ICON_LIBRARY_PACKAGES } from "@/lib/prompts";
 import type { IconLibrary } from "@/lib/prompts";
 import {
   SHADCN_INIT_COMMAND,
   SHADCN_ADD_COMMAND,
-  ESLINT_INSTALL_COMMAND,
   PROJECT_PATHS,
   getAppTsx,
   getScreenPreviewAppTsx,
   getGeneratedPlaceholderTsx,
   getPreviewThemeCss,
-  getEslintConfig,
+  patchEslintConfig,
   getComponentPreviewDirPath,
   getScreenPreviewDirPath,
   getGeneratedDirPath,
@@ -37,7 +36,7 @@ async function isScaffoldValid(dir: string): Promise<boolean> {
   try {
     await readFile(`${dir}/${P.PACKAGE_JSON}`);
     await readFile(`${dir}/${P.COMPONENTS_JSON}`);
-    await readFile(`${dir}/${P.ESLINT_CONFIG_TS}`);
+    await readFile(`${dir}/${P.ESLINT_CONFIG_JS}`);
     await readFile(`${dir}/${SRC.INDEX_CSS}`);
     await readFile(`${dir}/${SRC.UTILS_TS}`);
     await readFile(`${dir}/${SRC.APP_TSX}`);
@@ -64,6 +63,14 @@ async function removeProjectDir(dir: string): Promise<void> {
   } catch {
     // May not exist, that's fine
   }
+}
+
+/** Delete stale eslint.config.ts from old scaffolds, then patch shadcn's eslint.config.js. */
+async function patchEslint(projectDir: string): Promise<void> {
+  try { await deleteFile(`${projectDir}/eslint.config.ts`) } catch { /* not present */ }
+  const configPath = `${projectDir}/${P.ESLINT_CONFIG_JS}`;
+  const raw = await readFile(configPath);
+  await writeFile(configPath, patchEslintConfig(raw));
 }
 
 /**
@@ -116,12 +123,10 @@ export async function scaffoldGenerated(
     await bunInstallSync(generatedDir);
   }
 
-  // Step 5: Write eslint.config.ts and install ESLint dev dependencies.
-  // Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
-  // bun create @eslint/config is interactive and cannot be automated.
-  onStep?.("Setting up ESLint…");
-  await writeFile(`${generatedDir}/${P.ESLINT_CONFIG_TS}`, getEslintConfig());
-  await runShellCommandSync(generatedDir, ESLINT_INSTALL_COMMAND);
+  // Step 5: Patch eslint.config.js to ignore shadcn's own false-positive errors
+  // and clean up stale eslint.config.ts from old scaffold versions.
+  onStep?.("Patching ESLint config…");
+  await patchEslint(generatedDir);
 }
 
 /**
@@ -199,11 +204,10 @@ export async function scaffoldComponentPreview(
     await bunInstallSync(componentPreviewDir);
   }
 
-  // Step 9: Write eslint.config.ts and install ESLint dev dependencies.
-  // Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
-  onStep?.("Setting up ESLint…");
-  await writeFile(`${componentPreviewDir}/${P.ESLINT_CONFIG_TS}`, getEslintConfig());
-  await runShellCommandSync(componentPreviewDir, ESLINT_INSTALL_COMMAND);
+  // Step 9: Patch eslint.config.js to ignore shadcn's own false-positive errors
+  // and clean up stale eslint.config.ts from old scaffold versions.
+  onStep?.("Patching ESLint config…");
+  await patchEslint(componentPreviewDir);
 }
 
 /**
@@ -285,11 +289,10 @@ export async function scaffoldScreenPreview(
     await bunInstallSync(screenPreviewDir);
   }
 
-  // Step 8: Write eslint.config.ts and install ESLint dev dependencies.
-  // Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
-  onStep?.("Setting up ESLint…");
-  await writeFile(`${screenPreviewDir}/${P.ESLINT_CONFIG_TS}`, getEslintConfig());
-  await runShellCommandSync(screenPreviewDir, ESLINT_INSTALL_COMMAND);
+  // Step 8: Patch eslint.config.js to ignore shadcn's own false-positive errors
+  // and clean up stale eslint.config.ts from old scaffold versions.
+  onStep?.("Patching ESLint config…");
+  await patchEslint(screenPreviewDir);
 }
 
 /**
