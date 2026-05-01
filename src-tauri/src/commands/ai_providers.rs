@@ -60,7 +60,7 @@ pub async fn chat_completion_openai(
                         }
                         Some(Err(e)) => return Err(AppError::Http(e.to_string())),
                         None => {
-                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done); }
+                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
                             return Ok(full);
                         }
                     }
@@ -69,7 +69,7 @@ pub async fn chat_completion_openai(
                     // Cancellation requested — drop the byte stream to close
                     // the HTTP connection, stopping server-side generation.
                     drop(byte_stream);
-                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done); }
+                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
                     return Ok(full);
                 }
             }
@@ -136,14 +136,14 @@ pub async fn chat_completion_claude(
                         }
                         Some(Err(e)) => return Err(AppError::Http(e.to_string())),
                         None => {
-                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done); }
+                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
                             return Ok(full);
                         }
                     }
                 }
                 _ = cancel_token.cancelled() => {
                     drop(byte_stream);
-                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done); }
+                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
                     return Ok(full);
                 }
             }

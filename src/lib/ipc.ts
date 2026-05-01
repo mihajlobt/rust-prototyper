@@ -131,9 +131,9 @@ export interface Message {
   thinking?: string;
   images?: string[];
   /** Tool calls made by the assistant (Ollama provider only) */
-  toolCalls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
+  tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } }>;
   /** Tool name for tool-role messages (Ollama provider only) */
-  toolName?: string;
+  tool_name?: string;
 }
 
 export interface OllamaModel {
@@ -183,7 +183,7 @@ export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
   | { event: "ToolResult"; data: { tool: string; success: boolean; output: string; path?: string; content?: string } }
-  | { event: "Done"; data: null }
+  | { event: "Done"; data: { done_reason?: string } | null }
   | { event: "Error"; data: { message: string } };
 
 /** Non-streaming completion — returns full response at once */

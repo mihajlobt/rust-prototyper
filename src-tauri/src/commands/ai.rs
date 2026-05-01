@@ -1,7 +1,10 @@
 use futures_util::StreamExt;
+use json_lines::codec::JsonLinesCodec;
+use bytes::BytesMut;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tauri::{AppHandle, Manager};
 use tauri::ipc::Channel;
+use tokio_util::codec::Decoder;
 use ollama_rs::{
     generation::{
         chat::{ChatMessage as OllamaChatMessage, request::ChatMessageRequest},
@@ -38,7 +41,7 @@ pub enum CompletionEvent {
     Chunk { text: String, thinking: Option<String> },
     ToolCall { tool: String, args: serde_json::Value },
     ToolResult { tool: String, success: bool, output: String, path: Option<String>, content: Option<String> },
-    Done,
+    Done { done_reason: Option<String> },
     Error { message: String },
 }
 
@@ -70,8 +73,7 @@ pub struct CompletionRequest {
 ///   - `"high"` → ThinkType::High    (GPT-OSS)
 fn think_type_from_value(v: &serde_json::Value) -> Option<ThinkType> {
     match v {
-        serde_json::Value::Bool(true) => Some(ThinkType::True),
-        serde_json::Value::Bool(false) => Some(ThinkType::False),
+        serde_json::Value::Bool(b) => Some(ThinkType::from(*b)),
         serde_json::Value::String(s) => match s.as_str() {
             "low" => Some(ThinkType::Low),
             "medium" => Some(ThinkType::Medium),
@@ -165,7 +167,7 @@ async fn generate_ollama_completion_stream(
             api_key: &request.api_key,
             model: &request.model,
             initial_messages_json: json_messages,
-            think: request.think.as_ref().and_then(|v| think_type_from_value(v)),
+            think: request.think.as_ref().and_then(think_type_from_value),
             app_data_dir,
             output_path: path,
             channel,
@@ -213,50 +215,55 @@ async fn generate_ollama_completion_stream(
 
         let res = req_builder.send().await.map_err(|e| AppError::Http(e.to_string()))?;
         if !res.status().is_success() {
-            let err_body = res.text().await.unwrap_or_default();
-            return Err(AppError::Http(err_body));
+            let code = res.status().as_u16();
+            let err_body = res.text().await
+                .unwrap_or_else(|_| format!("<failed to read body, HTTP {code}>"));
+            return Err(AppError::Http(format!("HTTP {code}: {}", &err_body[..err_body.len().min(400)])));
         }
 
         let mut byte_stream = res.bytes_stream();
-        let mut buffer = String::new();
+        let mut codec = JsonLinesCodec::<OllamaStreamChunk, OllamaStreamChunk>::default();
+        let mut buffer = BytesMut::new();
 
         loop {
             tokio::select! {
                 chunk_result = byte_stream.next() => {
                     match chunk_result {
                         Some(Ok(chunk)) => {
-                            if let Ok(chunk_str) = String::from_utf8(chunk.to_vec()) {
-                                buffer.push_str(&chunk_str);
-                                let mut start = 0;
-                                while let Some(pos) = buffer[start..].find('\n') {
-                                    let line = buffer[start..start + pos].trim().to_string();
-                                    start = start + pos + 1;
-                                    if line.is_empty() { continue; }
-                                    if let Ok(response) = serde_json::from_str::<OllamaStreamChunk>(&line) {
+                            buffer.extend_from_slice(&chunk);
+                            loop {
+                                match codec.decode(&mut buffer) {
+                                    Ok(Some(response)) => {
                                         let thinking = response.message.thinking.filter(|t| !t.is_empty());
-                                        let text = response.message.content;
+                                        let text = response.message.content.clone();
                                         if thinking.is_some() || !text.is_empty() {
                                             let _ = channel.send(CompletionEvent::Chunk { text, thinking });
                                         }
                                         if response.done {
-                                            let _ = channel.send(CompletionEvent::Done);
+                                            let _ = channel.send(CompletionEvent::Done { done_reason: response.done_reason });
                                             return Ok(());
                                         }
                                     }
+                                    Ok(None) => break,
+                                    Err(e) => return Err(AppError::Http(format!(
+                                        "stream parse error: {} (buffer has {} bytes)",
+                                        e, buffer.len()
+                                    ))),
                                 }
-                                buffer = buffer[start..].to_string();
                             }
                         }
                         Some(Err(e)) => return Err(AppError::Http(e.to_string())),
                         None => {
-                            let _ = channel.send(CompletionEvent::Done);
+                            let _ = channel.send(CompletionEvent::Done { done_reason: None });
                             return Ok(());
                         }
                     }
                 }
                 _ = cancel_token.cancelled() => {
+                    // Push partial content before dropping the stream so
+                    // the next turn has context if user cancels mid-generation.
                     drop(byte_stream);
-                    let _ = channel.send(CompletionEvent::Done);
+                    let _ = channel.send(CompletionEvent::Done { done_reason: None });
                     return Ok(());
                 }
             }
@@ -270,11 +277,15 @@ async fn generate_ollama_completion_stream(
 struct OllamaStreamChunk {
     message: OllamaStreamMessage,
     done: bool,
+    #[serde(default)]
+    done_reason: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
 struct OllamaStreamMessage {
+    #[serde(default)]
     content: String,
+    #[serde(default)]
     thinking: Option<String>,
 }
 

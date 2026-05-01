@@ -1,18 +1,20 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
+use bytes::BytesMut;
 use futures_util::StreamExt;
+use futures::future::join_all;
+use json_lines::codec::JsonLinesCodec;
 use ollama_rs::generation::parameters::ThinkType;
 use tauri::ipc::Channel;
+use tokio_util::codec::Decoder;
 use tokio_util::sync::CancellationToken;
 use crate::{AppError, CompletionEvent};
-use super::{executor::execute_tool, tools::build_tools};
+use super::{executor::{execute_tool, ToolExecutionResult}, tools::build_tools};
 
 const MAX_ITERATIONS: u8 = 20;
 const MAX_WRITES: u8 = 3;
-/// Maximum characters of tool output sent to the model's history. Large
-/// file reads can consume excessive context tokens, so we truncate the
-/// history representation while sending the full output to the frontend.
-/// Matches the test binary's 500-char truncation.
-const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 500;
+const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 5000;
 
 fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     let parts: Vec<&str> = output_path.splitn(3, '/').collect();
@@ -23,10 +25,6 @@ fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     }
 }
 
-/// Build a serde_json::Value message for the Ollama /api/chat endpoint.
-/// Uses raw JSON to include `tool_name` on tool-role messages, which
-/// ollama-rs ChatMessage does not support.
-/// Per Ollama API docs: https://github.com/ollama/ollama/blob/main/docs/api.md
 fn assistant_msg_with_thinking(content: &str, thinking: Option<&str>, tool_calls: &[serde_json::Value]) -> serde_json::Value {
     let mut msg = serde_json::json!({"role": "assistant", "content": content});
     if let Some(t) = thinking {
@@ -46,8 +44,6 @@ fn tool_result_msg(tool_name: &str, content: &str) -> serde_json::Value {
     })
 }
 
-/// Deserialize a serde_json::Value tool_call from Ollama's streaming response
-/// into the ToolCall struct used by executor.
 fn parse_tool_call(value: &serde_json::Value) -> Option<(String, serde_json::Value)> {
     let func = value.get("function")?;
     let name = func.get("name")?.as_str()?.to_string();
@@ -55,8 +51,6 @@ fn parse_tool_call(value: &serde_json::Value) -> Option<(String, serde_json::Val
     Some((name, arguments))
 }
 
-/// Streaming response chunk from the Ollama /api/chat endpoint.
-/// Includes tool_calls for agent loop support.
 #[derive(serde::Deserialize)]
 struct StreamChunk {
     message: StreamMessage,
@@ -72,13 +66,6 @@ struct StreamMessage {
     tool_calls: Vec<serde_json::Value>,
 }
 
-/// Stream a single agent turn using raw HTTP to the Ollama /api/chat endpoint.
-/// Returns any tool calls the model made.
-///
-/// Manages history as Vec<serde_json::Value> instead of ollama-rs ChatMessage
-/// because ChatMessage lacks a `tool_name` field for tool-role messages.
-/// Per Ollama API docs, tool messages should include tool_name:
-/// https://github.com/ollama/ollama/blob/main/docs/api.md
 async fn stream_turn(
     http_client: &reqwest::Client,
     host: &str,
@@ -98,7 +85,8 @@ async fn stream_turn(
     });
 
     if let Some(tt) = think {
-        body["think"] = serde_json::to_value(tt).unwrap_or(serde_json::Value::Bool(true));
+        body["think"] = serde_json::to_value(tt)
+            .expect("ThinkType always serializes; never fails");
     }
 
     let url = format!("{}/api/chat", host);
@@ -109,34 +97,33 @@ async fn stream_turn(
 
     let res = req_builder.send().await.map_err(|e| AppError::Http(e.to_string()))?;
     if !res.status().is_success() {
-        let err_body = res.text().await.unwrap_or_default();
-        return Err(AppError::Http(err_body));
+        let code = res.status().as_u16();
+        let err_body = res.text().await
+            .unwrap_or_else(|_| format!("<failed to read body, HTTP {code}>"));
+        return Err(AppError::Http(format!("HTTP {code}: {}", &err_body[..err_body.len().min(400)])));
     }
 
     let mut byte_stream = res.bytes_stream();
+    let mut codec = JsonLinesCodec::<StreamChunk, StreamChunk>::default();
     let mut tool_calls: Vec<(String, serde_json::Value)> = vec![];
     let mut content_accumulated = String::new();
     let mut thinking_accumulated: Option<String> = None;
     let mut tool_calls_json: Vec<serde_json::Value> = vec![];
-    let mut buffer = String::new();
+    let mut buffer = BytesMut::new();
 
     loop {
         tokio::select! {
             chunk_result = byte_stream.next() => {
                 match chunk_result {
                     Some(Ok(chunk)) => {
-                        if let Ok(chunk_str) = String::from_utf8(chunk.to_vec()) {
-                            buffer.push_str(&chunk_str);
-                            let mut start = 0;
-                            while let Some(pos) = buffer[start..].find('\n') {
-                                let line = buffer[start..start + pos].trim().to_string();
-                                start = start + pos + 1;
-                                if line.is_empty() { continue; }
-                                if let Ok(response) = serde_json::from_str::<StreamChunk>(&line) {
+                        buffer.extend_from_slice(&chunk);
+                        loop {
+                            match codec.decode(&mut buffer) {
+                                Ok(Some(response)) => {
                                     if !response.message.tool_calls.is_empty() {
                                         tool_calls_json = response.message.tool_calls.clone();
                                         tool_calls = response.message.tool_calls.iter()
-                                            .filter_map(|v| parse_tool_call(v))
+                                            .filter_map(parse_tool_call)
                                             .collect();
                                     }
                                     let thinking = response.message.thinking.filter(|t| !t.is_empty());
@@ -160,11 +147,15 @@ async fn stream_turn(
                                             &tool_calls_json,
                                         );
                                         history.push(assistant);
-                                        break;
+                                        return Ok(tool_calls);
                                     }
                                 }
+                                Ok(None) => break,
+                                Err(e) => return Err(AppError::Http(format!(
+                                    "stream parse error: {} (buffer has {} bytes)",
+                                    e, buffer.len()
+                                ))),
                             }
-                            buffer = buffer[start..].to_string();
                         }
                     }
                     Some(Err(e)) => return Err(AppError::Http(e.to_string())),
@@ -175,21 +166,27 @@ async fn stream_turn(
                             &tool_calls_json,
                         );
                         history.push(assistant);
-                        break;
+                        return Ok(tool_calls);
                     }
                 }
             }
             _ = cancel_token.cancelled() => {
+                // Push the partial assistant message to history before
+                // returning so the next turn has context of what was
+                // generated so far (e.g. after user presses Stop).
+                let assistant = assistant_msg_with_thinking(
+                    &content_accumulated,
+                    thinking_accumulated.as_deref(),
+                    &tool_calls_json,
+                );
+                history.push(assistant);
                 drop(byte_stream);
                 return Ok(tool_calls);
             }
         }
     }
-
-    Ok(tool_calls)
 }
 
-/// Parameters for the agent loop, grouped to avoid too_many_arguments clippy warning.
 pub struct AgentLoopParams<'a> {
     pub http_client: &'a reqwest::Client,
     pub host: &'a str,
@@ -213,11 +210,15 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
     let tools_json = serde_json::to_value(&tools).expect("tools serialization should never fail");
 
     let mut iteration: u8 = 0;
-    let mut write_count: u8 = 0;
+    // Atomic write counter wrapped in Arc so each concurrent future in the
+    // iteration loop can capture its own clone.  SeqCst ordering guarantees
+    // visibility across all Tokio worker threads (rt-multi-thread is enabled
+    // via Cargo.toml "full" feature).
+    let write_count = Arc::new(AtomicU8::new(0));
 
     loop {
         if cancel_token.is_cancelled() {
-            let _ = channel.send(CompletionEvent::Done);
+            let _ = channel.send(CompletionEvent::Done { done_reason: None });
             return Ok(());
         }
 
@@ -228,11 +229,10 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
         ).await?;
 
         if cancel_token.is_cancelled() {
-            let _ = channel.send(CompletionEvent::Done);
+            let _ = channel.send(CompletionEvent::Done { done_reason: None });
             return Ok(());
         }
 
-        // No tool calls → model produced a text response → done
         if tool_calls.is_empty() {
             break;
         }
@@ -244,41 +244,59 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
             return Err(AppError::Process(format!("Max tool iterations ({MAX_ITERATIONS}) reached")));
         }
 
-        for (name, args) in &tool_calls {
-            if cancel_token.is_cancelled() {
-                let _ = channel.send(CompletionEvent::Done);
-                return Ok(());
-            }
+        let names: Vec<String> = tool_calls.iter().map(|(n, _)| n.clone()).collect();
+        let args: Vec<serde_json::Value> = tool_calls.iter().map(|(_, a)| a.clone()).collect();
 
-            // If the write limit was reached, skip write_file calls but allow
-            // read_file and bash (for verification). Report the error to the model.
-            if name == "write_file" && write_count >= MAX_WRITES {
-                let _ = channel.send(CompletionEvent::ToolResult {
-                    tool: name.clone(),
-                    success: false,
-                    output: format!("write_file: limit of {MAX_WRITES} writes reached. Use read_file or bash to continue verifying."),
-                    path: None,
-                    content: None,
-                });
-                history.push(tool_result_msg(name, &format!("write_file: limit of {MAX_WRITES} writes reached")));
-                continue;
-            }
-
+        for (idx, name) in names.iter().enumerate() {
             let _ = channel.send(CompletionEvent::ToolCall {
                 tool: name.clone(),
-                args: args.clone(),
+                args: args[idx].clone(),
             });
+        }
 
-            let result = execute_tool(name, args, app_data_dir, output_path, &proj_dir).await;
+        let futures: Vec<_> = (0..tool_calls.len())
+            .map(|idx| {
+                let name = names[idx].clone();
+                let arg = args[idx].clone();
+                let proj = proj_dir.clone();
+                let wc = Arc::clone(&write_count);
+                async move {
+                    // Atomically check the write limit before execution.
+                    // This prevents the bypass where multiple write_file calls
+                    // in one iteration all capture the same stale write_count.
+                    let skip = if name == "write_file" {
+                        wc.load(Ordering::SeqCst) >= MAX_WRITES
+                    } else {
+                        false
+                    };
+                    if skip {
+                        let output = format!("write_file: limit of {MAX_WRITES} writes reached. Use read_file or bash to continue verifying.");
+                        (idx, ToolExecutionResult {
+                            success: false,
+                            output,
+                            written_path: None,
+                            written_content: None,
+                        })
+                    } else {
+                        let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj).await;
+                        if name == "write_file" && result.success {
+                            wc.fetch_add(1, Ordering::SeqCst);
+                        }
+                        (idx, result)
+                    }
+                }
+            })
+            .collect();
 
-            // Tool failures are pushed into history so the model can see what went
-            // wrong and self-correct on the next turn. Retrying the same arguments
-            // provides no benefit — if the args are invalid, retries produce the same
-            // error. The model decides whether to adjust its approach.
-            // See Cursor's agent harness approach:
-            // https://www.cursor.com/blog/continually-improving-agent-hawk
+        let mut results: Vec<(usize, ToolExecutionResult)> = join_all(futures).await;
+        results.sort_by_key(|&(i, _)| i);
 
-            let path_opt = result.written_path.as_ref().map(|p| {
+        for result in results {
+            let idx = result.0;
+            let name = &names[idx];
+            let res = result.1;
+
+            let path_opt = res.written_path.as_ref().map(|p| {
                 p.strip_prefix(app_data_dir)
                     .map(|rel| rel.to_string_lossy().to_string())
                     .unwrap_or_else(|_| output_path.to_string())
@@ -286,35 +304,29 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
 
             let _ = channel.send(CompletionEvent::ToolResult {
                 tool: name.clone(),
-                success: result.success,
-                output: result.output.clone(),
+                success: res.success,
+                output: res.output.clone(),
                 path: path_opt,
-                content: result.written_content.clone(),
+                content: res.written_content.clone(),
             });
 
-            if name == "write_file" && result.success {
-                write_count += 1;
+            if name == "write_file" && res.success {
+                // Already incremented atomically inside the future;
+                // no need to increment again here.
             }
 
-            // Push tool result with tool_name into history for next turn.
-            // Per Ollama API docs: tool messages should include tool_name
-            // so the model can match results to their respective tool calls.
-            // Truncate to MAX_TOOL_OUTPUT_FOR_HISTORY chars to avoid consuming
-            // excessive context tokens on large file reads.
-            let history_output = if result.output.len() > MAX_TOOL_OUTPUT_FOR_HISTORY {
-                let truncated: String = result.output.chars().take(MAX_TOOL_OUTPUT_FOR_HISTORY).collect();
-                format!("{}\n... (output truncated, {} characters total)", truncated, result.output.len())
+            let history_output = if res.output.len() > MAX_TOOL_OUTPUT_FOR_HISTORY {
+                let truncated: String = res.output.chars().take(MAX_TOOL_OUTPUT_FOR_HISTORY).collect();
+                format!("{}\n... (output truncated, {} characters total)", truncated, res.output.len())
             } else {
-                result.output.clone()
+                res.output.clone()
             };
             history.push(tool_result_msg(name, &history_output));
         }
 
-        // Increment iteration counter and continue — don't break after
-        // write_file. Let the model self-verify via read_file or bash.
         iteration += 1;
     }
 
-    let _ = channel.send(CompletionEvent::Done);
+    let _ = channel.send(CompletionEvent::Done { done_reason: None });
     Ok(())
 }

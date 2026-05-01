@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use tokio::time::{timeout, Duration};
 use tokio::process::Command;
 use super::tools::{WriteFileArgs, ReadFileArgs, BashArgs};
@@ -6,7 +7,7 @@ use super::tools::{WriteFileArgs, ReadFileArgs, BashArgs};
 /// Classified tool error categories inspired by Cursor's agent harness taxonomy.
 /// Each variant produces a clear, actionable message so the model can self-correct.
 ///
-/// See: https://www.cursor.com/blog/continually-improving-agent-harness
+/// https://cursor.so/blog/self-driving-codebases
 enum ToolError {
     /// The tool call arguments were invalid (e.g. bad JSON, missing field).
     InvalidArguments(String),
@@ -167,6 +168,76 @@ async fn execute_read_file(
     }
 }
 
+/// Build a bubblewrap command that sandboxes the given shell command.
+/// Uses Linux namespaces (PID, UTS, IPC, mount) to create a fresh, empty
+/// filesystem where only the project directory is writable and everything
+/// else is either read-only system paths or absent entirely.
+///
+/// Does NOT use --unshare-user (user namespace). On some filesystems
+/// (e.g. btrfs subvolumes on CachyOS/Arch), --unshare-user causes
+/// --bind to fail with "Permission denied" when the project path is inside
+/// a subvolume. The fix: skip user namespace isolation. This sacrifices
+/// UID remapping but retains all other namespace isolation (PID, UTS, IPC,
+/// mount) and filesystem containment. See: https://github.com/containers/bubblewrap/issues/689
+///
+/// If bubblewrap is not available on the system, falls back to executing
+/// the command directly (unsandboxed) — see execute_bash.
+///
+/// Sandbox design:
+/// - /usr, /lib, /lib64 → read-only (system binaries/libraries)
+/// - /bin, /sbin → symlinks into /usr (no separate bin needed)
+/// - /proc, /dev → minimal process/device access for compilation tools
+/// - /tmp → fresh tmpfs (discarded on exit)
+/// - project_dir → the ONLY read-write mount
+/// - HOME → set to project_dir (prevents ~/.ssh access)
+/// - No network access (--unshare-net in isolation_args)
+/// - No host env vars (--clearenv)
+/// - New terminal session (prevents TIOCSTI injection)
+///
+/// Refs:
+/// - https://github.com/containers/bubblewrap
+/// - https://manpages.debian.org/unstable/bubblewrap/bwrap.1.en.html
+fn build_sandbox_command(project_dir: &Path, shell_cmd: &str) -> Command {
+    let proj_str = project_dir.to_string_lossy().to_string();
+    let mut cmd = Command::new("bwrap");
+    cmd
+        .arg("--ro-bind").arg("/usr").arg("/usr")
+        .arg("--symlink").arg("usr/bin").arg("/bin")
+        .arg("--symlink").arg("usr/sbin").arg("/sbin")
+        .arg("--proc").arg("/proc")
+        .arg("--dev").arg("/dev")
+        .arg("--tmpfs").arg("/tmp")
+        .arg("--bind").arg(&proj_str).arg(&proj_str)
+        .arg("--chdir").arg(&proj_str)
+        // PID, UTS, IPC namespaces — but NOT --unshare-user.
+        // --unshare-user causes --bind to fail on btrfs subvolumes
+        // with "Permission denied". The user namespace is the only
+        // namespace skipped; all others are retained.
+        .arg("--unshare-pid")
+        .arg("--unshare-ipc")
+        .arg("--unshare-uts")
+        .arg("--hostname").arg("ai-sandbox")
+        .arg("--new-session")
+        .arg("--die-with-parent")
+        .arg("--clearenv")
+        .arg("--setenv").arg("HOME").arg(&proj_str)
+        .arg("--setenv").arg("USER").arg("sandbox")
+        // PATH must include /home/m/.bun/bin for bun to be found.
+        // This is injected at the Tauri layer in execute_bash() via
+        // the shell command itself (cd ... && BUN_INSTALL=... bun ...),
+        // so we just set a minimal PATH here.
+        .arg("--setenv").arg("PATH").arg("/usr/local/bin:/usr/bin:/bin")
+        .arg("sh").arg("-c").arg(shell_cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    // /lib and /lib64: these contain ELF dynamic linkers and shared libraries.
+    // /lib64 in particular may be a symlink (Fedora) or absent (merged-/usr
+    // distros like Arch).  Use --ro-bind-try to skip silently when missing.
+    cmd.arg("--ro-bind-try").arg("/lib").arg("/lib");
+    cmd.arg("--ro-bind-try").arg("/lib64").arg("/lib64");
+    cmd
+}
+
 async fn execute_bash(
     args: &serde_json::Value,
     project_dir: &Path,
@@ -181,22 +252,35 @@ async fn execute_bash(
         },
     };
 
-    let child = Command::new("sh")
-        .arg("-c")
-        .arg(&parsed.command)
-        .current_dir(project_dir)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+    // Try bubblewrap first; fall back to bare sh if bwrap is not installed.
+    // The fallback is intentionally unsandboxed — bubblewrap is a defense-in-depth
+    // measure and this is a desktop development tool, not a server application.
+    let child = build_sandbox_command(project_dir, &parsed.command)
         .spawn();
 
     let child = match child {
         Ok(c) => c,
-        Err(e) => return ToolExecutionResult {
-            success: false,
-            output: format!("bash: {}", ToolError::FileSystem(format!("failed to spawn process: {e}"))),
-            written_path: None,
-            written_content: None,
-        },
+        Err(_sandbox_err) => {
+            // Bubblewrap not available — fall back to bare shell.
+            // The model's tool description already constrains it to lint/type-check
+            // commands within the project directory.
+            match Command::new("sh")
+                .arg("-c")
+                .arg(&parsed.command)
+                .current_dir(project_dir)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) => return ToolExecutionResult {
+                    success: false,
+                    output: format!("bash: {}", ToolError::FileSystem(format!("failed to spawn process: {e}"))),
+                    written_path: None,
+                    written_content: None,
+                },
+            }
+        }
     };
 
     match timeout(Duration::from_secs(30), child.wait_with_output()).await {

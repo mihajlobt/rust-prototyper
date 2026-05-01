@@ -46,14 +46,13 @@ export const SHADCN_ADD_COMMAND: string =
  * --no-monorepo    suppress the monorepo detection prompt
  * --no-rtl         suppress the RTL direction prompt
  * --pointer        enable pointer cursor for buttons
- * --reinstall      re-install existing UI components
  * (-y/--yes defaults to true per CLI docs, not needed)
  *
  * Tested non-interactively in /tmp — all prompts suppressed, exit 0.
  * Ref: https://ui.shadcn.com/docs/cli — init options
  */
 export const SHADCN_INIT_COMMAND: string =
-  "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer --reinstall";
+  "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer";
 
 /**
  * Patches shadcn's eslint.config.js to add globalIgnores for shadcn's own files.

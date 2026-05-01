@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prototyper Agent Loop — Full Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0a09;
+    --bg-elevated: #1c1917;
+    --bg-card: #292524;
+    --fg: #fafaf9;
+    --fg-muted: #a8a29e;
+    --fg-dim: #78716c;
+    --accent: #f59e0b;
+    --accent2: #22d3ee;
+    --accent3: #a78bfa;
+    --accent4: #34d399;
+    --accent5: #fb7185;
+    --accent6: #60a5fa;
+    --border: #44403c;
+    --border-accent: #f59e0b44;
+    --flow-line: #57534e;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Instrument Sans', system-ui, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .page-header {
+    padding: 3rem 2rem 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #1c191700 0%, var(--bg) 100%);
+    position: relative;
+  }
+  .page-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 50% at 50% 0%, #f59e0b08 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .page-header h1 {
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+  }
+  .page-header .sub {
+    font-size: 0.95rem;
+    color: var(--fg-dim);
+    margin-top: 0.5rem;
+    font-weight: 400;
+  }
+  .page-header .sub span {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.9em;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .flow-container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Flow connector between nodes */
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 2rem;
+    position: relative;
+  }
+  .connector .line {
+    width: 2px;
+    height: 100%;
+    background: var(--flow-line);
+  }
+  .connector .label {
+    position: absolute;
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--fg-dim);
+    background: var(--bg);
+    padding: 0 0.5rem;
+    transform: translateY(-50%);
+    top: 50%;
+  }
+
+  /* Base node styles */
+  .node {
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .node:hover {
+    border-color: var(--fg-dim);
+  }
+  .node-inner {
+    padding: 1rem 1.25rem;
+  }
+  .node-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .node-title .icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+  }
+  .node-body {
+    margin-top: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--fg-muted);
+    line-height: 1.55;
+  }
+  .node-body code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    background: #0003;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    color: var(--fg);
+  }
+
+  /* Node color variants */
+  .node--entry { border-color: var(--accent); background: linear-gradient(135deg, #f59e0b0d 0%, var(--bg-elevated) 100%); }
+  .node--entry .icon { background: var(--accent); color: var(--bg); }
+
+  .node--ts { border-color: var(--accent2); background: linear-gradient(135deg, #22d3ee0d 0%, var(--bg-elevated) 100%); }
+  .node--ts .icon { background: var(--accent2); color: var(--bg); }
+
+  .node--rust { border-color: var(--accent3); background: linear-gradient(135deg, #a78bfa0d 0%, var(--bg-elevated) 100%); }
+  .node--rust .icon { background: var(--accent3); color: var(--bg); }
+
+  .node--decision { border-color: var(--accent5); background: linear-gradient(135deg, #fb71850d 0%, var(--bg-elevated) 100%); border-style: dashed; }
+  .node--decision .icon { background: var(--accent5); color: var(--bg); }
+
+  .node--tool { border-color: var(--accent4); background: linear-gradient(135deg, #34d3990d 0%, var(--bg-elevated) 100%); }
+  .node--tool .icon { background: var(--accent4); color: var(--bg); }
+
+  .node--exit { border-color: var(--accent6); background: linear-gradient(135deg, #60a5fa0d 0%, var(--bg-elevated) 100%); }
+  .node--exit .icon { background: var(--accent6); color: var(--bg); }
+
+  .node--error { border-color: #ef4444; background: linear-gradient(135deg, #ef444410 0%, var(--bg-elevated) 100%); }
+  .node--error .icon { background: #ef4444; color: #fff; }
+
+  .node--loop { border-color: var(--accent); background: linear-gradient(135deg, #f59e0b08 0%, var(--bg-elevated) 100%); border-style: double; border-width: 3px; }
+  .node--loop .icon { background: var(--accent); color: var(--bg); }
+
+  /* Branch layout */
+  .branch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    position: relative;
+  }
+  .branch::before {
+    content: '';
+    position: absolute;
+    top: -2rem;
+    left: 50%;
+    width: 2px;
+    height: 2rem;
+    background: var(--flow-line);
+    transform: translateX(-50%);
+  }
+  .branch-yes, .branch-no {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .branch-yes { }
+
+  .branch-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+  .branch-label--yes { background: #34d39920; color: var(--accent4); }
+  .branch-label--no { background: #fb718520; color: var(--accent5); }
+
+  /* Merge point */
+  .merge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 2rem;
+    position: relative;
+  }
+  .merge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--flow-line);
+    border: 2px solid var(--bg);
+  }
+
+  /* Annotation callout */
+  .callout {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.78rem;
+    color: var(--fg-muted);
+    line-height: 1.6;
+    margin-top: 0.5rem;
+  }
+  .callout strong {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .callout code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    background: #0003;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    color: var(--fg);
+  }
+  .callout .tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1em 0.45em;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.3em;
+    vertical-align: baseline;
+  }
+  .tag--ts { background: #22d3ee20; color: var(--accent2); }
+  .tag--rust { background: #a78bfa20; color: var(--accent3); }
+  .tag--guard { background: #f59e0b20; color: var(--accent); }
+
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 2.5rem 0 1rem;
+    color: var(--fg-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .section-divider::before, .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .loop-bracket {
+    position: relative;
+    border: 2px solid var(--accent);
+    border-radius: 14px;
+    padding: 1.5rem;
+    margin: 0.5rem 0;
+    background: #f59e0b06;
+  }
+  .loop-bracket::before {
+    content: 'ITERATION LOOP';
+    position: absolute;
+    top: -0.65rem;
+    left: 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    background: var(--bg);
+    padding: 0 0.5rem;
+  }
+  .loop-bracket .inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .flow-connector-return {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.8rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+  }
+  .flow-connector-return .arrow {
+    font-size: 1rem;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  @media (max-width: 640px) {
+    .branch { grid-template-columns: 1fr; }
+    .page-header { padding: 2rem 1rem 0.75rem; }
+    .flow-container { padding: 1rem 0.75rem 3rem; }
+    .legend { padding: 1rem; gap: 0.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <h1>Prototyper Agent Loop</h1>
+  <p class="sub">Full flow from user message to rendered UI &mdash; <span>TypeScript</span> frontend &harr; <span>Rust</span> backend</p>
+</header>
+
+<nav class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Entry / Control</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22d3ee"></div>TypeScript Layer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>Rust Layer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div>Tool Execution</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fb7185"></div>Decision</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>Exit / Output</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Error</div>
+</nav>
+
+<div class="flow-container">
+
+  <!-- ===== ENTRY POINT ===== -->
+  <div class="node node--entry">
+    <div class="node-inner">
+      <div class="node-title"><span class="icon">&#9654;</span>User sends message</div>
+      <div class="node-body">User types in chat input. <code>useChat</code> hook assembles context: <code>systemPrompt</code> + chat history + <code>outputPath</code> (if tools enabled).</div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div><div class="label">TOOLS ON?</div></div>
+
+  <div class="branch">
+    <div class="branch-yes">
+      <div class="branch-label branch-label--yes">yes &mdash; tools enabled</div>
+      <div class="node node--ts">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">TS</span>Agent loop path</div>
+          <div class="node-body">
+            <code>effectiveOutputPath = outputPath</code><br>
+            Passes <code>outputPath</code> + <code>toolsEnabled: true</code> to <code>generateCompletionStream</code>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="branch-no">
+      <div class="branch-label branch-label--no">no &mdash; tools off</div>
+      <div class="node node--ts">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">TS</span>Direct stream path</div>
+          <div class="node-body">
+            <code>effectiveOutputPath = undefined</code><br>
+            No tools, no agent loop. Simple HTTP stream. Text → <code>onOutput</code> directly.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-divider">Agent Loop (Rust)</div>
+
+  <!-- ===== RUST AGENT LOOP ===== -->
+  <div class="node node--rust">
+    <div class="node-inner">
+      <div class="node-title"><span class="icon">RS</span>Agent loop entry — <code>run_agent_loop()</code></div>
+      <div class="node-body">
+        Initializes: <code>history = initial_messages_json</code>, <code>iteration = 0</code>, <code>write_count = 0</code>.<br>
+        Computes <code>proj_dir</code> from <code>output_path</code> (e.g. <code>projects/abc/generated/</code>).<br>
+        Creates project dir if missing.
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <div class="loop-bracket">
+    <div class="inner">
+
+      <div class="node node--rust">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">RS</span>Stream turn — <code>stream_turn()</code></div>
+          <div class="node-body">
+            Sends <code>history + tools</code> to Ollama <code>/api/chat</code>.<br>
+            Streams back: <code>Chunk</code> (text/thinking), <code>tool_calls</code>, or <code>done</code>.<br>
+            Forwards <code>Chunk</code> events to frontend via Tauri <code>Channel</code>.
+            <div class="callout">
+              <strong>Thinking support:</strong> If <code>think</code> is enabled, <code>thinking</code> field is streamed separately. Frontend displays in collapsible block.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"><div class="line"></div><div class="label">TOOL CALLS?</div></div>
+
+      <div class="branch">
+        <div class="branch-no">
+          <div class="branch-label branch-label--no">no tool calls &mdash; final text response</div>
+          <div class="node node--exit">
+            <div class="node-inner">
+              <div class="node-title"><span class="icon">&#9632;</span>Break loop &mdash; <code>Done</code></div>
+              <div class="node-body">
+                No tool calls means the model finished. Send <code>CompletionEvent::Done</code>.<br>
+                Frontend calls <code>finalize()</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="branch-yes">
+          <div class="branch-label branch-label--yes">tool calls returned</div>
+          <div class="node node--decision">
+            <div class="node-inner">
+              <div class="node-title"><span class="icon">&#9670;</span>Iteration guard</div>
+              <div class="node-body">
+                <code>iteration &ge; 20</code>? &rarr; Error, stop.<br>
+                <code>cancelled</code>? &rarr; <code>Done</code>, stop.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="merge"><div class="dot"></div></div>
+
+      <div class="section-divider">Process each tool call</div>
+
+      <div class="node node--decision">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">&#9670;</span>Tool type dispatch</div>
+          <div class="node-body">
+            Each <code>(name, args)</code> pair from <code>tool_calls</code> is executed sequentially.
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"><div class="line"></div><div class="label">WHICH TOOL?</div></div>
+
+      <!-- Three tool branches -->
+      <div class="branch" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="branch-yes">
+          <div class="node node--tool">
+            <div class="node-inner">
+              <div class="node-title"><span class="icon">&#128221;</span>write_file</div>
+              <div class="node-body">
+                <span class="tag tag--guard">GUARD</span> <code>write_count &ge; 3</code>? &rarr; skip, tell model.<br><br>
+                <span class="tag tag--rust">RUST</span> Path is <strong>fixed by system</strong> (model never chooses destination).<br>
+                Creates parent dirs.<br>
+                <code>content</code> written raw to disk.<br><br>
+                <strong>On success:</strong><br>
+                &rarr; <code>ToolResult</code> with <code>path</code> + <code>content</code><br>
+                &rarr; Sent to frontend: <code>onOutput(stripFences(content))</code>, <code>toolWritten = true</code>, <code>contentAccumulated = ""</code><br>
+                &rarr; <code>write_count++</code><br><br>
+                <strong>On failure:</strong><br>
+                &rarr; <code>ToolResult</code> with error message
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="branch-yes">
+          <div class="node node--tool">
+            <div class="node-inner">
+              <div class="node-title"><span class="icon">&#128196;</span>read_file</div>
+              <div class="node-body">
+                <span class="tag tag--rust">RUST</span> Model provides <code>path</code> arg (relative to app data dir).<br><br>
+                <code>..</code> in path? &rarr; Security error.<br>
+                <code>ENOENT</code>? &rarr; Filesystem error string.<br><br>
+                <strong>On success:</strong><br>
+                &rarr; <code>ToolResult</code> with file contents (truncated to 500 chars in history to save tokens)
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="branch-yes">
+          <div class="node node--tool">
+            <div class="node-inner">
+              <div class="node-title"><span class="icon">&#9000;</span>bash</div>
+              <div class="node-body">
+                <span class="tag tag--rust">RUST</span> Runs <code>sh -c &lt;command&gt;</code> in the project directory.<br><br>
+                30-second timeout.<br>
+                Captures <code>stdout + stderr</code>.<br>
+                Tool description instructs model to run <code>bun tsc --noEmit</code> and <code>bunx eslint &lt;path&gt;</code> for validation.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="connector"><div class="line"></div></div>
+
+      <div class="node node--rust">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">RS</span>Push result to history</div>
+          <div class="node-body">
+            Every tool result is appended to <code>history</code> as a <code>{"role": "tool", "tool_name": name, "content": output}</code> message.<br>
+            Output truncated to 500 chars for history (full output sent to frontend).
+            <div class="callout">
+              <strong>Model self-correction:</strong> Tool failures go into history. The model sees what went wrong and can adjust on the next turn. <a href="https://www.cursor.com/blog/continually-improving-agent-hawk" style="color:var(--accent2)">Cursor's Hawk approach</a>.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- .inner -->
+  </div><!-- .loop-bracket -->
+
+  <div class="flow-connector-return">
+    <span class="arrow">&#8634;</span> Loop back to <code>stream_turn()</code>
+  </div>
+
+  <div class="section-divider">Frontend Event Handling</div>
+
+  <div class="node node--ts">
+    <div class="node-inner">
+      <div class="node-title"><span class="icon">TS</span>Tauri Channel &mdash; event types</div>
+      <div class="node-body">
+        The <code>Channel&lt;CompletionEvent&gt;</code> streams events from Rust to TypeScript:
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top:0.5rem;">
+          <div><code>Chunk &#123;text&#125;</code> &mdash; streamed token text</div>
+          <div><code>Chunk &#123;thinking&#125;</code> &mdash; thinking tokens</div>
+          <div><code>ToolCall &#123;tool, args&#125;</code> &mdash; model invoked a tool</div>
+          <div><code>ToolResult &#123;tool, success, output, path, content&#125;</code></div>
+          <div><code>Done</code> &mdash; generation complete</div>
+          <div><code>Error &#123;message&#125;</code> &mdash; fatal error</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div><div class="label">WRITE_FILE RESULT?</div></div>
+
+  <div class="branch">
+    <div class="branch-yes">
+      <div class="branch-label branch-label--yes">write_file with content</div>
+      <div class="node node--ts">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">TS</span>Code written to editor</div>
+          <div class="node-body">
+            <code>toolWritten = true</code><br>
+            <code>contentAccumulated = ""</code> (reset, post-write text is NOT editor code)<br>
+            <code>onOutput(stripFences(content))</code> &rarr; editor + disk
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="branch-no">
+      <div class="branch-label branch-label--no">write_file without content</div>
+      <div class="node node--ts">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">TS</span>Write limit hit or error</div>
+          <div class="node-body">
+            <code>toolWritten</code> stays <code>false</code><br>
+            <code>contentAccumulated</code> NOT reset (model may still produce valid code in a later turn)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-divider">Loop Exit</div>
+
+  <div class="node node--ts">
+    <div class="node-inner">
+      <div class="node-title"><span class="icon">TS</span>Finalize on <code>Done</code> event</div>
+      <div class="node-body">
+        Flushes any pending tool results to store.<br>
+        Sets <code>streaming = false</code>.<br>
+        Persists chat history to disk.<br><br>
+        <strong>Critical guard:</strong> <code>if (!toolWritten) onOutput(contentAccumulated)</code><br>
+        If <code>write_file</code> never succeeded, the accumulated streaming text is the output (direct stream path without tools).
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <div class="node node--exit">
+    <div class="node-inner">
+      <div class="node-title"><span class="icon">&#10003;</span>UI rendered &mdash; complete</div>
+      <div class="node-body">
+        Code appears in editor panel. Chat shows full conversation including tool calls, thinking blocks, and any validation results.
+      </div>
+    </div>
+  </div>
+
+  <div class="section-divider">Error Paths</div>
+
+  <div class="branch">
+    <div class="branch-yes">
+      <div class="branch-label branch-label--yes">cancellation</div>
+      <div class="node node--error">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">&#9632;</span>User cancels</div>
+          <div class="node-body">
+            <code>CancellationToken</code> triggered. Drop HTTP stream. Send <code>Done</code> event. Frontend shows partial result.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="branch-no">
+      <div class="branch-label branch-label--no">HTTP / model error</div>
+      <div class="node node--error">
+        <div class="node-inner">
+          <div class="node-title"><span class="icon">&#9888;</span>Generation failure</div>
+          <div class="node-body">
+            Ollama connection refused, model OOM, invalid response.<br>
+            <code>CompletionEvent::Error &#123;message&#125;</code> &rarr; Sonner error toast.<br>
+            <code>finalize("⚠ " + message)</code> shows error inline in chat.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-divider">Scaffold &amp; Dev Server (parallel)</div>
+
+  <div class="node node--ts">
+    <div class="node-inner">
+      <div class="node-title"><span class="icon">TS</span>Background setup &mdash; not in the hot path</div>
+      <div class="node-body">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top:0.5rem;">
+          <div>
+            <strong>Scaffold check</strong> (<code>hasGeneratedScaffold</code>)<br>
+            &bull; Verify structural files exist<br>
+            &bull; Verify <code>App.tsx</code> doesn't use old wrapper<br>
+            &bull; If invalid: prompt user, scaffold with <code>withScaffoldNotifications</code><br>
+            &bull; <code>ensureEslintPatched()</code> on every open
+          </div>
+          <div>
+            <strong>Dev server</strong> (<code>useDevServerStore</code>)<br>
+            &bull; Start <code>bun dev</code> on configured port<br>
+            &bull; Capture localhost URL from terminal output<br>
+            &bull; Display in iframe preview<br>
+            &bull; HMR picks up <code>write_file</code> changes
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-divider">Key Guards &amp; Constants</div>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+    <div class="callout" style="border-left: 3px solid var(--accent);">
+      <strong>MAX_WRITES = 3</strong><br>
+      After 3 successful <code>write_file</code> calls, subsequent writes are rejected with an error message sent to the model.
+    </div>
+    <div class="callout" style="border-left: 3px solid var(--accent2);">
+      <strong>MAX_ITERATIONS = 20</strong><br>
+      Hard loop limit. Prevents infinite tool-call loops. Model sees all 20 turns of history.
+    </div>
+    <div class="callout" style="border-left: 3px solid var(--accent4);">
+      <strong>MAX_TOOL_OUTPUT = 500</strong><br>
+      Tool results > 500 chars are truncated in history to save context tokens. Full output still sent to frontend.
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

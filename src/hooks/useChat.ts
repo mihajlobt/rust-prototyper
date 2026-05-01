@@ -43,12 +43,12 @@ function buildApiMessages(
   const result: Message[] = [system]
   for (const m of messages) {
     if (m.role === "assistant" && m.toolCalls?.length) {
-      // Assistant message with tool calls
+      // Assistant message with tool calls — serialize to Ollama API format.
       result.push({
         role: "assistant",
         content: m.content,
         ...(m.thinking ? { thinking: m.thinking } : {}),
-        toolCalls: m.toolCalls.map((tc) => ({
+        tool_calls: m.toolCalls.map((tc) => ({
           function: { name: tc.tool, arguments: tc.arguments },
         })),
       })
@@ -58,7 +58,7 @@ function buildApiMessages(
           result.push({
             role: "tool",
             content: tc.result,
-            toolName: tc.tool,
+            tool_name: tc.tool,
           })
         }
       }
@@ -73,6 +73,7 @@ function buildApiMessages(
   }
   return result
 }
+
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -105,8 +106,124 @@ interface UseChatOptions {
   onOutput?: (content: string) => void
 }
 
+// ─── Factory: createStreamHandler ──────────────────────────────────────────
+//
+// Extracted to eliminate ~80 lines of duplicated channel.onmessage + finalize
+// logic between sendMessage and regenerate. Returns a bound handler that
+// closes over accumulated state. Also fixes the regenerate path's missing
+// rafThinkingId cancel (previously only finalize() in sendMessage cancelled
+// both raf IDs; the inline Done handler in regenerate only cancelled rafId).
+
+interface StreamHandlerParams {
+  entityId: string
+  chatPath: string
+  /** The updatedMessages array built by the caller (includes placeholder). */
+  updatedMessages: ChatMessage[]
+  stopRef: RefObject<boolean>
+  activeRequestIdRef: MutableRefObject<number | null>
+  onOutputRef: MutableRefObject<((content: string) => void) | undefined>
+  pendingToolResultsRef: MutableRefObject<PendingToolResult[]>
+  setToolResultTick: React.Dispatch<React.SetStateAction<number>>
+}
+
+function createStreamHandler(params: StreamHandlerParams) {
+  const {
+    entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
+    onOutputRef, pendingToolResultsRef, setToolResultTick,
+  } = params
+
+  let contentAccumulated = ""
+  let thinkingAccumulated = ""
+  let toolWritten = false
+  let rafId: number | null = null
+  let rafThinkingId: number | null = null
+
+  const finalize = (content: string, thinking: string) => {
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+    if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+    activeRequestIdRef.current = null
+    // Flush any queued tool results synchronously so the finalized message
+    // has pending=false and the correct path before we persist to disk.
+    // (The useEffect drainer fires post-paint, which may be after Done arrives.)
+    for (const result of pendingToolResultsRef.current.splice(0)) {
+      useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
+      useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
+    }
+    // Preserve toolCalls (now correctly flushed) in the finalized message
+    const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
+    const currentLast = msgs[msgs.length - 1]
+    const finalMessage: ChatMessage = {
+      role: "assistant",
+      content,
+      ...(thinking ? { thinking } : {}),
+      ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
+    }
+    const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
+    useChatStore.getState().setMessages(entityId, finalMessages)
+    useChatStore.getState().setStreaming(entityId, false)
+    useChatStore.getState().setStreamingThinking(entityId, "")
+    writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
+  }
+
+  const onMessage = (msg: CompletionEvent) => {
+    if ((stopRef as MutableRefObject<boolean>).current) return
+    if (msg.event === "Chunk") {
+      if (msg.data.thinking) {
+        thinkingAccumulated += msg.data.thinking
+        if (rafThinkingId === null) {
+          rafThinkingId = requestAnimationFrame(() => {
+            rafThinkingId = null
+            useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
+          })
+        }
+      }
+      if (msg.data.text) {
+        contentAccumulated += msg.data.text
+      }
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null
+          useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
+        })
+      }
+    } else if (msg.event === "ToolCall") {
+      useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+    } else if (msg.event === "ToolResult") {
+      const { tool, success, output, path, content } = msg.data
+      if (tool === "write_file" && success) toolWritten = true
+      if (tool === "write_file" && success) {
+        contentAccumulated = ""
+        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        if (content) onOutputRef.current?.(stripFences(content))
+      }
+      pendingToolResultsRef.current.push({ tool, success, output, path, content })
+      setToolResultTick((tick) => tick + 1)
+    } else if (msg.event === "Done") {
+      finalize(contentAccumulated, thinkingAccumulated)
+      if (!toolWritten) onOutputRef.current?.(contentAccumulated)
+    } else if (msg.event === "Error") {
+      finalize(`⚠ ${msg.data.message}`, "")
+      notify.error("Generation failed", msg.data.message)
+    }
+  }
+
+  return onMessage
+}
+
+// ─── useChat hook ──────────────────────────────────────────────────────────
+
 export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput }: UseChatOptions) {
-  const settings = useAppStore((s) => s.settings)
+  // Destructure individual settings fields instead of selecting the full
+  // settings object. Zustand's shallow equality means each selector re-renders
+  // only when its specific value changes. The full `settings` object was
+  // previously a single selector that changed reference on every store update,
+  // causing sendMessage/regenerate to recreate on every keystroke.
+  const modelId       = useAppStore((s) => s.settings.modelId)
+  const host          = useAppStore((s) => s.settings.host)
+  const apiKeys       = useAppStore((s) => s.settings.apiKeys)
+  const provider      = useAppStore((s) => s.settings.provider)
+  const modelOptions  = useAppStore((s) => s.settings.modelOptions)
+
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
   const onOutputRef = useRef(onOutput) as MutableRefObject<typeof onOutput>
@@ -116,13 +233,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const stopRef = useRef(false) as RefObject<boolean>
   // Active request ID returned by the Rust backend — used to cancel
   // the stream server-side via stopGenerationRequest
-  const activeRequestId = useRef<number | null>(null)
+  const activeRequestIdRef = useRef<number | null>(null)
 
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [mentions, setMentions] = useState<MentionAsset[]>([])
 
-  const caps = useModelCapabilities(settings.modelId)
+  const caps = useModelCapabilities(modelId)
 
   const [thinkEnabled, setThinkEnabled] = useState(false)
   const prevCanThinkRef = useRef(false)
@@ -236,7 +353,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     setAttachments([])
     setMentions([])
 
-    const { modelId, host, apiKeys, provider } = settings
     const isOllama = (provider as Provider).startsWith("ollama")
     const apiMessages = buildApiMessages(
       updatedMessages.slice(0, -1),
@@ -251,99 +367,35 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       : undefined
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
-    const channel = new Channel<CompletionEvent>()
-    let contentAccumulated = ""
-    let thinkingAccumulated = ""
-    let toolWritten = false
-    let rafId: number | null = null
-    let rafThinkingId: number | null = null
     ;(stopRef as MutableRefObject<boolean>).current = false
 
-    const finalize = (content: string, thinking: string) => {
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-      if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
-      activeRequestId.current = null
-      // Flush any queued tool results synchronously so the finalized message
-      // has pending=false and the correct path before we persist to disk.
-      // (The useEffect drainer fires post-paint, which may be after Done arrives.)
-      for (const result of pendingToolResultsRef.current.splice(0)) {
-        useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
-        useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
-      }
-      // Preserve toolCalls (now correctly flushed) in the finalized message
-      const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
-      const currentLast = msgs[msgs.length - 1]
-      const finalMessage: ChatMessage = {
-        role: "assistant",
-        content,
-        ...(thinking ? { thinking } : {}),
-        ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
-      }
-      const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
-      useChatStore.getState().setMessages(entityId, finalMessages)
-      useChatStore.getState().setStreaming(entityId, false)
-      useChatStore.getState().setStreamingThinking(entityId, "")
-      writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-    }
-
-    channel.onmessage = (msg) => {
-      if ((stopRef as MutableRefObject<boolean>).current) return
-      if (msg.event === "Chunk") {
-        // Handle thinking chunk (sent separately from content)
-        if (msg.data.thinking) {
-          thinkingAccumulated += msg.data.thinking
-          if (rafThinkingId === null) {
-            rafThinkingId = requestAnimationFrame(() => {
-              rafThinkingId = null
-              useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
-            })
-          }
-        }
-        if (msg.data.text) {
-          contentAccumulated += msg.data.text
-        }
-        if (rafId === null) {
-          rafId = requestAnimationFrame(() => {
-            rafId = null
-            useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
-          })
-        }
-      } else if (msg.event === "ToolCall") {
-        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
-      } else if (msg.event === "ToolResult") {
-        const { tool, success, output, path, content } = msg.data
-        if (tool === "write_file" && success) toolWritten = true
-        if (tool === "write_file") {
-          contentAccumulated = ""
-          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-          if (content) onOutputRef.current?.(stripFences(content))
-        }
-        pendingToolResultsRef.current.push({ tool, success, output, path, content })
-        setToolResultTick((tick) => tick + 1)
-      } else if (msg.event === "Done") {
-        finalize(contentAccumulated, thinkingAccumulated)
-        if (!toolWritten) onOutputRef.current?.(contentAccumulated)
-      } else if (msg.event === "Error") {
-        finalize(`⚠ ${msg.data.message}`, "")
-        notify.error("Generation failed", msg.data.message)
-       }
-     }
+    const channel = new Channel<CompletionEvent>()
+    const onMessage = createStreamHandler({
+      entityId, chatPath, updatedMessages,
+      stopRef, activeRequestIdRef, onOutputRef,
+      pendingToolResultsRef, setToolResultTick,
+    })
+    channel.onmessage = onMessage
 
     try {
       const requestId = await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
-        isOllama ? settings.modelOptions : undefined,
+        isOllama ? modelOptions : undefined,
       )
-      activeRequestId.current = requestId
+      activeRequestIdRef.current = requestId
     } catch (e) {
-      activeRequestId.current = null
+      activeRequestIdRef.current = null
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", getErrorMessage(e))
     }
-  }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath, toolsEnabled])
+  }, [
+    input, attachments, mentions, entityId, chatPath, systemPrompt,
+    modelId, host, apiKeys, provider, modelOptions,
+    thinkEnabled, caps.thinking, outputPath, toolsEnabled,
+  ])
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)
@@ -365,9 +417,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     // drops the HTTP connection, stopping generation at the source.
     // Per Ollama API docs there is no /api/abort; dropping the connection
     // is the standard cancellation pattern.
-    if (activeRequestId.current !== null) {
-      stopGenerationRequest(activeRequestId.current).catch(() => {})
-      activeRequestId.current = null
+    if (activeRequestIdRef.current !== null) {
+      stopGenerationRequest(activeRequestIdRef.current).catch(() => {})
+      activeRequestIdRef.current = null
     }
   }, [entityId])
 
@@ -392,7 +444,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     useChatStore.getState().setStreaming(entityId, true)
     useChatStore.getState().setStreamingThinking(entityId, "")
 
-    const { modelId, host, apiKeys, provider } = settings
     const isOllamaRegen = (provider as Provider).startsWith("ollama")
     const apiMessages = buildApiMessages(
       updatedMessages.slice(0, -1),
@@ -407,90 +458,35 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       : undefined
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
-    const channel = new Channel<CompletionEvent>()
-    let contentAccumulated = ""
-    let thinkingAccumulated = ""
-    let toolWrittenRegen = false
-    let rafId: number | null = null
-    let rafThinkingId: number | null = null
     ;(stopRef as MutableRefObject<boolean>).current = false
 
-    channel.onmessage = (msg) => {
-      if ((stopRef as MutableRefObject<boolean>).current) return
-      if (msg.event === "Chunk") {
-        if (msg.data.thinking) {
-          thinkingAccumulated += msg.data.thinking
-          if (rafThinkingId === null) {
-            rafThinkingId = requestAnimationFrame(() => {
-              rafThinkingId = null
-              useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
-            })
-          }
-        }
-        if (msg.data.text) contentAccumulated += msg.data.text
-        if (rafId === null) {
-          rafId = requestAnimationFrame(() => {
-            rafId = null
-            useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
-          })
-        }
-      } else if (msg.event === "ToolCall") {
-        useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
-      } else if (msg.event === "ToolResult") {
-        const { tool, success, output, path, content } = msg.data
-        if (tool === "write_file" && success) toolWrittenRegen = true
-        if (tool === "write_file") {
-          contentAccumulated = ""
-          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-          if (content) onOutputRef.current?.(stripFences(content))
-        }
-        pendingToolResultsRef.current.push({ tool, success, output, path, content })
-        setToolResultTick((tick) => tick + 1)
-      } else if (msg.event === "Done") {
-        activeRequestId.current = null
-        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        for (const result of pendingToolResultsRef.current.splice(0)) {
-          useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
-          useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
-        }
-        const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
-        const currentLast = msgs[msgs.length - 1]
-        const finalMessage: ChatMessage = {
-          role: "assistant",
-          content: contentAccumulated,
-          ...(thinkingAccumulated ? { thinking: thinkingAccumulated } : {}),
-          ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
-        }
-        const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
-        useChatStore.getState().setMessages(entityId, finalMessages)
-        useChatStore.getState().setStreaming(entityId, false)
-        useChatStore.getState().setStreamingThinking(entityId, "")
-        writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-        if (!toolWrittenRegen) onOutputRef.current?.(contentAccumulated)
-      } else if (msg.event === "Error") {
-        activeRequestId.current = null
-        useChatStore.getState().setMessages(entityId, [...updatedMessages.slice(0, -1), { role: "assistant" as const, content: `⚠ ${msg.data.message}` }])
-        useChatStore.getState().setStreaming(entityId, false)
-        useChatStore.getState().setStreamingThinking(entityId, "")
-        notify.error("Generation failed", msg.data.message)
-      }
-    }
+    const channel = new Channel<CompletionEvent>()
+    const onMessage = createStreamHandler({
+      entityId, chatPath, updatedMessages,
+      stopRef, activeRequestIdRef, onOutputRef,
+      pendingToolResultsRef, setToolResultTick,
+    })
+    channel.onmessage = onMessage
 
     try {
       const requestId = await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
-        isOllamaRegen ? settings.modelOptions : undefined,
+        isOllamaRegen ? modelOptions : undefined,
       )
-      activeRequestId.current = requestId
+      activeRequestIdRef.current = requestId
     } catch (e) {
-      activeRequestId.current = null
+      activeRequestIdRef.current = null
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", getErrorMessage(e))
     }
-  }, [entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath, toolsEnabled])
+  }, [
+    entityId, chatPath, systemPrompt,
+    modelId, host, apiKeys, provider, modelOptions,
+    thinkEnabled, caps.thinking, outputPath, toolsEnabled,
+  ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {
     setAttachments((prev) => [...prev, file])
