@@ -58,16 +58,12 @@ function assertSafeDirName(name: string): void {
  * Uses Rust's remove_dir_all which is recursive.
  */
 async function removeProjectDir(dir: string): Promise<void> {
-  try {
-    await deleteDir(dir);
-  } catch {
-    // May not exist, that's fine
-  }
+  try { await deleteDir(dir) } catch {}
 }
 
 /** Delete stale eslint.config.ts from old scaffolds, then patch shadcn's eslint.config.js. */
 async function patchEslint(projectDir: string): Promise<void> {
-  try { await deleteFile(`${projectDir}/eslint.config.ts`) } catch { /* not present */ }
+  try { await deleteFile(`${projectDir}/eslint.config.ts`) } catch {}
   const configPath = `${projectDir}/${P.ESLINT_CONFIG_JS}`;
   const raw = await readFile(configPath);
   await writeFile(configPath, patchEslintConfig(raw));
@@ -153,11 +149,7 @@ export async function scaffoldComponentPreview(
 
   // Step 1: Save user's Generated.tsx if it exists
   let savedGenerated = "";
-  try {
-    savedGenerated = await readFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`);
-  } catch {
-    // Doesn't exist yet
-  }
+  try { savedGenerated = await readFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`) } catch {}
 
   // Step 2: Remove the target directory so shadcn can create it fresh
   onStep?.("Removing old files…");
@@ -243,11 +235,7 @@ export async function scaffoldScreenPreview(
 
   // Step 1: Save user's Generated.tsx if it exists
   let savedGenerated = "";
-  try {
-    savedGenerated = await readFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`);
-  } catch {
-    // Doesn't exist yet
-  }
+  try { savedGenerated = await readFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`) } catch {}
 
   // Step 2: Remove the target directory so shadcn can create it fresh
   onStep?.("Removing old files…");
