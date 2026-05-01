@@ -1,4 +1,4 @@
-import { readFile, writeFile, createDir, bunInstallSync, runShellCommandSync, deleteDir, deleteFile } from "@/lib/ipc";
+import { readFile, writeFile, createDir, bunInstallSync, runShellCommandSync, deleteDir, deleteFile, isNotFoundError } from "@/lib/ipc";
 import { ICON_LIBRARY_PACKAGES } from "@/lib/prompts";
 import type { IconLibrary } from "@/lib/prompts";
 import {
@@ -58,12 +58,16 @@ function assertSafeDirName(name: string): void {
  * Uses Rust's remove_dir_all which is recursive.
  */
 async function removeProjectDir(dir: string): Promise<void> {
-  try { await deleteDir(dir) } catch {}
+  try { await deleteDir(dir) } catch (e) {
+    if (!isNotFoundError(e)) throw e;
+  }
 }
 
 /** Delete stale eslint.config.ts from old scaffolds, then patch shadcn's eslint.config.js. */
 async function patchEslint(projectDir: string): Promise<void> {
-  try { await deleteFile(`${projectDir}/eslint.config.ts`) } catch {}
+  try { await deleteFile(`${projectDir}/eslint.config.ts`) } catch (e) {
+    if (!isNotFoundError(e)) throw e;
+  }
   const configPath = `${projectDir}/${P.ESLINT_CONFIG_JS}`;
   const raw = await readFile(configPath);
   await writeFile(configPath, patchEslintConfig(raw));
@@ -149,7 +153,9 @@ export async function scaffoldComponentPreview(
 
   // Step 1: Save user's Generated.tsx if it exists
   let savedGenerated = "";
-  try { savedGenerated = await readFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`) } catch {}
+  try { savedGenerated = await readFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`) } catch (e) {
+    if (!isNotFoundError(e)) throw e;
+  }
 
   // Step 2: Remove the target directory so shadcn can create it fresh
   onStep?.("Removing old files…");
@@ -235,7 +241,9 @@ export async function scaffoldScreenPreview(
 
   // Step 1: Save user's Generated.tsx if it exists
   let savedGenerated = "";
-  try { savedGenerated = await readFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`) } catch {}
+  try { savedGenerated = await readFile(`${screenPreviewDir}/${SRC.GENERATED_TSX}`) } catch (e) {
+    if (!isNotFoundError(e)) throw e;
+  }
 
   // Step 2: Remove the target directory so shadcn can create it fresh
   onStep?.("Removing old files…");

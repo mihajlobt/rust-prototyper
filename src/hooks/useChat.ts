@@ -83,6 +83,7 @@ import {
   writeFile,
   getHostForProvider,
   getApiKeyForProvider,
+  getErrorMessage,
   type CompletionEvent,
   type Provider,
   type Message,
@@ -340,7 +341,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       activeRequestId.current = null
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
-      notify.error("Generation failed", e instanceof Error ? e.message : String(e))
+      notify.error("Generation failed", getErrorMessage(e))
     }
   }, [input, attachments, mentions, entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath, toolsEnabled])
 
@@ -487,7 +488,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       activeRequestId.current = null
       useChatStore.getState().setStreaming(entityId, false)
       useChatStore.getState().setStreamingThinking(entityId, "")
-      notify.error("Generation failed", e instanceof Error ? e.message : String(e))
+      notify.error("Generation failed", getErrorMessage(e))
     }
   }, [entityId, chatPath, systemPrompt, settings, thinkEnabled, caps.thinking, outputPath, toolsEnabled])
 

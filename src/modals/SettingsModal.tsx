@@ -25,7 +25,7 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { notify } from "@/hooks/useToast";
-import { readFile, writeFile, bunInstall } from "@/lib/ipc";
+import { readFile, writeFile, bunInstall, getErrorMessage } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
 import { ICON_LIBRARY_PACKAGES, PROMPT_DEFINITIONS, type IconLibrary, type PromptGroup } from "@/lib/prompts";
 
@@ -100,7 +100,7 @@ export function SettingsModal() {
           await bunInstall(`./projects/${settings.project}/generated`);
         }
       } catch (e) {
-        notify.error("Icon library install failed", e instanceof Error ? e.message : String(e));
+        notify.error("Icon library install failed", getErrorMessage(e));
       }
     })();
   }, [settings.iconLibrary, settings.project]);

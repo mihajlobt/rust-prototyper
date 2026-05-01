@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { writeFile, createDir, getHostForProvider } from "@/lib/ipc";
+import { writeFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
@@ -51,7 +51,7 @@ export function ThemesPanel() {
       await writeFile(`${base}/theme.css`, content);
       await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
     } catch (e) {
-      notify.error("Failed to save theme", e instanceof Error ? e.message : String(e));
+      notify.error("Failed to save theme", getErrorMessage(e));
     }
   }, [settings.project, selectedThemeDir]);
 
@@ -63,7 +63,7 @@ export function ThemesPanel() {
       await writeFile(dest, css);
       notify.success("Saved to Runner", dest);
     } catch (e) {
-      notify.error("Save to Runner failed", e instanceof Error ? e.message : String(e));
+      notify.error("Save to Runner failed", getErrorMessage(e));
     }
   }, [css, settings.project, ps.directories.themes, themeDir]);
 
@@ -90,7 +90,7 @@ export function ThemesPanel() {
         .trim();
       const css = cleaned || content.trim();
       setCss(css);
-      persistTheme(css, "").catch(() => {});
+      persistTheme(css, "");
       setPs({ themesCodeOpen: true });
     },
   });

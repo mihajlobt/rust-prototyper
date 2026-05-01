@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { writeFile, createDir, readFile, exportProject, getHostForProvider } from "@/lib/ipc";
+import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -107,14 +107,14 @@ export function ScreensPanel() {
         }
       } else {
         // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
-        writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getScreenPreviewAppTsx()).catch(() => {});
+        writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getScreenPreviewAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
       }
 
       if (cancelled) return;
       try {
         await startScreens(screenPreviewDir, ps.screensPreviewPort);
       } catch (e) {
-        notify.error("Failed to start screen preview server", e instanceof Error ? e.message : String(e));
+        notify.error("Failed to start screen preview server", getErrorMessage(e));
       }
     }
 
@@ -138,7 +138,7 @@ export function ScreensPanel() {
       await createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`);
       await writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.GENERATED_TSX}`, content);
     } catch (e) {
-      console.error("Failed to write to screen preview:", e);
+      notify.error("Failed to write screen preview", getErrorMessage(e));
     }
   }, [screenPreviewDir]);
 
@@ -153,8 +153,11 @@ export function ScreensPanel() {
           setCode(content);
           await writeToScreenPreview(content);
         }
-      } catch {
-        if (!cancelled) setCode("");
+      } catch (e) {
+        if (!cancelled) {
+          setCode("");
+          if (!isNotFoundError(e)) notify.error("Failed to load screen", getErrorMessage(e));
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -176,8 +179,8 @@ export function ScreensPanel() {
       const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
       createDir(parentDir)
         .then(() => writeFile(screenPath, content))
-        .catch(() => {});
-      writeToScreenPreview(content).catch(() => {});
+        .catch((e) => { const msg = getErrorMessage(e); notify.error("Failed to save screen", msg); });
+      writeToScreenPreview(content);
     },
   });
 
@@ -192,8 +195,11 @@ export function ScreensPanel() {
       try {
         const css = await readFile(`projects/${settings.project}/themes/${selectedTheme}/theme.css`);
         if (!cancelled) setThemeCss(css);
-      } catch {
-        if (!cancelled) setThemeCss("");
+      } catch (e) {
+        if (!cancelled) {
+          setThemeCss("");
+          if (!isNotFoundError(e)) notify.error("Failed to load theme", getErrorMessage(e));
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -214,14 +220,14 @@ export function ScreensPanel() {
       if (!outputPath) return;
       await exportProject(settings.project, outputPath, "react", true, true, true, false);
     } catch (e) {
-      notify.error("Export failed", e instanceof Error ? e.message : String(e));
+      notify.error("Export failed", getErrorMessage(e));
     }
   };
 
   const handleRetryPreview = () => {
     stoppedManuallyRef.current = false;
     scaffoldAttemptedRef.current = false;
-    startScreens(screenPreviewDir, ps.screensPreviewPort).catch(() => {});
+    startScreens(screenPreviewDir, ps.screensPreviewPort).catch(() => {} /* error shown in preview banner */);
   };
 
   const renderPreview = () => {
@@ -273,7 +279,7 @@ export function ScreensPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) { setCode(c); writeToScreenPreview(c).catch(() => {}); } }}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) { setCode(c); writeToScreenPreview(c); } }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
       />

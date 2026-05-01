@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { saveWorkflow, loadWorkflow, listWorkflows, type FileEntry } from "@/lib/ipc";
+import { saveWorkflow, loadWorkflow, listWorkflows, getErrorMessage, type FileEntry } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useReactFlow } from "@xyflow/react";
@@ -68,7 +68,7 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
       setPs({ activeWorkflow: cleanId });
       fitView({ padding: 0.1 });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       if (!silent) {
         setSaveError(msg);
         notify.error("Failed to load workflow", msg);
@@ -94,7 +94,7 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
       setPs({ activeWorkflow: id });
       await refreshSavedWorkflows();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       setSaveError(msg);
       notify.error("Failed to save workflow", msg);
     }
@@ -106,7 +106,7 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
       await deleteFile(`projects/${settings.project}/workflows/${name}`);
       await refreshSavedWorkflows();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       setSaveError(msg);
       notify.error("Failed to delete workflow", msg);
     }

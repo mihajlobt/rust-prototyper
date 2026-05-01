@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Download, FileArchive } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
-import { exportProject } from "@/lib/ipc";
+import { exportProject, getErrorMessage } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 
 export function ExportModal() {
@@ -47,7 +47,7 @@ export function ExportModal() {
       alert(`Exported to: ${path}`);
       setOpen(false);
     } catch (e) {
-      alert(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      alert(`Export failed: ${getErrorMessage(e)}`);
     } finally {
       setExporting(false);
     }

@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Download, FileCode } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
-import { exportComponent } from "@/lib/ipc";
+import { exportComponent, getErrorMessage } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 
 interface ComponentExportModalProps {
@@ -52,7 +52,7 @@ export function ComponentExportModal({ componentId, trigger }: ComponentExportMo
       alert(`Exported to: ${path}`);
       setOpen(false);
     } catch (e) {
-      alert(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      alert(`Export failed: ${getErrorMessage(e)}`);
     } finally {
       setExporting(false);
     }

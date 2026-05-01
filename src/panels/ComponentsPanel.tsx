@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { writeFile, createDir, readDir, readFile, getHostForProvider } from "@/lib/ipc";
+import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -126,14 +126,14 @@ export function ComponentsPanel() {
         }
       } else {
         // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
-        writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch(() => {});
+        writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
       }
 
       if (cancelled) return;
       try {
         await startPreview(componentPreviewDir, ps.devServerPort);
       } catch (e) {
-        notify.error("Failed to start preview server", e instanceof Error ? e.message : String(e));
+        notify.error("Failed to start preview server", getErrorMessage(e));
       }
     }
 
@@ -148,7 +148,7 @@ export function ComponentsPanel() {
 
     const themePath = `${componentPreviewDir}/src/styles/preview-theme.css`;
     writeFile(themePath, themeCss).catch((e) => {
-      console.error("Failed to write theme CSS:", e);
+      notify.error("Failed to write theme CSS", getErrorMessage(e));
     });
   }, [themeCss, previewStatus, componentPreviewDir]);
 
@@ -174,7 +174,7 @@ export function ComponentsPanel() {
         await writeFile(`${compDir}/component.tsx`, value);
       }
     } catch (e) {
-      notify.error("Failed to save generated code", e instanceof Error ? e.message : String(e));
+      notify.error("Failed to save generated code", getErrorMessage(e));
     }
   }, [settings.project, selectedComponent, componentPreviewDir]);
 
@@ -204,8 +204,11 @@ export function ComponentsPanel() {
       try {
         const entries = await readDir(`projects/${settings.project}/themes`);
         if (!cancelled) setThemes(entries.filter((e) => e.is_dir));
-      } catch {
-        if (!cancelled) setThemes([]);
+      } catch (e) {
+        if (!cancelled) {
+          setThemes([]);
+          if (!isNotFoundError(e)) notify.error("Failed to load themes", getErrorMessage(e));
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -221,8 +224,11 @@ export function ComponentsPanel() {
       try {
         const css = await readFile(`projects/${settings.project}/themes/${selectedTheme}/theme.css`);
         if (!cancelled) setThemeCss(css);
-      } catch {
-        if (!cancelled) setThemeCss("");
+      } catch (e) {
+        if (!cancelled) {
+          setThemeCss("");
+          if (!isNotFoundError(e)) notify.error("Failed to load theme", getErrorMessage(e));
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -236,9 +242,9 @@ export function ComponentsPanel() {
     setCode(loadedCode);
     if (!loadedCode) return;
     // Push to preview dirs so the Vite dev server shows the opened component immediately
-    writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, loadedCode).catch(() => {});
+    writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, loadedCode).catch((e) => { notify.error("Failed to write preview code", getErrorMessage(e)); });
     const genDir = `projects/${settings.project}/generated`;
-    writeFile(`${genDir}/src/App.tsx`, loadedCode).catch(() => {});
+    writeFile(`${genDir}/src/App.tsx`, loadedCode).catch((e) => { notify.error("Failed to write App.tsx", getErrorMessage(e)); });
   }, [loadedCode, componentPreviewDir, settings.project]);
 
   const chatPath = componentId
@@ -257,7 +263,7 @@ export function ComponentsPanel() {
       await writeFile(dest, code);
       notify.success("Saved to Runner", dest);
     } catch (e) {
-      notify.error("Save to Runner failed", e instanceof Error ? e.message : String(e));
+      notify.error("Save to Runner failed", getErrorMessage(e));
     }
   }, [code, componentId, settings.project, ps.directories.components]);
 
@@ -295,7 +301,7 @@ export function ComponentsPanel() {
         queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
       }
     } catch (e) {
-      notify.error("Failed to apply generated code", e instanceof Error ? e.message : String(e));
+      notify.error("Failed to apply generated code", getErrorMessage(e));
     }
   }, [settings.project, selectedComponent, queryClient, componentPreviewDir, setPs]);
 

@@ -17,6 +17,7 @@ import {
   readDir, readFile, writeFile, createDir, deleteFile,
   deleteDir, renameFile, revealInExplorer,
   bunBuild, bunInstall, killAllProcesses, killPort, runShellCommand,
+  isNotFoundError, getErrorMessage,
   type FileEntry,
 } from "@/lib/ipc";
 import { Input } from "@/components/ui/input";
@@ -73,7 +74,7 @@ export function RunnerPanel() {
   const openTabs = useMemo(() => ps.runnerEditorTabs ?? [], [ps.runnerEditorTabs]);
 
   const loadFiles = useCallback(async () => {
-    try { setFiles(await readDir(generatedDir)); } catch { setFiles([]); }
+    try { setFiles(await readDir(generatedDir)); } catch (e) { setFiles([]); if (!isNotFoundError(e)) notify.error("Failed to load files", getErrorMessage(e)); }
   }, [generatedDir]);
 
   const fileTreeRefreshKey = useUIStore((s) => s.fileTreeRefreshKey);
@@ -111,7 +112,7 @@ export function RunnerPanel() {
     if (activeTabPath && !tabContents[activeTabPath]) {
       readFile(activeTabPath).then((content) => {
         setTabContents((prev) => ({ ...prev, [activeTabPath]: content }));
-      }).catch(() => {});
+      }).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to load file", e.message); });
     }
     // only run when activeTabPath changes — including tabContents would cause an infinite loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +142,7 @@ export function RunnerPanel() {
       try {
         const content = await readFile(path);
         setTabContents((prev) => ({ ...prev, [path]: content }));
-      } catch { setTabContents((prev) => ({ ...prev, [path]: "" })); }
+      } catch (e) { setTabContents((prev) => ({ ...prev, [path]: "" })); if (!isNotFoundError(e)) notify.error("Failed to load file", getErrorMessage(e)); }
     }
   }, [openTabs, tabContents, setPs]);
 
@@ -189,7 +190,7 @@ export function RunnerPanel() {
     try {
       await writeFile(activeTabPath, content);
       setDirtyTabs((prev) => { const next = new Set(prev); next.delete(activeTabPath); return next; });
-    } catch (e) { notify.error("Save failed", e instanceof Error ? e.message : String(e)); }
+    } catch (e) { notify.error("Save failed", getErrorMessage(e)); }
   }, [activeTabPath, tabContents]);
 
   const handleEditorBlur = useCallback(() => { handleSaveFile(); }, [handleSaveFile]);
@@ -223,14 +224,14 @@ export function RunnerPanel() {
   };
 
   const handleRun = async () => {
-    if (running) { try { devServerStore.stopRunner(); } catch (e) { notify.error("Failed to stop", e instanceof Error ? e.message : String(e)); } return; }
+    if (running) { try { devServerStore.stopRunner(); } catch (e) { notify.error("Failed to stop", getErrorMessage(e)); } return; }
     if (!(await ensureScaffold())) return;
     xtermRef.current?.writeln("\x1b[36m> starting dev server…\x1b[0m");
-    try { await devServerStore.startRunner(generatedDir, ps.runnerPort); } catch (e) { notify.error("Failed to start", e instanceof Error ? e.message : String(e)); }
+    try { await devServerStore.startRunner(generatedDir, ps.runnerPort); } catch (e) { notify.error("Failed to start", getErrorMessage(e)); }
   };
 
-  const handleBuild   = async () => { if (!(await ensureScaffold())) return; xtermRef.current?.writeln("\x1b[36m> bun build\x1b[0m"); try { await bunBuild(generatedDir); } catch (e) { notify.error("Build failed", e instanceof Error ? e.message : String(e)); } };
-  const handleInstall = async () => { xtermRef.current?.writeln("\x1b[36m> bun install\x1b[0m"); try { await bunInstall(generatedDir); } catch (e) { notify.error("Install failed", e instanceof Error ? e.message : String(e)); } };
+  const handleBuild   = async () => { if (!(await ensureScaffold())) return; xtermRef.current?.writeln("\x1b[36m> bun build\x1b[0m"); try { await bunBuild(generatedDir); } catch (e) { notify.error("Build failed", getErrorMessage(e)); } };
+  const handleInstall = async () => { xtermRef.current?.writeln("\x1b[36m> bun install\x1b[0m"); try { await bunInstall(generatedDir); } catch (e) { notify.error("Install failed", getErrorMessage(e)); } };
 
   // ── File operations ─────────────────────────────────────────────────────
 
@@ -278,20 +279,20 @@ export function RunnerPanel() {
         setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
       }
       loadFiles();
-    } catch (e) { notify.error("Rename failed", e instanceof Error ? e.message : String(e)); }
+    } catch (e) { notify.error("Rename failed", getErrorMessage(e)); }
     setRenameTarget(null);
   };
 
   const startNewFolder = (parentPath: string) => { setNewFolderTarget(parentPath); setNewFolderName(""); };
   const handleCreateFolder = async () => {
     if (!newFolderTarget || !newFolderName.trim()) return;
-    try { await createDir(`${newFolderTarget}/${newFolderName.trim()}`); expandedDirs.add(newFolderTarget); loadFiles(); } catch (e) { notify.error("Create folder failed", e instanceof Error ? e.message : String(e)); }
+    try { await createDir(`${newFolderTarget}/${newFolderName.trim()}`); expandedDirs.add(newFolderTarget); loadFiles(); } catch (e) { notify.error("Create folder failed", getErrorMessage(e)); }
     setNewFolderTarget(null);
   };
 
   const handleKillAll = async () => {
     try { devServerStore.stopRunner(); await killAllProcesses(); await killPort(Array.from({ length: 12 }, (_, i) => 5173 + i)); notify.success("Killed all processes", "All active processes and ports 5173-5184 cleared"); }
-    catch (e) { notify.error("Kill all failed", e instanceof Error ? e.message : String(e)); }
+    catch (e) { notify.error("Kill all failed", getErrorMessage(e)); }
   };
 
   const handleRefreshPreview = () => { if (iframeRef.current && devUrl) iframeRef.current.src = devUrl; };

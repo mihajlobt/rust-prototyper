@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { readDir, readFile, writeFile, deleteDir, createDir, renameFile } from "@/lib/ipc";
+import { readDir, readFile, writeFile, deleteDir, createDir, renameFile, getErrorMessage } from "@/lib/ipc";
 import { save, confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -108,7 +108,7 @@ export function LibraryPanel() {
       await deleteDir(paths[item.type]);
       await loadItems();
     } catch (e) {
-      notify.error("Delete failed", e instanceof Error ? e.message : String(e));
+      notify.error("Delete failed", getErrorMessage(e));
     }
   };
 
@@ -133,7 +133,7 @@ export function LibraryPanel() {
       setEditingId(null);
       await loadItems();
     } catch (e) {
-      notify.error("Rename failed", e instanceof Error ? e.message : String(e));
+      notify.error("Rename failed", getErrorMessage(e));
     }
   };
 
@@ -171,7 +171,7 @@ export function LibraryPanel() {
       }
       await loadItems();
     } catch (e) {
-      notify.error("Duplicate failed", e instanceof Error ? e.message : String(e));
+      notify.error("Duplicate failed", getErrorMessage(e));
     }
   };
 
@@ -194,7 +194,7 @@ export function LibraryPanel() {
       await writeFile(outputPath, content);
       notify.success("Exported", `Saved to ${outputPath}`);
     } catch (e) {
-      notify.error("Export failed", e instanceof Error ? e.message : String(e));
+      notify.error("Export failed", getErrorMessage(e));
     }
   };
 

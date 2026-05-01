@@ -12,7 +12,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile } from "@/lib/ipc";
+import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, getErrorMessage } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -108,7 +108,7 @@ export function SidebarRail() {
       setShowNewDialog(false);
       setNewItemName("");
     } catch (e) {
-      notify.error("Create failed", e instanceof Error ? e.message : String(e));
+      notify.error("Create failed", getErrorMessage(e));
     } finally {
       setCreating(false);
     }
@@ -125,7 +125,7 @@ export function SidebarRail() {
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
-      notify.error("Delete failed", e instanceof Error ? e.message : String(e));
+      notify.error("Delete failed", getErrorMessage(e));
     }
   };
 
@@ -148,7 +148,7 @@ export function SidebarRail() {
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
       setRenameTarget(null);
     } catch (e) {
-      notify.error("Rename failed", e instanceof Error ? e.message : String(e));
+      notify.error("Rename failed", getErrorMessage(e));
     }
   };
 
@@ -180,7 +180,7 @@ export function SidebarRail() {
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
-      notify.error("Duplicate failed", e instanceof Error ? e.message : String(e));
+      notify.error("Duplicate failed", getErrorMessage(e));
     }
   };
 

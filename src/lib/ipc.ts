@@ -332,6 +332,27 @@ export async function exportComponent(
   });
 }
 
+// ─── Error Classification ───
+
+const NOT_FOUND_RE = /os error 2/;
+
+/** Returns true if the error is a "file not found" (ENOENT) from Rust's std::io::Error.
+ *  Tauri IPC errors arrive as plain strings (e.g. "IO error: No such file or directory (os error 2)"),
+ *  not Error instances — so we test both. */
+export function isNotFoundError(error: unknown): boolean {
+  if (error instanceof Error) return NOT_FOUND_RE.test(error.message);
+  if (typeof error === "string") return NOT_FOUND_RE.test(error);
+  return false;
+}
+
+/** Extract a human-readable message from a thrown error.
+ *  Handles both Error objects and plain strings (the format Tauri IPC uses for serialized AppError). */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return String(error);
+}
+
 // ─── Safe IPC Wrappers (with toast notifications) ───
 
 import { safeInvoke, safeInvokeSilent } from "./notifications";

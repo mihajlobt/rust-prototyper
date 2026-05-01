@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as Babel from "@babel/standalone";
-import { readFile } from "@/lib/ipc";
+import { readFile, getErrorMessage } from "@/lib/ipc";
 import {
   type IconLibrary,
   ICON_LIBRARY_PACKAGES,
@@ -60,7 +60,7 @@ export function transformTsx(
     });
     return { js: result.code ?? "" };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
+    return { error: getErrorMessage(e) };
   }
 }
 

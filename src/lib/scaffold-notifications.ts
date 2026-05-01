@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { onTerminalOutput } from "@/lib/ipc";
+import { onTerminalOutput, getErrorMessage } from "@/lib/ipc";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 function stripAnsi(str: string): string {
@@ -72,7 +72,7 @@ export async function withScaffoldNotifications(
     });
   } catch (e) {
     unlisten?.();
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = getErrorMessage(e);
     toast.error(title, {
       id: toastId,
       description: msg,

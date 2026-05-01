@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useSettings } from "@/hooks/useSettings";
-import { saveModelPresets, loadModelPresets, type ModelPreset } from "@/lib/ipc";
+import { saveModelPresets, loadModelPresets, getErrorMessage, type ModelPreset } from "@/lib/ipc";
 import type { OllamaModelOptions } from "@/stores/appStore";
 import { notify } from "@/hooks/useToast";
 
@@ -140,7 +140,7 @@ export function ModelOptionsPopover() {
     try {
       await saveModelPresets(next);
     } catch (e) {
-      notify.error("Failed to save presets", e instanceof Error ? e.message : String(e));
+      notify.error("Failed to save presets", getErrorMessage(e));
     }
   }, []);
 

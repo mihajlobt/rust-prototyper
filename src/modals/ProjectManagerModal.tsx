@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Folder, Plus, Trash2, Loader2, Layout, Box, Palette, Workflow, Globe, CheckCircle2 } from "lucide-react";
-import { readDir, createDir, writeFile, deleteDir, readFile } from "@/lib/ipc";
+import { readDir, createDir, writeFile, deleteDir, readFile, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
 import { scaffoldGenerated } from "@/lib/scaffold";
@@ -148,7 +148,7 @@ export function ProjectManagerModal() {
       await deleteDir(`${PROJECTS_DIR}/${id}`);
       await loadProjects();
     } catch (e) {
-      notify.error("Delete failed", e instanceof Error ? e.message : String(e));
+      notify.error("Delete failed", getErrorMessage(e));
     }
   };
 

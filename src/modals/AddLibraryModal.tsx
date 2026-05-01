@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PackagePlus } from "lucide-react";
-import { readFile, writeFile, bunInstall } from "@/lib/ipc";
+import { readFile, writeFile, bunInstall, getErrorMessage } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
 
 const NPM_NAME_REGEX = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
@@ -58,7 +58,7 @@ export function AddLibraryModal({ onAdded, trigger }: AddLibraryModalProps) {
       setName("");
       onAdded?.();
     } catch (e) {
-      setError(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+      setError(`Failed: ${getErrorMessage(e)}`);
     } finally {
       setAdding(false);
     }

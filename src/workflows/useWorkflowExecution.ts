@@ -19,6 +19,7 @@ import {
   generateCompletionStream, getApiKeyForProvider, getHostForProvider,
   httpRequest, runShellCommandCapture,
   readFile, writeFile, createDir, bunDev,
+  getErrorMessage,
   type CompletionEvent, type Message, type Provider,
 } from "@/lib/ipc";
 import { Channel } from "@tauri-apps/api/core";
@@ -472,7 +473,7 @@ export function useWorkflowExecution({
         nodeOutputMap.set(nodeId, output);
         updateStatus(nodeId, { status: "done", output });
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = getErrorMessage(e);
         updateStatus(nodeId, { status: "error", output: msg });
         notify.error(`Workflow node "${d.label}" failed`, msg);
       }
