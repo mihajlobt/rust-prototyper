@@ -311,14 +311,12 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       } else if (msg.event === "ToolResult") {
         const { tool, success, output, path, content } = msg.data
-        // Logical flags update synchronously — Done handler depends on toolWritten
-        if (tool === "write_file" && content) {
-          toolWritten = true
+        if (tool === "write_file" && success) toolWritten = true
+        if (tool === "write_file") {
           contentAccumulated = ""
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-          onOutputRef.current?.(stripFences(content))
+          if (content) onOutputRef.current?.(stripFences(content))
         }
-        // Queue visual update; useEffect([toolResultTick]) drains it post-paint
         pendingToolResultsRef.current.push({ tool, success, output, path, content })
         setToolResultTick((tick) => tick + 1)
       } else if (msg.event === "Done") {
@@ -439,11 +437,11 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       } else if (msg.event === "ToolResult") {
         const { tool, success, output, path, content } = msg.data
-        if (tool === "write_file" && content) {
-          toolWrittenRegen = true
+        if (tool === "write_file" && success) toolWrittenRegen = true
+        if (tool === "write_file") {
           contentAccumulated = ""
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-          onOutputRef.current?.(stripFences(content))
+          if (content) onOutputRef.current?.(stripFences(content))
         }
         pendingToolResultsRef.current.push({ tool, success, output, path, content })
         setToolResultTick((tick) => tick + 1)
