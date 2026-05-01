@@ -63,14 +63,35 @@ async function removeProjectDir(dir: string): Promise<void> {
   }
 }
 
-/** Delete stale eslint.config.ts from old scaffolds, then patch shadcn's eslint.config.js. */
+/** Delete stale eslint.config.ts from old scaffolds, then patch shadcn's eslint.config.js. Idempotent. */
 async function patchEslint(projectDir: string): Promise<void> {
   try { await deleteFile(`${projectDir}/eslint.config.ts`) } catch (e) {
     if (!isNotFoundError(e)) throw e;
   }
   const configPath = `${projectDir}/${P.ESLINT_CONFIG_JS}`;
-  const raw = await readFile(configPath);
-  await writeFile(configPath, patchEslintConfig(raw));
+  try {
+    const raw = await readFile(configPath);
+    const patched = patchEslintConfig(raw);
+    if (patched !== raw) {
+      await writeFile(configPath, patched);
+    }
+  } catch (e) {
+    if (!isNotFoundError(e)) throw e;
+  }
+}
+
+/**
+ * Ensure eslint.config.js has shadcn ignores in all scaffolded sub-projects.
+ * Idempotent — safe to call on every project open. Silently skips directories
+ * that don't exist or don't have an eslint config.
+ */
+export async function ensureEslintPatched(projectDir: string): Promise<void> {
+  const subDirs = [
+    getGeneratedDirPath(projectDir),
+    getComponentPreviewDirPath(projectDir),
+    getScreenPreviewDirPath(projectDir),
+  ];
+  await Promise.all(subDirs.map(patchEslint));
 }
 
 /**

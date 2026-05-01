@@ -72,11 +72,21 @@ CRITICAL — THE content PARAMETER IS RAW CODE, NOT JSON:
   Code fences and JSON wrappers are syntax errors — the content is saved as a raw .tsx/.css file.
 
 VALIDATION — After writing code:
-After calling write_file, you SHOULD call bash to run 'bun tsc --noEmit && bunx eslint .' to verify the code has no TypeScript or lint errors. If errors are found, read_file the file, fix the errors, and write_file the corrected version.
+After calling write_file, you SHOULD call bash to verify your code:
+1. Run 'bun tsc --noEmit' to check for TypeScript errors.
+2. Run 'bunx eslint <OUTPUT-FILE-PATH>' to lint ONLY the file you wrote — do NOT run eslint on the whole project (it reports false positives in library files).
+If errors are found, read_file the output file, fix the errors, and write_file the corrected version.
 
 IMPORTANT WORKFLOW:
 When asked to UPDATE an existing file, you MUST first read_file to see the current code,
 then explain what you will change, then write_file the updated version.`;
+
+export function outputFilePathSection(outputPath: string): string {
+  return `
+
+OUTPUT FILE — Your write_file output is saved to: ${outputPath}
+When using read_file to verify or fix your code, use exactly this path: ${outputPath}`;
+}
 
 // ─── Shadcn component catalog (used by shadcn-mode prompts) ──────────────────
 

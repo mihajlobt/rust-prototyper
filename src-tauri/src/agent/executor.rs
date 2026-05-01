@@ -106,9 +106,9 @@ async fn execute_write_file(
 
     match tokio::fs::write(&target, &parsed.content).await {
         Ok(()) => {
-            let mut output = format!("Written: {rel_path}");
+            let mut output = format!("Written to: {rel_path}\nTo read this file, use read_file with path: {rel_path}");
             if file_already_existed {
-                output.push_str("\n\nNote: This file already existed. For better edits, use read_file first to see the current code before writing changes.");
+                output.push_str("\n\nNote: This file already existed. Use read_file first to see the current code before writing changes.");
             }
             ToolExecutionResult {
                 success: true,

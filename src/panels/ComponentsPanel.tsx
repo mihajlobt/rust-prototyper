@@ -23,10 +23,10 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { FileEntry } from "@/lib/ipc";
-import { getComponentNewPrompt, getComponentUpdatePrompt } from "@/lib/prompts";
+import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasComponentPreviewScaffold, scaffoldComponentPreview } from "@/lib/scaffold";
+import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -79,7 +79,8 @@ export function ComponentsPanel() {
   const defaultSystem = hasGeneratedCode
     ? getComponentUpdatePrompt(settings.iconLibrary, code, ps.shadcnMode, settings.prompts["prompt.components.update"] || undefined) + themeCssSection
     : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + themeCssSection;
-  const systemContent = defaultSystem;
+  const componentPath = componentId ? `projects/${settings.project}/components/${componentId}/component.tsx` : undefined;
+  const systemContent = defaultSystem + (componentPath ? outputFilePathSection(componentPath) : "");
 
   // Reset guards whenever the active project changes
   useEffect(() => {
@@ -127,6 +128,7 @@ export function ComponentsPanel() {
       } else {
         // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
         writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
+        ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
       }
 
       if (cancelled) return;

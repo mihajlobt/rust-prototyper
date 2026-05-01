@@ -18,7 +18,7 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-import { getThemeSystemPrompt } from "@/lib/prompts";
+import { getThemeSystemPrompt, outputFilePathSection } from "@/lib/prompts";
 import { getParentCss } from "@/lib/preview";
 import { PromptInspector } from "@/components/PromptInspector";
 import Frame from "react-frame-component";
@@ -80,7 +80,7 @@ export function ThemesPanel() {
       themesFramework,
       settings.prompts["prompt.themes.base"] || undefined,
       settings.prompts[`prompt.themes.${themesFramework}`] || undefined,
-    ) + (themesDarkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : ""),
+    ) + (themesDarkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : "") + outputFilePathSection(themeOutputPath),
     outputPath: themeOutputPath,
     onOutput: (content) => {
       // Same extraction as the Apply button: strip fences, keep only the CSS block

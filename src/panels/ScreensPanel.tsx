@@ -9,14 +9,14 @@ import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { getScreenNewPrompt, getScreenUpdatePrompt } from "@/lib/prompts";
+import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useChat } from "@/hooks/useChat";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasScreenPreviewScaffold, scaffoldScreenPreview } from "@/lib/scaffold";
+import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getScreenPreviewDirPath, getScreenPreviewAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 
@@ -60,9 +60,10 @@ export function ScreensPanel() {
   const themeCssSection = themeCss
     ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\``
     : "";
-  const systemContent = hasGeneratedCode
-    ? getScreenUpdatePrompt(settings.iconLibrary, code, settings.prompts["prompt.screens.update"] || undefined) + themeCssSection
-    : getScreenNewPrompt(settings.iconLibrary, settings.prompts["prompt.screens.new"] || undefined) + themeCssSection;
+  const systemContent = (hasGeneratedCode
+    ? getScreenUpdatePrompt(settings.iconLibrary, code, settings.prompts["prompt.screens.update"] || undefined)
+    : getScreenNewPrompt(settings.iconLibrary, settings.prompts["prompt.screens.new"] || undefined)
+  ) + themeCssSection + outputFilePathSection(screenPath);
 
   // Reset guards whenever the active project changes
   useEffect(() => {
@@ -108,6 +109,7 @@ export function ScreensPanel() {
       } else {
         // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
         writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getScreenPreviewAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
+        ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
       }
 
       if (cancelled) return;

@@ -7,6 +7,7 @@ export {
   ICON_LIBRARY_PACKAGES,
   ICON_LIBRARY_CSS_PATHS,
   getIconLibraryPromptSection,
+  outputFilePathSection,
 } from "./prompts/shared";
 
 // Screen prompts
