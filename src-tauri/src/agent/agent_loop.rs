@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{AppError, CompletionEvent};
 use super::{executor::execute_tool, tools::build_tools};
 
-const MAX_ITERATIONS: u8 = 10;
+const MAX_ITERATIONS: u8 = 20;
 const MAX_WRITES: u8 = 3;
 /// Maximum characters of tool output sent to the model's history. Large
 /// file reads can consume excessive context tokens, so we truncate the

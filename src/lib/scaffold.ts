@@ -4,11 +4,13 @@ import type { IconLibrary } from "@/lib/prompts";
 import {
   SHADCN_INIT_COMMAND,
   SHADCN_ADD_COMMAND,
+  ESLINT_INSTALL_COMMAND,
   PROJECT_PATHS,
   getAppTsx,
   getScreenPreviewAppTsx,
   getGeneratedPlaceholderTsx,
   getPreviewThemeCss,
+  getEslintConfig,
   getComponentPreviewDirPath,
   getScreenPreviewDirPath,
   getGeneratedDirPath,
@@ -35,6 +37,7 @@ async function isScaffoldValid(dir: string): Promise<boolean> {
   try {
     await readFile(`${dir}/${P.PACKAGE_JSON}`);
     await readFile(`${dir}/${P.COMPONENTS_JSON}`);
+    await readFile(`${dir}/${P.ESLINT_CONFIG_TS}`);
     await readFile(`${dir}/${SRC.INDEX_CSS}`);
     await readFile(`${dir}/${SRC.UTILS_TS}`);
     await readFile(`${dir}/${SRC.APP_TSX}`);
@@ -112,6 +115,13 @@ export async function scaffoldGenerated(
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
     await bunInstallSync(generatedDir);
   }
+
+  // Step 5: Write eslint.config.ts and install ESLint dev dependencies.
+  // Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
+  // bun create @eslint/config is interactive and cannot be automated.
+  onStep?.("Setting up ESLint…");
+  await writeFile(`${generatedDir}/${P.ESLINT_CONFIG_TS}`, getEslintConfig());
+  await runShellCommandSync(generatedDir, ESLINT_INSTALL_COMMAND);
 }
 
 /**
@@ -188,6 +198,12 @@ export async function scaffoldComponentPreview(
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
     await bunInstallSync(componentPreviewDir);
   }
+
+  // Step 9: Write eslint.config.ts and install ESLint dev dependencies.
+  // Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
+  onStep?.("Setting up ESLint…");
+  await writeFile(`${componentPreviewDir}/${P.ESLINT_CONFIG_TS}`, getEslintConfig());
+  await runShellCommandSync(componentPreviewDir, ESLINT_INSTALL_COMMAND);
 }
 
 /**
@@ -268,6 +284,12 @@ export async function scaffoldScreenPreview(
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
     await bunInstallSync(screenPreviewDir);
   }
+
+  // Step 8: Write eslint.config.ts and install ESLint dev dependencies.
+  // Per ESLint docs manual setup: https://eslint.org/docs/latest/use/getting-started#manual-set-up
+  onStep?.("Setting up ESLint…");
+  await writeFile(`${screenPreviewDir}/${P.ESLINT_CONFIG_TS}`, getEslintConfig());
+  await runShellCommandSync(screenPreviewDir, ESLINT_INSTALL_COMMAND);
 }
 
 /**

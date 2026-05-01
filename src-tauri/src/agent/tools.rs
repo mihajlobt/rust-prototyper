@@ -47,7 +47,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "bash".to_string(),
-                description: "Run a shell command in the project directory. Use for checking files, running linters or type-checkers (e.g. 'bun tsc --noEmit'), or inspecting directory structure. After writing code with write_file, run 'bun tsc --noEmit' to verify there are no TypeScript errors. 30-second timeout.".to_string(),
+                description: "Run a shell command in the project directory. Use for checking files, running linters or type-checkers (e.g. 'bun tsc --noEmit' or 'bunx eslint .'). After writing code with write_file, run 'bun tsc --noEmit && bunx eslint .' to verify. 30-second timeout — prefer short commands.".to_string(),
                 parameters: make_schema::<BashArgs>(),
             },
         },
