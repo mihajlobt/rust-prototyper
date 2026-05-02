@@ -1,5 +1,6 @@
 mod agent;
 pub mod commands;
+pub mod sandbox;
 
 use std::sync::Mutex;
 use std::collections::HashMap;
