@@ -134,6 +134,7 @@ function createStreamHandler(params: StreamHandlerParams) {
 
   let contentAccumulated = ""
   let thinkingAccumulated = ""
+  let chunkIndex = 0
   let toolWritten = false
   let rafId: number | null = null
   let rafThinkingId: number | null = null
@@ -157,6 +158,7 @@ function createStreamHandler(params: StreamHandlerParams) {
       content,
       ...(thinking ? { thinking } : {}),
       ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
+      ...(currentLast?.streamChunks?.length ? { streamChunks: currentLast.streamChunks } : {}),
     }
     const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
     useChatStore.getState().setMessages(entityId, finalMessages)
@@ -188,19 +190,44 @@ function createStreamHandler(params: StreamHandlerParams) {
       }
     } else if (msg.event === "ToolCall") {
       useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
+      // Flush accumulated thinking/text as a chunk at tool boundary
+      useChatStore.getState().addStreamChunk(entityId, {
+        index: chunkIndex++,
+        thinking: thinkingAccumulated,
+        text: contentAccumulated,
+      })
+      thinkingAccumulated = ""
+      contentAccumulated = ""
+      // Clear live accumulators so they don't duplicate the chunk we just stored
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+      if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+      useChatStore.getState().setStreamingContent(entityId, "")
+      useChatStore.getState().setStreamingThinking(entityId, "")
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
       if (tool === "write_file" && success) toolWritten = true
       if (tool === "write_file" && success) {
         contentAccumulated = ""
+        // Prevent stale text from appearing after write_file result
+        useChatStore.getState().setStreamingContent(entityId, "")
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         if (content) onOutputRef.current?.(stripFences(content))
       }
       pendingToolResultsRef.current.push({ tool, success, output, path, content })
       setToolResultTick((tick) => tick + 1)
     } else if (msg.event === "Done") {
-      finalize(contentAccumulated, thinkingAccumulated)
-      if (!toolWritten) onOutputRef.current?.(contentAccumulated)
+      const finalThinking = thinkingAccumulated
+      const finalContent = contentAccumulated
+      // Flush remaining accumulated thinking/text as final chunk
+      if (thinkingAccumulated || contentAccumulated) {
+        useChatStore.getState().addStreamChunk(entityId, {
+          index: chunkIndex++,
+          thinking: thinkingAccumulated,
+          text: contentAccumulated,
+        })
+      }
+      finalize(finalContent, finalThinking)
+      if (!toolWritten) onOutputRef.current?.(finalContent)
     } else if (msg.event === "Error") {
       finalize(`⚠ ${msg.data.message}`, "")
       notify.error("Generation failed", msg.data.message)

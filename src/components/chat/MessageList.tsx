@@ -139,7 +139,9 @@ const MessageBubble = memo(function MessageBubble({
   onApplyCode, onRegenerate, onDeleteFrom,
 }: MessageBubbleProps) {
   const content = message.content
-  const isEmpty = isStreaming && content === "" && !streamingThinking
+  const hasChunks = !!message.streamChunks?.length
+  const hasTools = !!message.toolCalls?.length
+  const isEmpty = isStreaming && content === "" && !streamingThinking && !hasChunks && !hasTools
 
   const hasThinking = isStreaming ? streamingThinking.length > 0 : !!message.thinking
   const thinkingText = isStreaming ? streamingThinking : (message.thinking ?? "")
@@ -174,6 +176,72 @@ const MessageBubble = memo(function MessageBubble({
     )
   }
 
+  /*
+   * Renders stream chunks and their corresponding tool calls in the order
+   * they occurred: think[i] → tool[i] → think[i+1] → tool[i+1] → liveThink
+   *
+   * Each chunk captures what was accumulated between tool boundaries.
+   * The live thinking/content (after the last stored chunk) is rendered
+   * separately so it updates in real time without waiting for the next
+   * tool call to create a stored chunk.
+   */
+  const renderInterleaved = () => {
+    const chunks = message.streamChunks ?? []
+    const toolCalls = message.toolCalls ?? []
+    const elements: React.ReactNode[] = []
+
+    // Pair each stored chunk with its corresponding tool call
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      // Stored chunks are finalized — never streaming
+      if (chunk.thinking) {
+        elements.push(
+          <Reasoning key={`think-${i}`} isStreaming={false}>
+            <ReasoningTrigger className="text-xs text-muted-foreground">Thinking</ReasoningTrigger>
+            <ReasoningContent markdown className="text-xs">{chunk.thinking}</ReasoningContent>
+          </Reasoning>
+        )
+      }
+      if (chunk.text) {
+        elements.push(<MessageContent key={`text-${i}`} markdown className="text-sm">{chunk.text}</MessageContent>)
+      }
+      // The tool call that followed this chunk
+      if (i < toolCalls.length) {
+        elements.push(
+          <Tool
+            key={`tool-${i}`}
+            toolPart={toolPartFromRecord(toolCalls[i])}
+            defaultOpen={i === toolCalls.length - 1 && isStreaming}
+          />
+        )
+      }
+    }
+
+    // If there are more tools than chunks, render remaining tools
+    for (let i = chunks.length; i < toolCalls.length; i++) {
+      elements.push(
+        <Tool
+          key={`tool-${i}`}
+          toolPart={toolPartFromRecord(toolCalls[i])}
+          defaultOpen={i === toolCalls.length - 1 && isStreaming}
+        />
+      )
+    }
+
+    // Live thinking that arrived after the last stored chunk (or before any tool)
+    // This is the "current" segment that is actively streaming
+    if (isStreaming && streamingThinking.length > 0) {
+      elements.push(
+        <Reasoning key="think-live" isStreaming={true}>
+          <ReasoningTrigger className="text-xs text-muted-foreground">Thinking</ReasoningTrigger>
+          <ReasoningContent markdown className="text-xs">{streamingThinking}</ReasoningContent>
+        </Reasoning>
+      )
+    }
+
+    return elements
+  }
+
   // ── Assistant message ─────────────────────────────────────────────
   return (
     <Message>
@@ -181,42 +249,33 @@ const MessageBubble = memo(function MessageBubble({
       <div className="flex flex-col gap-1 max-w-[85%]">
         {isEmpty ? (
           <Loader variant="typing" size="sm" />
-        ) : hasThinking ? (
+        ) : (
           <>
-            <Reasoning isStreaming={isStreaming}>
-              <ReasoningTrigger className="text-xs text-muted-foreground">
-                Thinking
-              </ReasoningTrigger>
-              <ReasoningContent markdown={!isStreaming} className="text-xs">
-                {thinkingText}
-              </ReasoningContent>
-            </Reasoning>
-            {content && (
-              <MessageContent markdown isStreaming={isStreaming} className="text-sm">
-                {content}
-              </MessageContent>
+            {(hasChunks || hasTools) ? renderInterleaved() : (
+              <>
+                {hasThinking && (
+                  <>
+                    <Reasoning isStreaming={isStreaming}>
+                      <ReasoningTrigger className="text-xs text-muted-foreground">Thinking</ReasoningTrigger>
+                      <ReasoningContent markdown={!isStreaming} className="text-xs">{thinkingText}</ReasoningContent>
+                    </Reasoning>
+                    {content && <MessageContent markdown isStreaming={isStreaming} className="text-sm">{content}</MessageContent>}
+                  </>
+                )}
+                {!hasThinking && <MessageContent markdown isStreaming={isStreaming} className="text-sm">{content}</MessageContent>}
+              </>
+            )}
+
+            {/* Live content after all tools — only when streaming */}
+            {(isStreaming && hasTools) && (
+              <MessageContent markdown isStreaming className="text-sm">{content}</MessageContent>
+            )}
+
+            {/* Generating indicator — streaming with no content yet */}
+            {isStreaming && !hasThinking && content === "" && !hasTools && (
+              <Loader variant="loading-dots" size="sm" text="Generating" />
             )}
           </>
-        ) : (
-          <MessageContent markdown isStreaming={isStreaming} className="text-sm">
-            {content}
-          </MessageContent>
-        )}
-
-        {/* Tool cards — pending spinner while executing, result when done */}
-        {message.toolCalls?.length ? (
-          message.toolCalls.map((tc, i) => (
-            <Tool
-              key={i}
-              toolPart={toolPartFromRecord(tc)}
-              defaultOpen
-            />
-          ))
-        ) : null}
-
-        {/* Generating indicator — streaming with no tool calls yet */}
-        {isStreaming && !isEmpty && !message.toolCalls?.length && (
-          <Loader variant="loading-dots" size="sm" text="Generating" />
         )}
 
         {/* Single-row actions: copy + apply + regenerate */}
@@ -250,6 +309,7 @@ const MessageBubble = memo(function MessageBubble({
   prev.message.content === next.message.content &&
   prev.message.toolCalls === next.message.toolCalls &&
   prev.message.thinking === next.message.thinking &&
+  prev.message.streamChunks === next.message.streamChunks &&
   prev.isStreaming === next.isStreaming &&
   prev.isLastAssistant === next.isLastAssistant &&
   prev.streamingThinking === next.streamingThinking &&

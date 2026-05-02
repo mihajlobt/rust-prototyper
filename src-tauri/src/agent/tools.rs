@@ -47,7 +47,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "bash".to_string(),
-                description: "Run a shell command. Working directory is the project root (e.g. projects/my-project/). Do NOT use 'cd projects/...' — you are already there. After writing a component with write_file, type-check it with: cd component-preview && bun node_modules/typescript/lib/tsc.js --noEmit --project ../tsconfig.check.json 2>&1 | grep 'components/'. Do NOT run eslint on the whole project. Use ls, find, or cat to inspect files. 30-second timeout — keep commands short.".to_string(),
+                description: "Run a shell command in the project root. After write_file, ALWAYS run both: 1) Type-check: cd component-preview && bun node_modules/typescript/lib/tsc.js --noEmit --project ../tsconfig.check.json 2>&1 | grep 'components/YOUR-FILE/component.tsx'. 2) Lint: bunx eslint components/YOUR-FILE/component.tsx. Replace YOUR-FILE with the actual folder name you wrote. NEVER run tsc or eslint on the whole project. Use ls/find/cat to inspect. 30s timeout.".to_string(),
                 parameters: make_schema::<BashArgs>(),
             },
         },

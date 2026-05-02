@@ -7,12 +7,24 @@ export interface ToolCallRecord {
   pending?: boolean
 }
 
+/// Groups thinking/text that arrived between tool invocations
+export interface StreamChunk {
+  /** Ordered index for rendering */
+  index: number
+  /** Combined thinking accumulated since last tool result */
+  thinking: string
+  /** Text content accumulated since last tool result */
+  text: string
+}
+
 export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   thinking?: string
   images?: string[]
   toolCalls?: ToolCallRecord[]
+  /** Thinking/text chunks grouped by tool boundaries for cursor-like display */
+  streamChunks?: StreamChunk[]
 }
 
 export interface MentionAsset {

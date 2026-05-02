@@ -1,10 +1,10 @@
 import { create } from "zustand"
-import type { ChatMessage } from "@/types/chat"
+import type { ChatMessage, StreamChunk } from "@/types/chat"
 
 interface ChatState {
   messages: ChatMessage[]
   isStreaming: boolean
-  thinkingContent: string  // Accumulated thinking during streaming (separate field)
+  thinkingContent: string
 }
 
 interface ChatStore {
@@ -19,6 +19,7 @@ interface ChatStore {
   updateLastToolResult: (id: string, tool: string, result: string, success: boolean) => void
   patchLastToolCallPath: (id: string, tool: string, path: string) => void
   clearChat: (id: string) => void
+  addStreamChunk: (id: string, chunk: StreamChunk) => void
 }
 
 const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "" }
@@ -116,6 +117,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
     }),
 
-  clearChat: (id) =>
+clearChat: (id) =>
     set((s) => ({ chats: { ...s.chats, [id]: EMPTY } })),
+
+  addStreamChunk: (id, chunk) =>
+    set((s) => {
+      const chat = s.chats[id] ?? EMPTY
+      const messages = [...chat.messages]
+      const last = messages[messages.length - 1]
+      if (last?.role === "assistant") {
+        const prev = last.streamChunks ?? []
+        messages[messages.length - 1] = { ...last, streamChunks: [...prev, chunk] }
+      }
+      return { chats: { ...s.chats, [id]: { ...chat, messages } } }
+    }),
 }))
