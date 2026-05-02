@@ -19,9 +19,63 @@ const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 5000;
 fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     let parts: Vec<&str> = output_path.splitn(3, '/').collect();
     if parts.len() >= 2 {
-        app_data_dir.join(parts[0]).join(parts[1]).join("generated")
+        app_data_dir.join(parts[0]).join(parts[1])
     } else {
         app_data_dir.to_path_buf()
+    }
+}
+
+/// Prepare the project directory for agent bash commands.
+///
+/// Creates a `node_modules` symlink at the project root pointing to
+/// `component-preview/node_modules` so TypeScript's module resolution
+/// (which walks ancestor directories) finds packages when type-checking
+/// files in `components/` or `screens/` subdirectories.
+///
+/// Also writes `tsconfig.check.json` extending the app tsconfig so the
+/// model can run `cd component-preview && bunx tsc --noEmit --project
+/// ../tsconfig.check.json` without needing to construct the config itself.
+///
+/// Both files are idempotent to create; `tsconfig.check.json` is always
+/// refreshed so its content stays in sync with this function.
+async fn setup_project_dir(proj_dir: &Path) {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::symlink;
+
+        let component_preview = proj_dir.join("component-preview");
+        if component_preview.exists() {
+            // Create node_modules symlink at project root → component-preview/node_modules.
+            // Only creates if not already present; a pre-existing real directory is left alone.
+            let link = proj_dir.join("node_modules");
+            if !link.exists() {
+                let _ = symlink("component-preview/node_modules", &link);
+            }
+
+            // tsconfig.check.json at project root: extends component-preview's app tsconfig,
+            // overrides include to cover components/ and screens/ alongside src/.
+            // `noUnusedLocals/Parameters` disabled — generated code often has unused stubs.
+            // `types: []` drops vite/client (not relevant outside the preview app runtime).
+            // `typeRoots` points to component-preview/node_modules/@types for global types.
+            let tsconfig = proj_dir.join("tsconfig.check.json");
+            let content = r#"{
+  "extends": "./component-preview/tsconfig.app.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": [],
+    "typeRoots": ["./component-preview/node_modules/@types"]
+  },
+  "include": [
+    "components/**/*.tsx",
+    "components/**/*.ts",
+    "screens/**/*.tsx",
+    "screens/**/*.ts"
+  ]
+}
+"#;
+            let _ = tokio::fs::write(&tsconfig, content).await;
+        }
     }
 }
 
@@ -66,6 +120,7 @@ struct StreamMessage {
     tool_calls: Vec<serde_json::Value>,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn stream_turn(
     http_client: &reqwest::Client,
     host: &str,
@@ -204,6 +259,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
     let AgentLoopParams { http_client, host, api_key, model, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token } = params;
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
+    setup_project_dir(&proj_dir).await;
 
     let mut history = initial_messages_json;
     let tools = build_tools();
