@@ -23,9 +23,16 @@ import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage, ToolCallRecord } from "@/types/chat"
 
 function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
+  // "(no output)" from grep/filter commands ≠ error (just no match)
+  // Always show as info, ignore the success field for this case
+  const isEmptyOutput = tc.result === "" || tc.result === undefined || tc.result === "(no output)"
+  // Only show error if success is explicitly false AND output has actual content
+  const isRealError = tc.success === false && !isEmptyOutput
   const state = tc.pending
     ? "input-streaming"
-    : tc.success === false
+    : isEmptyOutput
+    ? "output-empty"
+    : isRealError
     ? "output-error"
     : "output-available"
 
@@ -37,14 +44,14 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
         type: "write_file",
         state,
         input: filename ? { file: filename } : tc.arguments,
-        output: tc.result ? { written: filename ?? "file" } : undefined,
+        output: tc.result !== undefined ? { written: filename ?? "file" } : undefined,
       }
     case "read_file":
       return {
         type: "read_file",
         state,
         input: { path: (tc.arguments.path as string) ?? tc.path },
-        output: tc.result ? { contents: tc.result.slice(0, 500) + (tc.result.length > 500 ? "…" : "") } : undefined,
+        output: tc.result !== undefined ? { contents: tc.result.slice(0, 500) + (tc.result.length > 500 ? "…" : "") } : undefined,
         errorText: tc.success === false ? tc.result : undefined,
       }
     case "bash":
@@ -52,7 +59,7 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
         type: "bash",
         state,
         input: { command: tc.arguments.command as string },
-        output: tc.result ? { output: tc.result } : undefined,
+        output: tc.result !== undefined ? { output: tc.result } : undefined,
         errorText: tc.success === false ? tc.result : undefined,
       }
     default:
@@ -60,7 +67,7 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
         type: tc.tool,
         state,
         input: tc.arguments,
-        output: tc.result ? { result: tc.result } : undefined,
+        output: tc.result !== undefined ? { result: tc.result } : undefined,
       }
   }
 }

@@ -23,6 +23,7 @@ export type ToolPart = {
     | "input-streaming"
     | "input-available"
     | "output-available"
+    | "output-empty"
     | "output-error"
   input?: Record<string, unknown>
   output?: Record<string, unknown>
@@ -49,6 +50,8 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
         return <Settings className="h-4 w-4 text-orange-500" />
       case "output-available":
         return <CheckCircle className="h-4 w-4 text-green-500" />
+      case "output-empty":
+        return <CheckCircle className="h-4 w-4 text-muted-foreground" />
       case "output-error":
         return <XCircle className="h-4 w-4 text-red-500" />
       default:
@@ -90,6 +93,17 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
             )}
           >
             Completed
+          </span>
+        )
+      case "output-empty":
+        return (
+          <span
+            className={cn(
+              baseClasses,
+              "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400"
+            )}
+          >
+            Info
           </span>
         )
       case "output-error":
