@@ -167,6 +167,10 @@ async fn stream_turn(
                                     }
                                     let thinking = response.message.thinking.filter(|t| !t.is_empty());
                                     let text = response.message.content.clone();
+                                    eprintln!("[agent-chunk] done={} text.len={} thinking={:?} tool_calls={}",
+                                        response.done, text.len(),
+                                        thinking.as_deref().map(|t| &t[..t.len().min(80)]),
+                                        response.message.tool_calls.len());
                                     if !text.is_empty() {
                                         content_accumulated.push_str(&text);
                                     }
