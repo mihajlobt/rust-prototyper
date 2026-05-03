@@ -81,12 +81,6 @@ export function RunnerPanel() {
   useEffect(() => {
     let cancelled = false;
     let stopFn: (() => void) | null = null;
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) {
-        console.warn("[watcher] timed out");
-      }
-    }, 3000);
-
     (async () => {
       try {
         const unwatch = await watch(
@@ -98,17 +92,15 @@ export function RunnerPanel() {
           },
           { baseDir: BaseDirectory.AppData, recursive: true, delayMs: 500 },
         );
-        clearTimeout(timeoutId);
         if (cancelled) { unwatch(); return; }
         stopFn = unwatch;
       } catch (error) {
-        clearTimeout(timeoutId);
+        // Expected when generated/ doesn't exist yet; log for debugging other failures
         console.warn("[watcher] failed to start:", error);
       }
     })();
     return () => {
       cancelled = true;
-      clearTimeout(timeoutId);
       stopFn?.();
     };
   }, [generatedDir]);
