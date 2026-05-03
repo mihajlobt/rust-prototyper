@@ -169,7 +169,7 @@ export function ScreensPanel() {
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, clearChat, deleteFrom, attachments, addAttachment, removeAttachment,
-    thinkEnabled, toggleThink, canThink, canVision,
+    thinkEnabled, toggleThink, thinkLevel, setThinkLevel, isGptOssFamily, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
     pendingPermissions,
@@ -318,6 +318,9 @@ export function ScreensPanel() {
           placeholder="Describe your screen..."
           thinkEnabled={thinkEnabled}
           onToggleThink={toggleThink}
+          thinkLevel={thinkLevel}
+          onSetThinkLevel={setThinkLevel}
+          isGptOssFamily={isGptOssFamily}
           canThink={canThink}
           canVision={canVision}
           toolsEnabled={toolsEnabled}

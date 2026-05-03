@@ -74,6 +74,24 @@ function buildApiMessages(
   return result
 }
 
+/** Resolves the think parameter to send to Ollama based on model capabilities and user toggle.
+ *  - gpt-oss family: always sends a level (low/medium/high), can't fully disable
+ *  - Other models: sends false to disable, true/level to enable, undefined if model doesn't support */
+function resolveThinkParam(
+  caps: { thinking: boolean; thinkLevel?: "low" | "medium" | "high" },
+  isGptOssFamily: boolean,
+  thinkEnabled: boolean,
+  thinkLevel: "low" | "medium" | "high",
+): boolean | "low" | "medium" | "high" | undefined {
+  if (!caps.thinking) return undefined
+
+  if (isGptOssFamily) {
+    return thinkEnabled ? thinkLevel : "low"
+  }
+
+  return thinkEnabled ? (caps.thinkLevel ?? true) : false
+}
+
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -288,16 +306,24 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const caps = useModelCapabilities(modelId)
 
+  // gpt-oss family uses reasoning effort levels instead of on/off toggle
+  const isGptOssFamily = caps.family === "gptoss"
+
   const [thinkEnabled, setThinkEnabled] = useState(false)
+  const [thinkLevel, setThinkLevel] = useState<"low" | "medium" | "high">("medium")
   const prevCanThinkRef = useRef(false)
   useEffect(() => {
     if (caps.thinking && !prevCanThinkRef.current) {
       setThinkEnabled(true)
+      // Auto-set think level based on capabilities (default "medium" for gpt-oss)
+      if (caps.thinkLevel) {
+        setThinkLevel(caps.thinkLevel)
+      }
     } else if (!caps.thinking) {
       setThinkEnabled(false)
     }
     prevCanThinkRef.current = caps.thinking
-  }, [caps.thinking])
+  }, [caps.thinking, caps.thinkLevel])
 
   const [toolsEnabled, setToolsEnabled] = useState(true)
   const prevCanToolsRef = useRef(false)
@@ -409,9 +435,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
-    const useThinking: boolean | "low" | "medium" | "high" | undefined = thinkEnabled && caps.thinking
-      ? (caps.thinkLevel ?? true)
-      : undefined
+    const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
     ;(stopRef as MutableRefObject<boolean>).current = false
@@ -503,9 +527,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const resolvedHost = getHostForProvider(provider as Provider, host)
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
-    const useThinking: boolean | "low" | "medium" | "high" | undefined = thinkEnabled && caps.thinking
-      ? (caps.thinkLevel ?? true)
-      : undefined
+    const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
     ;(stopRef as MutableRefObject<boolean>).current = false
@@ -582,6 +604,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     removeMention,
     thinkEnabled,
     toggleThink: () => setThinkEnabled((v) => !v),
+    thinkLevel,
+    setThinkLevel: (level: "low" | "medium" | "high") => setThinkLevel(level),
+    isGptOssFamily,
     canThink: caps.thinking,
     toolsEnabled,
     toggleTools: () => setToolsEnabled((v) => !v),

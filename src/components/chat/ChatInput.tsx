@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent, type ClipboardEvent, type KeyboardEve
 import { Send, Square, ImageIcon, Brain, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker } from "./MentionPicker"
 import { AttachmentChip } from "./AttachmentChip"
@@ -24,6 +25,12 @@ interface ChatInputProps {
   placeholder?: string
   thinkEnabled?: boolean
   onToggleThink?: () => void
+  /** Reasoning effort level for gpt-oss family (low/medium/high) */
+  thinkLevel?: "low" | "medium" | "high"
+  /** Set reasoning effort level for gpt-oss family */
+  onSetThinkLevel?: (level: "low" | "medium" | "high") => void
+  /** Whether current model is gpt-oss family (shows level selector instead of on/off toggle) */
+  isGptOssFamily?: boolean
   canThink?: boolean
   canVision?: boolean
   toolsEnabled?: boolean
@@ -36,7 +43,8 @@ export function ChatInput({
   value, onChange, onSend, disabled,
   attachments, onAddAttachment, onRemoveAttachment,
   mentions, onAddMention, onRemoveMention,
-  thinkEnabled, onToggleThink, canThink, canVision, toolsEnabled, onToggleTools, canTools, onStop,
+  thinkEnabled, onToggleThink, thinkLevel, onSetThinkLevel, isGptOssFamily,
+  canThink, canVision, toolsEnabled, onToggleTools, canTools, onStop,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -170,29 +178,66 @@ export function ChatInput({
         <div className="flex items-center justify-between px-2 pb-2">
           <div className="flex items-center gap-1">
             <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={canThink ? onToggleThink : undefined}
-                    className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition-colors ${
-                      canThink
-                        ? thinkEnabled
-                          ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        : "text-muted-foreground/30 cursor-not-allowed"
-                    }`}
-                  >
-                    <Brain size={13} />
-                    {thinkEnabled && canThink && <span>Thinking</span>}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {canThink
-                    ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
-                    : "Model does not support thinking"}
-                </TooltipContent>
-              </Tooltip>
+              {isGptOssFamily ? (
+                /* Reasoning effort selector for gpt-oss family */
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ToggleGroup
+                      type="single"
+                      value={thinkLevel ?? "medium"}
+                      onValueChange={(v) => v && onSetThinkLevel?.(v as "low" | "medium" | "high")}
+                      className="h-6 gap-0"
+                    >
+                      <ToggleGroupItem
+                        value="low"
+                        className="h-6 px-1.5 text-xs data-[state=off]:text-muted-foreground data-[state=on]:text-violet-400 data-[state=on]:bg-violet-500/10"
+                      >
+                        L
+                      </ToggleGroupItem>
+                      <ToggleGroupItem
+                        value="medium"
+                        className="h-6 px-1.5 text-xs data-[state=off]:text-muted-foreground data-[state=on]:text-violet-400 data-[state=on]:bg-violet-500/10"
+                      >
+                        M
+                      </ToggleGroupItem>
+                      <ToggleGroupItem
+                        value="high"
+                        className="h-6 px-1.5 text-xs data-[state=off]:text-muted-foreground data-[state=on]:text-violet-400 data-[state=on]:bg-violet-500/10"
+                      >
+                        H
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    Reasoning effort level (gpt-oss always thinks)
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                /* Regular on/off toggle for non-gpt-oss models */
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={canThink ? onToggleThink : undefined}
+                      className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition-colors ${
+                        canThink
+                          ? thinkEnabled
+                            ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          : "text-muted-foreground/30 cursor-not-allowed"
+                      }`}
+                    >
+                      <Brain size={13} />
+                      {thinkEnabled && canThink && <span>Thinking</span>}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {canThink
+                      ? thinkEnabled ? "Thinking on — click to disable" : "Thinking off — click to enable"
+                      : "Model does not support thinking"}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </TooltipProvider>
 
             <TooltipProvider>

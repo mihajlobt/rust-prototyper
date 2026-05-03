@@ -77,7 +77,7 @@ export function ThemesPanel() {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, clearChat, deleteFrom, attachments, addAttachment, removeAttachment,
     mentions, addMention, removeMention,
-    thinkEnabled, toggleThink, canThink, canVision,
+    thinkEnabled, toggleThink, thinkLevel, setThinkLevel, isGptOssFamily, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     pendingPermissions,
   } = useChat({
@@ -175,6 +175,9 @@ export function ThemesPanel() {
           placeholder="Describe the theme you want…"
           thinkEnabled={thinkEnabled}
           onToggleThink={toggleThink}
+          thinkLevel={thinkLevel}
+          onSetThinkLevel={setThinkLevel}
+          isGptOssFamily={isGptOssFamily}
           canThink={canThink}
           canVision={canVision}
           toolsEnabled={toolsEnabled}
