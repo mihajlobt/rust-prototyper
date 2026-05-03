@@ -402,10 +402,11 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                                 });
                             }
                             ToolPermissionDecision::AlwaysAllowed => {
+                                // Added to allowlist - execute the tool after showing this message
                                 let _ = channel.send(CompletionEvent::ToolResult {
                                     tool: name.clone(),
-                                    success: false,
-                                    output: format!("auto_allowlist_add({name})"),
+                                    success: true,
+                                    output: format!("Added {name} to allowlist, executing..."),
                                     path: None,
                                     content: None,
                                 });
