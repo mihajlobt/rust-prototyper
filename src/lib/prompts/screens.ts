@@ -31,7 +31,6 @@ export const SCREEN_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript dev
 ${TOOL_USAGE_SECTION}
 
 CODE RULES:
-- Output the COMPLETE updated file — do NOT patch or diff.
 - Preserve ALL existing imports and add any new ones required. Every identifier used must be imported.
 - The function MUST remain the default export: export default function App() { ... }
 - Preserve ALL existing functionality and responsive design unless asked to change it.

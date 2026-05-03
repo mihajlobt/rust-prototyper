@@ -459,6 +459,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         isOllama ? modelOptions : undefined,
         toolPermissionMode,
         toolAllowlist,
+        caps.family,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -553,6 +554,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         isOllamaRegen ? modelOptions : undefined,
         toolPermissionMode,
         toolAllowlist,
+        caps.family,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {

@@ -167,10 +167,6 @@ async fn stream_turn(
                                     }
                                     let thinking = response.message.thinking.filter(|t| !t.is_empty());
                                     let text = response.message.content.clone();
-                                    eprintln!("[agent-chunk] done={} text.len={} thinking={:?} tool_calls={}",
-                                        response.done, text.len(),
-                                        thinking.as_deref().map(|t| &t[..t.len().min(80)]),
-                                        response.message.tool_calls.len());
                                     if !text.is_empty() {
                                         content_accumulated.push_str(&text);
                                     }
@@ -304,6 +300,8 @@ pub struct AgentLoopParams<'a> {
     pub host: &'a str,
     pub api_key: &'a str,
     pub model: &'a str,
+    /// Model family as returned by Ollama's /api/show details.family (e.g. "gemma4", "gptoss").
+    pub model_family: &'a str,
     pub initial_messages_json: Vec<serde_json::Value>,
     pub think: Option<ThinkType>,
     pub app_data_dir: &'a Path,
@@ -316,12 +314,23 @@ pub struct AgentLoopParams<'a> {
 }
 
 pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
-    let AgentLoopParams { http_client, host, api_key, model, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist } = params;
+    let AgentLoopParams { http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist } = params;
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
     setup_project_dir(&proj_dir).await;
 
+    // Gemma4 requires <|think|> at the start of the system prompt to enable thinking.
+    // The think: true API parameter alone is insufficient for this model family.
+    // https://ai.google.dev/gemma/docs/capabilities/thinking
     let mut history = initial_messages_json;
+    if model_family == "gemma4" && think.is_some() {
+        if let Some(system) = history.iter_mut().find(|m| m["role"] == "system") {
+            let content = system["content"].as_str().unwrap_or("");
+            if !content.starts_with("<|think|>") {
+                system["content"] = format!("<|think|>{content}").into();
+            }
+        }
+    }
     let tools = build_tools();
     let tools_json = serde_json::to_value(&tools).expect("tools serialization should never fail");
 

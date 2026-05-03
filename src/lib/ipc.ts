@@ -242,7 +242,8 @@ export async function generateCompletionStream(
   provider: Provider = "ollama-local",
   options?: OllamaModelOptions,
   toolPermissionMode?: ToolPermissionMode,
-  toolAllowlist?: string[]
+  toolAllowlist?: string[],
+  modelFamily?: string,
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -256,6 +257,7 @@ export async function generateCompletionStream(
       options: options ?? null,
       toolPermissionMode: toolPermissionMode ?? "ask_every_time",
       toolAllowlist: toolAllowlist ?? [],
+      modelFamily: modelFamily ?? null,
     },
     onEvent,
   });

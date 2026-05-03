@@ -49,6 +49,7 @@ pub async fn execute_tool(
         "bash" => execute_bash(args, project_dir).await,
         "run_tsc" => execute_run_tsc(args, project_dir).await,
         "run_lint" => execute_run_lint(args, project_dir).await,
+        "run_build" => execute_run_build(args, project_dir).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
@@ -326,17 +327,59 @@ async fn execute_run_lint(
 
     let (body, exit_code) = extract_exit_code(&raw);
 
-    let output = if body.trim().is_empty() {
-        format!("✅ No ESLint errors in {}", parsed.path)
-    } else {
-        body.to_string()
+    // Exit 0 = clean; 1 = lint violations; 2 = config/internal error.
+    ToolExecutionResult {
+        success: exit_code == Some(0),
+        output: body.to_string(),
+        written_path: None,
+        written_content: None,
+    }
+}
+
+async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<LintCheckArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("run_build: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
     };
 
-    // Exit 0 = clean; 1 = lint violations; 2 = config/internal error.
-    let success = exit_code == Some(0);
+    if parsed.path.contains("..") {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("run_build: {}", ToolError::Security("path traversal not allowed".into())),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let component_relative = if parsed.path.starts_with("projects/") {
+        parsed.path.splitn(3, '/').nth(2).unwrap_or(&parsed.path)
+    } else {
+        &parsed.path
+    };
+
+    let escaped = match shlex::try_quote(&format!("../{}", component_relative)) {
+        Ok(s) => s.into_owned(),
+        Err(_) => return ToolExecutionResult {
+            success: false,
+            output: format!("run_build: {}", ToolError::Security("path contains a nul byte".into())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    // esbuild is a Vite dependency — always available in component-preview/node_modules.
+    let command = format!("cd component-preview && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
+    let raw = run_sandboxed_command(&command, project_dir).await;
+    let (body, exit_code) = extract_exit_code(&raw);
+
     ToolExecutionResult {
-        success,
-        output,
+        success: exit_code == Some(0),
+        output: body.to_string(),
         written_path: None,
         written_content: None,
     }

@@ -74,6 +74,7 @@ CRITICAL — THE content PARAMETER IS RAW CODE, NOT JSON:
 VALIDATION — After writing or editing code:
 1. Call run_tsc (optionally with the file path to filter output) to check for TypeScript errors.
 2. Call run_lint with the file path to check for ESLint violations.
+3. Call run_build with the file path to catch JSX/Babel syntax errors that tsc does not detect (e.g. malformed JSX tags).
 If errors are found, use edit_file to fix them surgically — do NOT rewrite the whole file with write_file.
 
 IMPORTANT WORKFLOW:

@@ -71,7 +71,6 @@ This is a COMPONENT preview — NOT a full-page app generator. Keep the componen
 ${TOOL_USAGE_SECTION}
 
 CODE RULES:
-- Output the COMPLETE updated function — do NOT patch or diff.
 - NO import statements of any kind. NO export keyword. Function must be named App.
 - Preserve the component scope — do NOT expand into a full-screen layout.
 - Keep all existing hooks, state, and handlers intact.
@@ -89,7 +88,6 @@ ${SHADCN_COMPONENT_CATALOG}
 ${TOOL_USAGE_SECTION}
 
 CODE RULES:
-- Output the COMPLETE updated function — do NOT patch or diff.
 - You MAY import shadcn components: import { Button } from "@/components/ui/button"
 - You MAY import cn utility: import { cn } from "@/lib/utils"
 - Do NOT import React or React hooks — they are available globally.

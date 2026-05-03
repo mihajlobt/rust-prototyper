@@ -92,6 +92,14 @@ pub fn build_tools() -> Vec<ToolInfo> {
         ToolInfo {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
+                name: "run_build".to_string(),
+                description: "Run esbuild on a specific file to catch JSX/Babel syntax errors that tsc misses (e.g. malformed JSX tags). Call after run_tsc passes. Provide the relative file path (e.g. 'components/my-folder/component.tsx').".to_string(),
+                parameters: make_schema::<LintCheckArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
                 name: "bash".to_string(),
                 description: "Run a general shell command in the project root (30s timeout). Use ls/find/cat to inspect files. For TypeScript checking use run_tsc. For linting use run_lint.".to_string(),
                 parameters: make_schema::<BashArgs>(),

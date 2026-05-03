@@ -90,6 +90,10 @@ pub struct CompletionRequest {
     /// Tool names that are always allowed (user-approved allowlist).
     #[serde(default)]
     pub tool_allowlist: Vec<String>,
+    /// Model family as returned by Ollama's /api/show (e.g. "gemma4", "gptoss").
+    /// Used for model-specific behaviour like Gemma4's <|think|> system prompt prefix.
+    #[serde(default)]
+    pub model_family: Option<String>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -194,6 +198,7 @@ async fn generate_ollama_completion_stream(
             host: &request.host,
             api_key: &request.api_key,
             model: &request.model,
+            model_family: request.model_family.as_deref().unwrap_or(""),
             initial_messages_json: json_messages,
             think: request.think.as_ref().and_then(think_type_from_value),
             app_data_dir,
