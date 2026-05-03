@@ -85,20 +85,23 @@ pub fn apply_landlock(project_dir: &Path, self_exe: &Path) -> Result<(), Sandbox
         })?;
     }
 
-    // Bun's package resolver traverses up the directory tree with
+// Bun's package resolver traverses up the directory tree with
     // O_RDONLY | O_DIRECTORY to find workspace/package.json boundaries.
     // Without read access to ancestor directories, it fails with EACCES.
     // Grant ReadDir (list directory entries, no file content) on each
     // ancestor so bun can traverse without exposing file contents.
-    // Reference: LANDLOCK_ACCESS_FS_READ_DIR kernel docs §5.3
+    //
+    // Also grant Execute on ancestors: execve(2) requires execute permission
+    // on every directory in the path prefix, not just the target file.
+    // Reference: LANDLOCK_ACCESS_FS_EXECUTE kernel docs §5.3
     let mut ancestor = project_dir.parent();
     while let Some(parent) = ancestor {
         if parent == Path::new("") || parent == Path::new("/") {
             break;
         }
         if let Ok(fd) = PathFd::new(parent) {
-            created = created.add_rule(PathBeneath::new(fd, AccessFs::ReadDir))
-                .map_err(|e| SandboxError::Landlock(format!("add ancestor rule {}: {e}", parent.display())))?;
+            created = created.add_rule(PathBeneath::new(fd, AccessFs::ReadDir | AccessFs::Execute))
+                .map_err(|e| SandboxError::Landlock(format!("add ancestor rule {}: {}", parent.display(), e)))?;
         } else {
             break;
         }
