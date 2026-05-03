@@ -7,6 +7,14 @@ export interface ToolCallRecord {
   pending?: boolean
 }
 
+export interface ToolPermissionRecord {
+  requestId: number
+  tool: string
+  args: Record<string, unknown>
+  pending: boolean
+  decision?: "accepted" | "rejected" | "always_allowed"
+}
+
 /// Groups thinking/text that arrived between tool invocations
 export interface StreamChunk {
   /** Ordered index for rendering */

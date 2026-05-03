@@ -40,9 +40,31 @@ pub struct Message {
 pub enum CompletionEvent {
     Chunk { text: String, thinking: Option<String> },
     ToolCall { tool: String, args: serde_json::Value },
+    ToolPermission { request_id: u64, tool: String, args: serde_json::Value },
     ToolResult { tool: String, success: bool, output: String, path: Option<String>, content: Option<String> },
     Done { done_reason: Option<String> },
     Error { message: String },
+}
+
+/// User's decision for a tool permission request.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolPermissionDecision {
+    Accepted,
+    Rejected,
+    AlwaysAllowed,
+}
+
+/// Global permission mode controlling when the user is prompted.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolPermissionMode {
+    #[default]
+    AskEveryTime,
+    /// Allow read_file silently; gate write_file/bash.
+    AutoAcceptReadOnly,
+    /// Execute everything without prompting (for testing).
+    AutoAcceptAll,
 }
 
 // ─── Request / response types ─────────────────────────────────────────────────
@@ -62,6 +84,12 @@ pub struct CompletionRequest {
     pub think: Option<serde_json::Value>,
     pub output_path: Option<String>,
     pub options: Option<OllamaOptions>,
+    /// Permission mode for agent tool calls.
+    #[serde(default)]
+    pub tool_permission_mode: ToolPermissionMode,
+    /// Tool names that are always allowed (user-approved allowlist).
+    #[serde(default)]
+    pub tool_allowlist: Vec<String>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -155,12 +183,11 @@ async fn generate_ollama_completion_stream(
     channel: &Channel<CompletionEvent>,
     cancel_token: &CancellationToken,
     http_client: &reqwest::Client,
+    app_handle: &AppHandle,
 ) -> Result<(), AppError> {
     if let Some(path) = request.output_path.as_deref() {
-        // Agent loop path: uses raw HTTP to include tool_name in tool messages,
-        // which ollama-rs ChatMessage does not support.
-        // Per Ollama API docs: https://github.com/ollama/ollama/blob/main/docs/api.md
         let json_messages = messages_to_ollama_json(&request.messages);
+        let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
         crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
             http_client,
             host: &request.host,
@@ -172,6 +199,9 @@ async fn generate_ollama_completion_stream(
             output_path: path,
             channel,
             cancel_token,
+            app_handle,
+            permission_mode: request.tool_permission_mode,
+            tool_allowlist: allowlist,
         }).await
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name
@@ -356,7 +386,7 @@ pub async fn generate_completion_stream(
             let cancel_clone = cancel_token.clone();
             tokio::spawn(async move {
                 let state = app_handle.state::<AppState>();
-                let result = generate_ollama_completion_stream(&normalized, &app_data, &on_event, &cancel_clone, &client).await;
+                let result = generate_ollama_completion_stream(&normalized, &app_data, &on_event, &cancel_clone, &client, &app_handle).await;
                 state.cancellation_tokens.lock().unwrap().remove(&request_id);
                 if let Err(e) = result {
                     let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });
@@ -413,6 +443,31 @@ pub async fn stop_generation_stream(request_id: u32, app: AppHandle) -> Result<(
     } else {
         Err(AppError::NotFound(format!("No active generation with request_id {request_id}")))
     }
+}
+
+/// Pending tool permission request awaiting user decision.
+pub struct PendingToolPermission {
+    pub sender: tokio::sync::oneshot::Sender<ToolPermissionDecision>,
+    pub tool: String,
+    pub args: serde_json::Value,
+}
+
+/// Resolve a pending tool permission request.
+/// Called by frontend when user clicks Accept/Reject/Always Allow.
+#[tauri::command]
+pub fn resolve_tool_permission(
+    permission_id: u64,
+    decision: ToolPermissionDecision,
+    app: AppHandle,
+) -> Result<(), AppError> {
+    let state = app.state::<crate::AppState>();
+    let mut permissions = state.pending_permissions.lock().unwrap();
+    let pending = permissions
+        .remove(&permission_id)
+        .ok_or_else(|| AppError::NotFound(format!("Permission request {permission_id} not found or already resolved")))?;
+    drop(permissions);
+    let _ = pending.sender.send(decision);
+    Ok(())
 }
 
 // save_model_presets, load_model_presets, list_ollama_models are in ai_ollama.rs

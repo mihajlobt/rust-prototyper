@@ -12,6 +12,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useChat } from "@/hooks/useChat";
+import { useChatStore } from "@/stores/chatStore";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
@@ -171,6 +172,7 @@ export function ScreensPanel() {
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
+    pendingPermissions,
   } = useChat({
     entityId: screenId ? `screen-${screenId}` : "screen-none",
     chatPath,
@@ -281,9 +283,15 @@ export function ScreensPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
+        pendingPermissions={pendingPermissions}
         onApplyCode={(content) => { const c = extractCode(content); if (c) { setCode(c); writeToScreenPreview(c); } }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
+        onResolvePermission={(requestId, decision) => useChatStore.getState().resolveToolPermission(
+          screenId ? `screen-${screenId}` : "screen-none",
+          requestId,
+          decision
+        )}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

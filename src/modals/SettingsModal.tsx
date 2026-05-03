@@ -28,6 +28,7 @@ import { notify } from "@/hooks/useToast";
 import { readFile, writeFile, bunInstall, getErrorMessage } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
 import { ICON_LIBRARY_PACKAGES, PROMPT_DEFINITIONS, type IconLibrary, type PromptGroup } from "@/lib/prompts";
+import type { ToolPermissionMode } from "@/lib/ipc";
 
 export function SettingsModal() {
   const { settings, setSettings } = useSettings();
@@ -343,34 +344,72 @@ export function SettingsModal() {
                   </div>
                 </section>
 
-                {/* Icon Library */}
-                <section className="space-y-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Icon Library</p>
-                  <div className="flex items-start gap-6">
-                    <div className="w-64 space-y-1.5">
-                      <Select value={settings.iconLibrary} onValueChange={(v) => setSettings({ iconLibrary: v as IconLibrary })}>
-                        <SelectTrigger className="text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <Library size={12} />
-                            <SelectValue placeholder="Select icon library" />
-                          </div>
+{/* Icon Library */}
+                  <section className="space-y-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Icon Library</p>
+                    <div className="flex items-start gap-6">
+                      <div className="w-64 space-y-1.5">
+                        <Select value={settings.iconLibrary} onValueChange={(v) => setSettings({ iconLibrary: v as IconLibrary })}>
+                          <SelectTrigger className="text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Library size={12} />
+                              <SelectValue placeholder="Select icon library" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent position="popper" side="bottom">
+                            <SelectItem value="lucide" className="text-xs">lucide-react (React components)</SelectItem>
+                            <SelectItem value="tabler" className="text-xs">Tabler Icons (CSS font)</SelectItem>
+                            <SelectItem value="fontawesome" className="text-xs">Font Awesome (CSS font)</SelectItem>
+                            <SelectItem value="bootstrap" className="text-xs">Bootstrap Icons (CSS font)</SelectItem>
+                            <SelectItem value="material" className="text-xs">Material Symbols (CSS font)</SelectItem>
+                            <SelectItem value="none" className="text-xs">None</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-xs text-muted-foreground pt-1.5">
+                        Auto-installed in the generated folder.<br />Affects component and screen generation prompts.
+                      </p>
+                    </div>
+                  </section>
+
+                  {/* Tool Permission Mode */}
+                  <section className="space-y-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tool Permission</p>
+                    <div className="space-y-2">
+                      <Select
+                        value={settings.toolPermissionMode}
+                        onValueChange={(v) => setSettings({ toolPermissionMode: v as ToolPermissionMode })}
+                      >
+                        <SelectTrigger className="w-full text-xs">
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent position="popper" side="bottom">
-                          <SelectItem value="lucide" className="text-xs">lucide-react (React components)</SelectItem>
-                          <SelectItem value="tabler" className="text-xs">Tabler Icons (CSS font)</SelectItem>
-                          <SelectItem value="fontawesome" className="text-xs">Font Awesome (CSS font)</SelectItem>
-                          <SelectItem value="bootstrap" className="text-xs">Bootstrap Icons (CSS font)</SelectItem>
-                          <SelectItem value="material" className="text-xs">Material Symbols (CSS font)</SelectItem>
-                          <SelectItem value="none" className="text-xs">None</SelectItem>
+                          <SelectItem value="ask_every_time" className="text-xs">
+                            <span className="flex flex-col gap-0.5">
+                              <span>Ask every time</span>
+                              <span className="text-[10px] text-muted-foreground">Prompt before each tool use</span>
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="auto_accept_read_only" className="text-xs">
+                            <span className="flex flex-col gap-0.5">
+                              <span>Auto-accept read-only</span>
+                              <span className="text-[10px] text-muted-foreground">Auto-allow read_file, reject writes/executes</span>
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="auto_accept_all" className="text-xs">
+                            <span className="flex flex-col gap-0.5">
+                              <span>Auto-accept all</span>
+                              <span className="text-[10px] text-muted-foreground">No prompting, allow all tools</span>
+                            </span>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Controls how the AI agent requests permission to use tools (read_file, write_file, bash, etc.).
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground pt-1.5">
-                      Auto-installed in the generated folder.<br />Affects component and screen generation prompts.
-                    </p>
-                  </div>
-                </section>
-              </div>
+                  </section>
+                </div>
             </ScrollArea>
           </TabsContent>
 

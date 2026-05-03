@@ -15,12 +15,13 @@ function MsgActionBtn({ className, children, ...props }: React.ButtonHTMLAttribu
 }
 import { Tool } from "@/components/ui/tool"
 import type { ToolPart } from "@/components/ui/tool"
+import { ToolPermissionCard, type ToolPermissionDecision } from "@/components/ui/ToolPermissionCard"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
 import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
-import type { ChatMessage, ToolCallRecord } from "@/types/chat"
+import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/chat"
 
 function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
   // "(no output)" from grep/filter commands ≠ error (just no match)
@@ -79,11 +80,16 @@ interface MessageListProps {
   onApplyCode?: (content: string) => void
   onRegenerate?: () => void
   onDeleteFrom?: (index: number) => void
+  /** Active permission requests for the current streaming session */
+  pendingPermissions?: ToolPermissionRecord[]
+  /** Called when user resolves a permission request (to update local state) */
+  onResolvePermission?: (requestId: number, decision: ToolPermissionDecision) => void
 }
 
 export function MessageList({
   messages, isStreaming, thinkingContent,
   onApplyCode, onRegenerate, onDeleteFrom,
+  pendingPermissions, onResolvePermission,
 }: MessageListProps) {
   if (messages.length === 0) {
     return (
@@ -113,6 +119,21 @@ export function MessageList({
               onDeleteFrom={onDeleteFrom}
             />
           ))}
+          {pendingPermissions && pendingPermissions.length > 0 && (
+            <div className="flex flex-col gap-2" data-role="permissions">
+              {pendingPermissions
+                .filter((perm) => perm.pending)
+                .map((perm) => (
+                  <ToolPermissionCard
+                    key={`perm-${perm.requestId}`}
+                    requestId={perm.requestId}
+                    tool={perm.tool}
+                    args={perm.args}
+                    onResolve={(decision) => onResolvePermission?.(perm.requestId, decision)}
+                  />
+                ))}
+            </div>
+          )}
           <ChatContainerScrollAnchor />
         </ChatContainerContent>
         <div className="absolute right-4 bottom-4 z-10">

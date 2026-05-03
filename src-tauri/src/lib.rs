@@ -2,7 +2,7 @@ mod agent;
 pub mod commands;
 pub mod sandbox;
 
-use std::sync::Mutex;
+use std::sync::{atomic::AtomicU64, Mutex};
 use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
@@ -13,6 +13,10 @@ pub struct AppState {
     pub active_processes: Mutex<HashMap<u32, CommandChild>>,
     pub cancellation_tokens: Mutex<HashMap<u32, CancellationToken>>,
     pub http_client: reqwest::Client,
+    /// Maps permission request_id -> pending oneshot sender.
+    pub pending_permissions: Mutex<HashMap<u64, commands::ai::PendingToolPermission>>,
+    /// Monotonically increasing counter for permission IDs.
+    pub next_permission_id: AtomicU64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,6 +107,8 @@ pub fn run() {
             active_processes: Mutex::new(HashMap::new()),
             cancellation_tokens: Mutex::new(HashMap::new()),
             http_client,
+            pending_permissions: Mutex::new(HashMap::new()),
+            next_permission_id: AtomicU64::new(1),
         })
         .invoke_handler(tauri::generate_handler![
             commands::process::bun_dev,
@@ -127,6 +133,7 @@ pub fn run() {
             commands::ai::generate_completion,
             commands::ai::generate_completion_stream,
             commands::ai::stop_generation_stream,
+            commands::ai::resolve_tool_permission,
             commands::ai_ollama::list_ollama_models,
             commands::ai_ollama::save_model_presets,
             commands::ai_ollama::load_model_presets,

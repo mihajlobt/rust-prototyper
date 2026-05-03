@@ -6,6 +6,8 @@ const SETTINGS_KEY = "settings.json";
 
 export type Provider = "ollama-local" | "ollama-cloud" | "openai" | "claude";
 
+export type ToolPermissionMode = "ask_every_time" | "auto_accept_read_only" | "auto_accept_all";
+
 /** Ollama generation options — all fields optional; omitted fields use Ollama's defaults. */
 export interface OllamaModelOptions {
   temperature?: number;
@@ -39,6 +41,8 @@ export interface Settings {
   iconLibrary: "lucide" | "tabler" | "fontawesome" | "bootstrap" | "material" | "none";
   layout: Record<string, number[]>;
   modelOptions: OllamaModelOptions;
+  toolPermissionMode: ToolPermissionMode;
+  toolAllowlist: string[];
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -58,6 +62,8 @@ const DEFAULT_SETTINGS: Settings = {
   iconLibrary: "lucide",
   layout: {},
   modelOptions: {},
+  toolPermissionMode: "ask_every_time",
+  toolAllowlist: [],
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

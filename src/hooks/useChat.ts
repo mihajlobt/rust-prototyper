@@ -88,7 +88,7 @@ import {
   type CompletionEvent,
   type Provider,
   type Message,
-} from "@/lib/ipc"
+  } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
 import { useModelCapabilities } from "@/hooks/useModelCapabilities"
@@ -203,6 +203,24 @@ function createStreamHandler(params: StreamHandlerParams) {
       if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
       useChatStore.getState().setStreamingContent(entityId, "")
       useChatStore.getState().setStreamingThinking(entityId, "")
+    } else if (msg.event === "ToolPermission") {
+      useChatStore.getState().attachToolPermission(entityId, {
+        requestId: msg.data.request_id,
+        tool: msg.data.tool,
+        args: msg.data.args,
+        pending: true,
+      })
+      useChatStore.getState().addStreamChunk(entityId, {
+        index: chunkIndex++,
+        thinking: thinkingAccumulated,
+        text: contentAccumulated,
+      })
+      thinkingAccumulated = ""
+      contentAccumulated = ""
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+      if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+      useChatStore.getState().setStreamingContent(entityId, "")
+      useChatStore.getState().setStreamingThinking(entityId, "")
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
       if (tool === "write_file" && success) toolWritten = true
@@ -250,6 +268,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const apiKeys       = useAppStore((s) => s.settings.apiKeys)
   const provider      = useAppStore((s) => s.settings.provider)
   const modelOptions  = useAppStore((s) => s.settings.modelOptions)
+  const toolPermissionMode = useAppStore((s) => s.settings.toolPermissionMode)
+  const toolAllowlist = useAppStore((s) => s.settings.toolAllowlist)
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -410,6 +430,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
         isOllama ? modelOptions : undefined,
+        toolPermissionMode,
+        toolAllowlist,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -422,6 +444,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     input, attachments, mentions, entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, caps.thinking, outputPath, toolsEnabled,
+    toolPermissionMode, toolAllowlist,
   ])
 
   const clearChat = useCallback(() => {
@@ -501,6 +524,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         channel, useThinking || undefined, effectiveOutputPath,
         provider as Provider,
         isOllamaRegen ? modelOptions : undefined,
+        toolPermissionMode,
+        toolAllowlist,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -513,6 +538,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, caps.thinking, outputPath, toolsEnabled,
+    toolPermissionMode, toolAllowlist,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {
@@ -540,6 +566,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     messages: chat.messages,
     isStreaming: chat.isStreaming,
     thinkingContent: chat.thinkingContent,
+    pendingPermissions: chat.pendingPermissions,
     input,
     setInput,
     sendMessage,

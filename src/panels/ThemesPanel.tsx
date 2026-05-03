@@ -13,6 +13,7 @@ import {
 import { writeFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
+import { useChatStore } from "@/stores/chatStore";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
@@ -73,6 +74,7 @@ export function ThemesPanel() {
     mentions, addMention, removeMention,
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
+    pendingPermissions,
   } = useChat({
     entityId: `theme-${themeDir}`,
     chatPath,
@@ -130,13 +132,19 @@ export function ThemesPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
+        pendingPermissions={pendingPermissions}
         onApplyCode={(content) => {
-          const stripped = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+          const stripped = content.replace(/ thinking[\s\S]*?<\/think>/g, "").trim();
           const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
           if (cleaned) setCss(cleaned);
         }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
+        onResolvePermission={(requestId, decision) => useChatStore.getState().resolveToolPermission(
+          `theme-${themeDir}`,
+          requestId,
+          decision
+        )}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

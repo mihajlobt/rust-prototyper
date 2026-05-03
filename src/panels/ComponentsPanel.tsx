@@ -32,6 +32,7 @@ import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaf
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat } from "@/hooks/useChat";
+import { useChatStore } from "@/stores/chatStore";
 import { MessageList, ChatInput } from "@/components/chat";
 
 export function ComponentsPanel() {
@@ -275,6 +276,7 @@ export function ComponentsPanel() {
     thinkEnabled, toggleThink, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
+    pendingPermissions,
   } = useChat({
     entityId: componentId ? `component-${componentId}` : "component-none",
     chatPath,
@@ -373,9 +375,15 @@ export function ComponentsPanel() {
         messages={messages}
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
+        pendingPermissions={pendingPermissions}
         onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
+        onResolvePermission={(requestId, decision) => useChatStore.getState().resolveToolPermission(
+          componentId ? `component-${componentId}` : "component-none",
+          requestId,
+          decision
+        )}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

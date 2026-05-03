@@ -1,10 +1,11 @@
 import { create } from "zustand"
-import type { ChatMessage, StreamChunk } from "@/types/chat"
+import type { ChatMessage, StreamChunk, ToolPermissionRecord } from "@/types/chat"
 
 interface ChatState {
   messages: ChatMessage[]
   isStreaming: boolean
   thinkingContent: string
+  pendingPermissions: ToolPermissionRecord[]
 }
 
 interface ChatStore {
@@ -20,9 +21,11 @@ interface ChatStore {
   patchLastToolCallPath: (id: string, tool: string, path: string) => void
   clearChat: (id: string) => void
   addStreamChunk: (id: string, chunk: StreamChunk) => void
+  attachToolPermission: (id: string, record: ToolPermissionRecord) => void
+  resolveToolPermission: (id: string, requestId: number, decision: ToolPermissionRecord["decision"]) => void
 }
 
-const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "" }
+const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "", pendingPermissions: [] }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   chats: {},
@@ -117,7 +120,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
     }),
 
-clearChat: (id) =>
+  clearChat: (id) =>
     set((s) => ({ chats: { ...s.chats, [id]: EMPTY } })),
 
   addStreamChunk: (id, chunk) =>
@@ -130,5 +133,21 @@ clearChat: (id) =>
         messages[messages.length - 1] = { ...last, streamChunks: [...prev, chunk] }
       }
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
+    }),
+
+  attachToolPermission: (id, record) =>
+    set((s) => {
+      const chat = s.chats[id] ?? EMPTY
+      const pendingPermissions = [...chat.pendingPermissions, record]
+      return { chats: { ...s.chats, [id]: { ...chat, pendingPermissions } } }
+    }),
+
+  resolveToolPermission: (id, requestId, decision) =>
+    set((s) => {
+      const chat = s.chats[id] ?? EMPTY
+      const pendingPermissions = chat.pendingPermissions.map((p) =>
+        p.requestId === requestId ? { ...p, pending: false, decision } : p
+      )
+      return { chats: { ...s.chats, [id]: { ...chat, pendingPermissions } } }
     }),
 }))

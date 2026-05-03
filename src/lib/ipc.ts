@@ -182,9 +182,21 @@ export function getApiKeyForProvider(provider: Provider, apiKeys: Record<string,
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
+  | { event: "ToolPermission"; data: { request_id: number; tool: string; args: Record<string, unknown> } }
   | { event: "ToolResult"; data: { tool: string; success: boolean; output: string; path?: string; content?: string } }
   | { event: "Done"; data: { done_reason?: string } | null }
   | { event: "Error"; data: { message: string } };
+
+export type ToolPermissionDecision = "accepted" | "rejected" | "always_allowed";
+
+/** Resolve a pending tool permission request. Called by the frontend
+ *  when the user clicks Accept/Reject/Always Allow. */
+export async function resolveToolPermission(
+  requestId: number,
+  decision: ToolPermissionDecision
+): Promise<void> {
+  return invoke("resolve_tool_permission", { permissionId: requestId, decision });
+}
 
 /** Non-streaming completion — returns full response at once */
 export async function generateCompletion(
@@ -214,6 +226,8 @@ export interface OllamaModelOptions {
 
 export type ThinkParam = boolean | "low" | "medium" | "high"
 
+export type ToolPermissionMode = "ask_every_time" | "auto_accept_read_only" | "auto_accept_all";
+
 /** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel.
  *  Returns a request ID that can be passed to stopGenerationRequest to cancel
  *  the stream server-side. */
@@ -226,7 +240,9 @@ export async function generateCompletionStream(
   think?: ThinkParam,
   outputPath?: string,
   provider: Provider = "ollama-local",
-  options?: OllamaModelOptions
+  options?: OllamaModelOptions,
+  toolPermissionMode?: ToolPermissionMode,
+  toolAllowlist?: string[]
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -238,6 +254,8 @@ export async function generateCompletionStream(
       think: think ?? null,
       outputPath: outputPath ?? null,
       options: options ?? null,
+      toolPermissionMode: toolPermissionMode ?? "ask_every_time",
+      toolAllowlist: toolAllowlist ?? [],
     },
     onEvent,
   });
