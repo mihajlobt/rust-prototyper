@@ -12,6 +12,11 @@
     "store:default",
     "clipboard:default",
     "dialog:default",
-    "mcp-bridge:default"
+    "mcp-bridge:default",
+    "core:menu:default",
+    "core:menu:allow-new",
+    "core:menu:allow-popup",
+    "core:menu:allow-set-text",
+    "core:menu:allow-set-enabled"
   ]
 }

@@ -6,7 +6,7 @@ import {
   Play, Square, Wrench, Package, PackagePlus, RotateCw,
   Minus, Plus, Smartphone, Tablet, Monitor,
   Terminal, ScrollText, Globe, Plus as PlusIcon,
-  ChevronDown, ChevronUp, Save, FolderPlus, RefreshCw, Loader2, X,
+  ChevronDown, ChevronUp, Save, FolderPlus, Loader2, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,11 +20,8 @@ import {
   isNotFoundError, getErrorMessage,
   type FileEntry,
 } from "@/lib/ipc";
+import { showContextMenu, createFileTreeActions, createTabActions } from "@/lib/context-menu";
 import { Input } from "@/components/ui/input";
-import {
-  ContextMenu, ContextMenuContent, ContextMenuItem,
-  ContextMenuSeparator, ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { useAppStore } from "@/stores/appStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -332,19 +329,25 @@ export function RunnerPanel() {
             <ScrollArea className="h-full overflow-hidden bg-card border-r border-border">
               <div className="p-2">
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <ContextMenu>
-                    <ContextMenuTrigger asChild>
-                      <span className="text-xs font-medium text-muted-foreground cursor-default">Files</span>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      <ContextMenuItem onClick={() => { setNewFileParentDir(generatedDir); setShowNewFile(true); }}><PlusIcon size={12} className="mr-2" />New File&#8230;</ContextMenuItem>
-                      <ContextMenuItem onClick={() => startNewFolder(generatedDir)}><FolderPlus size={12} className="mr-2" />New Folder&#8230;</ContextMenuItem>
-                      <ContextMenuItem onClick={() => setExpandedDirs(new Set())}>Collapse All</ContextMenuItem>
-                      <ContextMenuSeparator />
-                      <ContextMenuItem onClick={() => revealInExplorer(generatedDir)}>Show in File Explorer</ContextMenuItem>
-                      <ContextMenuItem onClick={loadFiles}><RefreshCw size={12} className="mr-2" />Refresh</ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
+                  <span
+                    className="text-xs font-medium text-muted-foreground cursor-default"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      showContextMenu(
+                        createFileTreeActions({
+                          onNewFile: () => { setNewFileParentDir(generatedDir); setShowNewFile(true); },
+                          onNewFolder: () => startNewFolder(generatedDir),
+                          onCollapseAll: () => setExpandedDirs(new Set()),
+                          onReveal: () => revealInExplorer(generatedDir),
+                          onRefresh: loadFiles,
+                        }),
+                        e.clientX,
+                        e.clientY
+                      );
+                    }}
+                  >
+                    Files
+                  </span>
                   <div className="flex gap-0.5">
                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => startNewFolder(generatedDir)}><FolderPlus size={10} /></Button>
                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setNewFileParentDir(generatedDir); setShowNewFile(true); }}><PlusIcon size={10} /></Button>
@@ -375,33 +378,36 @@ export function RunnerPanel() {
                               const isDirty = dirtyTabs.has(path);
                               const isLast = openTabs.indexOf(path) === openTabs.length - 1;
                               return (
-                                <ContextMenu key={path}>
-                                  <ContextMenuTrigger asChild>
-                                    <button
-                                      onClick={() => openTab(path)}
-                                      onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
-                                      className={["flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors", isActive ? "bg-background text-foreground border-b-2 border-b-primary -mb-px" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                                    >
-                                      {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                                      <span className="truncate">{name}</span>
-                                      <X size={10} className="shrink-0 opacity-50 hover:opacity-100" onClick={(e) => closeTab(path, e)} />
-                                    </button>
-                                  </ContextMenuTrigger>
-                                  <ContextMenuContent>
-                                    <ContextMenuItem onClick={() => handleSaveFile()}>Save</ContextMenuItem>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem onClick={() => closeTab(path)}>Close</ContextMenuItem>
-                                    <ContextMenuItem onClick={() => closeOtherTabs(path)} disabled={openTabs.length <= 1}>Close Others</ContextMenuItem>
-                                    <ContextMenuItem onClick={() => closeTabsToRight(path)} disabled={isLast}>Close to the Right</ContextMenuItem>
-                                    <ContextMenuItem onClick={closeAllTabs}>Close All</ContextMenuItem>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem onClick={() => revealInExplorer(path)}>Show in File Explorer</ContextMenuItem>
-                                    <ContextMenuItem onClick={() => startRename(path)}>Rename…</ContextMenuItem>
-                                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(path)}>Copy Path</ContextMenuItem>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteFile(path)}>Delete</ContextMenuItem>
-                                  </ContextMenuContent>
-                                </ContextMenu>
+                                <button
+                                  key={path}
+                                  onClick={() => openTab(path)}
+                                  onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    showContextMenu(
+                                      createTabActions({
+                                        onSave: handleSaveFile,
+                                        onClose: () => closeTab(path),
+                                        onCloseOthers: () => closeOtherTabs(path),
+                                        onCloseToRight: () => closeTabsToRight(path),
+                                        onCloseAll: closeAllTabs,
+                                        onReveal: () => revealInExplorer(path),
+                                        onRename: () => startRename(path),
+                                        onCopyPath: () => navigator.clipboard.writeText(path),
+                                        onDelete: () => handleDeleteFile(path),
+                                        canCloseOthers: openTabs.length > 1,
+                                        canCloseToRight: !isLast,
+                                      }),
+                                      e.clientX,
+                                      e.clientY
+                                    );
+                                  }}
+                                  className={["flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors", isActive ? "bg-background text-foreground border-b-2 border-b-primary -mb-px" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                                >
+                                  {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                                  <span className="truncate">{name}</span>
+                                  <X size={10} className="shrink-0 opacity-50 hover:opacity-100" onClick={(e) => closeTab(path, e)} />
+                                </button>
                               );
                             })}
                             </div>
