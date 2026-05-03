@@ -3,7 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import Frame from "react-frame-component";
+import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 
 interface FieldProps {
@@ -176,11 +176,15 @@ export function ContextOverrideFields({ data, set }: FieldProps) {
 export function PreviewFields({ data }: FieldProps) {
   if (!data.output) return null;
   return (
-    <FieldRow label="Preview">
-      <div className="border border-border rounded overflow-hidden bg-white" style={{ height: 200 }}>
-        <Frame className="w-full h-full border-0">
-          <div dangerouslySetInnerHTML={{ __html: data.output }} />
-        </Frame>
+    <FieldRow label="Code Preview">
+      <div className="border border-border rounded overflow-hidden" style={{ height: 200 }}>
+        <CodeMirrorEditor
+          value={data.output}
+          mode="tsx"
+          readOnly
+          minimal
+          height="200px"
+        />
       </div>
     </FieldRow>
   );

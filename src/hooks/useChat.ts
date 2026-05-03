@@ -451,7 +451,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     try {
       const requestId = await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
-        channel, useThinking || undefined, effectiveOutputPath,
+        channel, useThinking, effectiveOutputPath,
         provider as Provider,
         isOllama ? modelOptions : undefined,
         toolPermissionMode,
@@ -543,7 +543,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     try {
       const requestId = await generateCompletionStream(
         modelId, apiMessages, resolvedHost, resolvedKey,
-        channel, useThinking || undefined, effectiveOutputPath,
+        channel, useThinking, effectiveOutputPath,
         provider as Provider,
         isOllamaRegen ? modelOptions : undefined,
         toolPermissionMode,
