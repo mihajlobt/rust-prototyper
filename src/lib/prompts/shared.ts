@@ -71,15 +71,14 @@ CRITICAL — THE content PARAMETER IS RAW CODE, NOT JSON:
   The content parameter is WRITTEN TO DISK as-is. JSON will cause a syntax error.
   Code fences and JSON wrappers are syntax errors — the content is saved as a raw .tsx/.css file.
 
-VALIDATION — After writing code:
-After calling write_file, you SHOULD call bash to verify your code:
-1. Run 'bun run tsc --noEmit' to check for TypeScript errors.
-2. Run 'bunx eslint <OUTPUT-FILE-PATH>' to lint ONLY the file you wrote — do NOT run eslint on the whole project (it reports false positives in library files).
-If errors are found, read_file the output file, fix the errors, and write_file the corrected version.
+VALIDATION — After writing or editing code:
+1. Call run_tsc (optionally with the file path to filter output) to check for TypeScript errors.
+2. Call run_lint with the file path to check for ESLint violations.
+If errors are found, use edit_file to fix them surgically — do NOT rewrite the whole file with write_file.
 
 IMPORTANT WORKFLOW:
 When asked to UPDATE an existing file, you MUST first read_file to see the current code,
-then explain what you will change, then write_file the updated version.`;
+then use edit_file to make targeted changes. Only use write_file when creating a brand-new file.`;
 
 export function outputFilePathSection(outputPath: string): string {
   return `

@@ -31,7 +31,7 @@ import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
-import { useChat } from "@/hooks/useChat";
+import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
 import { MessageList, ChatInput } from "@/components/chat";
 
@@ -492,6 +492,8 @@ export function ComponentsPanel() {
                   ]}
                   host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}
+                  think={resolveThinkParam({ thinking: canThink, thinkLevel: undefined }, isGptOssFamily, thinkEnabled, thinkLevel)}
+                  hasTools={!!(componentOutputPath && toolsEnabled)}
                 />
               )}
             </Allotment.Pane>

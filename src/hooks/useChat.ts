@@ -77,7 +77,7 @@ function buildApiMessages(
 /** Resolves the think parameter to send to Ollama based on model capabilities and user toggle.
  *  - gpt-oss family: always sends a level (low/medium/high), can't fully disable
  *  - Other models: sends false to disable, true/level to enable, undefined if model doesn't support */
-function resolveThinkParam(
+export function resolveThinkParam(
   caps: { thinking: boolean; thinkLevel?: "low" | "medium" | "high" },
   isGptOssFamily: boolean,
   thinkEnabled: boolean,
@@ -89,7 +89,7 @@ function resolveThinkParam(
     return thinkEnabled ? thinkLevel : "low"
   }
 
-  return thinkEnabled ? (caps.thinkLevel ?? true) : false
+  return thinkEnabled ? (caps.thinkLevel ?? true) : undefined
 }
 
 import { Channel } from "@tauri-apps/api/core"
@@ -189,6 +189,7 @@ function createStreamHandler(params: StreamHandlerParams) {
     if ((stopRef as MutableRefObject<boolean>).current) return
     if (msg.event === "Chunk") {
       if (msg.data.thinking) {
+        console.log("[think-chunk] got thinking chunk len=%d preview=%s", msg.data.thinking.length, msg.data.thinking.slice(0, 80))
         thinkingAccumulated += msg.data.thinking
         if (rafThinkingId === null) {
           rafThinkingId = requestAnimationFrame(() => {
@@ -207,6 +208,7 @@ function createStreamHandler(params: StreamHandlerParams) {
         })
       }
     } else if (msg.event === "ToolCall") {
+      console.log("[think-toolcall] tool=%s thinkingAccumulated.len=%d", msg.data.tool, thinkingAccumulated.length)
       useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       // Flush accumulated thinking/text as a chunk at tool boundary
       useChatStore.getState().addStreamChunk(entityId, {
@@ -311,19 +313,18 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const [thinkEnabled, setThinkEnabled] = useState(false)
   const [thinkLevel, setThinkLevel] = useState<"low" | "medium" | "high">("medium")
-  const prevCanThinkRef = useRef(false)
   useEffect(() => {
-    if (caps.thinking && !prevCanThinkRef.current) {
+    if (caps.thinking) {
       setThinkEnabled(true)
-      // Auto-set think level based on capabilities (default "medium" for gpt-oss)
-      if (caps.thinkLevel) {
-        setThinkLevel(caps.thinkLevel)
-      }
-    } else if (!caps.thinking) {
+      if (caps.thinkLevel) setThinkLevel(caps.thinkLevel)
+    } else {
       setThinkEnabled(false)
     }
-    prevCanThinkRef.current = caps.thinking
-  }, [caps.thinking, caps.thinkLevel])
+    console.log("[think-auto] modelId=%s caps.thinking=%s → thinkEnabled=%s", modelId, caps.thinking, caps.thinking)
+  // modelId re-runs on model switch (handles switching between two thinking-capable models).
+  // caps.thinking re-runs when capabilities load after a switch (handles caps arriving after modelId change).
+  // https://docs.ollama.com/capabilities/thinking
+  }, [modelId, caps.thinking, caps.thinkLevel])
 
   const [toolsEnabled, setToolsEnabled] = useState(true)
   const prevCanToolsRef = useRef(false)
@@ -437,6 +438,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
+    console.log("[think-send] model=%s thinkEnabled=%s caps.thinking=%s isGptOss=%s → think=%s outputPath=%s",
+      modelId, thinkEnabled, caps.thinking, isGptOssFamily, useThinking, effectiveOutputPath ?? "(none)")
 
     ;(stopRef as MutableRefObject<boolean>).current = false
 
@@ -467,7 +470,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   }, [
     input, attachments, mentions, entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
-    thinkEnabled, caps.thinking, outputPath, toolsEnabled,
+    thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist,
   ])
 
@@ -529,6 +532,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
+    console.log("[think-regen] model=%s thinkEnabled=%s caps.thinking=%s isGptOss=%s → think=%s outputPath=%s",
+      modelId, thinkEnabled, caps.thinking, isGptOssFamily, useThinking, effectiveOutputPath ?? "(none)")
 
     ;(stopRef as MutableRefObject<boolean>).current = false
 
@@ -559,7 +564,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   }, [
     entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
-    thinkEnabled, caps.thinking, outputPath, toolsEnabled,
+    thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist,
   ])
 

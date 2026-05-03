@@ -11,7 +11,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
-import { useChat } from "@/hooks/useChat";
+import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -373,6 +373,8 @@ export function ScreensPanel() {
                   ]}
                   host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}
+                  think={resolveThinkParam({ thinking: canThink, thinkLevel: undefined }, isGptOssFamily, thinkEnabled, thinkLevel)}
+                  hasTools={!!(screenId && toolsEnabled)}
                 />
               )}
             </Allotment.Pane>

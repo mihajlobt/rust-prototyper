@@ -1,4 +1,5 @@
-import { Server, Cloud, Zap, Bot, ChevronDown, Check } from "lucide-react";
+import { useState } from "react";
+import { Server, Cloud, Zap, Bot, ChevronDown, Check, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,6 +126,16 @@ function SectionHeader({
 
 export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelPickerProps) {
   const { settings } = useAppStore();
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) setQuery("");
+  };
+
+  const matches = (name: string) =>
+    name.toLowerCase().includes(query.toLowerCase());
 
   // TanStack Query: fetch local Ollama models (with capabilities from /api/show)
   // Per docs/api/tanstack-query.md: staleTime=15s for polling, refetchInterval for live updates
@@ -158,8 +169,13 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
   const hasOpenAIKey = !!(settings.apiKeys["openai"]);
   const hasAnthropicKey = !!(settings.apiKeys["claude"]);
 
+  const visibleLocal  = localModels.filter((m) => matches(m.id));
+  const visibleCloud  = cloudModels.filter((m) => matches(m.id));
+  const visibleOpenAI = OPENAI_MODELS.filter((m) => matches(m.id));
+  const visibleClaude = ANTHROPIC_MODELS.filter((m) => matches(m.id));
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 text-xs h-7 max-w-[220px]">
           <span className="text-muted-foreground">
@@ -176,69 +192,86 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-72 p-1" style={{ maxHeight: "480px", overflowY: "auto" }}>
+      <DropdownMenuContent align="end" className="w-72 p-0" style={{ maxHeight: "480px" }}>
+        {/* Search — sticky so it stays visible while scrolling the list */}
+        <div className="px-2 py-1.5 border-b border-border">
+          <div className="flex items-center gap-1.5 px-2 rounded-sm bg-muted/50 border border-border/50">
+            <Search size={11} className="text-muted-foreground shrink-0" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="Search models…"
+              className="flex-1 bg-transparent py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        </div>
 
-        {localStatus !== "offline" && (
-          <>
-             <SectionHeader icon={<Server size={11} />} label="Ollama Local" status={localStatus} />
-            {localStatus === "loading" && (
-              <p className="text-[10px] text-muted-foreground px-2.5 py-1">Connecting…</p>
-            )}
-            {localStatus !== "loading" && localModels.length === 0 && (
-              <p className="text-[10px] text-muted-foreground px-2.5 py-1">No local models</p>
-            )}
-            {localModels.map((m) => (
-              <ModelCard
-                key={m.id}
-                model={m}
-                isActive={value === m.id}
-                onClick={() => onChange({ modelId: m.id, provider: m.provider })}
-                capabilities={m.capabilities}
-                contextLength={m.contextLength}
-              />
-            ))}
-          </>
-        )}
+        <div className="overflow-y-auto p-1" style={{ maxHeight: "calc(480px - 44px)" }}>
+          {localStatus !== "offline" && (visibleLocal.length > 0 || localStatus === "loading") && (
+            <>
+              <SectionHeader icon={<Server size={11} />} label="Ollama Local" status={localStatus} />
+              {localStatus === "loading" && (
+                <p className="text-[10px] text-muted-foreground px-2.5 py-1">Connecting…</p>
+              )}
+              {visibleLocal.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={m}
+                  isActive={value === m.id}
+                  onClick={() => onChange({ modelId: m.id, provider: m.provider })}
+                  capabilities={m.capabilities}
+                  contextLength={m.contextLength}
+                />
+              ))}
+            </>
+          )}
 
-        {ollamaApiKey && cloudStatus !== "offline" && (
-          <>
-            <DropdownMenuSeparator className="my-1" />
-            <SectionHeader icon={<Cloud size={11} />} label="Ollama Cloud" status={cloudStatus} />
-            {cloudStatus === "loading" && (
-              <p className="text-[10px] text-muted-foreground px-2.5 py-1">Loading…</p>
-            )}
-            {cloudModels.map((m) => (
-              <ModelCard
-                key={m.id}
-                model={m}
-                isActive={value === m.id}
-                onClick={() => onChange({ modelId: m.id, provider: m.provider })}
-                capabilities={m.capabilities}
-                contextLength={m.contextLength}
-              />
-            ))}
-          </>
-        )}
+          {ollamaApiKey && cloudStatus !== "offline" && (visibleCloud.length > 0 || cloudStatus === "loading") && (
+            <>
+              <DropdownMenuSeparator className="my-1" />
+              <SectionHeader icon={<Cloud size={11} />} label="Ollama Cloud" status={cloudStatus} />
+              {cloudStatus === "loading" && (
+                <p className="text-[10px] text-muted-foreground px-2.5 py-1">Loading…</p>
+              )}
+              {visibleCloud.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={m}
+                  isActive={value === m.id}
+                  onClick={() => onChange({ modelId: m.id, provider: m.provider })}
+                  capabilities={m.capabilities}
+                  contextLength={m.contextLength}
+                />
+              ))}
+            </>
+          )}
 
-        {hasOpenAIKey && (
-          <>
-            <DropdownMenuSeparator className="my-1" />
-            <SectionHeader icon={<Zap size={11} />} label="OpenAI" />
-            {OPENAI_MODELS.map((m) => (
-              <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
-            ))}
-          </>
-        )}
+          {hasOpenAIKey && visibleOpenAI.length > 0 && (
+            <>
+              <DropdownMenuSeparator className="my-1" />
+              <SectionHeader icon={<Zap size={11} />} label="OpenAI" />
+              {visibleOpenAI.map((m) => (
+                <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
+              ))}
+            </>
+          )}
 
-        {hasAnthropicKey && (
-          <>
-            <DropdownMenuSeparator className="my-1" />
-            <SectionHeader icon={<Bot size={11} />} label="Anthropic" />
-            {ANTHROPIC_MODELS.map((m) => (
-              <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
-            ))}
-          </>
-        )}
+          {hasAnthropicKey && visibleClaude.length > 0 && (
+            <>
+              <DropdownMenuSeparator className="my-1" />
+              <SectionHeader icon={<Bot size={11} />} label="Anthropic" />
+              {visibleClaude.map((m) => (
+                <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
+              ))}
+            </>
+          )}
+
+          {query && visibleLocal.length === 0 && visibleCloud.length === 0 && visibleOpenAI.length === 0 && visibleClaude.length === 0 && (
+            <p className="text-[10px] text-muted-foreground px-2.5 py-2">{`No models match "${query}"`}</p>
+          )}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

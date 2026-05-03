@@ -63,6 +63,8 @@ async fn setup_project_dir(proj_dir: &Path) {
 
 fn assistant_msg_with_thinking(content: &str, thinking: Option<&str>, tool_calls: &[serde_json::Value]) -> serde_json::Value {
     let mut msg = serde_json::json!({"role": "assistant", "content": content});
+    // Ollama multi-turn tool-calling: include thinking in history.
+    // https://docs.ollama.com/capabilities/tool-calling
     if let Some(t) = thinking {
         msg["thinking"] = serde_json::Value::String(t.to_string());
     }

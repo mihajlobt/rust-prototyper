@@ -14,7 +14,14 @@ interface PromptInspectorProps {
   messages: Message[];
   host: string;
   provider: Provider;
+  /** The resolved think parameter being sent — undefined means not sent */
+  think?: boolean | "low" | "medium" | "high";
+  /** Whether the agent tool set is included in the request */
+  hasTools?: boolean;
 }
+
+// Agent tool names sent by the Rust agent loop
+const AGENT_TOOLS = ["write_file", "read_file", "edit_file", "run_tsc", "run_lint", "bash"];
 
 function countTokens(text: string, model: string): number {
   try {
@@ -30,7 +37,24 @@ function countTokens(text: string, model: string): number {
   }
 }
 
-export function PromptInspector({ model, messages, host, provider }: PromptInspectorProps) {
+function buildOllamaPayload(
+  model: string,
+  messages: Message[],
+  think: boolean | "low" | "medium" | "high" | undefined,
+  hasTools: boolean,
+  stream: boolean,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    model,
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    stream,
+  };
+  if (think !== undefined) payload["think"] = think;
+  if (hasTools) payload["tools"] = AGENT_TOOLS.map((name) => ({ type: "function", function: { name } }));
+  return payload;
+}
+
+export function PromptInspector({ model, messages, host, provider, think, hasTools = false }: PromptInspectorProps) {
   const caps = useModelCapabilities(model);
   const contextWindow = caps.contextLength ?? 8192;
 
@@ -40,41 +64,35 @@ export function PromptInspector({ model, messages, host, provider }: PromptInspe
 
   const isOllama = provider.startsWith("ollama");
 
-  const curl = isOllama
-    ? `curl -X POST ${host}/api/chat \\
-  -H "Content-Type: application/json" \\
-  -d '${JSON.stringify({
-      model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: false,
-    })}'`
-    : provider === "claude"
-      ? `curl -X POST https://api.anthropic.com/v1/messages \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: $ANTHROPIC_API_KEY" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '${JSON.stringify({
-      model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      max_tokens: 4096,
-    })}'`
-      : `curl -X POST https://api.openai.com/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer $OPENAI_API_KEY" \\
-  -d '${JSON.stringify({
-      model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    })}'`;
+  const ollamaPayload = buildOllamaPayload(model, messages, think, hasTools, true);
 
-  const payload = JSON.stringify(
-    {
-      model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: false,
-    },
-    null,
-    2
-  );
+  const payload = isOllama
+    ? JSON.stringify(ollamaPayload, null, 2)
+    : provider === "claude"
+      ? JSON.stringify({
+          model,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          max_tokens: 4096,
+          stream: true,
+        }, null, 2)
+      : JSON.stringify({
+          model,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          stream: true,
+        }, null, 2);
+
+  const curl = isOllama
+    ? `curl -X POST ${host}/api/chat \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(buildOllamaPayload(model, messages, think, hasTools, false))}'`
+    : provider === "claude"
+      ? `curl -X POST https://api.anthropic.com/v1/messages \\\n  -H "Content-Type: application/json" \\\n  -H "x-api-key: $ANTHROPIC_API_KEY" \\\n  -H "anthropic-version: 2023-06-01" \\\n  -d '${JSON.stringify({
+          model,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          max_tokens: 4096,
+        })}'`
+      : `curl -X POST https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '${JSON.stringify({
+          model,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        })}'`;
 
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
 

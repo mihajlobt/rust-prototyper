@@ -145,10 +145,11 @@ pub(crate) fn messages_to_ollama_json(messages: &[Message]) -> Vec<serde_json::V
         obj.insert("role".to_string(), serde_json::Value::String(m.role.clone()));
         obj.insert("content".to_string(), serde_json::Value::String(m.content.clone()));
 
+        // Ollama multi-turn tool-calling: include thinking in history.
+        // https://docs.ollama.com/capabilities/tool-calling
         if let Some(thinking) = &m.thinking {
             obj.insert("thinking".to_string(), serde_json::Value::String(thinking.clone()));
         }
-
         if !m.images.is_empty() {
             obj.insert("images".to_string(), serde_json::Value::Array(
                 m.images.iter().map(|b| serde_json::Value::String(b.clone())).collect()
