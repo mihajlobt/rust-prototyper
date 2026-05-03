@@ -64,6 +64,9 @@ define_program(
 define_program(
     program="bun",
     system_path=["/usr/bin/bun"],
+    options=[
+        flag("--noEmit"),
+    ],
     args=[ARG_UNVERIFIED_VARARGS],
 )
 
@@ -88,7 +91,7 @@ define_program(
         flag("-E"),
         flag("-r"),
     ],
-    args=[ARG_OPAQUE_VALUE],
+    args=[ARG_OPAQUE_VALUE, ARG_RFILES],
 )
 
 define_program(

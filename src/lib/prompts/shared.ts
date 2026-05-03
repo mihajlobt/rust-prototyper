@@ -73,7 +73,7 @@ CRITICAL — THE content PARAMETER IS RAW CODE, NOT JSON:
 
 VALIDATION — After writing code:
 After calling write_file, you SHOULD call bash to verify your code:
-1. Run 'bun tsc --noEmit' to check for TypeScript errors.
+1. Run 'bun run tsc --noEmit' to check for TypeScript errors.
 2. Run 'bunx eslint <OUTPUT-FILE-PATH>' to lint ONLY the file you wrote — do NOT run eslint on the whole project (it reports false positives in library files).
 If errors are found, read_file the output file, fix the errors, and write_file the corrected version.
 

@@ -63,7 +63,8 @@ export const SHADCN_INIT_COMMAND: string =
  *       https://eslint.org/docs/latest/use/configure/configuration-files#globally-ignore-files-with-ignores
  */
 export function patchEslintConfig(config: string): string {
-  return config.replace(
+  // Add globalIgnores for shadcn false positives
+  let patched = config.replace(
     /globalIgnores\(\[(.*?)\]\)/s,
     (_match, inner) => {
       const existing = inner
@@ -78,6 +79,13 @@ export function patchEslintConfig(config: string): string {
       return `globalIgnores([${merged.join(", ")}])`;
     }
   );
+  // Add no-undef rule to catch missing imports (e.g., lucide-react icons)
+  // This catches runtime errors like "Can't find variable: Plus" at lint time
+  patched = patched.replace(
+    /languageOptions:\s*\{/,
+    "rules: { 'no-undef': 'error' },\n  languageOptions: {"
+  );
+  return patched;
 }
 
 /**

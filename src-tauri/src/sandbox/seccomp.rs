@@ -42,6 +42,10 @@ pub fn apply_seccomp_filter() -> Result<(), SandboxError> {
         (libc::SYS_sigaltstack, vec![]),
         (libc::SYS_clone3, vec![]),
         (libc::SYS_clone, vec![]),
+        // vfork: Node.js child_process.spawn() uses vfork() on Linux for performance
+        // before falling back to clone(). Without it, posix_spawn() fails with EPERM.
+        // Reference: Node.js libuv src/unix/process.c uses uv_spawn() which calls vfork()
+        (libc::SYS_vfork, vec![]),
         (libc::SYS_wait4, vec![]),
         (libc::SYS_waitid, vec![]),
         (libc::SYS_socket, vec![]),
