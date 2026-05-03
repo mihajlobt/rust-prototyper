@@ -287,11 +287,20 @@ export function ScreensPanel() {
         onApplyCode={(content) => { const c = extractCode(content); if (c) { setCode(c); writeToScreenPreview(c); } }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
-        onResolvePermission={(requestId, decision) => useChatStore.getState().resolveToolPermission(
-          screenId ? `screen-${screenId}` : "screen-none",
-          requestId,
-          decision
-        )}
+        onResolvePermission={(requestId, decision, toolName) => {
+          useChatStore.getState().resolveToolPermission(
+            screenId ? `screen-${screenId}` : "screen-none",
+            requestId,
+            decision
+          )
+          // When Always Allow, also persist to settings allowlist
+          if (decision === "always_allowed" && toolName) {
+            const current = settings.toolAllowlist
+            if (!current.includes(toolName)) {
+              useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
+            }
+          }
+        }}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput

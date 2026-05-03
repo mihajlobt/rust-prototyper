@@ -83,7 +83,7 @@ interface MessageListProps {
   /** Active permission requests for the current streaming session */
   pendingPermissions?: ToolPermissionRecord[]
   /** Called when user resolves a permission request (to update local state) */
-  onResolvePermission?: (requestId: number, decision: ToolPermissionDecision) => void
+  onResolvePermission?: (requestId: number, decision: ToolPermissionDecision, toolName: string) => void
 }
 
 export function MessageList({
@@ -129,7 +129,7 @@ export function MessageList({
                     requestId={perm.requestId}
                     tool={perm.tool}
                     args={perm.args}
-                    onResolve={(decision) => onResolvePermission?.(perm.requestId, decision)}
+                    onResolve={(decision) => onResolvePermission?.(perm.requestId, decision, perm.tool)}
                   />
                 ))}
             </div>

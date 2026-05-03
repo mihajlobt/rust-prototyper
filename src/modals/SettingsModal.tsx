@@ -408,6 +408,25 @@ export function SettingsModal() {
                         Controls how the AI agent requests permission to use tools (read_file, write_file, bash, etc.).
                       </p>
                     </div>
+                    {/* Tool Allowlist */}
+                    {settings.toolAllowlist.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Allowed Tools</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {settings.toolAllowlist.map((tool) => (
+                            <div key={tool} className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs">
+                              <span className="font-mono">{tool}</span>
+                              <button
+                                onClick={() => setSettings({ toolAllowlist: settings.toolAllowlist.filter((t) => t !== tool) })}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </section>
                 </div>
             </ScrollArea>

@@ -379,11 +379,19 @@ export function ComponentsPanel() {
         onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
-        onResolvePermission={(requestId, decision) => useChatStore.getState().resolveToolPermission(
-          componentId ? `component-${componentId}` : "component-none",
-          requestId,
-          decision
-        )}
+        onResolvePermission={(requestId, decision, toolName) => {
+          useChatStore.getState().resolveToolPermission(
+            componentId ? `component-${componentId}` : "component-none",
+            requestId,
+            decision
+          )
+          if (decision === "always_allowed" && toolName) {
+            const current = settings.toolAllowlist
+            if (!current.includes(toolName)) {
+              useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
+            }
+          }
+        }}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <ChatInput
