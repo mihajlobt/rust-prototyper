@@ -8,12 +8,6 @@
     "shell:default",
     "fs:default",
     "fs:allow-watch",
-    {
-      "identifier": "fs:allow-watch",
-      "allow": [
-        { "path": "$APPDATA/projects/**" }
-      ]
-    },
     "http:default",
     "store:default",
     "clipboard:default",
