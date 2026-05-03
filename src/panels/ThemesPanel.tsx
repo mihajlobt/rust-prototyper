@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Save, FolderUp, FileCode, Sun, Moon, Trash2 } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Save, FolderUp, FileCode, Sun, Moon, Trash2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -57,10 +58,14 @@ export function ThemesPanel() {
   }, [settings.project, selectedThemeDir]);
 
   const handleSaveToRunner = useCallback(async () => {
-    if (!css) return;
-    const dest = `projects/${settings.project}/generated/${ps.directories.themes}/${themeDir}.css`;
+    if (!css) {
+      notify.error("No CSS to save");
+      return;
+    }
+    const dirPath = `projects/${settings.project}/generated/${ps.directories.themes}`;
+    const dest = `${dirPath}/${themeDir}.css`;
     try {
-      await createDir(`projects/${settings.project}/generated/${ps.directories.themes}`);
+      await createDir(dirPath);
       await writeFile(dest, css);
       notify.success("Saved to Runner", dest);
     } catch (e) {
@@ -226,11 +231,29 @@ export function ThemesPanel() {
                   {frameworkPills}
                   <Button
                     variant="ghost" size="icon" className="h-6 w-6"
-                    onClick={() => { setSaveDialogName(selectedThemeDir && selectedThemeDir !== "main" ? selectedThemeDir : ""); setShowSaveDialog(true); }}
+                    onClick={async () => {
+                      if (selectedThemeDir && selectedThemeDir !== "main") {
+                        // Update existing theme directly
+                        try {
+                          await persistTheme(css, "", selectedThemeDir);
+                          toast.success(
+                            `Updated "${selectedThemeDir}"`,
+                            { description: "Theme saved" }
+                          );
+                        } catch (e) {
+                          toast.error(`Failed to update "${selectedThemeDir}"`, { description: getErrorMessage(e) });
+                        }
+                        window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
+                      } else {
+                        // New theme - open save dialog
+                        setSaveDialogName("");
+                        setShowSaveDialog(true);
+                      }
+                    }}
                     disabled={!css}
-                    title="Save as…"
+                    title={selectedThemeDir && selectedThemeDir !== "main" ? "Update theme" : "Save as new theme"}
                   >
-                    <Save size={12} />
+                    {selectedThemeDir && selectedThemeDir !== "main" ? <RefreshCw size={12} /> : <Save size={12} />}
                   </Button>
                   <Button
                     variant="ghost" size="icon" className="h-6 w-6"

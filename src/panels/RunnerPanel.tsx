@@ -78,6 +78,7 @@ export function RunnerPanel() {
 
   useEffect(() => { loadFiles(); }, [loadFiles, fileTreeRefreshKey]);
 
+  // File watcher for auto-refresh
   useEffect(() => {
     let cancelled = false;
     let stopFn: (() => void) | null = null;
@@ -95,7 +96,6 @@ export function RunnerPanel() {
         if (cancelled) { unwatch(); return; }
         stopFn = unwatch;
       } catch (error) {
-        // Expected when generated/ doesn't exist yet; log for debugging other failures
         console.warn("[watcher] failed to start:", error);
       }
     })();
