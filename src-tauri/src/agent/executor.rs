@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs};
 
 enum ToolError {
@@ -7,7 +8,6 @@ enum ToolError {
     Timeout { command: String, seconds: u64 },
     FileSystem(String),
     Security(String),
-    NotFound(String),
 }
 
 impl std::fmt::Display for ToolError {
@@ -22,8 +22,6 @@ impl std::fmt::Display for ToolError {
                 write!(f, "File system error: {detail}"),
             ToolError::Security(detail) =>
                 write!(f, "Security error: {detail}"),
-            ToolError::NotFound(detail) =>
-                write!(f, "Not found: {detail}"),
         }
     }
 }
@@ -139,7 +137,7 @@ async fn execute_read_file(
     if parsed.path.contains("..") {
         return ToolExecutionResult {
             success: false,
-            output: format!("read_file: {}", ToolError::Security("path traversal not allowed".into())),
+            output: "read_file: path traversal not allowed".to_string(),
             written_path: None,
             written_content: None,
         };
@@ -147,19 +145,130 @@ async fn execute_read_file(
 
     let target = app_data_dir.join(&parsed.path);
 
-    match tokio::fs::read_to_string(&target).await {
-        Ok(contents) => ToolExecutionResult {
-            success: true,
-            output: contents,
+    if !target.exists() {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("read_file: file not found: {}", parsed.path),
             written_path: None,
             written_content: None,
-        },
-        Err(e) => ToolExecutionResult {
+        };
+    }
+
+    // Handle directory listing
+    if target.is_dir() {
+        match tokio::fs::read_dir(&target).await {
+            Ok(mut dir) => {
+                let mut entries = Vec::new();
+                loop {
+                    match dir.next_entry().await {
+                        Ok(Some(entry)) => {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            // tokio DirEntry doesn't have file_type as sync, use metadata
+                            let metadata = match entry.metadata().await {
+                                Ok(m) => m.is_dir(),
+                                Err(_) => false,
+                            };
+                            entries.push(if metadata { format!("{}/", name) } else { name });
+                        }
+                        Ok(None) => break,
+                        Err(_) => continue,
+                    }
+                }
+                entries.sort();
+                let output = format!(
+                    "<path>{}</path>\n<type>directory</type>\n<entries>\n{}\n</entries>",
+                    parsed.path,
+                    entries.join("\n")
+                );
+                return ToolExecutionResult {
+                    success: true,
+                    output,
+                    written_path: None,
+                    written_content: None,
+                };
+            }
+            Err(e) => return ToolExecutionResult {
+                success: false,
+                output: format!("read_file: {}", ToolError::FileSystem(e.to_string())),
+                written_path: None,
+                written_content: None,
+            },
+        };
+    }
+
+    // Handle file reading with line offsets
+    let file = match tokio::fs::File::open(&target).await {
+        Ok(f) => f,
+        Err(e) => return ToolExecutionResult {
             success: false,
             output: format!("read_file: {}", ToolError::FileSystem(e.to_string())),
             written_path: None,
             written_content: None,
         },
+    };
+
+    let mut reader = BufReader::new(file).lines();
+
+    // Convert 1-indexed offset to 0-indexed, default to 1
+    let start_offset = parsed.offset.unwrap_or(1).saturating_sub(1) as usize;
+    let max_lines = parsed.limit.unwrap_or(2000) as usize;
+    const MAX_BYTES: usize = 50_000;
+
+    let mut output = String::new();
+    let mut current_line_num = 0;
+    let mut bytes_written = 0;
+    let mut truncated = false;
+
+    // First pass: skip to offset
+    while let Ok(Some(_)) = reader.next_line().await {
+        current_line_num += 1;
+        if current_line_num > start_offset {
+            break;
+        }
+    }
+
+    // Second pass: collect lines up to limit
+    while let Ok(Some(line)) = reader.next_line().await {
+        let line_prefix = format!("{}: ", current_line_num + 1);
+        let line_with_newline = format!("{}{}\n", line_prefix, line);
+
+        if bytes_written + line_with_newline.len() > MAX_BYTES || (current_line_num + 1 - start_offset) >= max_lines {
+            truncated = true;
+            break;
+        }
+
+        output.push_str(&line_with_newline);
+        bytes_written += line_with_newline.len();
+        current_line_num += 1;
+    }
+
+    // If we haven't read the full file yet, check if there's more
+    if reader.next_line().await.is_ok() {
+        truncated = true;
+    }
+
+    // Build XML output
+    let total_lines = current_line_num;
+    let output_xml = format!(
+        "<path>{}</path>\n<type>file</type>\n<content>\n{}{}</content>",
+        parsed.path,
+        output,
+        if truncated {
+            format!(
+                "\n(Showing {} lines. Use offset={} to continue.)",
+                max_lines.min(current_line_num.saturating_sub(start_offset)),
+                current_line_num + 1
+            )
+        } else {
+            format!("\n(End of file - {} lines)", total_lines)
+        }
+    );
+
+    ToolExecutionResult {
+        success: true,
+        output: output_xml,
+        written_path: None,
+        written_content: None,
     }
 }
 
@@ -180,7 +289,7 @@ async fn execute_edit_file(
     if parsed.path.contains("..") {
         return ToolExecutionResult {
             success: false,
-            output: format!("edit_file: {}", ToolError::Security("path traversal not allowed".into())),
+            output: "edit_file: path traversal not allowed".to_string(),
             written_path: None,
             written_content: None,
         };
@@ -192,43 +301,29 @@ async fn execute_edit_file(
         Ok(c) => c,
         Err(e) => return ToolExecutionResult {
             success: false,
-            output: format!("edit_file: {}", ToolError::FileSystem(format!("could not read '{}': {e}", parsed.path))),
+            output: format!("edit_file: could not read '{}': {}", parsed.path, e),
             written_path: None,
             written_content: None,
         },
     };
 
-    let match_count = current.matches(parsed.old_string.as_str()).count();
-    if match_count == 0 {
-        return ToolExecutionResult {
-            success: false,
-            output: format!(
-                "edit_file: {} — old_string not found in '{}'. Use read_file to verify the exact content.",
-                ToolError::NotFound("old_string not found".into()),
-                parsed.path
-            ),
-            written_path: None,
-            written_content: None,
-        };
-    }
-    if match_count > 1 {
-        return ToolExecutionResult {
-            success: false,
-            output: format!(
-                "edit_file: old_string appears {match_count} times in '{}' — it must be unique. Add more surrounding context to make it unambiguous.",
-                parsed.path
-            ),
-            written_path: None,
-            written_content: None,
-        };
-    }
+    let replace_all = parsed.replace_all.unwrap_or(false);
 
-    let updated = current.replacen(parsed.old_string.as_str(), parsed.new_string.as_str(), 1);
+    // Try fuzzy matching (exact -> trimmed -> indent-flexible -> block-anchor)
+    let updated = match fuzzy_replace(&current, &parsed.old_string, &parsed.new_string, replace_all) {
+        Ok(u) => u,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: e,
+            written_path: None,
+            written_content: None,
+        },
+    };
 
     match tokio::fs::write(&target, &updated).await {
         Ok(()) => ToolExecutionResult {
             success: true,
-            output: format!("Edited: {}\nReplaced {} bytes with {} bytes.", parsed.path, parsed.old_string.len(), parsed.new_string.len()),
+            output: "Edit applied successfully.".to_string(),
             written_path: Some(target),
             written_content: Some(updated),
         },
@@ -241,41 +336,222 @@ async fn execute_edit_file(
     }
 }
 
+/// Try multiple matching strategies in order, return first match
+fn fuzzy_replace(content: &str, old: &str, new: &str, replace_all: bool) -> Result<String, String> {
+    // 1. Exact match
+    if replace_all {
+        if content.contains(old) {
+            return Ok(content.replace(old, new));
+        }
+    } else if content.contains(old) {
+        return Ok(content.replacen(old, new, 1));
+    }
+
+    // 2. Trim whitespace
+    let trimmed_old = old.trim();
+    if content.contains(trimmed_old) {
+        // Find each trimmed line, replace with proper indentation
+        let result: String = content
+            .lines()
+            .map(|line| {
+                if line.trim() == trimmed_old {
+                    // Preserve original indentation
+                    let indent_len = line.len() - line.trim_start().len();
+                    let new_lines: Vec<&str> = new.lines().collect();
+                    new_lines
+                        .iter()
+                        .enumerate()
+                        .map(|(i, l)| {
+                            if i == 0 {
+                                format!("{}{}", " ".repeat(indent_len), l)
+                            } else {
+                                l.to_string()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect();
+        return Ok(result);
+    }
+
+    // 3. Normalize indentation and try again
+    let normalize = |s: &str| -> String {
+        s.lines()
+            .map(|line| {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    String::new()
+                } else {
+                    trimmed.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let normalized_old = normalize(old);
+    let normalized_content = normalize(content);
+    if normalized_content.contains(&normalized_old) {
+        // Find the normalized match, reconstruct with original indentation
+        let result = apply_indent_flexible_replace(content, old, new, replace_all);
+        if result.is_some() {
+            return Ok(result.unwrap());
+        }
+    }
+
+    // 4. Block anchor (first/last non-empty lines as anchors)
+    if let Some(replaced) = fuzzy_block_match(content, old, new, replace_all) {
+        return Ok(replaced);
+    }
+
+    Err(format!(
+        "edit_file: Could not find '{}' in the file. It must match exactly including whitespace and indentation.",
+        old.lines().next().unwrap_or(old)
+    ))
+}
+
+/// Replace with indentation preservation  
+fn apply_indent_flexible_replace(content: &str, old: &str, new: &str, _replace_all: bool) -> Option<String> {
+    let old_lines: Vec<&str> = old.lines().collect();
+    let content_lines: Vec<&str> = content.lines().collect();
+
+    for (i, content_line) in content_lines.iter().enumerate() {
+        let trimmed = content_line.trim();
+        let old_trimmed = old_lines.first()?.trim();
+
+        if trimmed == old_trimmed {
+            // Found start, calculate indent
+            let indent_len = content_line.len() - content_line.trim_start().len();
+
+            // Check if rest matches
+            let mut matches = true;
+            for (j, old_line) in old_lines.iter().skip(1).enumerate() {
+                if i + 1 + j >= content_lines.len() {
+                    matches = false;
+                    break;
+                }
+                let content_trimmed = content_lines[i + 1 + j].trim();
+                if content_trimmed != old_line.trim() {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if matches {
+                // Build replacement with original indentation
+                let new_lines: Vec<&str> = new.lines().collect();
+                let replacement = new_lines
+                    .iter()
+                    .enumerate()
+                    .map(|(j, l)| {
+                        if j == 0 {
+                            format!("{}{}", " ".repeat(indent_len), l)
+                        } else {
+                            l.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let end_idx = i + old_lines.len();
+                let mut result = content_lines[..i].join("\n");
+                if !result.is_empty() {
+                    result.push('\n');
+                }
+                result.push_str(&replacement);
+                if end_idx < content_lines.len() {
+                    result.push('\n');
+                    result.push_str(&content_lines[end_idx..].join("\n"));
+                }
+                return Some(result);
+            }
+        }
+    }
+    None
+}
+
+/// Block anchor matching - use first/last non-empty lines as anchors
+fn fuzzy_block_match(content: &str, old: &str, new: &str, _replace_all: bool) -> Option<String> {
+    let old_lines: Vec<&str> = old.lines().collect();
+    if old_lines.len() < 2 {
+        return None;
+    }
+
+    // Find first and last non-empty lines in old
+    let first = old_lines.iter().find(|l| !l.trim().is_empty())?.trim();
+    let last = old_lines.iter().rfind(|l| !l.trim().is_empty())?.trim();
+
+    let content_lines: Vec<&str> = content.lines().collect();
+
+    for i in 0..content_lines.len() {
+        if content_lines[i].trim() != first {
+            continue;
+        }
+        // Look for matching last anchor
+        for j in (i + 2)..content_lines.len() {
+            if content_lines[j].trim() == last {
+                // Found block - verify middle content matches
+                let block_len = j - i + 1;
+                if block_len != old_lines.len() {
+                    continue;
+                }
+
+                let mut matches = true;
+                for k in 0..block_len {
+                    if content_lines[i + k].trim() != old_lines[k].trim() {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if matches {
+                    // Replace the block
+                    let new_lines: Vec<&str> = new.lines().collect();
+                    let mut result = content_lines[..i].join("\n");
+                    if !result.is_empty() && !new_lines.first().map(|l| l.trim().is_empty()).unwrap_or(true) {
+                        result.push('\n');
+                    }
+                    result.push_str(&new_lines.join("\n"));
+                    if j < content_lines.len() - 1 {
+                        result.push('\n');
+                        result.push_str(&content_lines[j + 1..].join("\n"));
+                    }
+                    return Some(result);
+                }
+            }
+        }
+    }
+    None
+}
+
 async fn execute_run_tsc(
     args: &serde_json::Value,
     project_dir: &Path,
 ) -> ToolExecutionResult {
-    let parsed = match serde_json::from_value::<TscCheckArgs>(args.clone()) {
-        Ok(p) => p,
-        Err(e) => return ToolExecutionResult {
+    // Validate args (TscCheckArgs is now empty struct)
+    if let Err(e) = serde_json::from_value::<TscCheckArgs>(args.clone()) {
+        return ToolExecutionResult {
             success: false,
             output: format!("run_tsc: {}", ToolError::InvalidArguments(e.to_string())),
             written_path: None,
             written_content: None,
-        },
-    };
-
-    let command = "cd component-preview && bun run tsc --noEmit --project ../tsconfig.check.json 2>&1";
-    let raw = run_sandboxed_command(command, project_dir).await;
-
-    let output = if let Some(filter_path) = parsed.path.filter(|p| !p.is_empty()) {
-        // Strip "projects/<id>/" prefix so the filter matches tsc output (project-relative paths).
-        let component_relative = if filter_path.starts_with("projects/") {
-            filter_path.splitn(3, '/').nth(2).unwrap_or(&filter_path).to_string()
-        } else {
-            filter_path.clone()
         };
-        raw.lines()
-            .filter(|line| line.contains(component_relative.as_str()))
-            .collect::<Vec<&str>>()
-            .join("\n")
-    } else {
-        raw
+    }
+
+    let command = "cd component-preview && bun run tsc --noEmit --project ../tsconfig.check.json 2>&1; echo \"EXIT:$?\"";
+    let raw = run_sandboxed_command(command, project_dir).await;
+    let (body, exit_code) = extract_exit_code(&raw);
+
+    let output = match exit_code {
+        Some(code) => format!("{body}\nExit code: {code}"),
+        None => body.to_string(),
     };
 
-    let success = !output.contains("error TS");
     ToolExecutionResult {
-        success,
+        success: exit_code == Some(0),
         output,
         written_path: None,
         written_content: None,

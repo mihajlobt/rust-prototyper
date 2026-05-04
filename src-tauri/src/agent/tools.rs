@@ -11,6 +11,10 @@ pub struct WriteFileArgs {
 pub struct ReadFileArgs {
     /// Relative file path within the project to read (e.g. "projects/abc/screens/xyz/screen.tsx")
     pub path: String,
+    /// Line number to start reading from (1-indexed). Default: 1 (first line).
+    pub offset: Option<u32>,
+    /// Maximum number of lines to read. Default: 2000.
+    pub limit: Option<u32>,
 }
 
 #[derive(serde::Deserialize, JsonSchema)]
@@ -21,6 +25,8 @@ pub struct EditFileArgs {
     pub old_string: String,
     /// The string to replace old_string with.
     pub new_string: String,
+    /// If true, replace all occurrences of old_string. Default: false (replace first occurrence only).
+    pub replace_all: Option<bool>,
 }
 
 #[derive(serde::Deserialize, JsonSchema)]
@@ -30,10 +36,7 @@ pub struct BashArgs {
 }
 
 #[derive(serde::Deserialize, JsonSchema)]
-pub struct TscCheckArgs {
-    /// Optional: relative path to filter errors by (e.g. "components/my-folder/component.tsx"). Leave empty to see all errors in generated files.
-    pub path: Option<String>,
-}
+pub struct TscCheckArgs {}
 
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct LintCheckArgs {
@@ -61,7 +64,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "read_file".to_string(),
-                description: "Read the contents of a file in the project. Always call this before edit_file or write_file on existing files.".to_string(),
+                description: "Read the contents of a file in the project. Use offset and limit to read a specific range of lines. Always call this before edit_file or write_file on existing files.".to_string(),
                 parameters: make_schema::<ReadFileArgs>(),
             },
         },
@@ -69,7 +72,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "edit_file".to_string(),
-                description: "Surgically edit an existing file by replacing an exact string. Much preferred over write_file for modifications — avoids full rewrites. The old_string must match exactly (including all whitespace/newlines) and appear exactly once. Use read_file first to get the current content. Make multiple edit_file calls for multiple changes rather than one write_file.".to_string(),
+                description: "Edit an existing file by replacing text. Multiple matching strategies are tried automatically (exact, trimmed whitespace, indentation-normalized). Use replaceAll to replace all occurrences. Verify edit with read_file after.".to_string(),
                 parameters: make_schema::<EditFileArgs>(),
             },
         },

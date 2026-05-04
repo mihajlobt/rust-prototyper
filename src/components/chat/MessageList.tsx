@@ -25,7 +25,7 @@ import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/
 
 function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
   // "(no output)" from grep/filter commands ≠ error (just no match)
-  // Always show as info, ignore the success field for this case
+  // Also handle empty string results from write/edit tools
   const isEmptyOutput = tc.result === "" || tc.result === undefined || tc.result === "(no output)"
   // Only show error if success is explicitly false AND output has actual content
   const isRealError = tc.success === false && !isEmptyOutput
@@ -40,22 +40,67 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
   const filename = tc.path ? tc.path.split("/").pop() : undefined
 
   switch (tc.tool) {
-    case "write_file":
+    case "write_file": {
+      // Output is now "Written N bytes to filepath" or empty
+      // tc.arguments may have 'content' as a string in the raw, or be an object
+      const writeContentLength = typeof tc.arguments.content === "string" ? tc.arguments.content.length : 0
       return {
         type: "write_file",
         state,
-        input: filename ? { file: filename } : tc.arguments,
-        output: tc.result !== undefined ? { written: filename ?? "file" } : undefined,
+        input: {
+          path: (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown",
+          ...(writeContentLength > 0 ? { size: `${writeContentLength} bytes` } : {}),
+        },
+        output: tc.result !== undefined ? { result: tc.result || "File written successfully" } : undefined,
       }
-    case "read_file":
+    }
+    case "read_file": {
+      // Output is now XML: <path>...</path><content>1: line... 2: line...</content>
+      // Parse it for nicer display
+      let contents = tc.result
+      if (tc.result?.includes("<content>")) {
+        // Extract just the content between tags
+        const contentMatch = tc.result.match(/<content>([\s\S]*?)<\/content>/)
+        if (contentMatch) {
+          contents = contentMatch[1].trim()
+        }
+      }
       return {
         type: "read_file",
         state,
-        input: { path: (tc.arguments.path as string) ?? tc.path },
-        output: tc.result !== undefined ? { contents: tc.result.slice(0, 500) + (tc.result.length > 500 ? "…" : "") } : undefined,
+        input: {
+          path: (tc.arguments.path as string) ?? tc.path,
+          ...(tc.arguments.offset ? { offset: String(tc.arguments.offset) } : {}),
+          ...(tc.arguments.limit ? { limit: String(tc.arguments.limit) } : {}),
+        },
+        output: tc.result !== undefined ? { contents: (contents ?? "").slice(0, 1000) + ((contents?.length ?? 0) > 1000 ? "\n... (truncated)" : "") } : undefined,
         errorText: tc.success === false ? tc.result : undefined,
       }
-    case "bash":
+    }
+    case "edit_file": {
+      // Output is now "Edit applied successfully." instead of byte counts
+      return {
+        type: "edit_file",
+        state,
+        input: {
+          path: (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown",
+          ...(tc.arguments.replace_all ? { replaceAll: "true" } : {}),
+        },
+        output: tc.result !== undefined ? { result: tc.result } : undefined,
+        errorText: tc.success === false ? tc.result : undefined,
+      }
+    }
+case "run_tsc": {
+      // Output now includes "Exit code: N"
+      return {
+        type: "run_tsc",
+        state,
+        input: {},
+        output: tc.result !== undefined ? { result: tc.result } : undefined,
+        errorText: tc.success === false ? tc.result : undefined,
+      }
+    }
+    case "bash": {
       return {
         type: "bash",
         state,
@@ -63,13 +108,15 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
         output: tc.result !== undefined ? { output: tc.result } : undefined,
         errorText: tc.success === false ? tc.result : undefined,
       }
-    default:
+    }
+    default: {
       return {
         type: tc.tool,
         state,
         input: tc.arguments,
         output: tc.result !== undefined ? { result: tc.result } : undefined,
       }
+    }
   }
 }
 
