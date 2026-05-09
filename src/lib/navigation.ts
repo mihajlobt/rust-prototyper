@@ -9,15 +9,22 @@ export interface NavScreen {
   title: string;
 }
 
+export interface NavLink {
+  id: string;
+  from: string;
+  to: string;
+}
+
 export interface Navigation {
   defaultScreen: string;
   screens: NavScreen[];
+  links: NavLink[];
 }
 
 const NAVIGATION_FILE = "navigation.json";
 
 function defaultNav(): Navigation {
-  return { defaultScreen: "", screens: [] };
+  return { defaultScreen: "", screens: [], links: [] };
 }
 
 export async function loadNavigation(projectDir: string): Promise<Navigation> {
@@ -56,6 +63,20 @@ export async function removeScreenFromNavigation(projectDir: string, screenId: s
   if (nav.defaultScreen === screenId) {
     nav.defaultScreen = nav.screens[0]?.id ?? "";
   }
+  await saveNavigation(projectDir, nav);
+}
+
+export async function addNavLink(projectDir: string, from: string, to: string): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  const id = `${from}->${to}`;
+  if (nav.links.some((l) => l.id === id)) return;
+  nav.links.push({ id, from, to });
+  await saveNavigation(projectDir, nav);
+}
+
+export async function removeNavLink(projectDir: string, linkId: string): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  nav.links = nav.links.filter((l) => l.id !== linkId);
   await saveNavigation(projectDir, nav);
 }
 
