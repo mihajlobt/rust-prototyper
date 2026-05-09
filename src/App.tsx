@@ -9,6 +9,7 @@ import { ThemesPanel } from "./panels/ThemesPanel";
 import { APIsPanel } from "./panels/APIsPanel";
 import { RunnerPanel } from "./panels/RunnerPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
+import { FlowsPanel } from "./panels/FlowsPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
 import { useAppStore } from "./stores/appStore";
 import { useProjectSettingsStore } from "./stores/projectSettingsStore";
@@ -75,6 +76,7 @@ export default function App() {
                 {ps.activeView === "screens"    && <ScreensPanel />}
                 {ps.activeView === "components" && <ComponentsPanel />}
                 {ps.activeView === "themes"     && <ThemesPanel />}
+                {ps.activeView === "flows"      && <FlowsPanel />}
                 <div style={{ display: ps.activeView === "workflows" ? "contents" : "none" }}>
                   <WorkflowsView />
                 </div>

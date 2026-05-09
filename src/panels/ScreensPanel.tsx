@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square, GitBranch } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
@@ -11,7 +11,6 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection } from "@/lib/prompts";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
-import { FlowsView } from "@/panels/FlowsView";
 import { extractCode } from "@/lib/preview";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
@@ -30,7 +29,6 @@ export function ScreensPanel() {
   const screensDevice = ps.screensDevice;
   const screensShowInspector = ps.screensShowInspector;
   const screensZoom = ps.screensZoom;
-  const screensActiveTab = ps.screensActiveTab;
   const screensDarkPreview = ps.screensDarkPreview;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3, [true, true, screensShowInspector]);
@@ -390,86 +388,61 @@ export function ScreensPanel() {
         <Allotment.Pane minSize={400}>
           <div className="h-full flex flex-col">
             <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
-              <div className="flex items-center gap-1 bg-muted rounded p-0.5">
-                <Button
-                  variant={screensActiveTab === "preview" ? "secondary" : "ghost"}
-                  size="sm" className="h-6 px-2 text-xs"
-                  onClick={() => setPs({ screensActiveTab: "preview" })}
-                >Preview</Button>
-                <Button
-                  variant={screensActiveTab === "flows" ? "secondary" : "ghost"}
-                  size="sm" className="h-6 px-2 text-xs gap-1"
-                  onClick={() => setPs({ screensActiveTab: "flows" })}
-                ><GitBranch size={10} />Flows</Button>
-              </div>
-              {screensActiveTab === "preview" && (
-                <>
-                  {screensStatus === "running" ? (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopScreens(); }} title="Stop preview server">
-                      <Square size={12} />
-                    </Button>
-                  ) : screensStatus === "starting" ? (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
-                      <Loader2 size={12} className="animate-spin" />
-                    </Button>
-                  ) : (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startScreens(screenPreviewDir, ps.screensPreviewPort); }} title="Start preview server">
-                      <Play size={12} />
-                    </Button>
-                  )}
-                  <div className="flex-1" />
-                  <Button
-                    variant={screensDarkPreview ? "secondary" : "ghost"}
-                    size="icon" className="h-7 w-7"
-                    onClick={() => {
-                      setPs({ screensDarkPreview: !screensDarkPreview });
-                      previewIframeRef.current?.contentWindow?.postMessage(
-                        { type: "set-dark", value: !screensDarkPreview },
-                        "*"
-                      );
-                    }}
-                    title={screensDarkPreview ? "Light preview" : "Dark preview"}
-                  >
-                    {screensDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
-                  </Button>
-                  <div className="w-px h-4 bg-border" />
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
-                    <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(screensZoom * 100)}%</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.min(screensZoom + 0.1, 2) })}>+</Button>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant={screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "mobile" })}>
-                      <Smartphone size={12} />
-                    </Button>
-                    <Button variant={screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "tablet" })}>
-                      <Tablet size={12} />
-                    </Button>
-                    <Button variant={screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "desktop" })}>
-                      <Monitor size={12} />
-                    </Button>
-                  </div>
-                </>
+              <span className="text-sm font-medium">Preview</span>
+              {screensStatus === "running" ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopScreens(); }} title="Stop preview server">
+                  <Square size={12} />
+                </Button>
+              ) : screensStatus === "starting" ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
+                  <Loader2 size={12} className="animate-spin" />
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startScreens(screenPreviewDir, ps.screensPreviewPort); }} title="Start preview server">
+                  <Play size={12} />
+                </Button>
               )}
-              {screensActiveTab === "flows" && <div className="flex-1" />}
+              <div className="flex-1" />
+              <Button
+                variant={screensDarkPreview ? "secondary" : "ghost"}
+                size="icon" className="h-7 w-7"
+                onClick={() => {
+                  setPs({ screensDarkPreview: !screensDarkPreview });
+                  previewIframeRef.current?.contentWindow?.postMessage(
+                    { type: "set-dark", value: !screensDarkPreview },
+                    "*"
+                  );
+                }}
+                title={screensDarkPreview ? "Light preview" : "Dark preview"}
+              >
+                {screensDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+              </Button>
+              <div className="w-px h-4 bg-border" />
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
+                <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(screensZoom * 100)}%</span>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.min(screensZoom + 0.1, 2) })}>+</Button>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button variant={screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "mobile" })}>
+                  <Smartphone size={12} />
+                </Button>
+                <Button variant={screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "tablet" })}>
+                  <Tablet size={12} />
+                </Button>
+                <Button variant={screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "desktop" })}>
+                  <Monitor size={12} />
+                </Button>
+              </div>
             </div>
-            {screensActiveTab === "flows" ? (
-              <div className="relative flex-1 overflow-hidden">
-                <FlowsView
-                  screenIds={screenIds}
-                  onSelectScreen={(id) => setPs({ activeScreen: id })}
-                />
+            <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
+              <div
+                className="h-full bg-background shadow-lg border border-border overflow-hidden"
+                style={{ width: deviceWidth[screensDevice], transform: `scale(${screensZoom})`, transformOrigin: "top center" }}
+              >
+                {renderPreview()}
               </div>
-            ) : (
-              <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
-                <div
-                  className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                  style={{ width: deviceWidth[screensDevice], transform: `scale(${screensZoom})`, transformOrigin: "top center" }}
-                >
-                  {renderPreview()}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </Allotment.Pane>
       </Allotment>
