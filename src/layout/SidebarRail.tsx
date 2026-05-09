@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, getErrorMessage } from "@/lib/ipc";
+import { addScreenToNavigation, removeScreenFromNavigation, renameScreenInNavigation, syncScreenPreviewRoutes } from "@/lib/navigation";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -103,6 +104,8 @@ export function SidebarRail() {
           await writeFile(`${dir}/screen.tsx`, `// ${newItemName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newItemName}</div>;\n}\n`);
           await writeFile(`${dir}/chat.json`, "[]");
           await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
+          await addScreenToNavigation(base, id);
+          await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
           break;
         }
         case "component": {
@@ -151,6 +154,10 @@ export function SidebarRail() {
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
+      if (section === "screens") {
+        await removeScreenFromNavigation(base, name);
+        await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+      }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
       notify.error("Delete failed", getErrorMessage(e));
@@ -173,6 +180,10 @@ export function SidebarRail() {
       } else {
         await renameFile(`${base}/${section}/${name}`, `${base}/${section}/${newId}`);
       }
+      if (section === "screens") {
+        await renameScreenInNavigation(base, name, newId);
+        await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+      }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
       setRenameTarget(null);
     } catch (e) {
@@ -192,6 +203,8 @@ export function SidebarRail() {
         await writeFile(`${dir}/screen.tsx`, code);
         await writeFile(`${dir}/chat.json`, chat);
         await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
+        await addScreenToNavigation(base, newId);
+        await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       } else if (section === "components") {
         const dir = `${base}/components/${newId}`;
         await createDir(dir);

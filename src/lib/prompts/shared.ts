@@ -55,6 +55,43 @@ export function getIconLibraryPromptSection(iconLibrary: IconLibrary): string {
   }
 }
 
+// ─── Design tokens ────────────────────────────────────────────────────────────
+
+/**
+ * Parse CSS custom property names from a theme's :root {} block.
+ * Returns the list of --token-name strings found, ignoring values.
+ */
+export function extractDesignTokenNames(themeCss: string): string[] {
+  const names: string[] = [];
+  const rootMatch = themeCss.match(/:root\s*\{([^}]*)\}/s);
+  if (!rootMatch) return names;
+  const declarations = rootMatch[1].matchAll(/--[\w-]+(?=\s*:)/g);
+  for (const match of declarations) {
+    names.push(match[0]);
+  }
+  return names;
+}
+
+/**
+ * Build the design tokens prompt section from parsed token names.
+ * Returns empty string when no tokens are available.
+ */
+export function getDesignTokensSection(tokenNames: string[]): string {
+  if (tokenNames.length === 0) return "";
+  return `\n\nDESIGN TOKENS — use these CSS custom properties for all colors, spacing, and radii. Never hardcode hex/rgb values:
+${tokenNames.map((t) => `  ${t}`).join("\n")}
+Usage: className="bg-[var(--primary)] text-[var(--primary-foreground)]" or style={{color: "var(--foreground)"}}}`;
+}
+
+// ─── Mock data layer ──────────────────────────────────────────────────────────
+
+export const DATA_LAYER_SECTION = `
+SHARED MOCK DATA — available at @/data/store:
+- Import realistic data instead of hardcoding dummy text: import { users, products } from '@/data/store';
+- Use glob("data/*.ts") to discover what data files already exist before creating new ones.
+- If the data you need doesn't exist yet, create a new file (e.g. data/users.ts) and add an export to data/store.ts.
+- Data files use plain TypeScript — typed arrays of objects with realistic values (real names, prices, dates, etc).`;
+
 // ─── Shared tool-calling section (DRY — used by screen and component prompts) ──
 
 export const TOOL_USAGE_SECTION = `TOOL USAGE — REQUIRED:

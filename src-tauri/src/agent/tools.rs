@@ -47,6 +47,20 @@ pub struct LintCheckArgs {
     pub path: String,
 }
 
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct GlobArgs {
+    /// Glob pattern relative to the project root (e.g. "components/**/*.tsx", "screens/*/screen.tsx", "data/*.ts"). No ".." allowed. Returns up to 100 matching file paths.
+    pub pattern: String,
+}
+
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct GrepArgs {
+    /// Text or regex pattern to search for (e.g. "useNavigate", "import.*Button", "export default").
+    pub pattern: String,
+    /// Relative path or directory to search within (e.g. "components/", "screens/my-screen/screen.tsx"). Defaults to entire project. No ".." allowed.
+    pub path: Option<String>,
+}
+
 fn make_schema<T: JsonSchema>() -> schemars::Schema {
     let mut settings = SchemaSettings::draft07();
     settings.inline_subschemas = true;
@@ -101,6 +115,22 @@ pub fn build_tools() -> Vec<ToolInfo> {
                 name: "run_build".to_string(),
                 description: "Run esbuild on a specific file to catch JSX/Babel syntax errors that tsc misses (e.g. malformed JSX tags, missing imports). Call after run_lint passes.".to_string(),
                 parameters: make_schema::<LintCheckArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "glob".to_string(),
+                description: "Find files matching a glob pattern in the project. Call before writing new code to discover existing components, screens, data files, or utilities. Returns up to 100 matching relative file paths.".to_string(),
+                parameters: make_schema::<GlobArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "grep".to_string(),
+                description: "Search for a text or regex pattern across project files (.tsx, .ts, .css, .json). Use to find where a component is imported, how a type is defined, or whether something already exists before creating it. Returns file paths and matching lines (up to 100 results).".to_string(),
+                parameters: make_schema::<GrepArgs>(),
             },
         },
         ToolInfo {

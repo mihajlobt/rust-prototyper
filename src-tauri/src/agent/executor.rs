@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs};
+use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs};
 
 enum ToolError {
     InvalidArguments(String),
@@ -48,6 +48,8 @@ pub async fn execute_tool(
         "run_tsc" => execute_run_tsc(args, project_dir).await,
         "run_lint" => execute_run_lint(args, project_dir).await,
         "run_build" => execute_run_build(args, project_dir).await,
+        "glob" => execute_glob(args, project_dir).await,
+        "grep" => execute_grep(args, project_dir).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
@@ -694,6 +696,107 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
     ToolExecutionResult {
         success: exit_code == Some(0),
         output: body.to_string(),
+        written_path: None,
+        written_content: None,
+    }
+}
+
+async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<GlobArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("glob: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if parsed.pattern.contains("..") {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("glob: {}", ToolError::Security("path traversal not allowed".into())),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let escaped_pattern = match shlex::try_quote(&parsed.pattern) {
+        Ok(q) => q.into_owned(),
+        Err(_) => return ToolExecutionResult {
+            success: false,
+            output: format!("glob: {}", ToolError::Security("pattern contains a nul byte".into())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    // Use find with -path for glob matching; strip the leading "./" from results.
+    let command = format!(
+        r#"find . -path {escaped_pattern} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f | sed 's|^\./||' | head -100; echo "EXIT:$?""#
+    );
+    let raw = run_sandboxed_command(&command, project_dir).await;
+    let (body, exit_code) = extract_exit_code(&raw);
+
+    ToolExecutionResult {
+        success: exit_code == Some(0),
+        output: if body.trim().is_empty() { "(no files matched)".to_string() } else { body.to_string() },
+        written_path: None,
+        written_content: None,
+    }
+}
+
+async fn execute_grep(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<GrepArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("grep: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if parsed.pattern.contains("..") || parsed.path.as_deref().map(|p| p.contains("..")).unwrap_or(false) {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("grep: {}", ToolError::Security("path traversal not allowed".into())),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let escaped_pattern = match shlex::try_quote(&parsed.pattern) {
+        Ok(q) => q.into_owned(),
+        Err(_) => return ToolExecutionResult {
+            success: false,
+            output: format!("grep: {}", ToolError::Security("pattern contains a nul byte".into())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    let search_path = parsed.path.as_deref().unwrap_or(".");
+    let escaped_path = match shlex::try_quote(search_path) {
+        Ok(q) => q.into_owned(),
+        Err(_) => return ToolExecutionResult {
+            success: false,
+            output: format!("grep: {}", ToolError::Security("path contains a nul byte".into())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    let command = format!(
+        r#"grep -rn --include='*.tsx' --include='*.ts' --include='*.css' --include='*.json' --exclude-dir=node_modules --exclude-dir=.git {escaped_pattern} {escaped_path} | head -100; echo "EXIT:$?""#
+    );
+    let raw = run_sandboxed_command(&command, project_dir).await;
+    let (body, exit_code) = extract_exit_code(&raw);
+
+    // grep exits 1 when no matches found — that's not an error for our purposes.
+    ToolExecutionResult {
+        success: exit_code == Some(0) || exit_code == Some(1),
+        output: if body.trim().is_empty() { "(no matches found)".to_string() } else { body.to_string() },
         written_path: None,
         written_content: None,
     }

@@ -23,10 +23,10 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { FileEntry } from "@/lib/ipc";
-import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection } from "@/lib/prompts";
+import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs } from "@/lib/scaffold";
+import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -74,12 +74,10 @@ export function ComponentsPanel() {
 
   // Switch to update prompt after first generation
   const hasGeneratedCode = code.length > 0;
-  const themeCssSection = themeCss
-    ? `\n\nTHEME CSS VARIABLES — Use these exact CSS custom properties for all colors:\n\`\`\`css\n${themeCss}\n\`\`\``
-    : "";
+  const designTokensSection = getDesignTokensSection(extractDesignTokenNames(themeCss));
   const defaultSystem = hasGeneratedCode
-    ? getComponentUpdatePrompt(settings.iconLibrary, code, ps.shadcnMode, settings.prompts["prompt.components.update"] || undefined) + themeCssSection
-    : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + themeCssSection;
+    ? getComponentUpdatePrompt(settings.iconLibrary, code, ps.shadcnMode, settings.prompts["prompt.components.update"] || undefined) + designTokensSection
+    : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + designTokensSection;
   const componentPath = componentId ? `projects/${settings.project}/components/${componentId}/component.tsx` : undefined;
   const systemContent = defaultSystem + (componentPath ? outputFilePathSection(componentPath) : "");
 
@@ -131,6 +129,7 @@ export function ComponentsPanel() {
         writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
         ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
+        ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
       }
 
       if (cancelled) return;

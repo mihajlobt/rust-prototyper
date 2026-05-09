@@ -57,6 +57,27 @@ async fn setup_project_dir(proj_dir: &Path) {
 }
 "#;
             let _ = tokio::fs::write(&tsconfig, content).await;
+
+            // Symlink component-preview/src/data → ../../data so that @/data imports
+            // in generated components resolve to the project-level data/ directory.
+            let src_dir = component_preview.join("src");
+            if src_dir.exists() {
+                let data_link = src_dir.join("data");
+                if !data_link.exists() {
+                    let _ = symlink("../../data", &data_link);
+                }
+            }
+
+            // Symlink screen-preview/src/screens → ../../../screens so that @/screens/{id}/screen
+            // imports in routes.ts resolve to the project-level screens/ directory.
+            let screen_preview = proj_dir.join("screen-preview");
+            let screen_src_dir = screen_preview.join("src");
+            if screen_src_dir.exists() {
+                let screens_link = screen_src_dir.join("screens");
+                if !screens_link.exists() {
+                    let _ = symlink("../../../screens", &screens_link);
+                }
+            }
         }
     }
 }

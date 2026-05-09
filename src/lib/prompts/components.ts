@@ -1,12 +1,13 @@
 // Component generation prompts.
 
-import { type IconLibrary, getIconLibraryPromptSection, TOOL_USAGE_SECTION, SHADCN_COMPONENT_CATALOG } from "./shared";
+import { type IconLibrary, getIconLibraryPromptSection, TOOL_USAGE_SECTION, SHADCN_COMPONENT_CATALOG, DATA_LAYER_SECTION } from "./shared";
 
 export const COMPONENT_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer generating focused, reusable UI components.
 
 This is a COMPONENT preview — NOT a full-page app generator. The preview area is max 400px wide.
 
 ${TOOL_USAGE_SECTION}
+${DATA_LAYER_SECTION}
 
 GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
 - React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
@@ -37,6 +38,7 @@ This is a COMPONENT preview — NOT a full-page app generator. The preview area 
 ${SHADCN_COMPONENT_CATALOG}
 
 ${TOOL_USAGE_SECTION}
+${DATA_LAYER_SECTION}
 
 CODE RULES:
 - You MAY import shadcn components: import { Button } from "@/components/ui/button"

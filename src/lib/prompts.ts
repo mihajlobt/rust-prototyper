@@ -8,6 +8,8 @@ export {
   ICON_LIBRARY_CSS_PATHS,
   getIconLibraryPromptSection,
   outputFilePathSection,
+  extractDesignTokenNames,
+  getDesignTokensSection,
 } from "./prompts/shared";
 
 // Screen prompts
@@ -16,6 +18,7 @@ export {
   SCREEN_UPDATE_PROMPT_BASE,
   getScreenNewPrompt,
   getScreenUpdatePrompt,
+  getNavigationSection,
 } from "./prompts/screens";
 
 // Component prompts

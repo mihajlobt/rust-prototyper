@@ -179,9 +179,46 @@ export function getAppTsx(): string {
   ]);
 }
 
-/** Returns the App.tsx for the screen-preview/ project (no preview-theme.css). */
+/** Returns the App.tsx for the screen-preview/ project — React Router shell with all screens as routes. */
 export function getScreenPreviewAppTsx(): string {
-  return getPreviewAppTsx([`./${PROJECT_PATHS.SRC.INDEX_CSS.replace('src/', '')}`]);
+  return `import React, { useEffect } from "react"
+import "./index.css"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { routes, defaultPath } from "./routes";
+
+function App() {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dark = params.get("dark") === "true";
+    document.documentElement.classList.toggle("dark", dark);
+
+    function handler(event: MessageEvent) {
+      if (event.data?.type === "set-dark") {
+        document.documentElement.classList.toggle("dark", event.data.value);
+      }
+    }
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  if (routes.length === 0) {
+    return <div style={{ padding: 24, color: "var(--muted-foreground)" }}>No screens yet — create one in the Screens panel.</div>;
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        {routes.map((r) => (
+          <Route key={r.path} path={r.path} element={<r.component />} />
+        ))}
+        <Route path="*" element={<Navigate to={defaultPath} replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+`;
 }
 
 /** Returns the placeholder Generated.tsx source shown before any component is generated. */

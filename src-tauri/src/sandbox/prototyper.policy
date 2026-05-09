@@ -42,6 +42,12 @@ define_program(
 )
 
 define_program(
+    program="grep",
+    system_path=["/usr/bin/grep", "/bin/grep"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
     program="cp",
     system_path=["/usr/bin/cp", "/bin/cp"],
     options=[
