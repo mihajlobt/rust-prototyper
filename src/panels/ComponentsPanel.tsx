@@ -26,7 +26,7 @@ import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched } from "@/lib/scaffold";
+import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -130,6 +130,7 @@ export function ComponentsPanel() {
         // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
         writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
+        ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
       }
 
       if (cancelled) return;

@@ -531,18 +531,56 @@ async fn execute_run_tsc(
     args: &serde_json::Value,
     project_dir: &Path,
 ) -> ToolExecutionResult {
-    // Validate args (TscCheckArgs is now empty struct)
-    if let Err(e) = serde_json::from_value::<TscCheckArgs>(args.clone()) {
-        return ToolExecutionResult {
+    let parsed = match serde_json::from_value::<TscCheckArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
             success: false,
             output: format!("run_tsc: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if parsed.path.as_deref().map(|p| p.contains("..")).unwrap_or(false) {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("run_tsc: {}", ToolError::Security("path traversal not allowed".into())),
             written_path: None,
             written_content: None,
         };
     }
 
-    let command = "cd component-preview && bun run tsc --noEmit --project ../tsconfig.check.json 2>&1; echo \"EXIT:$?\"";
-    let raw = run_sandboxed_command(command, project_dir).await;
+    // Each component/screen dir has a tsconfig.json written at creation time (SidebarRail.tsx).
+    // It extends component-preview/tsconfig.app.json and scopes "files" to that one .tsx file.
+    // tsc ignores --project when files are passed as CLI args, so a dedicated tsconfig is the
+    // only correct way to scope checking to one file. See: https://github.com/microsoft/TypeScript/issues/41865
+    let tsconfig_arg = if let Some(ref file_path) = parsed.path {
+        // Strip "projects/<id>/" prefix — path must be relative to project_dir
+        let project_relative = if file_path.starts_with("projects/") {
+            file_path.splitn(3, '/').nth(2).unwrap_or(file_path.as_str())
+        } else {
+            file_path.as_str()
+        };
+        // Derive the directory containing the .tsx file
+        let dir = project_relative.rsplitn(2, '/').nth(1).unwrap_or(project_relative);
+        let rel = format!("../{dir}/tsconfig.json");
+        match shlex::try_quote(&rel) {
+            Ok(quoted) => quoted.into_owned(),
+            Err(_) => return ToolExecutionResult {
+                success: false,
+                output: format!("run_tsc: {}", ToolError::Security("path contains a nul byte".into())),
+                written_path: None,
+                written_content: None,
+            },
+        }
+    } else {
+        "../tsconfig.check.json".to_string()
+    };
+
+    let command = format!(
+        r#"cd component-preview && bun run tsc --noEmit --project {tsconfig_arg} 2>&1; echo "EXIT:$?""#
+    );
+    let raw = run_sandboxed_command(&command, project_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     let output = match exit_code {

@@ -22,6 +22,32 @@ import { notify } from "@/hooks/useToast";
 import { ProjectExplorer, SECTION_NAMES } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
 
+// Per-component/screen tsconfig scoped to the single .tsx file.
+// Extends component-preview's tsconfig (two levels up from components/<id>/ or screens/<id>/).
+// Written at creation/duplicate time so run_tsc can check only this file without output filtering.
+// See: https://github.com/microsoft/TypeScript/issues/41865
+const componentTsconfig = JSON.stringify({
+  extends: "../../component-preview/tsconfig.app.json",
+  compilerOptions: {
+    noUnusedLocals: false,
+    noUnusedParameters: false,
+    types: [],
+    typeRoots: ["../../component-preview/node_modules/@types"],
+  },
+  files: ["component.tsx"],
+}, null, 2);
+
+const screenTsconfig = JSON.stringify({
+  extends: "../../component-preview/tsconfig.app.json",
+  compilerOptions: {
+    noUnusedLocals: false,
+    noUnusedParameters: false,
+    types: [],
+    typeRoots: ["../../component-preview/node_modules/@types"],
+  },
+  files: ["screen.tsx"],
+}, null, 2);
+
 export function SidebarRail() {
   const { settings } = useAppStore();
   const { setPs, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectSettingsStore();
@@ -76,6 +102,7 @@ export function SidebarRail() {
           await createDir(dir);
           await writeFile(`${dir}/screen.tsx`, `// ${newItemName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newItemName}</div>;\n}\n`);
           await writeFile(`${dir}/chat.json`, "[]");
+          await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
           break;
         }
         case "component": {
@@ -83,6 +110,7 @@ export function SidebarRail() {
           await createDir(dir);
           await writeFile(`${dir}/component.tsx`, `// ${newItemName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newItemName}</div>;\n}\n`);
           await writeFile(`${dir}/prompt.json`, JSON.stringify({ name: newItemName, prompt: "", created: new Date().toISOString() }, null, 2));
+          await writeFile(`${dir}/tsconfig.json`, componentTsconfig);
           break;
         }
         case "theme": {
@@ -163,6 +191,7 @@ export function SidebarRail() {
         const chat = await readFile(`${base}/screens/${name}/chat.json`).catch(() => "[]");
         await writeFile(`${dir}/screen.tsx`, code);
         await writeFile(`${dir}/chat.json`, chat);
+        await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
       } else if (section === "components") {
         const dir = `${base}/components/${newId}`;
         await createDir(dir);
@@ -170,6 +199,7 @@ export function SidebarRail() {
         const meta = await readFile(`${base}/components/${name}/prompt.json`).catch(() => "{}");
         await writeFile(`${dir}/component.tsx`, code);
         await writeFile(`${dir}/prompt.json`, meta);
+        await writeFile(`${dir}/tsconfig.json`, componentTsconfig);
       } else if (section === "themes") {
         const dir = `${base}/themes/${newId}`;
         await createDir(dir);

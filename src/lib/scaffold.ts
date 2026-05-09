@@ -1,4 +1,4 @@
-import { readFile, writeFile, createDir, bunInstallSync, runShellCommandSync, deleteDir, deleteFile, isNotFoundError } from "@/lib/ipc";
+import { readFile, writeFile, createDir, readDir, bunInstallSync, runShellCommandSync, deleteDir, deleteFile, isNotFoundError } from "@/lib/ipc";
 import { ICON_LIBRARY_PACKAGES } from "@/lib/prompts";
 import type { IconLibrary } from "@/lib/prompts";
 import {
@@ -313,10 +313,55 @@ export async function scaffoldScreenPreview(
 }
 
 /**
- * Check if the generated/ directory has a valid Runner scaffold.
- * Also rejects projects where App.tsx still uses the old Generated.tsx wrapper
- * (written by a previous version of the scaffold code) — those must re-scaffold.
+ * Ensure every component and screen directory has a scoped tsconfig.json.
+ * New dirs get it at creation time (SidebarRail.tsx), but pre-existing ones do not.
+ * Idempotent — safe to call on every project open. Silently skips missing dirs.
  */
+export async function ensureTsconfigs(projectDir: string): Promise<void> {
+  const sections: Array<{ subdir: string; tsconfig: object }> = [
+    {
+      subdir: "components",
+      tsconfig: {
+        extends: "../../component-preview/tsconfig.app.json",
+        compilerOptions: { noUnusedLocals: false, noUnusedParameters: false, types: [], typeRoots: ["../../component-preview/node_modules/@types"] },
+        files: ["component.tsx"],
+      },
+    },
+    {
+      subdir: "screens",
+      tsconfig: {
+        extends: "../../component-preview/tsconfig.app.json",
+        compilerOptions: { noUnusedLocals: false, noUnusedParameters: false, types: [], typeRoots: ["../../component-preview/node_modules/@types"] },
+        files: ["screen.tsx"],
+      },
+    },
+  ];
+
+  await Promise.all(
+    sections.map(async ({ subdir, tsconfig }) => {
+      let entries;
+      try {
+        entries = await readDir(`${projectDir}/${subdir}`);
+      } catch {
+        return;
+      }
+      await Promise.all(
+        entries
+          .filter((e) => e.is_dir)
+          .map(async (entry) => {
+            const tsconfigPath = `${projectDir}/${subdir}/${entry.name}/tsconfig.json`;
+            try {
+              await readFile(tsconfigPath);
+            } catch (e) {
+              if (!isNotFoundError(e)) throw e;
+              await writeFile(tsconfigPath, JSON.stringify(tsconfig, null, 2));
+            }
+          })
+      );
+    })
+  );
+}
+
 export async function hasGeneratedScaffold(projectDir: string): Promise<boolean> {
   const dir = getGeneratedDirPath(projectDir);
   if (!(await isScaffoldValid(dir))) return false;

@@ -17,7 +17,7 @@ import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched } from "@/lib/scaffold";
+import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched, ensureTsconfigs } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getScreenPreviewDirPath, getScreenPreviewAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 
@@ -111,6 +111,7 @@ export function ScreensPanel() {
         // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
         writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getScreenPreviewAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
+        ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
       }
 
       if (cancelled) return;
