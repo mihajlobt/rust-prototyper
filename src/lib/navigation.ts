@@ -34,7 +34,13 @@ export async function loadNavigation(projectDir: string): Promise<Navigation> {
     if (typeof parsed !== "object" || parsed === null || !("screens" in parsed)) {
       throw new Error(`navigation.json has unexpected shape`);
     }
-    return parsed as Navigation;
+    const nav = parsed as Partial<Navigation>;
+    // Normalize — older files may be missing links
+    return {
+      defaultScreen: nav.defaultScreen ?? "",
+      screens: nav.screens ?? [],
+      links: nav.links ?? [],
+    };
   } catch (e) {
     if (isNotFoundError(e)) return defaultNav();
     throw e;
@@ -60,6 +66,7 @@ export async function addScreenToNavigation(projectDir: string, screenId: string
 export async function removeScreenFromNavigation(projectDir: string, screenId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
   nav.screens = nav.screens.filter((s) => s.id !== screenId);
+  nav.links = nav.links.filter((l) => l.from !== screenId && l.to !== screenId);
   if (nav.defaultScreen === screenId) {
     nav.defaultScreen = nav.screens[0]?.id ?? "";
   }
@@ -87,6 +94,11 @@ export async function renameScreenInNavigation(projectDir: string, oldId: string
     screen.id = newId;
     screen.path = `/${newId}`;
     screen.title = newId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  // Update any links that reference the renamed screen
+  for (const link of nav.links) {
+    if (link.from === oldId) { link.from = newId; link.id = `${newId}->${link.to}`; }
+    if (link.to === oldId)   { link.to = newId;   link.id = `${link.from}->${newId}`; }
   }
   if (nav.defaultScreen === oldId) nav.defaultScreen = newId;
   await saveNavigation(projectDir, nav);

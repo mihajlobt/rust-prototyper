@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useContext, useEffect, createContext, useMemo } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -31,6 +31,21 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { getErrorMessage } from "@/lib/ipc";
 
+// ─── Actions context (avoids prop-drilling into React Flow node components) ─
+
+interface FlowsActions {
+  openScreen: (id: string) => void;
+  setDefaultScreen: (id: string) => void;
+}
+
+const FlowsActionsContext = createContext<FlowsActions | null>(null);
+
+function useFlowsActions(): FlowsActions {
+  const ctx = useContext(FlowsActionsContext);
+  if (!ctx) throw new Error("useFlowsActions must be used inside FlowsActionsContext.Provider");
+  return ctx;
+}
+
 // ─── Screen node data ──────────────────────────────────────────────────────
 
 interface ScreenNodeData {
@@ -43,8 +58,8 @@ type ScreenNode = Node<ScreenNodeData, "screen">;
 
 // ─── Screen node component ─────────────────────────────────────────────────
 
-function ScreenNode({ data, selected, id }: NodeProps<ScreenNode>) {
-  const { setPs } = useProjectSettingsStore();
+function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
+  const actions = useFlowsActions();
   const borderColor = data.isDefault
     ? "var(--primary)"
     : selected
@@ -64,7 +79,7 @@ function ScreenNode({ data, selected, id }: NodeProps<ScreenNode>) {
           <div className="px-3 pt-1.5 pb-2">
             <div
               className="mb-1.5 h-0.5 rounded-full"
-              style={{ background: data.isDefault ? "var(--primary)" : "var(--muted-foreground)", opacity: 0.6 }}
+              style={{ background: data.isDefault ? "var(--primary)" : "var(--muted-foreground)", opacity: 0.5 }}
             />
             <div className="flex items-center gap-1.5">
               <Layout size={11} className="shrink-0 text-muted-foreground" />
@@ -80,15 +95,10 @@ function ScreenNode({ data, selected, id }: NodeProps<ScreenNode>) {
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuGroup>
-          <ContextMenuItem onClick={() => setPs({ activeScreen: id })}>
+          <ContextMenuItem onClick={() => actions.openScreen(id)}>
             Open in editor
           </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => {
-              // Dispatch custom event — handled in FlowsViewInner
-              window.dispatchEvent(new CustomEvent("flows:set-default", { detail: id }));
-            }}
-          >
+          <ContextMenuItem onClick={() => actions.setDefaultScreen(id)}>
             <Star size={12} className="mr-1" />Set as entry screen
           </ContextMenuItem>
         </ContextMenuGroup>
@@ -97,7 +107,7 @@ function ScreenNode({ data, selected, id }: NodeProps<ScreenNode>) {
   );
 }
 
-const nodeTypes = { screen: ScreenNode };
+const nodeTypes = { screen: ScreenNodeComponent };
 
 // ─── Layout helpers ────────────────────────────────────────────────────────
 
@@ -105,11 +115,13 @@ const COLS = 4;
 const H_GAP = 220;
 const V_GAP = 130;
 
-function buildNodes(screenIds: string[], nav: Navigation): ScreenNode[] {
+function buildNodes(screenIds: string[], nav: Navigation, existingNodes: ScreenNode[]): ScreenNode[] {
+  const positionById = new Map(existingNodes.map((n) => [n.id, n.position]));
   return screenIds.map((id, i) => ({
     id,
     type: "screen" as const,
-    position: { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
+    // Preserve user-dragged positions — only use grid for new nodes
+    position: positionById.get(id) ?? { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
     data: {
       label: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       isDefault: id === nav.defaultScreen,
@@ -118,7 +130,7 @@ function buildNodes(screenIds: string[], nav: Navigation): ScreenNode[] {
 }
 
 function buildEdges(nav: Navigation): Edge[] {
-  return (nav.links ?? []).map((link) => ({
+  return nav.links.map((link) => ({
     id: link.id,
     source: link.from,
     target: link.to,
@@ -145,7 +157,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   const loadFlow = useCallback(async () => {
     try {
       const nav = await loadNavigation(projectDir);
-      setNodes(buildNodes(screenIds, nav));
+      setNodes((current) => buildNodes(screenIds, nav, current));
       setEdges(buildEdges(nav));
     } catch (e) {
       notify.error("Failed to load navigation", getErrorMessage(e));
@@ -155,29 +167,6 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   useEffect(() => {
     loadFlow();
   }, [loadFlow]);
-
-  // Handle set-default event from ScreenNode context menu
-  useEffect(() => {
-    const handler = async (e: Event) => {
-      const screenId = (e as CustomEvent<string>).detail;
-      try {
-        const nav = await loadNavigation(projectDir);
-        nav.defaultScreen = screenId;
-        await saveNavigation(projectDir, nav);
-        setNodes((nds) =>
-          nds.map((n) => ({
-            ...n,
-            data: { ...n.data, isDefault: n.id === screenId },
-          }))
-        );
-        notify.success("Entry screen updated", `"${screenId}" is now the starting screen`);
-      } catch (e) {
-        notify.error("Failed to update entry screen", getErrorMessage(e));
-      }
-    };
-    window.addEventListener("flows:set-default", handler);
-    return () => window.removeEventListener("flows:set-default", handler);
-  }, [projectDir, setNodes]);
 
   const onConnect = useCallback(
     async (connection: Connection) => {
@@ -218,9 +207,32 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
 
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: ScreenNode) => {
-      setPs({ activeScreen: node.id });
+      setPs({ activeView: "screens", activeScreen: node.id });
     },
     [setPs]
+  );
+
+  const actions = useMemo<FlowsActions>(
+    () => ({
+      openScreen: (id) => setPs({ activeView: "screens", activeScreen: id }),
+      setDefaultScreen: async (id) => {
+        try {
+          const nav = await loadNavigation(projectDir);
+          nav.defaultScreen = id;
+          await saveNavigation(projectDir, nav);
+          setNodes((nds) =>
+            nds.map((n) => ({
+              ...n,
+              data: { ...n.data, isDefault: n.id === id },
+            }))
+          );
+          notify.success("Entry screen updated", `"${id}" is now the starting screen`);
+        } catch (e) {
+          notify.error("Failed to update entry screen", getErrorMessage(e));
+        }
+      },
+    }),
+    [projectDir, setPs, setNodes]
   );
 
   if (screenIds.length === 0) {
@@ -234,23 +246,25 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   }
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onEdgesDelete={onEdgesDelete}
-      onNodeDoubleClick={onNodeDoubleClick}
-      fitView
-      fitViewOptions={{ padding: 0.3 }}
-      deleteKeyCode="Delete"
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
-      <Controls showInteractive={false} className="!bg-card !border-border !shadow-none" />
-    </ReactFlow>
+    <FlowsActionsContext.Provider value={actions}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onEdgesDelete={onEdgesDelete}
+        onNodeDoubleClick={onNodeDoubleClick}
+        fitView
+        fitViewOptions={{ padding: 0.3 }}
+        deleteKeyCode="Delete"
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </FlowsActionsContext.Provider>
   );
 }
 
