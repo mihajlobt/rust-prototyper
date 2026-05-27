@@ -129,13 +129,6 @@ export function ComponentsPanel() {
         // Stop dev server before re-scaffolding to release file locks
         useDevServerStore.getState().stopPreview();
 
-        const ok = await confirm(
-          "The component preview needs a Vite project. Create one now?",
-          { title: "Scaffold Required", kind: "info" }
-        );
-        if (!ok) return;
-        if (cancelled) return;
-
         try {
           await withScaffoldNotifications(
             "scaffold-component-preview",

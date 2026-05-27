@@ -16,7 +16,6 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
-import { confirm } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, buildComponentsSection, type DesignBriefTemplate } from "@/lib/prompts";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { extractCode } from "@/lib/preview";
@@ -133,13 +132,6 @@ export function ScreensPanel() {
         scaffoldAttemptedRef.current = true;
 
         useDevServerStore.getState().stopScreens();
-
-        const ok = await confirm(
-          "The screen preview needs a Vite project. Create one now?",
-          { title: "Scaffold Required", kind: "info" }
-        );
-        if (!ok) return;
-        if (cancelled) return;
 
         try {
           await withScaffoldNotifications(
