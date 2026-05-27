@@ -178,8 +178,22 @@ export async function syncScreenPreviewRoutes(projectDir: string): Promise<void>
   const nav = await loadNavigation(projectDir);
   const navById = new Map(nav.screens.map((s) => [s.id, s]));
 
-  // Build routes from filesystem — use nav for path/title, fall back to defaults
-  const routes = screenEntries.map((entry) => {
+  // Build routes from filesystem — only include screens that have a screen.tsx on disk.
+  // Directories without a screen.tsx (e.g. created by UI but not yet written by the agent)
+  // would cause a Vite import error if included.
+  const screenEntriesWithFile = await Promise.all(
+    screenEntries.map(async (entry) => {
+      try {
+        await readFile(`${projectDir}/screens/${entry.name}/screen.tsx`);
+        return entry;
+      } catch {
+        return null;
+      }
+    })
+  );
+  const validEntries = screenEntriesWithFile.filter((e): e is { name: string; is_dir: boolean } => e !== null);
+
+  const routes = validEntries.map((entry) => {
     const navEntry = navById.get(entry.name);
     return {
       id: entry.name,
