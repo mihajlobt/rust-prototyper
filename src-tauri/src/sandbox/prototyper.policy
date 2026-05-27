@@ -7,7 +7,7 @@ Note: define_program, flag, opt, ARG_* are built-in globals — no load() needed
 define_program(
     program="ls",
     system_path=["/usr/bin/ls", "/bin/ls"],
-    args=[ARG_OPAQUE_VALUE],
+    args=[ARG_UNVERIFIED_VARARGS],
 )
 
 define_program(

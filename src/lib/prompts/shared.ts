@@ -119,10 +119,19 @@ When asked to UPDATE an existing file, you MUST first read_file to see the curre
 then use edit_file to make targeted changes. Only use write_file when creating a brand-new file.`;
 
 export function outputFilePathSection(outputPath: string): string {
+  // Derive the project root from the output path (e.g. "projects/my-app/screens/x/screen.tsx" → "projects/my-app")
+  const parts = outputPath.split("/");
+  const projectRoot = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
   return `
 
 OUTPUT FILE — Your write_file output is saved to: ${outputPath}
-When using read_file to verify or fix your code, use exactly this path: ${outputPath}`;
+When using read_file to verify or fix your code, use exactly this path: ${outputPath}
+
+PATH CONVENTIONS — all file paths are relative to the app data root:
+- Project root: ${projectRoot}/
+- glob and grep return paths relative to the PROJECT ROOT (e.g. "screens/x/screen.tsx")
+- read_file, write_file, and edit_file require paths from the APP DATA ROOT (e.g. "${projectRoot}/screens/x/screen.tsx")
+- When using a path from glob/grep with read_file: prepend "${projectRoot}/" to it.`;
 }
 
 // ─── Shadcn component catalog (used by shadcn-mode prompts) ──────────────────
