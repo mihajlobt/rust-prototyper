@@ -31,7 +31,7 @@ pub struct EditFileArgs {
 
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct BashArgs {
-    /// Shell command to run inside the sandboxed project dir (30s timeout). Sandbox allows: ls, find, cat, grep, echo, bun, bunx, tsc, node. Disallowed: network access (curl, wget), privilege escalation, python/perl/ruby -e. Prefer specialized tools — run_tsc for type checking, run_lint for linting, read_file for reading files.
+    /// Shell command to run inside the sandboxed project dir (30s timeout). Sandbox allows: ls (any flags e.g. ls -la), find, cat, head, grep, sed, echo, bun, bunx, node. Disallowed: network access (curl, wget), privilege escalation, python/perl/ruby -e. Prefer specialized tools — run_tsc for type checking, run_lint for linting, read_file for reading files.
     pub command: String,
 }
 

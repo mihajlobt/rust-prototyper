@@ -7,32 +7,19 @@ Note: define_program, flag, opt, ARG_* are built-in globals — no load() needed
 define_program(
     program="ls",
     system_path=["/usr/bin/ls", "/bin/ls"],
-    options=[
-        flag("-a"),
-        flag("-l"),
-        flag("-1"),
-        flag("-R"),
-    ],
-    args=[ARG_RFILES],
+    args=[ARG_OPAQUE_VALUE],
 )
 
 define_program(
     program="cat",
     system_path=["/usr/bin/cat", "/bin/cat"],
-    options=[
-        flag("-n"),
-        flag("-b"),
-    ],
-    args=[ARG_RFILES],
+    args=[ARG_OPAQUE_VALUE],
 )
 
 define_program(
     program="head",
     system_path=["/usr/bin/head", "/bin/head"],
-    options=[
-        opt("-n", ARG_OPAQUE_VALUE),
-    ],
-    args=[ARG_RFILES],
+    args=[ARG_OPAQUE_VALUE],
 )
 
 define_program(
@@ -91,13 +78,7 @@ define_program(
 define_program(
     program="sed",
     system_path=["/usr/bin/sed", "/bin/sed"],
-    options=[
-        flag("-i"),
-        flag("-n"),
-        flag("-E"),
-        flag("-r"),
-    ],
-    args=[ARG_OPAQUE_VALUE, ARG_RFILES],
+    args=[ARG_OPAQUE_VALUE],
 )
 
 define_program(
