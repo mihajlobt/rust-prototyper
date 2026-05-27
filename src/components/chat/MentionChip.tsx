@@ -15,12 +15,17 @@ interface MentionChipProps {
 
 export function MentionChip({ asset, onRemove }: MentionChipProps) {
   return (
-    <div className="flex items-center gap-1 rounded border border-border bg-accent/10 px-1.5 py-0.5 text-xs">
-      {TYPE_ICONS[asset.type]}
-      <span>{asset.name}</span>
+    <div className="flex items-start gap-1.5 rounded border border-border bg-accent/10 px-2 py-1 text-xs max-w-48">
+      <span className="text-muted-foreground mt-0.5 shrink-0">{TYPE_ICONS[asset.type]}</span>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium leading-tight truncate">{asset.name}</div>
+        {asset.description && (
+          <div className="text-[10px] text-muted-foreground leading-tight truncate mt-0.5">{asset.description}</div>
+        )}
+      </div>
       <button
         onClick={onRemove}
-        className="ml-0.5 text-muted-foreground hover:text-foreground"
+        className="ml-0.5 text-muted-foreground hover:text-foreground shrink-0 mt-0.5"
         aria-label="Remove mention"
       >
         <X size={10} />

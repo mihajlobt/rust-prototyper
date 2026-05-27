@@ -565,6 +565,34 @@ async fn execute_run_tsc(
         };
         // Derive the directory containing the .tsx file
         let dir = project_relative.rsplitn(2, '/').nth(1).unwrap_or(project_relative);
+        // Derive the filename (e.g. "component.tsx" or "screen.tsx") for the "files" entry
+        let filename = project_relative.rsplitn(2, '/').next().unwrap_or("component.tsx");
+        let tsconfig_path = project_dir.join(dir).join("tsconfig.json");
+        // Auto-create the per-file tsconfig if the agent wrote the file directly (bypassing SidebarRail)
+        if !tsconfig_path.exists() {
+            let is_screen = dir.starts_with("screens/");
+            let extend_base = if is_screen {
+                "../../component-preview/tsconfig.app.json"
+            } else {
+                "../../component-preview/tsconfig.app.json"
+            };
+            let tsconfig_content = format!(
+                r#"{{
+  "extends": "{}",
+  "compilerOptions": {{
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": [],
+    "typeRoots": ["../../component-preview/node_modules/@types"]
+  }},
+  "files": ["{}"]
+}}
+"#,
+                extend_base, filename
+            );
+            let _ = tokio::fs::create_dir_all(&project_dir.join(dir)).await;
+            let _ = tokio::fs::write(&tsconfig_path, tsconfig_content).await;
+        }
         let rel = format!("../{dir}/tsconfig.json");
         match shlex::try_quote(&rel) {
             Ok(quoted) => quoted.into_owned(),

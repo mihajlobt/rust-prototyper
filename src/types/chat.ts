@@ -41,6 +41,7 @@ export interface MentionAsset {
   name: string
   path: string
   code: string
+  description?: string
 }
 
 export interface AttachmentFile {

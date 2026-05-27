@@ -111,17 +111,19 @@ import Generated from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').r
 
 const queryClient = new QueryClient()
 
-class PreviewErrorBoundary extends React.Component {
-  constructor(props) {
+interface ErrorBoundaryState { hasError: boolean; error: Error | null }
+
+class PreviewErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBoundaryState> {
+  constructor(props: React.PropsWithChildren) {
     super(props)
     this.state = { hasError: false, error: null }
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error, info) {
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[PreviewErrorBoundary]", error, info)
   }
 

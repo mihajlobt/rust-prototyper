@@ -86,14 +86,13 @@ export function ChatInput({
     const lastAt = value.lastIndexOf("@")
     onChange(value.slice(0, lastAt))
     setMentionQuery(null)
+    const base = { id: item.id, type: item.type, name: item.name, path: item.path, description: item.description }
     if (item.preCode !== undefined) {
-      // API (or other eagerly-loaded) asset — code is already available
-      const { preCode, ...rest } = item
-      onAddMention({ ...rest, code: preCode })
+      onAddMention({ ...base, code: item.preCode })
     } else {
       readFile(item.path)
-        .then((code) => onAddMention({ ...item, code }))
-        .catch(() => onAddMention({ ...item, code: "" }))
+        .then((code) => onAddMention({ ...base, code }))
+        .catch(() => onAddMention({ ...base, code: "" }))
     }
   }
 
