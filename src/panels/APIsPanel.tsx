@@ -1019,7 +1019,7 @@ export function APIsPanel() {
                   <TabsContent value="body" className="flex-1 overflow-hidden mt-0">
                     {response ? (
                       <CodeMirrorEditor
-                        value={response.body}
+                        value={(() => { try { return JSON.stringify(JSON.parse(response.body), null, 2); } catch { return response.body; } })()}
                         mode={(() => { try { JSON.parse(response.body); return "json"; } catch { return "yaml"; } })()}
                         readOnly
                       />
