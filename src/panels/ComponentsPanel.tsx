@@ -34,7 +34,7 @@ import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, type DesignBriefTemplate } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir } from "@/lib/scaffold";
+import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -151,6 +151,7 @@ export function ComponentsPanel() {
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
         ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
         ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
+        ensureTanstackQuery(componentPreviewDir).catch(() => { /* non-fatal */ });
       }
 
       if (cancelled) return;
@@ -317,7 +318,7 @@ export function ComponentsPanel() {
     chatPath,
     systemPrompt: systemContent,
     outputPath: componentOutputPath,
-    onOutput: (content) => applyCode(content),
+    onOutput: (content) => applyCode(extractCode(content) ?? content),
   });
 
   const applyCode = useCallback(async (extracted: string) => {

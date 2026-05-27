@@ -26,7 +26,7 @@ import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir } from "@/lib/scaffold";
+import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getScreenPreviewDirPath, getScreenPreviewAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { syncGeneratedRouter } from "@/lib/navigation";
@@ -156,6 +156,7 @@ export function ScreensPanel() {
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
         ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
         ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
+        ensureTanstackQuery(screenPreviewDir).catch(() => { /* non-fatal */ });
       }
 
       if (cancelled) return;
@@ -224,13 +225,14 @@ export function ScreensPanel() {
     systemPrompt: systemContent,
     outputPath: screenId ? screenPath : undefined,
     onOutput: (content) => {
-      setCode(content);
+      const extracted = extractCode(content) ?? content;
+      setCode(extracted);
       const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
       createDir(parentDir)
-        .then(() => writeFile(screenPath, content))
+        .then(() => writeFile(screenPath, extracted))
         .then(() => syncGeneratedRouter(`projects/${settings.project}`))
         .catch((e) => { const msg = getErrorMessage(e); notify.error("Failed to save screen", msg); });
-      writeToScreenPreview(content);
+      writeToScreenPreview(extracted);
     },
   });
 

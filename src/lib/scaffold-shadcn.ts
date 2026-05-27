@@ -105,8 +105,11 @@ export function patchEslintConfig(config: string): string {
 export function getPreviewAppTsx(cssImports: string[]): string {
   const imports = cssImports.map((p) => `import "${p}"`).join("\n");
   return `import React from "react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 ${imports}
 import Generated from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
+
+const queryClient = new QueryClient()
 
 class PreviewErrorBoundary extends React.Component {
   constructor(props) {
@@ -164,9 +167,11 @@ function App() {
   }, [])
 
   return (
-    <PreviewErrorBoundary>
-      <Generated />
-    </PreviewErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <PreviewErrorBoundary>
+        <Generated />
+      </PreviewErrorBoundary>
+    </QueryClientProvider>
   )
 }
 
@@ -186,8 +191,11 @@ export function getAppTsx(): string {
 export function getScreenPreviewAppTsx(): string {
   return `import React, { useEffect } from "react"
 import "./index.css"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { routes, defaultPath } from "./routes";
+
+const queryClient = new QueryClient()
 
 function App() {
   useEffect(() => {
@@ -209,14 +217,16 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        {routes.map((r) => (
-          <Route key={r.path} path={r.path} element={<r.component />} />
-        ))}
-        <Route path="*" element={<Navigate to={defaultPath} replace />} />
-      </Routes>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          {routes.map((r) => (
+            <Route key={r.path} path={r.path} element={<r.component />} />
+          ))}
+          <Route path="*" element={<Navigate to={defaultPath} replace />} />
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 

@@ -228,16 +228,16 @@ export async function scaffoldComponentPreview(
     await writeFile(`${componentPreviewDir}/${SRC.GENERATED_TSX}`, getGeneratedPlaceholderTsx());
   }
 
-  // Step 8: Add non-lucide icon library. lucide-react is already a shadcn
-  // dependency — skip it to avoid racing with shadcn add's bun install.
-  const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
-  if (iconPkg && iconLibrary !== "lucide") {
-    onStep?.(`Installing ${iconPkg}…`);
+  // Step 8: Install @tanstack/react-query and optional icon library
+  onStep?.("Installing @tanstack/react-query…");
+  {
     const pkgPath = `${componentPreviewDir}/${P.PACKAGE_JSON}`;
     const pkgRaw = await readFile(pkgPath);
     const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
     const deps = (pkg.dependencies as Record<string, string>) || {};
-    deps[iconPkg] = "latest";
+    deps["@tanstack/react-query"] = "^5.0.0";
+    const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
+    if (iconPkg && iconLibrary !== "lucide") deps[iconPkg] = "latest";
     pkg.dependencies = deps;
     await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
     await bunInstallSync(componentPreviewDir);
@@ -293,22 +293,21 @@ export async function scaffoldScreenPreview(
   onStep?.("Adding shadcn components…");
   await runShellCommandSync(screenPreviewDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 5: Install react-router-dom for the navigation router shell
-  onStep?.("Installing react-router-dom…");
-  const pkgPath = `${screenPreviewDir}/${P.PACKAGE_JSON}`;
-  const pkgRaw = await readFile(pkgPath);
-  const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
-  const deps = (pkg.dependencies as Record<string, string>) || {};
-  deps["react-router-dom"] = "^7.0.0";
-
-  // Step 6: Add non-lucide icon library
-  const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
-  if (iconPkg && iconLibrary !== "lucide") {
-    deps[iconPkg] = "latest";
+  // Step 5: Install @tanstack/react-query, react-router-dom, and optional icon library
+  onStep?.("Installing @tanstack/react-query + react-router-dom…");
+  {
+    const pkgPath = `${screenPreviewDir}/${P.PACKAGE_JSON}`;
+    const pkgRaw = await readFile(pkgPath);
+    const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
+    const deps = (pkg.dependencies as Record<string, string>) || {};
+    deps["@tanstack/react-query"] = "^5.0.0";
+    deps["react-router-dom"] = "^7.0.0";
+    const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
+    if (iconPkg && iconLibrary !== "lucide") deps[iconPkg] = "latest";
+    pkg.dependencies = deps;
+    await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
+    await bunInstallSync(screenPreviewDir);
   }
-  pkg.dependencies = deps;
-  await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
-  await bunInstallSync(screenPreviewDir);
 
   // Step 7: Write router App.tsx and initial empty routes.ts
   onStep?.("Writing App.tsx…");
@@ -419,5 +418,22 @@ export async function syncViteProxy(
   proxy: Record<string, string>
 ): Promise<void> {
   await writeFile(`${generatedDir}/${P.VITE_CONFIG_TS}`, getGeneratedViteConfig(proxy));
+}
+
+/**
+ * Ensure @tanstack/react-query is installed in a preview project.
+ * Called from the "already scaffolded" branch so existing projects get the dep
+ * after the App.tsx template was updated to import QueryClientProvider.
+ * No-op if the package is already present.
+ */
+export async function ensureTanstackQuery(previewDir: string): Promise<void> {
+  try {
+    const pkg = JSON.parse(await readFile(`${previewDir}/${P.PACKAGE_JSON}`));
+    const hasDep = pkg.dependencies?.["@tanstack/react-query"] || pkg.devDependencies?.["@tanstack/react-query"];
+    if (hasDep) return;
+    await runShellCommandSync(previewDir, "bun add @tanstack/react-query@^5.0.0");
+  } catch {
+    // Non-fatal: project may not exist yet or package.json unreadable
+  }
 }
 
