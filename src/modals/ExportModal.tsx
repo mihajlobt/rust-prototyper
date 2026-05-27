@@ -7,21 +7,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Download, FileArchive } from "lucide-react";
+import { Download, FileArchive, Info } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { exportProject, getErrorMessage } from "@/lib/ipc";
 import { useSettings } from "@/hooks/useSettings";
+import { notify } from "@/hooks/useToast";
 
 export function ExportModal() {
   const { settings } = useSettings();
   const [open, setOpen] = useState(false);
-  const [format, setFormat] = useState("react");
-  const [includeApis, setIncludeApis] = useState(true);
-  const [includeTheme, setIncludeTheme] = useState(true);
-  const [includeComponents, setIncludeComponents] = useState(true);
-  const [includeTests, setIncludeTests] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
@@ -31,23 +25,12 @@ export function ExportModal() {
         filters: [{ name: "Zip", extensions: ["zip"] }],
         defaultPath: `${settings.project}-export.zip`,
       });
-      if (!outputPath) {
-        setExporting(false);
-        return;
-      }
-      const path = await exportProject(
-        settings.project,
-        outputPath,
-        format,
-        includeApis,
-        includeTheme,
-        includeComponents,
-        includeTests
-      );
-      alert(`Exported to: ${path}`);
+      if (!outputPath) return;
+      await exportProject(settings.project, outputPath, "react", false, false, false, false);
+      notify.success("Export complete", outputPath);
       setOpen(false);
     } catch (e) {
-      alert(`Export failed: ${getErrorMessage(e)}`);
+      notify.error("Export failed", getErrorMessage(e));
     } finally {
       setExporting(false);
     }
@@ -61,53 +44,24 @@ export function ExportModal() {
           Export
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Export Project</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Framework</Label>
-            <div className="flex gap-2">
-              {["react", "vue", "svelte", "solid"].map((f) => (
-                <Button
-                  key={f}
-                  variant={format === f ? "default" : "outline"}
-                  size="sm"
-                  className="text-xs capitalize"
-                  onClick={() => setFormat(f)}
-                >
-                  {f}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Include</Label>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox id="apis" checked={includeApis} onCheckedChange={(c) => setIncludeApis(c === true)} />
-                <Label htmlFor="apis" className="text-sm font-normal">APIs</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="theme" checked={includeTheme} onCheckedChange={(c) => setIncludeTheme(c === true)} />
-                <Label htmlFor="theme" className="text-sm font-normal">Theme</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="components" checked={includeComponents} onCheckedChange={(c) => setIncludeComponents(c === true)} />
-                <Label htmlFor="components" className="text-sm font-normal">Components</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="tests" checked={includeTests} onCheckedChange={(c) => setIncludeTests(c === true)} />
-                <Label htmlFor="tests" className="text-sm font-normal">Tests</Label>
-              </div>
-            </div>
+          <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+            <Info size={13} className="mt-0.5 shrink-0" />
+            <span>
+              Exports the scaffolded <code className="font-mono">generated/</code> project as a runnable zip.
+              Includes router, services, Vite proxy config, and a <code className="font-mono">.env.example</code>.
+              API keys are <strong>not</strong> included.
+              Run <code className="font-mono">bun install &amp;&amp; bun dev</code> after unzipping.
+            </span>
           </div>
 
           <Button className="w-full gap-1" onClick={handleExport} disabled={exporting}>
             <FileArchive size={14} />
-            {exporting ? "Exporting…" : "Export Project"}
+            {exporting ? "Exporting…" : "Export as Zip"}
           </Button>
         </div>
       </DialogContent>

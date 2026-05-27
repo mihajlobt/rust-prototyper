@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2, Loader2, AlertCircle, Blocks, Play, Square } from "lucide-react";
+import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2, Loader2, AlertCircle, Blocks, Play, Square, Plug, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -9,6 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
@@ -23,7 +31,7 @@ import { PromptInspector } from "@/components/PromptInspector";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { FileEntry } from "@/lib/ipc";
-import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection } from "@/lib/prompts";
+import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, type DesignBriefTemplate } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
 import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir } from "@/lib/scaffold";
@@ -47,6 +55,13 @@ export function ComponentsPanel() {
   const stoppedManuallyRef = useRef(false);
 
   const [code, setCode] = useState("");
+
+  // Generation context state — APIs and Design Brief selectors
+  interface CtxApi { id: string; name: string; method: string; url: string; proxyPath: string }
+  const [ctxApis, setCtxApis] = useState<CtxApi[]>([]);
+  const [ctxSelectedApiIds, setCtxSelectedApiIds] = useState<string[]>([]);
+  const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
+
   const componentsShowInspector = ps.componentsShowInspector;
   const componentsDevice = ps.componentsDevice;
   const componentsDarkPreview = ps.componentsDarkPreview;
@@ -75,16 +90,22 @@ export function ComponentsPanel() {
   // Switch to update prompt after first generation
   const hasGeneratedCode = code.length > 0;
   const designTokensSection = getDesignTokensSection(extractDesignTokenNames(themeCss));
+  const selectedApis = ctxApis.filter((a) => ctxSelectedApiIds.includes(a.id));
   const defaultSystem = hasGeneratedCode
     ? getComponentUpdatePrompt(settings.iconLibrary, code, ps.shadcnMode, settings.prompts["prompt.components.update"] || undefined) + designTokensSection
     : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + designTokensSection;
   const componentPath = componentId ? `projects/${settings.project}/components/${componentId}/component.tsx` : undefined;
-  const systemContent = defaultSystem + (componentPath ? outputFilePathSection(componentPath) : "");
+  const systemContent = defaultSystem
+    + buildDesignBriefSection(ctxSelectedBrief?.content ?? "")
+    + buildApiContextSection(selectedApis, [])
+    + (componentPath ? outputFilePathSection(componentPath) : "");
 
-  // Reset guards whenever the active project changes
+  // Reset guards and context selections whenever the active project changes
   useEffect(() => {
     scaffoldAttemptedRef.current = false;
     stoppedManuallyRef.current = false;
+    setCtxSelectedApiIds([]);
+    setCtxSelectedBrief(null);
   }, [settings.project]);
 
   // ─── Ensure dev server is running ──────────────────────────────────────────
@@ -236,6 +257,20 @@ export function ComponentsPanel() {
     })();
     return () => { cancelled = true; };
   }, [selectedTheme, settings.project]);
+
+  // Load API list for generation context toolbar
+  useEffect(() => {
+    let cancelled = false;
+    readFile(`projects/${settings.project}/apis/apis.json`)
+      .then((data) => {
+        if (!cancelled) {
+          const apis = JSON.parse(data) as Array<{ id: string; name: string; method: string; url: string; proxyPath?: string }>;
+          setCtxApis(apis.map((a) => ({ id: a.id, name: a.name, method: a.method, url: a.url, proxyPath: a.proxyPath ?? "" })));
+        }
+      })
+      .catch(() => { if (!cancelled) setCtxApis([]); });
+    return () => { cancelled = true; };
+  }, [settings.project]);
 
   // Load selected component code via TanStack Query
   const { data: loadedCode } = useComponentCode(settings.project, selectedComponent);
@@ -394,6 +429,67 @@ export function ComponentsPanel() {
         }}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
+        {/* Generation context toolbar */}
+        {(ctxApis.length > 0 || ctxSelectedBrief) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Design Brief — always available */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant={ctxSelectedBrief ? "secondary" : "outline"} size="sm" className="h-6 text-[11px] gap-1 px-2">
+                  <Palette size={10} />
+                  {ctxSelectedBrief ? ctxSelectedBrief.name : "Brief"}
+                  {ctxSelectedBrief && (
+                    <span
+                      className="ml-0.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                      onClick={(e) => { e.stopPropagation(); setCtxSelectedBrief(null); }}
+                    >×</span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-72">
+                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => setCtxSelectedBrief(DESIGN_BRIEF_TEMPLATES.find((b) => b.name === v) ?? null)}>
+                  {DESIGN_BRIEF_TEMPLATES.map((brief) => (
+                    <DropdownMenuRadioItem key={brief.name} value={brief.name} className="flex-col items-start gap-0.5 py-2">
+                      <div className="flex items-center gap-2 w-full">
+                        <div className="flex gap-0.5">
+                          {brief.palette.map((c) => (
+                            <span key={c} className="w-3 h-3 rounded-sm inline-block border border-border/30" style={{ background: c }} />
+                          ))}
+                        </div>
+                        <span className="text-xs font-medium">{brief.name}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground pl-0.5">{brief.description}</span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* APIs */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant={ctxSelectedApiIds.length > 0 ? "secondary" : "outline"} size="sm" className="h-6 text-[11px] gap-1 px-2">
+                  <Plug size={10} />
+                  APIs{ctxSelectedApiIds.length > 0 ? ` (${ctxSelectedApiIds.length})` : ""}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                {ctxApis.map((api) => (
+                  <DropdownMenuCheckboxItem
+                    key={api.id}
+                    checked={ctxSelectedApiIds.includes(api.id)}
+                    onCheckedChange={(c) => setCtxSelectedApiIds((prev) => c ? [...prev, api.id] : prev.filter((x) => x !== api.id))}
+                    className="text-xs"
+                  >
+                    <span className={["mr-1 text-[10px] font-bold px-1 py-0.5 rounded", api.method === "GET" ? "bg-green-500/10 text-green-600" : "bg-blue-500/10 text-blue-600"].join(" ")}>{api.method}</span>
+                    {api.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
         <ChatInput
           value={input}
           onChange={setInput}

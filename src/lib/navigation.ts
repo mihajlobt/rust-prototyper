@@ -1,4 +1,5 @@
-// Navigation manifest — maps screens to routes for the screen-preview router shell.
+// Navigation manifest — maps screens to routes for the screen-preview router shell
+// and the generated/ app router (src/router.tsx).
 // The agent can read/write navigation.json to control routing between screens.
 
 import { readFile, writeFile, readDir, isNotFoundError } from "@/lib/ipc";
@@ -102,6 +103,59 @@ export async function renameScreenInNavigation(projectDir: string, oldId: string
   }
   if (nav.defaultScreen === oldId) nav.defaultScreen = newId;
   await saveNavigation(projectDir, nav);
+}
+
+/**
+ * Write generated/src/router.tsx from current navigation + screens on disk.
+ * Called from FlowsView whenever navigation changes (edges/default screen).
+ * Silently skips if generated/ has not been scaffolded yet.
+ */
+export async function syncGeneratedRouter(projectDir: string): Promise<void> {
+  const generatedDir = `${projectDir}/generated`;
+
+  // Skip if generated/ not scaffolded yet
+  try { await readFile(`${generatedDir}/package.json`); } catch { return; }
+
+  const nav = await loadNavigation(projectDir);
+  const navById = new Map(nav.screens.map((s) => [s.id, s]));
+
+  // Discover screens from generated/src/screens/ (source of truth)
+  let screenIds: string[] = [];
+  try {
+    const entries = await readDir(`${generatedDir}/src/screens`);
+    screenIds = entries
+      .filter((e) => !e.is_dir && e.name.endsWith(".tsx"))
+      .map((e) => e.name.replace(/\.tsx$/, ""));
+  } catch { /* no screens yet */ }
+
+  const routerPath = `${generatedDir}/src/router.tsx`;
+
+  if (screenIds.length === 0) {
+    await writeFile(routerPath,
+      `// Auto-generated from Flows panel. Edit navigation in the Flows panel, not here.\nimport { Routes, Route, Navigate } from 'react-router-dom'\n\nexport function AppRouter() {\n  return (\n    <Routes>\n      <Route path="*" element={<Navigate to="/" replace />} />\n    </Routes>\n  )\n}\n`
+    );
+    return;
+  }
+
+  const defaultId = nav.defaultScreen && screenIds.includes(nav.defaultScreen)
+    ? nav.defaultScreen
+    : screenIds[0];
+  const defaultPath = navById.get(defaultId)?.path ?? `/${defaultId}`;
+
+  const imports = screenIds
+    .map((id, i) => `import Screen${i} from './screens/${id}'`)
+    .join("\n");
+
+  const routes = screenIds
+    .map((id, i) => {
+      const path = navById.get(id)?.path ?? `/${id}`;
+      return `      <Route path="${path}" element={<Screen${i} />} />`;
+    })
+    .join("\n");
+
+  await writeFile(routerPath,
+    `// Auto-generated from Flows panel. Edit navigation in the Flows panel, not here.\nimport { Routes, Route, Navigate } from 'react-router-dom'\n${imports}\n\nexport function AppRouter() {\n  return (\n    <Routes>\n${routes}\n      <Route path="*" element={<Navigate to="${defaultPath}" replace />} />\n    </Routes>\n  )\n}\n`
+  );
 }
 
 /**

@@ -17,9 +17,12 @@ export const PROJECT_PATHS = {
   PACKAGE_JSON: "package.json",
   COMPONENTS_JSON: "components.json",
   ESLINT_CONFIG_JS: "eslint.config.js",
+  VITE_CONFIG_TS: "vite.config.ts",
   VITE_PKG: "node_modules/vite/package.json",
   SRC: {
     APP_TSX: "src/App.tsx",
+    MAIN_TSX: "src/main.tsx",
+    ROUTER_TSX: "src/router.tsx",
     INDEX_CSS: "src/index.css",
     UTILS_TS: "src/lib/utils.ts",
     GENERATED_TSX: "src/components/Generated.tsx",
@@ -247,4 +250,115 @@ export function getScreenPreviewDirPath(projectDir: string): string {
 /** Given a project data directory, returns the generated directory path. */
 export function getGeneratedDirPath(projectDir: string): string {
   return `${projectDir}/generated`;
+}
+
+/**
+ * Returns the main.tsx for the generated/ app.
+ * Wraps App with QueryClientProvider (TanStack Query) and BrowserRouter.
+ */
+export function getGeneratedMainTsx(): string {
+  return `import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter } from 'react-router-dom'
+import './index.css'
+import App from './App.tsx'
+
+const queryClient = new QueryClient()
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </StrictMode>,
+)
+`;
+}
+
+/**
+ * Returns App.tsx for the generated/ app.
+ * Delegates all routing to AppRouter from router.tsx.
+ */
+export function getGeneratedAppTsx(): string {
+  return `import "./index.css"
+import { AppRouter } from "./router"
+
+export default function App() {
+  return <AppRouter />
+}
+`;
+}
+
+/**
+ * Returns a router.tsx stub for the generated/ app.
+ * Contains no routes initially — populated by syncNavigationToRouter() when
+ * the user defines navigation in the Flows panel.
+ */
+export function getRouterTsx(): string {
+  return `// Auto-generated from Flows panel. Edit navigation in the Flows panel, not here.
+import { Routes, Route, Navigate } from 'react-router-dom'
+
+export function AppRouter() {
+  return (
+    <Routes>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+`;
+}
+
+/**
+ * Returns vite.config.ts for the generated/ app.
+ * Includes proxy entries for each API host (keyed by path prefix → target URL)
+ * so generated apps can call external APIs without CORS issues.
+ *
+ * @param proxy  Map of path prefix (e.g. "/api/weather") to target host (e.g. "https://api.openweathermap.org")
+ */
+export function getGeneratedViteConfig(proxy: Record<string, string> = {}): string {
+  const entries = Object.entries(proxy);
+  const proxyBlock = entries.length > 0
+    ? `
+  server: {
+    proxy: {
+${entries.map(([prefix, targetUrl]) => {
+  // targetUrl stores origin+pathname (e.g. "https://api.example.com/v2/endpoint")
+  // Vite proxy target must be origin-only; the pathname becomes the rewrite destination.
+  let origin = targetUrl;
+  let rewriteTo = "";
+  try {
+    const p = new URL(targetUrl);
+    origin = p.origin;
+    rewriteTo = p.pathname !== "/" ? p.pathname : "";
+  } catch { /* malformed URL — use as-is */ }
+  const safeOrigin = origin.replace(/"/g, "").replace(/\\/g, "");
+  const safeRewrite = rewriteTo.replace(/"/g, "").replace(/\\/g, "");
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '\\/');
+  return `      "${prefix}": {
+        target: "${safeOrigin}",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^${escaped}/, "${safeRewrite}"),
+      },`;
+}).join('\n')}
+    },
+  },`
+    : '';
+
+  return `import path from "path"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  plugins: [tailwindcss(), react()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },${proxyBlock}
+})
+`;
 }

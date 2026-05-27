@@ -10,6 +10,11 @@ export {
   outputFilePathSection,
   extractDesignTokenNames,
   getDesignTokensSection,
+  type DesignBriefTemplate,
+  DESIGN_BRIEF_TEMPLATES,
+  buildDesignBriefSection,
+  buildApiContextSection,
+  buildComponentsSection,
 } from "./prompts/shared";
 
 // Screen prompts

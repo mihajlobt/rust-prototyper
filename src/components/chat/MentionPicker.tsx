@@ -1,24 +1,34 @@
 import { useEffect, useState } from "react"
-import { Component, Palette, Monitor } from "lucide-react"
-import { readDir } from "@/lib/ipc"
+import { Component, Palette, Monitor, Plug } from "lucide-react"
+import { readFile } from "@/lib/ipc"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { MentionAsset } from "@/types/chat"
 
-const TYPE_ICONS = {
+// PickerItem extends MentionAsset (minus code) with optional fields:
+//   preCode  — content already known at load time (APIs); skips file read on select
+//   palette  — up to 5 oklch/hex color strings extracted from theme CSS for swatch preview
+export type PickerItem = Omit<MentionAsset, "code"> & {
+  preCode?: string
+  description?: string
+  palette?: string[]
+}
+
+const TYPE_ICONS: Record<MentionAsset["type"], React.ReactNode> = {
   component: <Component size={11} />,
   theme: <Palette size={11} />,
   screen: <Monitor size={11} />,
-} as const
+  api: <Plug size={11} />,
+}
 
 interface MentionPickerProps {
   query: string
   projectPath: string
-  onSelect: (asset: Omit<MentionAsset, "code">) => void
+  onSelect: (item: PickerItem) => void
   onClose: () => void
 }
 
 export function MentionPicker({ query, projectPath, onSelect, onClose }: MentionPickerProps) {
-  const [assets, setAssets] = useState<Omit<MentionAsset, "code">[]>([])
+  const [assets, setAssets] = useState<PickerItem[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {
@@ -54,23 +64,51 @@ export function MentionPicker({ query, projectPath, onSelect, onClose }: Mention
   if (filtered.length === 0) return null
 
   return (
-    <div className="absolute bottom-full mb-1 left-0 z-50 w-64 rounded-md border border-border bg-popover shadow-lg">
+    <div className="absolute bottom-full mb-1 left-0 z-50 w-72 rounded-md border border-border bg-popover shadow-lg">
       <ScrollArea className="h-48">
         <div className="p-1">
           {filtered.map((asset, i) => (
             <button
               key={asset.id}
-              className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-accent/10 ${
+              className={`flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-accent/10 rounded ${
                 i === activeIndex ? "bg-accent/10" : ""
               }`}
               onMouseDown={(e) => {
-                e.preventDefault() // don't blur textarea
+                e.preventDefault()
                 onSelect(asset)
               }}
             >
-              {TYPE_ICONS[asset.type]}
-              <span className="flex-1 text-left truncate">{asset.name}</span>
-              <span className="text-xs text-muted-foreground">{asset.type}</span>
+              <span className="text-muted-foreground shrink-0">{TYPE_ICONS[asset.type]}</span>
+
+              <div className="flex-1 min-w-0 text-left">
+                <div className="font-medium truncate leading-tight">{asset.name}</div>
+                {asset.description && (
+                  <div className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.description}</div>
+                )}
+              </div>
+
+              {/* Theme palette swatches */}
+              {asset.palette && asset.palette.length > 0 && (
+                <div className="flex gap-0.5 shrink-0">
+                  {asset.palette.map((color, ci) => (
+                    <span
+                      key={ci}
+                      className="w-3 h-3 rounded-sm inline-block border border-border/30"
+                      style={{ background: color }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* API method badge */}
+              {asset.type === "api" && asset.description && (
+                <span className={[
+                  "shrink-0 text-[9px] font-bold px-1 py-0.5 rounded",
+                  asset.description.startsWith("POST") ? "bg-blue-500/10 text-blue-600" : "bg-green-500/10 text-green-600",
+                ].join(" ")}>
+                  {asset.description.split(" ")[0]}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -79,29 +117,95 @@ export function MentionPicker({ query, projectPath, onSelect, onClose }: Mention
   )
 }
 
-async function loadProjectAssets(projectPath: string): Promise<Omit<MentionAsset, "code">[]> {
-  const assets: Omit<MentionAsset, "code">[] = []
-  const sections: Array<{ dir: string; type: MentionAsset["type"]; file: string }> = [
-    { dir: "components", type: "component", file: "component.tsx" },
-    { dir: "themes",     type: "theme",     file: "theme.css" },
-    { dir: "screens",    type: "screen",    file: "screen.tsx" },
-  ]
-  for (const { dir, type, file } of sections) {
-    try {
-      const entries = await readDir(`${projectPath}/${dir}`)
-      for (const entry of entries) {
-        if (entry.is_dir) {
-          assets.push({
-            id: entry.name,
-            type,
-            name: entry.name,
-            path: `${projectPath}/${dir}/${entry.name}/${file}`,
-          })
-        }
-      }
-    } catch {
-      // directory may not exist yet
-    }
+// ─── Palette extraction ────────────────────────────────────────────────────────
+
+function extractThemePalette(css: string): string[] {
+  const keys = ["--background", "--primary", "--secondary", "--accent", "--destructive"]
+  const colors: string[] = []
+  for (const key of keys) {
+    const match = css.match(new RegExp(`${key}:\\s*([^;\\n]+)`))
+    if (match) colors.push(match[1].trim())
   }
+  return colors
+}
+
+// ─── Asset loader ──────────────────────────────────────────────────────────────
+
+async function loadProjectAssets(projectPath: string): Promise<PickerItem[]> {
+  const assets: PickerItem[] = []
+  const { readDir } = await import("@/lib/ipc")
+
+  // Components
+  try {
+    const entries = await readDir(`${projectPath}/components`)
+    for (const e of entries) {
+      if (e.is_dir) assets.push({
+        id: e.name,
+        type: "component",
+        name: e.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        description: "React component",
+        path: `${projectPath}/components/${e.name}/component.tsx`,
+      })
+    }
+  } catch { /* no components dir */ }
+
+  // Screens
+  try {
+    const entries = await readDir(`${projectPath}/screens`)
+    for (const e of entries) {
+      if (e.is_dir) assets.push({
+        id: e.name,
+        type: "screen",
+        name: e.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        description: "Screen component",
+        path: `${projectPath}/screens/${e.name}/screen.tsx`,
+      })
+    }
+  } catch { /* no screens dir */ }
+
+  // Themes — load CSS to extract palette swatches
+  try {
+    const entries = await readDir(`${projectPath}/themes`)
+    for (const e of entries) {
+      if (!e.is_dir) continue
+      const cssPath = `${projectPath}/themes/${e.name}/theme.css`
+      let palette: string[] = []
+      try {
+        const css = await readFile(cssPath)
+        palette = extractThemePalette(css)
+      } catch { /* palette stays empty */ }
+      assets.push({
+        id: e.name,
+        type: "theme",
+        name: e.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        description: "CSS theme",
+        path: cssPath,
+        palette,
+      })
+    }
+  } catch { /* no themes dir */ }
+
+  // APIs — code computed eagerly; description = "METHOD url"
+  try {
+    const raw = await readFile(`${projectPath}/apis/apis.json`)
+    const list = JSON.parse(raw) as Array<{
+      id: string; name: string; method: string; url: string; proxyPath?: string
+    }>
+    for (const api of list) {
+      const base = api.proxyPath?.trim() || api.url
+      const keyMatch = api.url.match(/\{\{(\w+)\}\}/)
+      const authLine = keyMatch ? `\nAuth: import.meta.env.VITE_${keyMatch[1]}` : ""
+      assets.push({
+        id: api.id,
+        type: "api",
+        name: api.name,
+        // description drives the method badge + subtitle
+        description: `${api.method} ${base}`,
+        path: `${projectPath}/apis/apis.json`,
+        preCode: `${api.method} ${base}${authLine}`,
+      })
+    }
+  } catch { /* no apis yet */ }
+
   return assets
 }

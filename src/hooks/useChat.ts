@@ -404,10 +404,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     // Build mention context block
     const mentionContext = currentMentions
-      .map(
-        (m) =>
-          `<!-- @${m.name} -->\n\`\`\`${m.type === "theme" ? "css" : "tsx"}\n${m.code}\n\`\`\`\n<!-- end @${m.name} -->`
-      )
+      .map((m) => {
+        if (m.type === "api") {
+          // API context as prose — no code fence needed
+          return `<!-- @${m.name} -->\nAPI: ${m.name}\n${m.code}\n<!-- end @${m.name} -->`
+        }
+        const lang = m.type === "theme" ? "css" : "tsx"
+        return `<!-- @${m.name} -->\n\`\`\`${lang}\n${m.code}\n\`\`\`\n<!-- end @${m.name} -->`
+      })
       .join("\n\n")
 
     const userContent = mentionContext ? `${mentionContext}\n\n${currentInput}` : currentInput

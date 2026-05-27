@@ -149,3 +149,86 @@ export const SHADCN_COMPONENT_CATALOG = `AVAILABLE SHADCN/UI COMPONENTS — impo
 
 UTILITY:
 - import { cn } from "@/lib/utils" — combines clsx + tailwind-merge for conditional classes`;
+
+// ─── Design Brief templates (opendesigner.io style) ──────────────────────────
+
+export interface DesignBriefTemplate {
+  name: string;
+  description: string;
+  palette: string[];
+  content: string;
+}
+
+export const DESIGN_BRIEF_TEMPLATES: DesignBriefTemplate[] = [
+  {
+    name: "Minimal / Clean",
+    description: "Lots of whitespace, Inter font, neutral palette, subtle borders",
+    palette: ["#ffffff", "#f5f5f5", "#e5e5e5", "#a3a3a3", "#171717"],
+    content: `# Minimal / Clean\nA calm, focused design that values whitespace and legibility above all.\n\nCOLOR\n- Background: pure white (#ffffff) or near-white (#fafafa)\n- Text: dark gray (#171717), light gray (#737373) for secondary\n- Accents: single muted accent (slate blue #64748b or warm gray)\n- Borders: 1px solid #e5e5e5\n\nTYPOGRAPHY\n- Font: Inter, system-ui fallback\n- Scale: 12px caption, 14px body, 16px base, 20px h3, 24px h2, 32px h1\n- Line height: 1.6 for body, 1.2 for headings\n- Weight: 400 regular, 500 medium, 600 semibold — no bold\n\nSPACING\n- Base unit: 4px. Use multiples: 8, 12, 16, 24, 32, 48, 64\n- Generous padding in cards and sections\n\nCOMPONENTS\n- Cards: white bg, 1px #e5e5e5 border, 8px radius, no shadow\n- Buttons: outline style preferred, filled only for primary CTA\n- Inputs: thin 1px border, no heavy outlines\n\nANTI-PATTERNS\n- No drop shadows except very subtle (0 1px 3px rgba(0,0,0,.08))\n- No gradient backgrounds\n- No decorative icons or illustrations`,
+  },
+  {
+    name: "Neo-Brutalism",
+    description: "Thick black borders, flat colors, strong contrast, monospace font",
+    palette: ["#ffffff", "#ffde59", "#ff5757", "#5ce1e6", "#000000"],
+    content: `# Neo-Brutalism\nRaw, honest, unapologetic design. Heavily inspired by 90s web and print brutalism.\n\nCOLOR\n- Background: white (#ffffff) or off-white (#f5f0e8)\n- Key accent: bright yellow (#ffde59), coral red (#ff5757), or cyan (#5ce1e6) — pick ONE\n- All borders: pure black (#000000)\n- Text: pure black (#000000) on light, white (#ffffff) on dark\n\nTYPOGRAPHY\n- Font: Space Grotesk, Syne, or system monospace (Courier New fallback)\n- Scale: oversized headings (48–96px), normal body (15–16px)\n- Weight: 700–900 for headings, 400–500 for body\n- Letter-spacing: -0.02em to -0.04em for headings\n\nCOMPONENTS\n- Cards: white bg, 3–4px solid black border, 0 radius, translate on hover\n- Buttons: solid black bg + white text OR accent fill + black text, 3px border, 0 radius\n- Shadows: always offset, opaque black: "4px 4px 0px #000" or "6px 6px 0px #000"\n- Inputs: 2px solid black, 0 radius\n\nANTI-PATTERNS\n- No rounded corners (never more than 2px)\n- No gradients\n- No thin or decorative fonts\n- No subtle/muted colors — everything high contrast`,
+  },
+  {
+    name: "Glass Morphism",
+    description: "Frosted glass, blur effects, dark backgrounds, vibrant gradients",
+    palette: ["#0f0f1a", "#ffffff30", "#a78bfa", "#60a5fa", "#f0abfc"],
+    content: `# Glass Morphism\nTranslucent surfaces layered over rich dark gradients. Premium, futuristic, immersive.\n\nCOLOR\n- Background: deep dark (#0a0a1a or #0f0f23), layered gradient from purple to dark blue\n- Surface: rgba(255,255,255,0.08) to rgba(255,255,255,0.15) with backdrop-filter: blur(20px)\n- Border: rgba(255,255,255,0.15) — always subtle\n- Text: white (#ffffff) primary, rgba(255,255,255,0.7) secondary\n- Accents: violet (#a78bfa), sky blue (#60a5fa), pink (#f0abfc)\n\nTYPOGRAPHY\n- Font: Inter, Plus Jakarta Sans, or Geist\n- Weight: 300–400 for body, 600–700 for headings\n- Hierarchy through opacity not weight\n\nCOMPONENTS\n- Cards: backdrop-blur + rgba bg + thin rgba border + subtle inset glow\n- Buttons: glass primary or gradient fill (purple → blue)\n- CSS: backdrop-filter: blur(20px) saturate(180%); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 32px rgba(0,0,0,0.3)\n\nANTI-PATTERNS\n- No opaque solid backgrounds\n- No harsh borders or thick outlines\n- No light-mode color palette`,
+  },
+  {
+    name: "Neon / HUD",
+    description: "Dark theme, green/cyan neon accents, monospace font, data-dense layouts",
+    palette: ["#050505", "#0d1117", "#00ff88", "#00cfff", "#ff0055"],
+    content: `# Neon / HUD\nTerminal meets sci-fi dashboard. Dense data, glowing UI, machine aesthetic.\n\nCOLOR\n- Background: near-black (#050505 or #0d1117)\n- Primary neon: electric green (#00ff88) or cyan (#00cfff) — pick ONE\n- Alert: hot pink (#ff0055)\n- Text: neon color for active, 50% opacity for secondary\n- Grid lines: rgba(0,255,136,0.15)\n\nTYPOGRAPHY\n- Font: JetBrains Mono, Fira Code, Space Mono — monospace exclusively\n- Scale: dense — 11px labels, 13px body, 15px values, 20px headings\n- Uppercase with letter-spacing for labels\n- Numbers in tabular-nums variant\n\nCOMPONENTS\n- Cards: dark bg, 1px neon border (0.3 opacity), glow on hover\n- Buttons: neon outline only, text-glow on hover (box-shadow: 0 0 10px rgba(0,255,136,0.3))\n- Inputs: dark bg, neon bottom-border only\n- text-shadow: 0 0 8px currentColor for headings\n\nANTI-PATTERNS\n- No rounded corners (max 2px)\n- No gradients, no light backgrounds, no sans-serif fonts`,
+  },
+];
+
+// ─── Generation context sections (appended to system prompts) ─────────────────
+
+/** Formats a DESIGN.md brief for injection into screen/component generation prompts. */
+export function buildDesignBriefSection(brief: string): string {
+  if (!brief.trim()) return "";
+  return `\n\nDESIGN BRIEF — follow these design system instructions precisely. Override any conflicting defaults:\n\n${brief.trim()}`;
+}
+
+/** Formats selected API definitions for injection into screen/component generation prompts. */
+export function buildApiContextSection(
+  apis: Array<{ name: string; method: string; url: string; proxyPath?: string }>,
+  _keyNames: string[] = [] // eslint-disable-line @typescript-eslint/no-unused-vars -- kept for API compat; key names are now auto-derived from URL {{PLACEHOLDER}} patterns
+): string {
+  if (apis.length === 0) return "";
+  const lines = apis.map((api) => {
+    const base = api.proxyPath?.trim() || api.url;
+    const keyMatch = api.url.match(/\{\{(\w+)\}\}/);
+    const authNote = keyMatch ? `\n    Auth env var: import.meta.env.VITE_${keyMatch[1]}` : "";
+    return `  ${api.method} ${base}  (${api.name})${authNote}`;
+  });
+  return [
+    "\n\nAVAILABLE APIS — use @tanstack/react-query for all data fetching:",
+    ...lines,
+    "",
+    "Import: import { useQuery } from '@tanstack/react-query'",
+    "Use proxy paths as base URLs (e.g. /api/weather, not https://api.openweathermap.org) — CORS-free in dev.",
+    "Always add loading and error states. Import service hooks from '@/services/{name}' if available.",
+    "For TanStack Query: wrap the tree with <QueryClientProvider> in main.tsx (already done by scaffold).",
+  ].join("\n");
+}
+
+/** Injects selected component source code so AI can reuse them in the generated screen. */
+export function buildComponentsSection(
+  components: Array<{ name: string; code: string }>
+): string {
+  if (components.length === 0) return "";
+  const blocks = components.map(
+    (c) => `### ${c.name}\n\`\`\`tsx\n${c.code.slice(0, 3000)}\n\`\`\``
+  );
+  return [
+    "\n\nAVAILABLE COMPONENTS — reuse these in your output, do NOT recreate them:",
+    ...blocks,
+    "",
+    "Import them from '@/components/{component-id}/component' (replace {component-id} with the actual dir name).",
+  ].join("\n");
+}

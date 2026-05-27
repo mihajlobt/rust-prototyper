@@ -23,27 +23,6 @@ fn zip_err(e: zip::result::ZipError) -> AppError {
     AppError::Io(std::io::Error::other(e.to_string()))
 }
 
-fn add_dir_to_zip<W: Write + std::io::Seek>(
-    zip: &mut zip::ZipWriter<W>,
-    dir: &std::path::Path,
-    prefix: &std::path::Path,
-) -> Result<(), AppError> {
-    for entry in std::fs::read_dir(dir).map_err(AppError::Io)? {
-        let entry = entry.map_err(AppError::Io)?;
-        let path = entry.path();
-        let name = path.strip_prefix(prefix).map_err(|_| AppError::NotFound("Prefix mismatch".into()))?;
-        if path.is_file() {
-            let mut file = std::fs::File::open(&path).map_err(AppError::Io)?;
-            zip.start_file_from_path(name, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            std::io::copy(&mut file, zip).map_err(AppError::Io)?;
-        } else if path.is_dir() {
-            zip.add_directory_from_path(name, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            add_dir_to_zip(zip, &path, prefix)?;
-        }
-    }
-    Ok(())
-}
-
 fn add_file_to_zip<W: Write + std::io::Seek>(
     zip: &mut zip::ZipWriter<W>,
     source_path: &std::path::Path,
@@ -56,24 +35,25 @@ fn add_file_to_zip<W: Write + std::io::Seek>(
     Ok(())
 }
 
-fn add_dir_to_zip_with_prefix<W: Write + std::io::Seek>(
+fn add_dir_to_zip_filtered<W: Write + std::io::Seek>(
     zip: &mut zip::ZipWriter<W>,
     dir: &std::path::Path,
-    zip_prefix: &str,
+    base: &std::path::Path,
+    exclude: &[&str],
 ) -> Result<(), AppError> {
-    if !dir.exists() { return Ok(()); }
     for entry in std::fs::read_dir(dir).map_err(AppError::Io)? {
         let entry = entry.map_err(AppError::Io)?;
         let path = entry.path();
         let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-        let zip_entry = format!("{}/{}", zip_prefix, file_name);
+        if exclude.iter().any(|e| *e == file_name.as_ref()) { continue; }
+        let zip_name = path.strip_prefix(base).map_err(|_| AppError::NotFound("Prefix mismatch".into()))?;
         if path.is_file() {
             let mut file = std::fs::File::open(&path).map_err(AppError::Io)?;
-            zip.start_file(&zip_entry, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            zip.start_file_from_path(zip_name, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
             std::io::copy(&mut file, zip).map_err(AppError::Io)?;
         } else if path.is_dir() {
-            zip.add_directory(&zip_entry, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            add_dir_to_zip_with_prefix(zip, &path, &zip_entry)?;
+            zip.add_directory_from_path(zip_name, zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+            add_dir_to_zip_filtered(zip, &path, base, exclude)?;
         }
     }
     Ok(())
@@ -230,8 +210,8 @@ fn shadcn_globals_css() -> &'static str {
 pub async fn export_project(
     project_id: String,
     output_path: String,
-    format: String,
-    options: ExportProjectOptions,
+    _format: String,
+    _options: ExportProjectOptions,
     app: AppHandle,
 ) -> Result<String, AppError> {
     let project_dir = resolve_path(&app, &format!("projects/{}", project_id))?;
@@ -244,74 +224,50 @@ pub async fn export_project(
         let file = std::fs::File::create(&output_path).map_err(AppError::Io)?;
         let mut zip = zip::ZipWriter::new(file);
 
-        if format == "react-vite" || format.is_empty() {
-            let pkg = r#"{"name":"exported-app","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"react":"^19","react-dom":"^19","class-variance-authority":"^0.7","clsx":"^2.1","tailwind-merge":"^3.0","radix-ui":"^1.4","lucide-react":"^0.511"},"devDependencies":{"@tailwindcss/vite":"^4","@types/react":"^19","@types/react-dom":"^19","@vitejs/plugin-react":"^4","typescript":"^5","vite":"^6"}}"#;
-            zip.start_file("package.json", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(pkg.as_bytes()).map_err(AppError::Io)?;
-
-            let tsconfig = r#"{"compilerOptions":{"target":"ES2020","useDefineForClassFields":true,"lib":["ES2020","DOM","DOM.Iterable"],"module":"ESNext","skipLibCheck":true,"moduleResolution":"bundler","allowImportingTsExtensions":true,"resolveJsonModule":true,"isolatedModules":true,"noEmit":true,"jsx":"react-jsx","strict":true,"noUnusedLocals":true,"noUnusedParameters":true,"noFallthroughCasesInSwitch":true,"baseUrl":".","paths":{"@/*":["./src/*"]}},"include":["src"],"references":[{"path":"./tsconfig.node.json"}]}"#;
-            zip.start_file("tsconfig.json", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(tsconfig.as_bytes()).map_err(AppError::Io)?;
-
-            let vite_config = r#"import { defineConfig } from 'vite'; import react from '@vitejs/plugin-react'; import tailwindcss from '@tailwindcss/vite'; import path from 'path'; export default defineConfig({ plugins: [react(), tailwindcss()], resolve: { alias: { '@': path.resolve(__dirname, './src') } } });"#;
-            zip.start_file("vite.config.ts", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(vite_config.as_bytes()).map_err(AppError::Io)?;
-
-            let main = r#"import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App'; import './styles/globals.css'; ReactDOM.createRoot(document.getElementById('root')!).render(<App />);"#;
-            zip.start_file("src/main.tsx", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(main.as_bytes()).map_err(AppError::Io)?;
-
-            let html = r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Exported App</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>"#;
-            zip.start_file("index.html", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(html.as_bytes()).map_err(AppError::Io)?;
-
-            // shadcn utility — prefer component-preview's file, fall back to default
-            let default_utils = r#"import { clsx, type ClassValue } from "clsx"; import { twMerge } from "tailwind-merge"; export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }"#;
-            let utils_path = project_dir.join("component-preview").join("src").join("lib").join("utils.ts");
-            let utils_source = if utils_path.exists() {
-                std::fs::read_to_string(&utils_path).unwrap_or_else(|_| default_utils.to_string())
-            } else {
-                default_utils.to_string()
-            };
-            zip.start_file("src/lib/utils.ts", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(utils_source.as_bytes()).map_err(AppError::Io)?;
-
-            zip.start_file("src/styles/globals.css", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(shadcn_globals_css().as_bytes()).map_err(AppError::Io)?;
-        }
-
-        if options.include_components {
-            let comp_dir = project_dir.join("components");
-            if comp_dir.exists() { add_dir_to_zip(&mut zip, &comp_dir, &project_dir)?; }
-        }
-        if options.include_theme {
-            let theme_dir = project_dir.join("themes");
-            if theme_dir.exists() { add_dir_to_zip(&mut zip, &theme_dir, &project_dir)?; }
-        }
-        if options.include_apis {
-            let api_dir = project_dir.join("apis");
-            if api_dir.exists() { add_dir_to_zip(&mut zip, &api_dir, &project_dir)?; }
-        }
-
-        let component_preview_dir = project_dir.join("component-preview");
-        if component_preview_dir.exists() && (format == "react-vite" || format.is_empty()) {
-            let ui_dir = component_preview_dir.join("src").join("components").join("ui");
-            if ui_dir.exists() { add_dir_to_zip_with_prefix(&mut zip, &ui_dir, "src/components/ui")?; }
-        }
-
-        let screens_dir = project_dir.join("screens");
-        if screens_dir.exists() { add_dir_to_zip(&mut zip, &screens_dir, &project_dir)?; }
-
+        // Export is always from generated/ — the fully scaffolded runnable project.
+        // If generated/ hasn't been scaffolded yet, tell the user to scaffold in Runner first.
         let gen_dir = project_dir.join("generated");
-        if gen_dir.exists() { add_dir_to_zip(&mut zip, &gen_dir, &project_dir)?; }
-
-        if options.include_tests {
-            zip.start_file("src/App.test.tsx", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(b"import { describe, it, expect } from 'vitest';").map_err(AppError::Io)?;
-            let vitest_config = r#"import { defineConfig } from 'vitest/config'; import react from '@vitejs/plugin-react'; export default defineConfig({ plugins: [react()], test: { environment: 'jsdom', globals: true } });"#;
-            zip.start_file("vitest.config.ts", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
-            zip.write_all(vitest_config.as_bytes()).map_err(AppError::Io)?;
+        if !gen_dir.exists() || !gen_dir.join("package.json").exists() {
+            return Err(AppError::NotFound(
+                "generated/ project not found. Open the Runner panel and scaffold the project first.".into()
+            ));
         }
+
+        let exclude = ["node_modules", ".env.local", ".env"];
+        add_dir_to_zip_filtered(&mut zip, &gen_dir, &gen_dir, &exclude)?;
+
+        // .env.example — strip values from .env.local so the zip is safe to share
+        let env_local = gen_dir.join(".env.local");
+        if env_local.exists() {
+            if let Ok(content) = std::fs::read_to_string(&env_local) {
+                let example: String = content.lines().map(|line| {
+                    if !line.starts_with('#') && line.contains('=') {
+                        let key = line.split('=').next().unwrap_or(line);
+                        format!("{}=\n", key)
+                    } else {
+                        format!("{}\n", line)
+                    }
+                }).collect();
+                zip.start_file(".env.example", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+                zip.write_all(example.as_bytes()).map_err(AppError::Io)?;
+            }
+        }
+
+        // README.md
+        let readme = concat!(
+            "# Exported App\n\n",
+            "## Setup\n\n",
+            "1. Install dependencies:\n",
+            "   ```bash\n   bun install\n   ```\n\n",
+            "2. Configure environment variables:\n",
+            "   ```bash\n   cp .env.example .env.local\n",
+            "   # Edit .env.local and fill in your API keys\n   ```\n\n",
+            "3. Start development server:\n",
+            "   ```bash\n   bun dev\n   ```\n\n",
+            "> API calls are proxied via Vite — see `vite.config.ts` for proxy configuration.\n",
+        );
+        zip.start_file("README.md", zip::write::SimpleFileOptions::default()).map_err(zip_err)?;
+        zip.write_all(readme.as_bytes()).map_err(AppError::Io)?;
 
         zip.finish().map_err(zip_err)?;
         Ok(output_path)

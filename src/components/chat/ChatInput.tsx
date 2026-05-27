@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { readFile } from "@/lib/ipc"
-import { MentionPicker } from "./MentionPicker"
+import { MentionPicker, type PickerItem } from "./MentionPicker"
 import { AttachmentChip } from "./AttachmentChip"
 import { MentionChip } from "./MentionChip"
 import { FileUpload, FileUploadTrigger } from "@/components/ui/file-upload"
@@ -82,13 +82,19 @@ export function ChatInput({
     }
   }
 
-  function handleMentionSelect(asset: Omit<MentionAsset, "code">) {
+  function handleMentionSelect(item: PickerItem) {
     const lastAt = value.lastIndexOf("@")
     onChange(value.slice(0, lastAt))
     setMentionQuery(null)
-    readFile(asset.path)
-      .then((code) => onAddMention({ ...asset, code }))
-      .catch(() => onAddMention({ ...asset, code: "" }))
+    if (item.preCode !== undefined) {
+      // API (or other eagerly-loaded) asset — code is already available
+      const { preCode, ...rest } = item
+      onAddMention({ ...rest, code: preCode })
+    } else {
+      readFile(item.path)
+        .then((code) => onAddMention({ ...item, code }))
+        .catch(() => onAddMention({ ...item, code: "" }))
+    }
   }
 
   async function processImageFile(file: File) {
@@ -137,7 +143,7 @@ export function ChatInput({
         <MentionPicker
           query={mentionQuery}
           projectPath={projectPath}
-          onSelect={handleMentionSelect}
+          onSelect={(item) => handleMentionSelect(item)}
           onClose={() => setMentionQuery(null)}
         />
       )}

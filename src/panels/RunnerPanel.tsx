@@ -30,6 +30,7 @@ import { watch, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
+import { getGeneratedAppTsx, PROJECT_PATHS as GEN_PATHS } from "@/lib/scaffold-shadcn";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import { useDevServerStore } from "@/lib/dev-server-manager";
@@ -206,6 +207,14 @@ export function RunnerPanel() {
     const scaffolded = await hasGeneratedScaffold(`projects/${settings.project}`);
     if (scaffolded) {
       await ensureEslintPatched(`projects/${settings.project}`);
+      // Migrate App.tsx to the AppRouter pattern if it predates this feature
+      try {
+        const appTsx = await readFile(`${generatedDir}/${GEN_PATHS.SRC.APP_TSX}`);
+        if (!appTsx.includes("AppRouter")) {
+          await writeFile(`${generatedDir}/${GEN_PATHS.SRC.APP_TSX}`, getGeneratedAppTsx());
+          notify.info("App.tsx updated", "Migrated to AppRouter pattern for multi-screen navigation");
+        }
+      } catch { /* non-fatal — old App.tsx stays as-is */ }
       return true;
     }
     const ok = await confirm("The generated/ folder needs a Vite + React + shadcn/ui project. Create one now?");

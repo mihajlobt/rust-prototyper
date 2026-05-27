@@ -13,6 +13,10 @@ import {
   getComponentPreviewDirPath,
   getScreenPreviewDirPath,
   getGeneratedDirPath,
+  getGeneratedMainTsx,
+  getGeneratedAppTsx,
+  getRouterTsx,
+  getGeneratedViteConfig,
 } from "@/lib/scaffold-shadcn";
 
 const P = PROJECT_PATHS;
@@ -128,23 +132,39 @@ export async function scaffoldGenerated(
   onStep?.("Adding shadcn components…");
   await runShellCommandSync(generatedDir, `${SHADCN_ADD_COMMAND} --cwd .`);
 
-  // Step 4: Add non-lucide icon library. lucide-react is already a shadcn
-  // dependency — installing it again races with shadcn add's bun install and
-  // causes cache conflicts, so we skip it here.
+  // Step 4: Add @tanstack/react-query, react-router-dom, and optional icon library
+  onStep?.("Installing TanStack Query + React Router…");
+  const pkgPath = `${generatedDir}/${P.PACKAGE_JSON}`;
+  const pkgRaw = await readFile(pkgPath);
+  const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
+  const deps = (pkg.dependencies as Record<string, string>) || {};
+  deps["@tanstack/react-query"] = "^5.0.0";
+  deps["react-router-dom"] = "^7.0.0";
+
   const iconPkg = ICON_LIBRARY_PACKAGES[iconLibrary];
   if (iconPkg && iconLibrary !== "lucide") {
     onStep?.(`Installing ${iconPkg}…`);
-    const pkgPath = `${generatedDir}/${P.PACKAGE_JSON}`;
-    const pkgRaw = await readFile(pkgPath);
-    const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
-    const deps = (pkg.dependencies as Record<string, string>) || {};
     deps[iconPkg] = "latest";
-    pkg.dependencies = deps;
-    await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
-    await bunInstallSync(generatedDir);
   }
 
-  // Step 5: Patch eslint.config.js to ignore shadcn's own false-positive errors
+  pkg.dependencies = deps;
+  await writeFile(pkgPath, JSON.stringify(pkg, null, 2));
+  await bunInstallSync(generatedDir);
+
+  // Step 5: Write main.tsx with QueryClientProvider + BrowserRouter
+  onStep?.("Writing main.tsx…");
+  await writeFile(`${generatedDir}/${P.SRC.MAIN_TSX}`, getGeneratedMainTsx());
+
+  // Step 6: Write router.tsx stub (populated by Flows panel)
+  await writeFile(`${generatedDir}/${P.SRC.ROUTER_TSX}`, getRouterTsx());
+
+  // Step 7: Overwrite App.tsx with our AppRouter shell
+  await writeFile(`${generatedDir}/${P.SRC.APP_TSX}`, getGeneratedAppTsx());
+
+  // Step 8: Write vite.config.ts (no proxy entries yet — synced from API panel)
+  await writeFile(`${generatedDir}/${P.VITE_CONFIG_TS}`, getGeneratedViteConfig());
+
+  // Step 9: Patch eslint.config.js to ignore shadcn's own false-positive errors
   // and clean up stale eslint.config.ts from old scaffold versions.
   onStep?.("Patching ESLint config…");
   await patchEslint(generatedDir);
@@ -376,11 +396,28 @@ export async function hasGeneratedScaffold(projectDir: string): Promise<boolean>
   if (!(await isScaffoldValid(dir))) return false;
   try {
     const appTsx = await readFile(`${dir}/${P.SRC.APP_TSX}`);
-    // Old pattern: our code wrote an App.tsx that wraps ./components/Generated
+    // Old pattern: code that wraps ./components/Generated needs a full re-scaffold
     if (appTsx.includes("./components/Generated")) return false;
+    // Missing router.tsx needs a full re-scaffold
+    await readFile(`${dir}/${P.SRC.ROUTER_TSX}`);
+    // Note: if App.tsx is missing AppRouter, RunnerPanel migrates it silently
   } catch {
     return false;
   }
   return true;
+}
+
+/**
+ * Sync Vite proxy config for the generated/ app.
+ * Called from the API panel whenever API keys / proxy mappings change.
+ *
+ * @param generatedDir  Absolute path to the generated/ directory
+ * @param proxy         Map of path prefix → target host
+ */
+export async function syncViteProxy(
+  generatedDir: string,
+  proxy: Record<string, string>
+): Promise<void> {
+  await writeFile(`${generatedDir}/${P.VITE_CONFIG_TS}`, getGeneratedViteConfig(proxy));
 }
 

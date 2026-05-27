@@ -25,7 +25,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Separator } from "@/components/ui/separator";
-import { loadNavigation, saveNavigation, addNavLink, removeNavLink, type Navigation } from "@/lib/navigation";
+import { loadNavigation, saveNavigation, addNavLink, removeNavLink, syncGeneratedRouter, type Navigation } from "@/lib/navigation";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -185,6 +185,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
             eds
           )
         );
+        await syncGeneratedRouter(projectDir);
       } catch (e) {
         notify.error("Failed to add navigation link", getErrorMessage(e));
       }
@@ -201,6 +202,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
           notify.error("Failed to remove navigation link", getErrorMessage(e));
         }
       }
+      try { await syncGeneratedRouter(projectDir); } catch (e) { notify.error("Failed to sync router", getErrorMessage(e)); }
     },
     [projectDir]
   );
@@ -220,6 +222,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
           const nav = await loadNavigation(projectDir);
           nav.defaultScreen = id;
           await saveNavigation(projectDir, nav);
+          await syncGeneratedRouter(projectDir);
           setNodes((nds) =>
             nds.map((n) => ({
               ...n,

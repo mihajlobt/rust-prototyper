@@ -63,6 +63,7 @@ export interface ProjectSettings {
   apisAuthTokenUrl: string;
   apisAuthClientId: string;
   apisAuthClientSecret: string;
+  apisProxyPath: string;
   apisShowInspector: boolean;
 
   // Component preview
@@ -124,6 +125,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   apisAuthTokenUrl: "",
   apisAuthClientId: "",
   apisAuthClientSecret: "",
+  apisProxyPath: "",
   apisShowInspector: false,
 
   shadcnMode: true,
