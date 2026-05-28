@@ -27,6 +27,13 @@ import type { SectionName } from "@/components/ProjectExplorer";
 // Extends component-preview's tsconfig (two levels up from components/<id>/ or screens/<id>/).
 // Written at creation/duplicate time so run_tsc can check only this file without output filtering.
 // See: https://github.com/microsoft/TypeScript/issues/41865
+async function syncRoutes(base: string) {
+  const { skipped } = await syncScreenPreviewRoutes(base);
+  for (const s of skipped) {
+    notify.warning(`Screen "${s.name}" excluded from preview`, s.reason);
+  }
+}
+
 const componentTsconfig = JSON.stringify({
   extends: "../../component-preview/tsconfig.app.json",
   compilerOptions: {
@@ -105,7 +112,7 @@ export function SidebarRail() {
           await writeFile(`${dir}/chat.json`, "[]");
           await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
           await addScreenToNavigation(base, id);
-          await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+          await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
           break;
         }
         case "component": {
@@ -156,7 +163,7 @@ export function SidebarRail() {
       }
       if (section === "screens") {
         await removeScreenFromNavigation(base, name);
-        await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+        await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
@@ -182,7 +189,7 @@ export function SidebarRail() {
       }
       if (section === "screens") {
         await renameScreenInNavigation(base, name, newId);
-        await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+        await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
       setRenameTarget(null);
@@ -204,7 +211,7 @@ export function SidebarRail() {
         await writeFile(`${dir}/chat.json`, chat);
         await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
         await addScreenToNavigation(base, newId);
-        await syncScreenPreviewRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+        await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       } else if (section === "components") {
         const dir = `${base}/components/${newId}`;
         await createDir(dir);

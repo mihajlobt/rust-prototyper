@@ -198,6 +198,11 @@ export function ScreensPanel() {
     createDir(parentDir)
       .then(() => writeFile(screenPath, code))
       .then(() => syncScreenPreviewRoutes(`projects/${settings.project}`))
+      .then(({ skipped }) => {
+        for (const s of skipped) {
+          notify.warning(`Screen "${s.name}" excluded from preview`, s.reason);
+        }
+      })
       .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
     // Write to screen-preview Generated.tsx for live HMR preview
     createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
