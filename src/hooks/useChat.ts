@@ -248,14 +248,17 @@ function createStreamHandler(params: StreamHandlerParams) {
       useChatStore.getState().setStreamingThinking(entityId, "")
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
-      if (tool === "write_file" && success) {
-        toolWritten = true
-        // Clear any streaming text that was accumulating before this write
-        contentAccumulated = ""
-        useChatStore.getState().setStreamingContent(entityId, "")
-        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        // Only fire onCodeOutput when writing the designated primary output file.
-        // Secondary writes (services, helpers) produce a ToolResult but don't update the editor.
+      if ((tool === "write_file" || tool === "edit_file") && success) {
+        if (tool === "write_file") {
+          toolWritten = true
+          // Clear any streaming text that was accumulating before this write
+          contentAccumulated = ""
+          useChatStore.getState().setStreamingContent(entityId, "")
+          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+        }
+        // Fire onCodeOutput for write_file and edit_file when the path matches the
+        // designated primary output file. edit_file sends the full post-edit content
+        // in `content` (written_content from executor), so the preview stays in sync.
         if (content && outputPath && path === outputPath) {
           onCodeOutputRef.current?.(stripFences(content))
         }

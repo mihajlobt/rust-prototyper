@@ -1,6 +1,37 @@
 import { memo } from "react"
-import { Copy, Code2, RefreshCw, Trash2, Sparkles } from "lucide-react"
+import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { MentionAsset } from "@/types/chat"
+
+/** Icon for a mention asset type, matching ProjectExplorer colors */
+function mentionIcon(type: MentionAsset["type"]) {
+  switch (type) {
+    case "screen": return <Layout size={13} className="shrink-0 text-blue-400" />
+    case "component": return <Box size={13} className="shrink-0 text-purple-400" />
+    case "theme": return <Palette size={13} className="shrink-0 text-pink-400" />
+    case "api": return <Globe size={13} className="shrink-0 text-yellow-400" />
+  }
+}
+
+const MENTION_TYPE_LABEL: Record<MentionAsset["type"], string> = {
+  screen: "Screen",
+  component: "Component",
+  theme: "Theme",
+  api: "API",
+}
+
+/** Card showing a referenced project item in a user message */
+function MentionCard({ mention }: { mention: { type: MentionAsset["type"]; name: string; description?: string } }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs max-w-[220px]">
+      <span className="mt-0.5">{mentionIcon(mention.type)}</span>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-foreground truncate">{mention.name}</div>
+        <div className="text-muted-foreground text-[10px] leading-tight truncate">{mention.description ?? MENTION_TYPE_LABEL[mention.type]}</div>
+      </div>
+    </div>
+  )
+}
 
 /** Small action button used inside message action rows. */
 function MsgActionBtn({ className, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -78,15 +109,17 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
       }
     }
     case "edit_file": {
-      // Output is now "Edit applied successfully." instead of byte counts
+      const oldString = typeof tc.arguments.old_string === "string" ? tc.arguments.old_string : undefined
+      const newString = typeof tc.arguments.new_string === "string" ? tc.arguments.new_string : undefined
       return {
         type: "edit_file",
         state,
         input: {
           path: (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown",
-          ...(tc.arguments.replace_all ? { replaceAll: "true" } : {}),
         },
-        output: tc.result !== undefined ? { result: tc.result } : undefined,
+        diff: oldString !== undefined && newString !== undefined
+          ? { oldString, newString }
+          : undefined,
         errorText: tc.success === false ? tc.result : undefined,
       }
     }
@@ -218,10 +251,31 @@ const MessageBubble = memo(function MessageBubble({
 
   // ── User message ──────────────────────────────────────────────────
   if (message.role === "user") {
+    const hasImages = !!message.images?.length
+    const hasMentions = !!message.mentions?.length
     return (
       <Message className="justify-end group">
         <div className="flex flex-col items-end gap-1 max-w-[85%]">
-          <MessageContent className="text-sm">
+          {hasImages && (
+            <div className="flex gap-1 flex-wrap justify-end">
+              {message.images!.map((img, imgIdx) => (
+                <img
+                  key={imgIdx}
+                  src={`data:image/png;base64,${img}`}
+                  alt="Attached image"
+                  className="max-h-20 max-w-20 rounded object-contain border border-border"
+                />
+              ))}
+            </div>
+          )}
+          {hasMentions && (
+            <div className="flex gap-1.5 flex-wrap justify-end">
+              {message.mentions!.map((m) => (
+                <MentionCard key={`${m.type}-${m.name}`} mention={m} />
+              ))}
+            </div>
+          )}
+          <MessageContent markdown className="text-sm">
             {content}
           </MessageContent>
           <MessageActions className="opacity-0 group-hover:opacity-100 transition-opacity">
