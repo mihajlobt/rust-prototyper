@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { writeFile, createDir, readFile, deleteFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -289,9 +289,12 @@ export function ScreensPanel() {
     onCodeOutput: (code) => applyScreenCode(code),
   });
 
-  // Sync @component mentions into screen-preview/src/components/ so that
-  // `import X from '@/components/{name}'` in generated screens resolves correctly.
+  // Sync @component mentions into screen-preview/src/components/.
+  // Copy on add, delete on remove — no stale files left behind.
+  const prevComponentMentionIds = useRef<Set<string>>(new Set());
   useEffect(() => {
+    const current = new Set(mentions.filter((m) => m.type === "component").map((m) => m.id));
+    // Copy new/updated components
     for (const m of mentions) {
       if (m.type === "component" && m.code) {
         createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
@@ -299,6 +302,13 @@ export function ScreensPanel() {
           .catch(() => {});
       }
     }
+    // Delete removed components
+    for (const id of prevComponentMentionIds.current) {
+      if (!current.has(id)) {
+        deleteFile(`${screenPreviewDir}/src/components/${id}.tsx`).catch(() => {});
+      }
+    }
+    prevComponentMentionIds.current = current;
   }, [mentions, screenPreviewDir]);
 
   useEffect(() => {

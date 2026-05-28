@@ -17,7 +17,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { writeFile, createDir, readDir, readFile, deleteFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -342,14 +342,22 @@ export function ComponentsPanel() {
     }
   }, [settings.project, selectedComponent, queryClient, componentPreviewDir, setPs]);
 
-  // Sync @component mentions into the preview project so imports like
-  // `@/components/{name}` resolve when Vite compiles the generated component.
+  // Sync @component mentions into component-preview/src/components/.
+  // Copy on add, delete on remove — no stale files left behind.
+  const prevComponentMentionIds = useRef<Set<string>>(new Set());
   useEffect(() => {
+    const current = new Set(mentions.filter((m) => m.type === "component").map((m) => m.id));
     for (const m of mentions) {
       if (m.type === "component" && m.code) {
         writeFile(`${componentPreviewDir}/src/components/${m.id}.tsx`, m.code).catch(() => {});
       }
     }
+    for (const id of prevComponentMentionIds.current) {
+      if (!current.has(id)) {
+        deleteFile(`${componentPreviewDir}/src/components/${id}.tsx`).catch(() => {});
+      }
+    }
+    prevComponentMentionIds.current = current;
   }, [mentions, componentPreviewDir]);
 
   const deviceWidth = {
