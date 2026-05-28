@@ -342,6 +342,33 @@ describe("syncScreenPreviewRoutes", () => {
     expect(routes).toContain("import Screen0 from '@/screens/home/screen'");
     expect(routes).not.toContain("draft");
   });
+
+  it("skips screen.tsx files that exist but have no export default (broken/partial write)", async () => {
+    const { __files, __dirs } = await getIpcMocks();
+    __dirs.set(`${PROJECT}/screens`, [
+      { name: "home", is_dir: true },
+      { name: "broken", is_dir: true }, // screen.tsx exists but has no export default
+    ]);
+    __files.set(`${PROJECT}/screens/home/screen.tsx`, "export default function App() {}");
+    __files.set(
+      `${PROJECT}/screens/broken/screen.tsx`,
+      "useEffect(() => { const t = setTimeout(() => {}, 500); return () => clearTimeout(t); }, []);",
+    );
+    await setNavFile({
+      defaultScreen: "home",
+      screens: [
+        { id: "home", path: "/", title: "Home" },
+        { id: "broken", path: "/broken", title: "Broken" },
+      ],
+      links: [],
+    });
+
+    await syncScreenPreviewRoutes(PROJECT);
+
+    const routes = __files.get(`${PROJECT}/screen-preview/src/routes.ts`)!;
+    expect(routes).toContain("import Screen0 from '@/screens/home/screen'");
+    expect(routes).not.toContain("broken");
+  });
 });
 
 // ─── syncGeneratedRouter ──────────────────────────────────────────────────────

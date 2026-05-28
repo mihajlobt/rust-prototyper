@@ -160,8 +160,8 @@ export async function syncGeneratedRouter(projectDir: string): Promise<void> {
 
 /**
  * Write screen-preview/src/routes.ts from current screens in navigation.json.
- * Called whenever screens are created, deleted, or renamed.
- * Uses a symlink screen-preview/src/screens → ../../../screens/ set up at scaffold time.
+ * Called whenever screens are created, deleted, renamed, or written by the AI agent.
+ * Uses a symlink screen-preview/src/screens → ../../screens set up by ensureScreenSymlink().
  */
 export async function syncScreenPreviewRoutes(projectDir: string): Promise<void> {
   const screenPreviewDir = `${projectDir}/screen-preview`;
@@ -178,13 +178,15 @@ export async function syncScreenPreviewRoutes(projectDir: string): Promise<void>
   const nav = await loadNavigation(projectDir);
   const navById = new Map(nav.screens.map((s) => [s.id, s]));
 
-  // Build routes from filesystem — only include screens that have a screen.tsx on disk.
-  // Directories without a screen.tsx (e.g. created by UI but not yet written by the agent)
-  // would cause a Vite import error if included.
+  // Build routes from filesystem — only include screens that have a valid screen.tsx on disk.
+  // "Valid" means the file exists AND contains `export default`, so Vite can resolve the default
+  // import in routes.ts. A file without a default export (e.g. a partial/broken write) would
+  // cause a WebKit ESM error that blanks the entire preview for all screens.
   const screenEntriesWithFile = await Promise.all(
     screenEntries.map(async (entry) => {
       try {
-        await readFile(`${projectDir}/screens/${entry.name}/screen.tsx`);
+        const content = await readFile(`${projectDir}/screens/${entry.name}/screen.tsx`);
+        if (!content.includes("export default")) return null;
         return entry;
       } catch {
         return null;
