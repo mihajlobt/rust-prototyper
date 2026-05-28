@@ -428,6 +428,27 @@ export function SettingsModal() {
                       </div>
                     )}
                   </section>
+
+                  {/* Max Tool Calls */}
+                  <section className="space-y-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Max Tool Calls</p>
+                    <div className="space-y-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        className="w-24 text-xs"
+                        value={settings.maxToolCalls}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value, 10);
+                          if (!isNaN(n) && n >= 1) setSettings({ maxToolCalls: n });
+                        }}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Maximum number of tool-call iterations the agent runs per generation. Default: 20.
+                      </p>
+                    </div>
+                  </section>
                 </div>
             </ScrollArea>
           </TabsContent>

@@ -332,10 +332,13 @@ pub struct AgentLoopParams<'a> {
     pub app_handle: &'a tauri::AppHandle,
     pub permission_mode: ToolPermissionMode,
     pub tool_allowlist: HashSet<String>,
+    /// Override for MAX_ITERATIONS. None or 0 falls back to the compiled default.
+    pub max_tool_calls: Option<u8>,
 }
 
 pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
-    let AgentLoopParams { http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist } = params;
+    let AgentLoopParams { http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls } = params;
+    let max_iterations = max_tool_calls.filter(|&n| n > 0).unwrap_or(MAX_ITERATIONS);
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
     setup_project_dir(&proj_dir).await;
@@ -379,11 +382,11 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
             break;
         }
 
-        if iteration >= MAX_ITERATIONS {
+        if iteration >= max_iterations {
             let _ = channel.send(CompletionEvent::Error {
-                message: format!("Max tool iterations ({MAX_ITERATIONS}) reached"),
+                message: format!("Max tool iterations ({max_iterations}) reached"),
             });
-            return Err(AppError::Process(format!("Max tool iterations ({MAX_ITERATIONS}) reached")));
+            return Err(AppError::Process(format!("Max tool iterations ({max_iterations}) reached")));
         }
 
         let names: Vec<String> = tool_calls.iter().map(|(n, _)| n.clone()).collect();

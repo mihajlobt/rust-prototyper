@@ -94,6 +94,10 @@ pub struct CompletionRequest {
     /// Used for model-specific behaviour like Gemma4's <|think|> system prompt prefix.
     #[serde(default)]
     pub model_family: Option<String>,
+    /// Maximum number of tool-call iterations the agent loop will run.
+    /// Defaults to MAX_ITERATIONS in agent_loop.rs when absent or zero.
+    #[serde(default)]
+    pub max_tool_calls: Option<u8>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -208,6 +212,7 @@ async fn generate_ollama_completion_stream(
             app_handle,
             permission_mode: request.tool_permission_mode,
             tool_allowlist: allowlist,
+            max_tool_calls: request.max_tool_calls,
         }).await
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name

@@ -7,7 +7,17 @@ Note: define_program, flag, opt, ARG_* are built-in globals — no load() needed
 define_program(
     program="ls",
     system_path=["/usr/bin/ls", "/bin/ls"],
-    args=[ARG_UNVERIFIED_VARARGS],
+    options=[
+        flag("-l"),
+        flag("-a"),
+        flag("-A"),
+        flag("-h"),
+        flag("-1"),
+        flag("--long"),
+        flag("--all"),
+        flag("--human-readable"),
+    ],
+    args=[ARG_OPAQUE_VALUE],
 )
 
 define_program(
@@ -19,6 +29,54 @@ define_program(
 define_program(
     program="head",
     system_path=["/usr/bin/head", "/bin/head"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="wc",
+    system_path=["/usr/bin/wc", "/bin/wc"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="tail",
+    system_path=["/usr/bin/tail", "/bin/tail"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="sort",
+    system_path=["/usr/bin/sort", "/bin/sort"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="uniq",
+    system_path=["/usr/bin/uniq", "/bin/uniq"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="du",
+    system_path=["/usr/bin/du", "/bin/du"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="file",
+    system_path=["/usr/bin/file", "/bin/file"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="stat",
+    system_path=["/usr/bin/stat", "/bin/stat"],
+    args=[ARG_OPAQUE_VALUE],
+)
+
+define_program(
+    program="tree",
+    system_path=["/usr/bin/tree", "/bin/tree"],
     args=[ARG_OPAQUE_VALUE],
 )
 

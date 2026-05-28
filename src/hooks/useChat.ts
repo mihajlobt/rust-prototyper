@@ -299,6 +299,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const modelOptions  = useAppStore((s) => s.settings.modelOptions)
   const toolPermissionMode = useAppStore((s) => s.settings.toolPermissionMode)
   const toolAllowlist = useAppStore((s) => s.settings.toolAllowlist)
+  const maxToolCalls = useAppStore((s) => s.settings.maxToolCalls)
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -476,6 +477,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         toolPermissionMode,
         toolAllowlist,
         caps.family,
+        maxToolCalls,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -488,7 +490,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     input, attachments, mentions, entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
-    toolPermissionMode, toolAllowlist,
+    toolPermissionMode, toolAllowlist, maxToolCalls,
   ])
 
   const clearChat = useCallback(() => {
@@ -571,6 +573,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         toolPermissionMode,
         toolAllowlist,
         caps.family,
+        maxToolCalls,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -583,7 +586,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
-    toolPermissionMode, toolAllowlist,
+    toolPermissionMode, toolAllowlist, maxToolCalls,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {

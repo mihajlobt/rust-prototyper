@@ -101,6 +101,10 @@ export async function revealInExplorer(path: string): Promise<void> {
   return invoke("reveal_in_explorer", { path });
 }
 
+export async function createSymlink(linkPath: string, target: string): Promise<void> {
+  return invoke("create_symlink", { linkPath, target });
+}
+
 /** Convert a Rust-side file path to a URL loadable in the webview */
 export function toFileUrl(filePath: string): string {
   return convertFileSrc(filePath);
@@ -244,6 +248,7 @@ export async function generateCompletionStream(
   toolPermissionMode?: ToolPermissionMode,
   toolAllowlist?: string[],
   modelFamily?: string,
+  maxToolCalls?: number,
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -258,6 +263,7 @@ export async function generateCompletionStream(
       toolPermissionMode: toolPermissionMode ?? "ask_every_time",
       toolAllowlist: toolAllowlist ?? [],
       modelFamily: modelFamily ?? null,
+      maxToolCalls: maxToolCalls ?? null,
     },
     onEvent,
   });

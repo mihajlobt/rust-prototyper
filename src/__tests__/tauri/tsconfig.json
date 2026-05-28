@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@wdio/globals/types", "mocha", "node"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["../../../node_modules"]
+}

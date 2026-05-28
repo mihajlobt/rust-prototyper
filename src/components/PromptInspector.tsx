@@ -3,7 +3,6 @@ import { encodingForModel } from "js-tiktoken";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Copy, Eye } from "lucide-react";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import type { Provider } from "@/lib/ipc";
 import type { Message } from "@/lib/ipc";
@@ -37,6 +36,15 @@ function countTokens(text: string, model: string): number {
   }
 }
 
+function serializeMessage(m: Message): Record<string, unknown> {
+  const result: Record<string, unknown> = { role: m.role, content: m.content };
+  if (m.images?.length) result["images"] = m.images;
+  if (m.thinking) result["thinking"] = m.thinking;
+  if (m.tool_calls?.length) result["tool_calls"] = m.tool_calls;
+  if (m.tool_name) result["tool_name"] = m.tool_name;
+  return result;
+}
+
 function buildOllamaPayload(
   model: string,
   messages: Message[],
@@ -46,7 +54,7 @@ function buildOllamaPayload(
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     model,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: messages.map(serializeMessage),
     stream,
   };
   if (think !== undefined) payload["think"] = think;
@@ -58,7 +66,10 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
   const caps = useModelCapabilities(model);
   const contextWindow = caps.contextLength ?? 8192;
 
-  const assembled = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
+  const assembled = messages.map((m) => {
+    const imageNote = m.images?.length ? `\n[${m.images.length} image(s) attached]` : "";
+    return `${m.role}: ${m.content}${imageNote}`;
+  }).join("\n\n");
   const tokenCount = useMemo(() => countTokens(assembled, model), [assembled, model]);
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
 
@@ -71,13 +82,13 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
     : provider === "claude"
       ? JSON.stringify({
           model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          messages: messages.map(serializeMessage),
           max_tokens: 4096,
           stream: true,
         }, null, 2)
       : JSON.stringify({
           model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          messages: messages.map(serializeMessage),
           stream: true,
         }, null, 2);
 
@@ -86,23 +97,20 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
     : provider === "claude"
       ? `curl -X POST https://api.anthropic.com/v1/messages \\\n  -H "Content-Type: application/json" \\\n  -H "x-api-key: $ANTHROPIC_API_KEY" \\\n  -H "anthropic-version: 2023-06-01" \\\n  -d '${JSON.stringify({
           model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          messages: messages.map(serializeMessage),
           max_tokens: 4096,
         })}'`
       : `curl -X POST https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '${JSON.stringify({
           model,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          messages: messages.map(serializeMessage),
         })}'`;
 
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
   const handleCopy = async (text: string, tab: string) => {
-    await writeText(text);
+    await navigator.clipboard.writeText(text);
     setCopiedTab(tab);
-  };
-
-  const handleCopiedAnimationEnd = () => {
-    setCopiedTab(null);
+    setTimeout(() => setCopiedTab(null), 1500);
   };
 
   return (
@@ -141,9 +149,7 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
             onClick={() => handleCopy(assembled, "assembled")}
           >
             <Copy size={12} />
-            {copiedTab === "assembled" ? (
-              <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
-            ) : "Copy"}
+            {copiedTab === "assembled" ? "Copied!" : "Copy"}
           </Button>
           <CodeMirrorEditor value={assembled} mode="markdown" readOnly />
         </TabsContent>
@@ -156,9 +162,7 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
             onClick={() => handleCopy(payload, "json")}
           >
             <Copy size={12} />
-            {copiedTab === "json" ? (
-              <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
-            ) : "Copy"}
+            {copiedTab === "json" ? "Copied!" : "Copy"}
           </Button>
           <CodeMirrorEditor value={payload} mode="json" readOnly />
         </TabsContent>
@@ -171,9 +175,7 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
             onClick={() => handleCopy(curl, "curl")}
           >
             <Copy size={12} />
-            {copiedTab === "curl" ? (
-              <span className="animate-fade-out" onAnimationEnd={handleCopiedAnimationEnd}>Copied!</span>
-            ) : "Copy"}
+            {copiedTab === "curl" ? "Copied!" : "Copy"}
           </Button>
           <CodeMirrorEditor value={curl} mode="shell" readOnly />
         </TabsContent>

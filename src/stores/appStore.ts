@@ -43,6 +43,7 @@ export interface Settings {
   modelOptions: OllamaModelOptions;
   toolPermissionMode: ToolPermissionMode;
   toolAllowlist: string[];
+  maxToolCalls: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -64,6 +65,7 @@ const DEFAULT_SETTINGS: Settings = {
   modelOptions: {},
   toolPermissionMode: "ask_every_time",
   toolAllowlist: [],
+  maxToolCalls: 20,
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

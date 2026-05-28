@@ -44,12 +44,12 @@ pub async fn execute_tool(
         "write_file" => execute_write_file(args, app_data_dir, output_path, project_dir).await,
         "read_file" => execute_read_file(args, app_data_dir, project_dir).await,
         "edit_file" => execute_edit_file(args, app_data_dir, project_dir).await,
-        "bash" => execute_bash(args, project_dir).await,
+        "bash" => execute_bash(args, app_data_dir).await,
         "run_tsc" => execute_run_tsc(args, project_dir).await,
         "run_lint" => execute_run_lint(args, project_dir).await,
         "run_build" => execute_run_build(args, project_dir).await,
-        "glob" => execute_glob(args, project_dir).await,
-        "grep" => execute_grep(args, project_dir).await,
+        "glob" => execute_glob(args, app_data_dir).await,
+        "grep" => execute_grep(args, app_data_dir).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
@@ -608,8 +608,11 @@ async fn execute_run_tsc(
             .unwrap_or((project_relative, "component.tsx"));
         let preview_dir = preview_dir_for_path(project_relative);
         let tsconfig_path = project_dir.join(dir).join("tsconfig.json");
-        // Auto-create the per-file tsconfig if the agent wrote the file directly (bypassing SidebarRail)
-        if !tsconfig_path.exists() {
+        // Always overwrite the per-file tsconfig so the extends path is always correct
+        // for the right preview project (component-preview vs screen-preview).
+        // Stale tsconfigs that extend the wrong preview dir cause the entire wrong project
+        // to be typechecked, producing hundreds of spurious errors.
+        {
             let extend_base = format!("../../{preview_dir}/tsconfig.app.json");
             let type_roots = format!("../../{preview_dir}/node_modules/@types");
             let tsconfig_content = format!(
@@ -705,7 +708,19 @@ async fn execute_run_lint(
         &parsed.path
     };
     let preview_dir = preview_dir_for_path(project_relative);
-    let escaped = match shlex::try_quote(&format!("../{}", project_relative)) {
+    // ESLint v9 flat config only covers files within its project root directory tree.
+    // Files outside (e.g. `../components/...`, `../screens/...`) cause "couldn't find
+    // eslint.config.js" because ESLint searches upward from the linted file, not CWD.
+    //
+    // Screens: screen-preview copies screens to src/screens/{id}/screen.tsx — lint that copy.
+    // Everything else (components/, themes/, etc.): pass --config eslint.config.js explicitly
+    // so ESLint uses the preview project's config without needing to find it by traversal.
+    let (lint_target, explicit_config) = if project_relative.starts_with("screens/") {
+        (format!("src/{}", project_relative), false)
+    } else {
+        (format!("../{}", project_relative), true)
+    };
+    let escaped = match shlex::try_quote(&lint_target) {
         Ok(s) => s.into_owned(),
         Err(_) => return ToolExecutionResult {
             success: false,
@@ -714,7 +729,12 @@ async fn execute_run_lint(
             written_content: None,
         },
     };
-    let command = format!("cd {preview_dir} && bunx eslint {} 2>&1; echo \"EXIT:$?\"", escaped);
+    let eslint_cmd = if explicit_config {
+        format!("bunx eslint --config eslint.config.js {}", escaped)
+    } else {
+        format!("bunx eslint {}", escaped)
+    };
+    let command = format!("cd {preview_dir} && {} 2>&1; echo \"EXIT:$?\"", eslint_cmd);
     let raw = run_sandboxed_command(&command, project_dir).await;
 
     let (body, exit_code) = extract_exit_code(&raw);
@@ -778,7 +798,7 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
     }
 }
 
-async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
+async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<GlobArgs>(args.clone()) {
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
@@ -798,7 +818,10 @@ async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
         };
     }
 
-    let escaped_pattern = match shlex::try_quote(&parsed.pattern) {
+    // Extract the non-glob prefix as the find base directory so recursive search works.
+    // "projects/newesttest/**/*" → base "projects/newesttest", find runs from app_data_dir.
+    let base = glob_base_dir(&parsed.pattern);
+    let escaped_base = match shlex::try_quote(base) {
         Ok(q) => q.into_owned(),
         Err(_) => return ToolExecutionResult {
             success: false,
@@ -808,11 +831,12 @@ async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
         },
     };
 
-    // Use find with -path for glob matching; strip the leading "./" from results.
+    // Run recursive find from the base directory; no -path filter needed because
+    // find already searches only within the given base.
     let command = format!(
-        r#"find . -path {escaped_pattern} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f | sed 's|^\./||' | head -100; echo "EXIT:$?""#
+        r#"find {escaped_base} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f | head -200; echo "EXIT:$?""#
     );
-    let raw = run_sandboxed_command(&command, project_dir).await;
+    let raw = run_sandboxed_command(&command, app_data_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     ToolExecutionResult {
@@ -823,7 +847,7 @@ async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
     }
 }
 
-async fn execute_grep(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
+async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<GrepArgs>(args.clone()) {
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
@@ -867,7 +891,7 @@ async fn execute_grep(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
     let command = format!(
         r#"grep -rn --include='*.tsx' --include='*.ts' --include='*.css' --include='*.json' --exclude-dir=node_modules --exclude-dir=.git {escaped_pattern} {escaped_path} | head -100; echo "EXIT:$?""#
     );
-    let raw = run_sandboxed_command(&command, project_dir).await;
+    let raw = run_sandboxed_command(&command, app_data_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     // grep exits 1 when no matches found — that's not an error for our purposes.
@@ -946,10 +970,47 @@ async fn run_sandboxed_command(command: &str, project_dir: &Path) -> String {
     }
 }
 
+/// Expand combined short flags so the execpolicy sandbox can match them individually.
+/// agcodex-execpolicy 0.1 does not support option_bundling, so `-la` → `-l -a`.
+fn expand_combined_flags(command: &str) -> String {
+    let tokens = match shlex::split(command) {
+        Some(t) => t,
+        None => return command.to_string(),
+    };
+    let mut parts: Vec<String> = Vec::with_capacity(tokens.len() * 2);
+    for token in &tokens {
+        // Combined short flags: single '-', length > 2, all ASCII letters after '-'
+        if token.starts_with('-')
+            && !token.starts_with("--")
+            && token.len() > 2
+            && token[1..].chars().all(|c| c.is_ascii_alphabetic())
+        {
+            for ch in token[1..].chars() {
+                parts.push(format!("-{ch}"));
+            }
+        } else {
+            let quoted = shlex::try_quote(token).map(|q| q.into_owned()).unwrap_or_else(|_| token.to_string());
+            parts.push(quoted);
+        }
+    }
+    parts.join(" ")
+}
+
+/// Extract the non-glob prefix directory from a glob pattern so find can use it as the base.
+/// `projects/newesttest/**/*.tsx` → `projects/newesttest`
+fn glob_base_dir(pattern: &str) -> &str {
+    let first_glob = pattern.find(['*', '?', '[']).unwrap_or(pattern.len());
+    let before_glob = &pattern[..first_glob];
+    match before_glob.rfind('/') {
+        Some(pos) => &pattern[..pos],
+        None => ".",
+    }
+}
+
 #[cfg(target_os = "linux")]
 async fn execute_bash(
     args: &serde_json::Value,
-    project_dir: &Path,
+    app_data_dir: &Path,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<BashArgs>(args.clone()) {
         Ok(p) => p,
@@ -961,7 +1022,8 @@ async fn execute_bash(
         },
     };
 
-    match crate::sandbox::execute_sandboxed(&parsed.command, project_dir, 30).await {
+    let command = expand_combined_flags(&parsed.command);
+    match crate::sandbox::execute_sandboxed(&command, app_data_dir, 30).await {
         Ok(result) => result,
         Err(crate::sandbox::SandboxError::InjectionDetected(detail)) => ToolExecutionResult {
             success: false,
@@ -987,7 +1049,7 @@ async fn execute_bash(
 #[cfg(not(target_os = "linux"))]
 async fn execute_bash(
     args: &serde_json::Value,
-    project_dir: &Path,
+    app_data_dir: &Path,
 ) -> ToolExecutionResult {
     use std::process::Stdio;
     use tokio::process::Command;
@@ -1006,7 +1068,7 @@ async fn execute_bash(
     let child = match Command::new("sh")
         .arg("-c")
         .arg(&parsed.command)
-        .current_dir(project_dir)
+        .current_dir(app_data_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
