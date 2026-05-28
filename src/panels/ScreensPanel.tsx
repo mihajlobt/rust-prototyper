@@ -294,9 +294,9 @@ export function ScreensPanel() {
   const prevComponentMentionIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     const current = new Set(mentions.filter((m) => m.type === "component").map((m) => m.id));
-    // Copy new/updated components
+    // Copy newly-added components only
     for (const m of mentions) {
-      if (m.type === "component" && m.code) {
+      if (m.type === "component" && m.code && !prevComponentMentionIds.current.has(m.id)) {
         createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
           .then(() => writeFile(`${screenPreviewDir}/src/components/${m.id}.tsx`, m.code))
           .catch(() => {});

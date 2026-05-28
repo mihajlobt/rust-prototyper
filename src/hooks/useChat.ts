@@ -256,7 +256,7 @@ function createStreamHandler(params: StreamHandlerParams) {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         // Only fire onCodeOutput when writing the designated primary output file.
         // Secondary writes (services, helpers) produce a ToolResult but don't update the editor.
-        if (content && (!outputPath || path === outputPath)) {
+        if (content && outputPath && path === outputPath) {
           onCodeOutputRef.current?.(stripFences(content))
         }
       }

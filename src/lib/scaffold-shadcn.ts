@@ -92,6 +92,28 @@ export function patchEslintConfig(config: string): string {
 }
 
 /**
+ * Patches a shadcn-generated vite.config.ts to add `server.fs.allow: [".."]`.
+ * Without this, Vite blocks imports from symlinked paths outside the project root
+ * (e.g. screen-preview/src/screens → ../../screens).
+ * Idempotent — safe to call repeatedly.
+ */
+export function patchViteFsAllow(config: string): string {
+  if (config.includes("fs:") && config.includes("allow:")) return config;
+  if (config.includes("server:")) {
+    // Merge fs.allow into existing server block
+    return config.replace(
+      /server:\s*\{/,
+      "server: {\n    fs: {\n      allow: [\"..\"],\n    },"
+    );
+  }
+  // Add server block before the closing })
+  return config.replace(
+    /,\n\}\)$/,
+    `,\n  server: {\n    fs: {\n      allow: [".."],\n    },\n  },\n})`
+  );
+}
+
+/**
  * Returns the App.tsx for the component-preview/ or screen-preview/ project.
  * Sets dark class on documentElement so body { bg-background } picks up the
  * dark CSS variables. Reads initial state from ?dark= query param (sync, before
@@ -194,10 +216,24 @@ export function getScreenPreviewAppTsx(): string {
   return `import React, { useEffect } from "react"
 import "./index.css"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { routes, defaultPath } from "./routes";
 
 const queryClient = new QueryClient()
+
+function NavigationListener() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    function handler(event: MessageEvent) {
+      if (event.data?.type === "navigate" && typeof event.data.path === "string") {
+        navigate(event.data.path);
+      }
+    }
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [navigate]);
+  return null;
+}
 
 function App() {
   useEffect(() => {
@@ -221,6 +257,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <NavigationListener />
         <Routes>
           {routes.map((r) => (
             <Route key={r.path} path={r.path} element={<r.component />} />

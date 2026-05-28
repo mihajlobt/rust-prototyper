@@ -100,9 +100,16 @@ async fn execute_write_file(
                 written_content: None,
             };
         }
-        let display = resolved.strip_prefix(app_data_dir)
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| model_path.to_string());
+        // strip_prefix cannot fail here: sandbox guarantees resolved ⊆ project_dir ⊆ app_data_dir.
+        let display = match resolved.strip_prefix(app_data_dir) {
+            Ok(p) => p.to_string_lossy().to_string(),
+            Err(_) => return ToolExecutionResult {
+                success: false,
+                output: format!("write_file: {}", ToolError::Security("path resolution failed".into())),
+                written_path: None,
+                written_content: None,
+            },
+        };
         (resolved, display)
     } else {
         if output_path.contains("..") {

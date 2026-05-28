@@ -348,7 +348,7 @@ export function ComponentsPanel() {
   useEffect(() => {
     const current = new Set(mentions.filter((m) => m.type === "component").map((m) => m.id));
     for (const m of mentions) {
-      if (m.type === "component" && m.code) {
+      if (m.type === "component" && m.code && !prevComponentMentionIds.current.has(m.id)) {
         writeFile(`${componentPreviewDir}/src/components/${m.id}.tsx`, m.code).catch(() => {});
       }
     }

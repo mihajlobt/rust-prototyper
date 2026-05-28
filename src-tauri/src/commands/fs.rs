@@ -65,6 +65,55 @@ pub async fn rename_file(from: String, to: String, app: AppHandle) -> Result<(),
 }
 
 #[tauri::command]
+pub async fn create_symlink(link_path: String, target: String, app: AppHandle) -> Result<(), AppError> {
+    let link = resolve_path(&app, &link_path)?;
+    let parent = link.parent().ok_or_else(|| AppError::Io(std::io::Error::other("link path has no parent")))?;
+    tokio::fs::create_dir_all(parent).await.map_err(AppError::Io)?;
+    if let Ok(existing) = tokio::fs::read_link(&link).await {
+        if existing.to_string_lossy() == target {
+            return Ok(());
+        }
+        tokio::fs::remove_file(&link).await.map_err(AppError::Io)?;
+    } else if tokio::fs::metadata(&link).await.is_ok() {
+        tokio::fs::remove_dir_all(&link).await.map_err(AppError::Io)?;
+    }
+    let target_owned = target.clone();
+    let link_owned = link.clone();
+    tokio::task::spawn_blocking(move || {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&target_owned, &link_owned)
+                .map_err(AppError::Io)?;
+        }
+        #[cfg(windows)]
+        {
+            let parent = link_owned.parent().ok_or_else(|| AppError::Io(std::io::Error::other("link path has no parent")))?;
+            let resolved_target = if std::path::Path::new(&target_owned).is_absolute() {
+                std::path::PathBuf::from(&target_owned)
+            } else {
+                parent.join(&target_owned)
+            };
+            let is_dir = resolved_target.is_dir();
+            let output = if is_dir {
+                std::process::Command::new("cmd")
+                    .args(["/C", "mklink", "/J", &link_owned.to_string_lossy(), &resolved_target.to_string_lossy()])
+                    .output()
+            } else {
+                std::process::Command::new("cmd")
+                    .args(["/C", "mklink", &link_owned.to_string_lossy(), &resolved_target.to_string_lossy()])
+                    .output()
+            }.map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(AppError::Io(std::io::Error::other(format!("mklink failed: {stderr}"))));
+            }
+        }
+        Ok::<(), AppError>(())
+    }).await.map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))??;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn reveal_in_explorer(path: String, app: AppHandle) -> Result<(), AppError> {
     let resolved = resolve_path(&app, &path)?;
     let target = if resolved.is_file() {
