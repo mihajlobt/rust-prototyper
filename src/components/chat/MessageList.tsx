@@ -72,54 +72,46 @@ function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
 
   switch (tc.tool) {
     case "write_file": {
-      // Output is now "Written N bytes to filepath" or empty
-      // tc.arguments may have 'content' as a string in the raw, or be an object
-      const writeContentLength = typeof tc.arguments.content === "string" ? tc.arguments.content.length : 0
+      const writePath = (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown"
+      const writeContent = typeof tc.arguments.content === "string" ? tc.arguments.content : undefined
       return {
         type: "write_file",
         state,
-        input: {
-          path: (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown",
-          ...(writeContentLength > 0 ? { size: `${writeContentLength} bytes` } : {}),
-        },
-        output: tc.result !== undefined ? { result: tc.result || "File written successfully" } : undefined,
+        input: { path: writePath },
+        fileContent: writeContent !== undefined
+          ? { path: writePath, content: writeContent }
+          : undefined,
+        errorText: tc.success === false ? tc.result : undefined,
       }
     }
     case "read_file": {
-      // Output is now XML: <path>...</path><content>1: line... 2: line...</content>
-      // Parse it for nicer display
-      let contents = tc.result
-      if (tc.result?.includes("<content>")) {
-        // Extract just the content between tags
-        const contentMatch = tc.result.match(/<content>([\s\S]*?)<\/content>/)
-        if (contentMatch) {
-          contents = contentMatch[1].trim()
-        }
+      const filePath = (tc.arguments.path as string) ?? tc.path ?? ""
+      // Extract content between XML tags when executor wraps it
+      let content = tc.result ?? ""
+      if (content.includes("<content>")) {
+        const match = content.match(/<content>([\s\S]*?)<\/content>/)
+        if (match) content = match[1].trim()
       }
       return {
         type: "read_file",
         state,
-        input: {
-          path: (tc.arguments.path as string) ?? tc.path,
-          ...(tc.arguments.offset ? { offset: String(tc.arguments.offset) } : {}),
-          ...(tc.arguments.limit ? { limit: String(tc.arguments.limit) } : {}),
-        },
-        output: tc.result !== undefined ? { contents: (contents ?? "").slice(0, 1000) + ((contents?.length ?? 0) > 1000 ? "\n... (truncated)" : "") } : undefined,
+        input: { path: filePath },
+        fileContent: tc.result !== undefined && tc.success !== false
+          ? { path: filePath, content }
+          : undefined,
         errorText: tc.success === false ? tc.result : undefined,
       }
     }
     case "edit_file": {
+      const editPath = (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown"
       const oldString = typeof tc.arguments.old_string === "string" ? tc.arguments.old_string : undefined
       const newString = typeof tc.arguments.new_string === "string" ? tc.arguments.new_string : undefined
       return {
         type: "edit_file",
         state,
-        input: {
-          path: (tc.arguments.path as string) ?? tc.path ?? filename ?? "unknown",
-        },
-        diff: oldString !== undefined && newString !== undefined
-          ? { oldString, newString }
-          : undefined,
+        input: { path: editPath },
+        diff: oldString !== undefined && newString !== undefined ? { oldString, newString } : undefined,
+        fileContent: { path: editPath, content: "" }, // path only, used for caption
         errorText: tc.success === false ? tc.result : undefined,
       }
     }

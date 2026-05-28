@@ -8,14 +8,11 @@ import {
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  CheckCircle,
-  ChevronDown,
-  Loader2,
-  Settings,
-  XCircle,
-} from "lucide-react"
+import { CheckCircle, ChevronDown, Loader2, Settings, XCircle } from "lucide-react"
 import { useState } from "react"
+import type { ReactNode } from "react"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ToolPart = {
   type: string
@@ -29,8 +26,10 @@ export type ToolPart = {
   output?: Record<string, unknown>
   toolCallId?: string
   errorText?: string
-  /** Present for edit_file — the before/after strings for diff rendering. */
+  /** edit_file: before/after strings for diff rendering. */
   diff?: { oldString: string; newString: string }
+  /** read_file / write_file: file content for code view rendering. */
+  fileContent?: { path: string; content: string }
 }
 
 export type ToolProps = {
@@ -45,7 +44,6 @@ const MAX_DIFF_LINES = 80
 
 function DiffBlock({ oldString, newString }: { oldString: string; newString: string }) {
   type DiffLine = { kind: "removed" | "added"; content: string }
-
   const removedLines: DiffLine[] = oldString.split("\n").map((content) => ({ kind: "removed", content }))
   const addedLines: DiffLine[]   = newString.split("\n").map((content) => ({ kind: "added",   content }))
   const allLines = [...removedLines, ...addedLines]
@@ -64,9 +62,7 @@ function DiffBlock({ oldString, newString }: { oldString: string; newString: str
               : "bg-green-500/10 text-green-600 dark:bg-green-500/10 dark:text-green-400",
           )}
         >
-          <span className="w-3 shrink-0 select-none opacity-50">
-            {line.kind === "removed" ? "-" : "+"}
-          </span>
+          <span className="w-3 shrink-0 select-none opacity-50">{line.kind === "removed" ? "-" : "+"}</span>
           <span>{line.content || " "}</span>
         </div>
       ))}
@@ -79,11 +75,96 @@ function DiffBlock({ oldString, newString }: { oldString: string; newString: str
   )
 }
 
+// ─── File content block ───────────────────────────────────────────────────────
+
+const MAX_CONTENT_LINES = 120
+
+function FileContentBlock({ content }: { content: string }) {
+  // Lines may be "N: code" (read_file) or plain (write_file). Both are handled.
+  // Strip trailing pagination note "(Showing N lines. Use offset=M to continue.)"
+  const lines = content.split("\n")
+  const noteIndex = lines.findIndex((l) => /^\(Showing \d+ lines/.test(l.trim()))
+  const codeLines = noteIndex >= 0 ? lines.slice(0, noteIndex) : lines
+  const note      = noteIndex >= 0 ? lines.slice(noteIndex).join(" ").trim() : undefined
+  const truncated = codeLines.length > MAX_CONTENT_LINES
+  const displayLines = truncated ? codeLines.slice(0, MAX_CONTENT_LINES) : codeLines
+
+  return (
+    <div className="rounded border overflow-hidden font-mono text-xs">
+      {displayLines.map((line, i) => {
+        const match = line.match(/^(\s*\d+):\s?(.*)$/)
+        const lineNum = match ? match[1].trim() : null
+        const code    = match ? match[2] : line
+        return (
+          <div key={i} className="flex leading-5 hover:bg-muted/30">
+            <span className="w-10 shrink-0 select-none text-right pr-3 text-muted-foreground/50 border-r border-border">
+              {lineNum ?? ""}
+            </span>
+            <span className="px-3 whitespace-pre-wrap break-all text-foreground/90">{code}</span>
+          </div>
+        )
+      })}
+      {(truncated || note) && (
+        <div className="bg-muted/30 px-3 py-1 text-xs text-muted-foreground border-t border-border">
+          {truncated && `… ${codeLines.length - MAX_CONTENT_LINES} more lines`}
+          {truncated && note && " · "}
+          {note}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Renderer registry ────────────────────────────────────────────────────────
+//
+// To add custom rendering for a new tool type, add an entry here.
+// Each renderer receives the full ToolPart and returns ReactNode (or null to
+// fall through to the generic input/output blocks).
+
+type ToolRenderer = (part: ToolPart) => ReactNode
+
+const TOOL_RENDERERS: Partial<Record<string, ToolRenderer>> = {
+  edit_file: (part) =>
+    part.diff ? (
+      <>
+        <ScrollArea className="max-h-96 overflow-hidden">
+          <DiffBlock oldString={part.diff.oldString} newString={part.diff.newString} />
+        </ScrollArea>
+        {part.fileContent?.path && (
+          <p className="text-xs text-muted-foreground font-mono truncate">{part.fileContent.path}</p>
+        )}
+      </>
+    ) : null,
+
+  read_file: (part) =>
+    part.fileContent ? (
+      <>
+        <ScrollArea className="max-h-96 overflow-hidden">
+          <FileContentBlock content={part.fileContent.content} />
+        </ScrollArea>
+        <p className="text-xs text-muted-foreground font-mono truncate">{part.fileContent.path}</p>
+      </>
+    ) : null,
+
+  write_file: (part) =>
+    part.fileContent ? (
+      <>
+        <ScrollArea className="max-h-96 overflow-hidden">
+          <FileContentBlock content={part.fileContent.content} />
+        </ScrollArea>
+        <p className="text-xs text-muted-foreground font-mono truncate">{part.fileContent.path}</p>
+      </>
+    ) : null,
+}
+
+// Tool types that show filename in the header alongside the tool name.
+const SHOW_FILENAME_FOR = new Set(["edit_file", "read_file", "write_file"])
+
 // ─── Tool card ────────────────────────────────────────────────────────────────
 
 const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
   const [isOpen, setIsOpen] = useState(defaultOpen)
-  const { state, input, output, toolCallId, diff } = toolPart
+  const { state, input, output, toolCallId } = toolPart
 
   const stateIcon = (() => {
     switch (state) {
@@ -114,10 +195,10 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
     return JSON.stringify(value, null, 2)
   }
 
-  // For edit_file show the filename alongside the tool name in the header.
-  const filePath = typeof input?.path === "string" ? input.path : undefined
+  const filePath = toolPart.fileContent?.path ?? (typeof input?.path === "string" ? input.path : undefined)
   const fileName = filePath ? filePath.split("/").pop() : undefined
-  const isEditFile = toolPart.type === "edit_file"
+  const customContent = TOOL_RENDERERS[toolPart.type]?.(toolPart) ?? null
+  const useGenericBlocks = customContent === null
 
   return (
     <div className={cn("border-border mt-3 overflow-hidden rounded-lg border", className)}>
@@ -130,7 +211,7 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
             <div className="flex items-center gap-2 min-w-0">
               {stateIcon}
               <span className="font-mono text-sm font-medium shrink-0">{toolPart.type}</span>
-              {isEditFile && fileName && (
+              {SHOW_FILENAME_FOR.has(toolPart.type) && fileName && (
                 <span className="font-mono text-xs text-muted-foreground truncate">{fileName}</span>
               )}
               {stateBadge}
@@ -142,20 +223,11 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
         <CollapsibleContent className="border-border border-t data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden">
           <div className="bg-background space-y-3 p-3">
 
-            {/* edit_file: show diff when available */}
-            {isEditFile && diff && (
-              <ScrollArea className="max-h-96 overflow-hidden">
-                <DiffBlock oldString={diff.oldString} newString={diff.newString} />
-              </ScrollArea>
-            )}
+            {/* Custom renderer output */}
+            {customContent}
 
-            {/* edit_file: show path when diff is present (instead of generic input block) */}
-            {isEditFile && filePath && (
-              <p className="text-xs text-muted-foreground font-mono truncate">{filePath}</p>
-            )}
-
-            {/* All other tools: generic input block */}
-            {!isEditFile && input && Object.keys(input).length > 0 && (
+            {/* Generic input/output blocks for tools without a custom renderer */}
+            {useGenericBlocks && input && Object.keys(input).length > 0 && (
               <div>
                 <h4 className="text-muted-foreground mb-2 text-sm font-medium">Input</h4>
                 <div className="bg-background rounded border p-2 font-mono text-sm">
@@ -169,8 +241,7 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
               </div>
             )}
 
-            {/* Generic output (all tools except edit_file which shows the diff) */}
-            {!isEditFile && output && (
+            {useGenericBlocks && output && (
               <div>
                 <h4 className="text-muted-foreground mb-2 text-sm font-medium">Output</h4>
                 <ScrollArea className="max-h-60 overflow-hidden">
