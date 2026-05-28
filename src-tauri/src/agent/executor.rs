@@ -41,9 +41,9 @@ pub async fn execute_tool(
     project_dir: &Path,
 ) -> ToolExecutionResult {
     match name {
-        "write_file" => execute_write_file(args, app_data_dir, output_path).await,
-        "read_file" => execute_read_file(args, app_data_dir).await,
-        "edit_file" => execute_edit_file(args, app_data_dir).await,
+        "write_file" => execute_write_file(args, app_data_dir, output_path, project_dir).await,
+        "read_file" => execute_read_file(args, app_data_dir, project_dir).await,
+        "edit_file" => execute_edit_file(args, app_data_dir, project_dir).await,
         "bash" => execute_bash(args, project_dir).await,
         "run_tsc" => execute_run_tsc(args, project_dir).await,
         "run_lint" => execute_run_lint(args, project_dir).await,
@@ -63,6 +63,7 @@ async fn execute_write_file(
     args: &serde_json::Value,
     app_data_dir: &Path,
     output_path: &str,
+    project_dir: &Path,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<WriteFileArgs>(args.clone()) {
         Ok(p) => p,
@@ -74,18 +75,46 @@ async fn execute_write_file(
         },
     };
 
-    let rel_path = output_path;
-
-    if rel_path.contains("..") {
-        return ToolExecutionResult {
-            success: false,
-            output: format!("write_file: {}", ToolError::Security("path traversal not allowed".into())),
-            written_path: None,
-            written_content: None,
+    // Resolve target path: model-specified path takes precedence over the default output_path.
+    let (target, display_path) = if let Some(model_path) = parsed.path.as_deref() {
+        if model_path.contains("..") {
+            return ToolExecutionResult {
+                success: false,
+                output: format!("write_file: {}", ToolError::Security("path traversal not allowed".into())),
+                written_path: None,
+                written_content: None,
+            };
+        }
+        // Resolve: app-data-root-relative if starts with "projects/", else project-dir-relative.
+        let resolved = if model_path.starts_with("projects/") {
+            app_data_dir.join(model_path)
+        } else {
+            project_dir.join(model_path)
         };
-    }
-
-    let target = app_data_dir.join(rel_path);
+        // Sandbox: must stay within the current project directory.
+        if !resolved.starts_with(project_dir) {
+            return ToolExecutionResult {
+                success: false,
+                output: format!("write_file: {}", ToolError::Security("path must be within the current project".into())),
+                written_path: None,
+                written_content: None,
+            };
+        }
+        let display = resolved.strip_prefix(app_data_dir)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| model_path.to_string());
+        (resolved, display)
+    } else {
+        if output_path.contains("..") {
+            return ToolExecutionResult {
+                success: false,
+                output: format!("write_file: {}", ToolError::Security("path traversal not allowed".into())),
+                written_path: None,
+                written_content: None,
+            };
+        }
+        (app_data_dir.join(output_path), output_path.to_string())
+    };
 
     if let Some(parent) = target.parent() {
         if let Err(e) = tokio::fs::create_dir_all(parent).await {
@@ -102,7 +131,7 @@ async fn execute_write_file(
 
     match tokio::fs::write(&target, &parsed.content).await {
         Ok(()) => {
-            let mut output = format!("Written to: {rel_path}\nTo read this file, use read_file with path: {rel_path}");
+            let mut output = format!("Written to: {display_path}\nTo read this file, use read_file with path: {display_path}");
             if file_already_existed {
                 output.push_str("\n\nNote: This file already existed. Use edit_file for future changes to this file instead of write_file.");
             }
@@ -125,6 +154,7 @@ async fn execute_write_file(
 async fn execute_read_file(
     args: &serde_json::Value,
     app_data_dir: &Path,
+    project_dir: &Path,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<ReadFileArgs>(args.clone()) {
         Ok(p) => p,
@@ -136,16 +166,17 @@ async fn execute_read_file(
         },
     };
 
-    if parsed.path.contains("..") {
-        return ToolExecutionResult {
+    // Resolve path: app-data-root-relative (e.g. "projects/abc/screens/x/screen.tsx")
+    // or project-relative (e.g. "screens/x/screen.tsx", "component-preview/src/lib/utils.ts").
+    let target = match resolve_file_path(&parsed.path, app_data_dir, project_dir) {
+        Some(t) => t,
+        None => return ToolExecutionResult {
             success: false,
             output: "read_file: path traversal not allowed".to_string(),
             written_path: None,
             written_content: None,
-        };
-    }
-
-    let target = app_data_dir.join(&parsed.path);
+        },
+    };
 
     if !target.exists() {
         return ToolExecutionResult {
@@ -277,6 +308,7 @@ async fn execute_read_file(
 async fn execute_edit_file(
     args: &serde_json::Value,
     app_data_dir: &Path,
+    project_dir: &Path,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<EditFileArgs>(args.clone()) {
         Ok(p) => p,
@@ -288,16 +320,17 @@ async fn execute_edit_file(
         },
     };
 
-    if parsed.path.contains("..") {
-        return ToolExecutionResult {
+    // Resolve path: app-data-root-relative (e.g. "projects/abc/screens/x/screen.tsx")
+    // or project-relative (e.g. "screens/x/screen.tsx", "component-preview/src/lib/utils.ts").
+    let target = match resolve_file_path(&parsed.path, app_data_dir, project_dir) {
+        Some(t) => t,
+        None => return ToolExecutionResult {
             success: false,
             output: "edit_file: path traversal not allowed".to_string(),
             written_path: None,
             written_content: None,
-        };
-    }
-
-    let target = app_data_dir.join(&parsed.path);
+        },
+    };
 
     let current = match tokio::fs::read_to_string(&target).await {
         Ok(c) => c,
@@ -398,9 +431,8 @@ fn fuzzy_replace(content: &str, old: &str, new: &str, replace_all: bool) -> Resu
     let normalized_content = normalize(content);
     if normalized_content.contains(&normalized_old) {
         // Find the normalized match, reconstruct with original indentation
-        let result = apply_indent_flexible_replace(content, old, new, replace_all);
-        if result.is_some() {
-            return Ok(result.unwrap());
+        if let Some(replaced) = apply_indent_flexible_replace(content, old, new, replace_all) {
+            return Ok(replaced);
         }
     }
 
@@ -553,10 +585,10 @@ async fn execute_run_tsc(
     }
 
     // Each component/screen dir has a tsconfig.json written at creation time (SidebarRail.tsx).
-    // It extends component-preview/tsconfig.app.json and scopes "files" to that one .tsx file.
+    // It extends the preview project's tsconfig.app.json and scopes "files" to that one .tsx file.
     // tsc ignores --project when files are passed as CLI args, so a dedicated tsconfig is the
     // only correct way to scope checking to one file. See: https://github.com/microsoft/TypeScript/issues/41865
-    let tsconfig_arg = if let Some(ref file_path) = parsed.path {
+    let (tsconfig_arg, tsc_preview_dir) = if let Some(ref file_path) = parsed.path {
         // Strip "projects/<id>/" prefix — path must be relative to project_dir
         let project_relative = if file_path.starts_with("projects/") {
             file_path.splitn(3, '/').nth(2).unwrap_or(file_path.as_str())
@@ -564,18 +596,15 @@ async fn execute_run_tsc(
             file_path.as_str()
         };
         // Derive the directory containing the .tsx file
-        let dir = project_relative.rsplitn(2, '/').nth(1).unwrap_or(project_relative);
-        // Derive the filename (e.g. "component.tsx" or "screen.tsx") for the "files" entry
-        let filename = project_relative.rsplitn(2, '/').next().unwrap_or("component.tsx");
+        let (dir, filename) = project_relative
+            .rsplit_once('/')
+            .unwrap_or((project_relative, "component.tsx"));
+        let preview_dir = preview_dir_for_path(project_relative);
         let tsconfig_path = project_dir.join(dir).join("tsconfig.json");
         // Auto-create the per-file tsconfig if the agent wrote the file directly (bypassing SidebarRail)
         if !tsconfig_path.exists() {
-            let is_screen = dir.starts_with("screens/");
-            let extend_base = if is_screen {
-                "../../component-preview/tsconfig.app.json"
-            } else {
-                "../../component-preview/tsconfig.app.json"
-            };
+            let extend_base = format!("../../{preview_dir}/tsconfig.app.json");
+            let type_roots = format!("../../{preview_dir}/node_modules/@types");
             let tsconfig_content = format!(
                 r#"{{
   "extends": "{}",
@@ -583,32 +612,33 @@ async fn execute_run_tsc(
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "types": [],
-    "typeRoots": ["../../component-preview/node_modules/@types"]
+    "typeRoots": ["{}"]
   }},
   "files": ["{}"]
 }}
 "#,
-                extend_base, filename
+                extend_base, type_roots, filename
             );
             let _ = tokio::fs::create_dir_all(&project_dir.join(dir)).await;
             let _ = tokio::fs::write(&tsconfig_path, tsconfig_content).await;
         }
         let rel = format!("../{dir}/tsconfig.json");
-        match shlex::try_quote(&rel) {
-            Ok(quoted) => quoted.into_owned(),
+        let quoted = match shlex::try_quote(&rel) {
+            Ok(q) => q.into_owned(),
             Err(_) => return ToolExecutionResult {
                 success: false,
                 output: format!("run_tsc: {}", ToolError::Security("path contains a nul byte".into())),
                 written_path: None,
                 written_content: None,
             },
-        }
+        };
+        (quoted, preview_dir)
     } else {
-        "../tsconfig.check.json".to_string()
+        ("../tsconfig.check.json".to_string(), "component-preview")
     };
 
     let command = format!(
-        r#"cd component-preview && bun run tsc --noEmit --project {tsconfig_arg} 2>&1; echo "EXIT:$?""#
+        r#"cd {tsc_preview_dir} && bun run tsc --noEmit --project {tsconfig_arg} 2>&1; echo "EXIT:$?""#
     );
     let raw = run_sandboxed_command(&command, project_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
@@ -623,6 +653,16 @@ async fn execute_run_tsc(
         output,
         written_path: None,
         written_content: None,
+    }
+}
+
+/// Determine which preview project directory to use based on the file path.
+/// Components and themes live under `component-preview/`, screens under `screen-preview/`.
+fn preview_dir_for_path(project_relative: &str) -> &'static str {
+    if project_relative.starts_with("screens/") {
+        "screen-preview"
+    } else {
+        "component-preview"
     }
 }
 
@@ -652,12 +692,13 @@ async fn execute_run_lint(
     // LLM may pass either a project-relative path ("components/foo/component.tsx")
     // or a full app_data_dir-relative path ("projects/abc/components/foo/component.tsx").
     // Strip "projects/<id>/" prefix so the path is always relative to project_dir.
-    let component_relative = if parsed.path.starts_with("projects/") {
+    let project_relative = if parsed.path.starts_with("projects/") {
         parsed.path.splitn(3, '/').nth(2).unwrap_or(&parsed.path)
     } else {
         &parsed.path
     };
-    let escaped = match shlex::try_quote(&format!("../{}", component_relative)) {
+    let preview_dir = preview_dir_for_path(project_relative);
+    let escaped = match shlex::try_quote(&format!("../{}", project_relative)) {
         Ok(s) => s.into_owned(),
         Err(_) => return ToolExecutionResult {
             success: false,
@@ -666,7 +707,7 @@ async fn execute_run_lint(
             written_content: None,
         },
     };
-    let command = format!("cd component-preview && bunx eslint {} 2>&1; echo \"EXIT:$?\"", escaped);
+    let command = format!("cd {preview_dir} && bunx eslint {} 2>&1; echo \"EXIT:$?\"", escaped);
     let raw = run_sandboxed_command(&command, project_dir).await;
 
     let (body, exit_code) = extract_exit_code(&raw);
@@ -700,13 +741,14 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
         };
     }
 
-    let component_relative = if parsed.path.starts_with("projects/") {
+    let project_relative = if parsed.path.starts_with("projects/") {
         parsed.path.splitn(3, '/').nth(2).unwrap_or(&parsed.path)
     } else {
         &parsed.path
     };
 
-    let escaped = match shlex::try_quote(&format!("../{}", component_relative)) {
+    let preview_dir = preview_dir_for_path(project_relative);
+    let escaped = match shlex::try_quote(&format!("../{}", project_relative)) {
         Ok(s) => s.into_owned(),
         Err(_) => return ToolExecutionResult {
             success: false,
@@ -716,8 +758,8 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
         },
     };
 
-    // esbuild is a Vite dependency — always available in component-preview/node_modules.
-    let command = format!("cd component-preview && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
+    // esbuild is a Vite dependency — available in both preview projects' node_modules.
+    let command = format!("cd {preview_dir} && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
     let raw = run_sandboxed_command(&command, project_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
@@ -827,6 +869,22 @@ async fn execute_grep(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
         output: if body.trim().is_empty() { "(no matches found)".to_string() } else { body.to_string() },
         written_path: None,
         written_content: None,
+    }
+}
+
+/// Resolve a path argument that may be app-data-root-relative (e.g. "projects/abc/screens/x/screen.tsx")
+/// or project-relative (e.g. "screens/x/screen.tsx" or "component-preview/src/lib/utils.ts").
+/// If the path starts with "projects/", treat it as app-data-root-relative.
+/// Otherwise, resolve it relative to the project directory.
+/// Returns None if the path contains ".." (path traversal).
+fn resolve_file_path(path: &str, app_data_dir: &Path, project_dir: &Path) -> Option<PathBuf> {
+    if path.contains("..") {
+        return None;
+    }
+    if path.starts_with("projects/") {
+        Some(app_data_dir.join(path))
+    } else {
+        Some(project_dir.join(path))
     }
 }
 

@@ -121,7 +121,10 @@ interface UseChatOptions {
   chatPath: string
   systemPrompt: string
   outputPath?: string
+  /** Called when the final text arrives from a non-tool model (Done, no write_file). */
   onOutput?: (content: string) => void
+  /** Called when write_file succeeds for the primary output file. Content is raw code, no fences. */
+  onCodeOutput?: (content: string) => void
 }
 
 // ─── Factory: createStreamHandler ──────────────────────────────────────────
@@ -140,6 +143,8 @@ interface StreamHandlerParams {
   stopRef: RefObject<boolean>
   activeRequestIdRef: MutableRefObject<number | null>
   onOutputRef: MutableRefObject<((content: string) => void) | undefined>
+  onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
+  outputPath: string | undefined
   pendingToolResultsRef: MutableRefObject<PendingToolResult[]>
   setToolResultTick: React.Dispatch<React.SetStateAction<number>>
 }
@@ -147,7 +152,7 @@ interface StreamHandlerParams {
 function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
-    onOutputRef, pendingToolResultsRef, setToolResultTick,
+    onOutputRef, onCodeOutputRef, outputPath, pendingToolResultsRef, setToolResultTick,
   } = params
 
   let contentAccumulated = ""
@@ -243,13 +248,17 @@ function createStreamHandler(params: StreamHandlerParams) {
       useChatStore.getState().setStreamingThinking(entityId, "")
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
-      if (tool === "write_file" && success) toolWritten = true
       if (tool === "write_file" && success) {
+        toolWritten = true
+        // Clear any streaming text that was accumulating before this write
         contentAccumulated = ""
-        // Prevent stale text from appearing after write_file result
         useChatStore.getState().setStreamingContent(entityId, "")
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        if (content) onOutputRef.current?.(stripFences(content))
+        // Only fire onCodeOutput when writing the designated primary output file.
+        // Secondary writes (services, helpers) produce a ToolResult but don't update the editor.
+        if (content && (!outputPath || path === outputPath)) {
+          onCodeOutputRef.current?.(stripFences(content))
+        }
       }
       pendingToolResultsRef.current.push({ tool, success, output, path, content })
       setToolResultTick((tick) => tick + 1)
@@ -277,7 +286,7 @@ function createStreamHandler(params: StreamHandlerParams) {
 
 // ─── useChat hook ──────────────────────────────────────────────────────────
 
-export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput }: UseChatOptions) {
   // Destructure individual settings fields instead of selecting the full
   // settings object. Zustand's shallow equality means each selector re-renders
   // only when its specific value changes. The full `settings` object was
@@ -295,6 +304,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const onOutputRef = useRef(onOutput) as MutableRefObject<typeof onOutput>
   useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
+  const onCodeOutputRef = useRef(onCodeOutput) as MutableRefObject<typeof onCodeOutput>
+  useEffect(() => { onCodeOutputRef.current = onCodeOutput }, [onCodeOutput])
 
   // Shared stop flag — set to true to abort the current stream mid-flight
   const stopRef = useRef(false) as RefObject<boolean>
@@ -420,6 +431,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       role: "user",
       content: userContent,
       ...(currentAttachments.length > 0 ? { images: currentAttachments.map((a) => a.base64) } : {}),
+      ...(currentMentions.length > 0 ? { mentions: currentMentions.map((m) => ({ type: m.type, name: m.name, description: m.description })) } : {}),
     }
     const assistantPlaceholder: ChatMessage = { role: "assistant", content: "" }
     const updatedMessages: ChatMessage[] = [...currentChat.messages, userMessage, assistantPlaceholder]
@@ -450,7 +462,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, updatedMessages,
-      stopRef, activeRequestIdRef, onOutputRef,
+      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, outputPath,
       pendingToolResultsRef, setToolResultTick,
     })
     channel.onmessage = onMessage
@@ -545,7 +557,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, updatedMessages,
-      stopRef, activeRequestIdRef, onOutputRef,
+      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, outputPath,
       pendingToolResultsRef, setToolResultTick,
     })
     channel.onmessage = onMessage

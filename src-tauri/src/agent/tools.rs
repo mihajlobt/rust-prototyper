@@ -5,6 +5,8 @@ use schemars::{JsonSchema, generate::SchemaSettings};
 pub struct WriteFileArgs {
     /// Complete raw source code to write. No wrappers, no JSON envelope, no markdown fences — raw code only. Only use write_file for new files. For existing files always use edit_file.
     pub content: String,
+    /// Optional path for the file. Project-root-relative (e.g. "screen-preview/src/services/weather.ts", "screen-preview/src/components/WeatherCard.tsx", "data/cities.ts") or app-data-root-relative (e.g. "projects/abc/screen-preview/src/services/weather.ts"). Must be within the current project. Omit to write the primary output file.
+    pub path: Option<String>,
 }
 
 #[derive(serde::Deserialize, JsonSchema)]
@@ -73,7 +75,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "write_file".to_string(),
-                description: "Write a new file from scratch. Use ONLY when creating a file that does not yet exist — never to overwrite an existing file. For edits to existing files, always use edit_file instead.".to_string(),
+                description: "Write a new file from scratch. Use ONLY when creating a file that does not yet exist — never to overwrite an existing file. For edits to existing files, always use edit_file instead. Omit 'path' to write the primary output file. Provide 'path' to write additional files within this project (e.g. services, sub-components, utilities).".to_string(),
                 parameters: make_schema::<WriteFileArgs>(),
             },
         },

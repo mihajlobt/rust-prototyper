@@ -15,7 +15,7 @@ use crate::{AppError, CompletionEvent};
 use super::{executor::{execute_tool, ToolExecutionResult}, tools::build_tools};
 
 const MAX_ITERATIONS: u8 = 20;
-const MAX_WRITES: u8 = 3;
+const MAX_WRITES: u8 = 10;
 const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 5000;
 
 fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
@@ -28,14 +28,14 @@ fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
 }
 
 async fn setup_project_dir(proj_dir: &Path) {
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
 
         let component_preview = proj_dir.join("component-preview");
-        if component_preview.exists() {
+        if tokio::fs::try_exists(&component_preview).await.unwrap_or(false) {
             let link = proj_dir.join("node_modules");
-            if !link.exists() {
+            if !tokio::fs::try_exists(&link).await.unwrap_or(false) {
                 let _ = symlink("component-preview/node_modules", &link);
             }
 
@@ -61,21 +61,21 @@ async fn setup_project_dir(proj_dir: &Path) {
             // Symlink component-preview/src/data → ../../data so that @/data imports
             // in generated components resolve to the project-level data/ directory.
             let src_dir = component_preview.join("src");
-            if src_dir.exists() {
+            if tokio::fs::try_exists(&src_dir).await.unwrap_or(false) {
                 let data_link = src_dir.join("data");
-                if !data_link.exists() {
+                if !tokio::fs::try_exists(&data_link).await.unwrap_or(false) {
                     let _ = symlink("../../data", &data_link);
                 }
             }
 
-            // Symlink screen-preview/src/screens → ../../../screens so that @/screens/{id}/screen
+            // Symlink screen-preview/src/screens → ../../screens so that @/screens/{id}/screen
             // imports in routes.ts resolve to the project-level screens/ directory.
             let screen_preview = proj_dir.join("screen-preview");
             let screen_src_dir = screen_preview.join("src");
-            if screen_src_dir.exists() {
+            if tokio::fs::try_exists(&screen_src_dir).await.unwrap_or(false) {
                 let screens_link = screen_src_dir.join("screens");
-                if !screens_link.exists() {
-                    let _ = symlink("../../../screens", &screens_link);
+                if !tokio::fs::try_exists(&screens_link).await.unwrap_or(false) {
+                    let _ = symlink("../../screens", &screens_link);
                 }
             }
         }
@@ -403,7 +403,6 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 let proj = proj_dir.clone();
                 let wc = Arc::clone(&write_count);
                 let allowlist = tool_allowlist.clone();
-                let permission_mode = permission_mode;
                 let channel = channel.clone();
                 let cancel_token = cancel_token.clone();
                 let app_handle = app_handle.clone();

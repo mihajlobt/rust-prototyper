@@ -34,7 +34,7 @@ import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, type DesignBriefTemplate } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery } from "@/lib/scaffold";
+import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery, ensureDataSymlink } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
@@ -144,6 +144,7 @@ export function ComponentsPanel() {
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
         ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
         ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
+        ensureDataSymlink(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to create data symlink", getErrorMessage(e)); });
         ensureTanstackQuery(componentPreviewDir).catch(() => { /* non-fatal */ });
       }
 
@@ -311,7 +312,10 @@ export function ComponentsPanel() {
     chatPath,
     systemPrompt: systemContent,
     outputPath: componentOutputPath,
-    onOutput: (content) => applyCode(extractCode(content) ?? content),
+    // Non-tool models: final text may contain a code block in markdown fences.
+    onOutput: (content) => { const code = extractCode(content); if (code) applyCode(code); },
+    // Tool models: write_file fires with raw code (no fences) for the primary output file only.
+    onCodeOutput: (code) => applyCode(code),
   });
 
   const applyCode = useCallback(async (extracted: string) => {
@@ -337,6 +341,16 @@ export function ComponentsPanel() {
       notify.error("Failed to apply generated code", getErrorMessage(e));
     }
   }, [settings.project, selectedComponent, queryClient, componentPreviewDir, setPs]);
+
+  // Sync @component mentions into the preview project so imports like
+  // `@/components/{name}` resolve when Vite compiles the generated component.
+  useEffect(() => {
+    for (const m of mentions) {
+      if (m.type === "component" && m.code) {
+        writeFile(`${componentPreviewDir}/src/components/${m.id}.tsx`, m.code).catch(() => {});
+      }
+    }
+  }, [mentions, componentPreviewDir]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -578,7 +592,13 @@ export function ComponentsPanel() {
                   model={settings.modelId}
                   messages={[
                     { role: "system", content: systemContent },
-                    ...messages.map((m) => ({ role: m.role, content: m.content })),
+                    ...messages.map((m) => ({
+                      role: m.role,
+                      content: m.content,
+                      ...(m.images?.length ? { images: m.images } : {}),
+                      ...(m.thinking ? { thinking: m.thinking } : {}),
+                      ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+                    })),
                   ]}
                   host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}

@@ -119,13 +119,21 @@ When asked to UPDATE an existing file, you MUST first read_file to see the curre
 then use edit_file to make targeted changes. Only use write_file when creating a brand-new file.`;
 
 export function outputFilePathSection(outputPath: string): string {
-  // Derive the project root from the output path (e.g. "projects/my-app/screens/x/screen.tsx" → "projects/my-app")
   const parts = outputPath.split("/");
   const projectRoot = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
+  const isScreen = outputPath.includes("/screens/");
+  const activePreview = isScreen ? "screen-preview" : "component-preview";
   return `
 
-OUTPUT FILE — Your write_file output is saved to: ${outputPath}
+OUTPUT FILE — Your primary write_file output goes to: ${outputPath}
 When using read_file to verify or fix your code, use exactly this path: ${outputPath}
+
+WRITING ADDITIONAL FILES — use write_file with a "path" argument to create helpers alongside your primary file:
+- Service hooks:   ${activePreview}/src/services/{name}.ts     (import via "@/services/{name}")
+- Sub-components:  ${activePreview}/src/components/{Name}.tsx  (import via "@/components/{Name}")
+- Data files:      data/{name}.ts                              (import via "@/data/{name}")
+- Utilities:       ${activePreview}/src/lib/{name}.ts          (import via "@/lib/{name}")
+Paths are project-root-relative. Example: write_file(path="${activePreview}/src/services/weather.ts", content="...")
 
 PATH CONVENTIONS — all file paths are relative to the app data root:
 - Project root: ${projectRoot}/

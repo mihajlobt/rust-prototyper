@@ -14,6 +14,7 @@ import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNo
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
+import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, buildComponentsSection, type DesignBriefTemplate } from "@/lib/prompts";
@@ -25,10 +26,10 @@ import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery } from "@/lib/scaffold";
+import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery, ensureScreenSymlink, ensureDataSymlink, ensureScreenPreviewViteConfig } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getScreenPreviewDirPath, getScreenPreviewAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
-import { syncGeneratedRouter } from "@/lib/navigation";
+import { syncScreenPreviewRoutes } from "@/lib/navigation";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
@@ -38,8 +39,10 @@ export function ScreensPanel() {
   const screensShowInspector = ps.screensShowInspector;
   const screensZoom = ps.screensZoom;
   const screensDarkPreview = ps.screensDarkPreview;
+  const screensCodeOpen = ps.screensCodeOpen;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3, [true, true, screensShowInspector]);
+  const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("screens-code", 3, [true, true, screensCodeOpen]);
   const [code, setCode] = useState("");
   const [themeCss, setThemeCss] = useState("");
 
@@ -65,9 +68,8 @@ export function ScreensPanel() {
   );
 
   const screenPreviewDir = getScreenPreviewDirPath(`projects/${settings.project}`);
-  const generatedScreenDir = ps.directories.screens;
   const screenPath = screenId
-    ? `projects/${settings.project}/generated/${generatedScreenDir}/${screenId}.tsx`
+    ? `projects/${settings.project}/screens/${screenId}/screen.tsx`
     : `projects/${settings.project}/screens/__placeholder__/screen.tsx`;
 
   const chatPath = screenId
@@ -148,6 +150,9 @@ export function ScreensPanel() {
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
         ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
         ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
+        ensureScreenSymlink(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to create screens symlink", getErrorMessage(e)); });
+        ensureDataSymlink(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to create data symlink", getErrorMessage(e)); });
+        ensureScreenPreviewViteConfig(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch Vite config", getErrorMessage(e)); });
         ensureTanstackQuery(screenPreviewDir).catch(() => { /* non-fatal */ });
       }
 
@@ -163,6 +168,18 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [settings.project, screensStatus, screenPreviewDir, startScreens, ps.screensPreviewPort, settings.iconLibrary]);
 
+  // ─── Navigate iframe to the active screen's route when screenId changes ──────
+
+  useEffect(() => {
+    if (!screenId) return;
+    const iframe = previewIframeRef.current;
+    if (!iframe?.contentWindow) return;
+    // Navigate the iframe to the screen's route path via postMessage.
+    // The screen-preview App.tsx has a NavigationListener component that
+    // receives "navigate" messages and calls React Router's navigate().
+    iframe.contentWindow.postMessage({ type: "navigate", path: `/${screenId}` }, "*");
+  }, [screenId]);
+
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
   useEffect(() => {
@@ -173,6 +190,21 @@ export function ScreensPanel() {
 
   // ─── Write current screen to screen-preview when screenId or code changes ───
 
+  // Single function used by both onOutput and onCodeOutput to apply generated screen code.
+  const applyScreenCode = useCallback((code: string) => {
+    setCode(code);
+    const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
+    // Write to screen source + sync routes (so preview knows about new screens)
+    createDir(parentDir)
+      .then(() => writeFile(screenPath, code))
+      .then(() => syncScreenPreviewRoutes(`projects/${settings.project}`))
+      .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
+    // Write to screen-preview Generated.tsx for live HMR preview
+    createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
+      .then(() => writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.GENERATED_TSX}`, code))
+      .catch((e) => { notify.error("Failed to write screen preview", getErrorMessage(e)); });
+  }, [screenPath, settings.project, screenPreviewDir]);
+
   const writeToScreenPreview = useCallback(async (content: string) => {
     if (!content) return;
     try {
@@ -182,6 +214,37 @@ export function ScreensPanel() {
       notify.error("Failed to write screen preview", getErrorMessage(e));
     }
   }, [screenPreviewDir]);
+
+  const saveScreenCode = useCallback(async (value: string) => {
+    if (!screenId) return;
+    try {
+      const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
+      await createDir(parentDir);
+      await writeFile(screenPath, value);
+    } catch (e) {
+      notify.error("Failed to save screen", getErrorMessage(e));
+    }
+  }, [screenId, screenPath]);
+
+  const handleCodeChange = useCallback((value: string) => {
+    setCode(value);
+  }, []);
+
+  const handleCodeBlur = useCallback(() => {
+    saveScreenCode(code);
+  }, [code, saveScreenCode]);
+
+  // Ctrl+S to save screen code
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        saveScreenCode(code);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [code, saveScreenCode]);
 
   // Load existing screen code when screenId changes
   useEffect(() => {
@@ -216,17 +279,27 @@ export function ScreensPanel() {
     chatPath,
     systemPrompt: systemContent,
     outputPath: screenId ? screenPath : undefined,
+    // Non-tool models: final text may contain a code block in markdown fences.
     onOutput: (content) => {
-      const extracted = extractCode(content) ?? content;
-      setCode(extracted);
-      const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
-      createDir(parentDir)
-        .then(() => writeFile(screenPath, extracted))
-        .then(() => syncGeneratedRouter(`projects/${settings.project}`))
-        .catch((e) => { const msg = getErrorMessage(e); notify.error("Failed to save screen", msg); });
-      writeToScreenPreview(extracted);
+      const code = extractCode(content);
+      if (!code) return;
+      applyScreenCode(code);
     },
+    // Tool models: write_file fires with raw code (no fences) for the primary output file only.
+    onCodeOutput: (code) => applyScreenCode(code),
   });
+
+  // Sync @component mentions into screen-preview/src/components/ so that
+  // `import X from '@/components/{name}'` in generated screens resolves correctly.
+  useEffect(() => {
+    for (const m of mentions) {
+      if (m.type === "component" && m.code) {
+        createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
+          .then(() => writeFile(`${screenPreviewDir}/src/components/${m.id}.tsx`, m.code))
+          .catch(() => {});
+      }
+    }
+  }, [mentions, screenPreviewDir]);
 
   useEffect(() => {
     const selectedTheme = ps.stylePreset;
@@ -521,7 +594,13 @@ export function ScreensPanel() {
                   model={settings.modelId}
                   messages={[
                     { role: "system", content: systemContent },
-                    ...messages.map((m) => ({ role: m.role, content: m.content })),
+                    ...messages.map((m) => ({
+                      role: m.role,
+                      content: m.content,
+                      ...(m.images?.length ? { images: m.images } : {}),
+                      ...(m.thinking ? { thinking: m.thinking } : {}),
+                      ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+                    })),
                   ]}
                   host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}
@@ -534,64 +613,82 @@ export function ScreensPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <div className="h-full flex flex-col">
-            <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
-              <span className="text-sm font-medium">Preview</span>
-              {screensStatus === "running" ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopScreens(); }} title="Stop preview server">
-                  <Square size={12} />
-                </Button>
-              ) : screensStatus === "starting" ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
-                  <Loader2 size={12} className="animate-spin" />
-                </Button>
-              ) : (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startScreens(screenPreviewDir, ps.screensPreviewPort); }} title="Start preview server">
-                  <Play size={12} />
-                </Button>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setPs({ screensCodeOpen: v })}>
+            <Allotment.Pane>
+              <div className="h-full flex flex-col">
+                <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
+                  <span className="text-sm font-medium">Preview</span>
+                  {screensStatus === "running" ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopScreens(); }} title="Stop preview server">
+                      <Square size={12} />
+                    </Button>
+                  ) : screensStatus === "starting" ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
+                      <Loader2 size={12} className="animate-spin" />
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startScreens(screenPreviewDir, ps.screensPreviewPort); }} title="Start preview server">
+                      <Play size={12} />
+                    </Button>
+                  )}
+                  <div className="flex-1" />
+                  <Button
+                    variant={screensDarkPreview ? "secondary" : "ghost"}
+                    size="icon" className="h-7 w-7"
+                    onClick={() => {
+                      setPs({ screensDarkPreview: !screensDarkPreview });
+                      previewIframeRef.current?.contentWindow?.postMessage(
+                        { type: "set-dark", value: !screensDarkPreview },
+                        "*"
+                      );
+                    }}
+                    title={screensDarkPreview ? "Light preview" : "Dark preview"}
+                  >
+                    {screensDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+                  </Button>
+                  <div className="w-px h-4 bg-border" />
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
+                    <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(screensZoom * 100)}%</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.min(screensZoom + 0.1, 2) })}>+</Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant={screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "mobile" })}>
+                      <Smartphone size={12} />
+                    </Button>
+                    <Button variant={screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "tablet" })}>
+                      <Tablet size={12} />
+                    </Button>
+                    <Button variant={screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "desktop" })}>
+                      <Monitor size={12} />
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
+                  <div
+                    className="h-full bg-background shadow-lg border border-border overflow-hidden"
+                    style={{ width: deviceWidth[screensDevice], transform: `scale(${screensZoom})`, transformOrigin: "top center" }}
+                  >
+                    {renderPreview()}
+                  </div>
+                </div>
+              </div>
+            </Allotment.Pane>
+
+            <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+              <PaneHeader onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
+                <span className="text-xs font-medium flex-1">Code</span>
+                {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              </PaneHeader>
+            </Allotment.Pane>
+            <Allotment.Pane visible={screensCodeOpen} preferredSize={252} minSize={100} snap>
+              {screensCodeOpen && (
+                <div className="h-full overflow-hidden">
+                  <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
+                </div>
               )}
-              <div className="flex-1" />
-              <Button
-                variant={screensDarkPreview ? "secondary" : "ghost"}
-                size="icon" className="h-7 w-7"
-                onClick={() => {
-                  setPs({ screensDarkPreview: !screensDarkPreview });
-                  previewIframeRef.current?.contentWindow?.postMessage(
-                    { type: "set-dark", value: !screensDarkPreview },
-                    "*"
-                  );
-                }}
-                title={screensDarkPreview ? "Light preview" : "Dark preview"}
-              >
-                {screensDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
-              </Button>
-              <div className="w-px h-4 bg-border" />
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.max(screensZoom - 0.1, 0.5) })}>-</Button>
-                <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(screensZoom * 100)}%</span>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" onClick={() => setPs({ screensZoom: Math.min(screensZoom + 0.1, 2) })}>+</Button>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button variant={screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "mobile" })}>
-                  <Smartphone size={12} />
-                </Button>
-                <Button variant={screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "tablet" })}>
-                  <Tablet size={12} />
-                </Button>
-                <Button variant={screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setPs({ screensDevice: "desktop" })}>
-                  <Monitor size={12} />
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
-              <div
-                className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                style={{ width: deviceWidth[screensDevice], transform: `scale(${screensZoom})`, transformOrigin: "top center" }}
-              >
-                {renderPreview()}
-              </div>
-            </div>
-          </div>
+            </Allotment.Pane>
+          </Allotment>
         </Allotment.Pane>
       </Allotment>
     </div>
