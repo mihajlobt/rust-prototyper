@@ -58,37 +58,47 @@ export const SHADCN_INIT_COMMAND: string =
   "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer";
 
 /**
- * Patches shadcn's eslint.config.js to add globalIgnores for shadcn's own files.
- * Shadcn components trigger react-refresh/only-export-components and
- * react-hooks/set-state-in-effect — both false positives in library code.
+ * Returns the canonical ESLint flat config for a shadcn-scaffolded preview project.
+ *
+ * Shadcn's generated eslint.config.js is used as the base, with one addition:
+ * globalIgnores for src/components/ui/** and src/hooks/use-mobile.ts, which are
+ * shadcn-generated library files that legitimately trigger false positives:
+ *   - react-refresh/only-export-components  (shadcn exports variants alongside components)
+ *   - react-hooks/rules-of-hooks            (use-mobile.ts calls setState in an effect)
  * Refs: https://github.com/shadcn-ui/ui/issues/7736
  *       https://github.com/shadcn-ui/ui/issues/8739
- *       https://eslint.org/docs/latest/use/configure/configuration-files#globally-ignore-files-with-ignores
+ *
+ * `no-undef` and custom globals are intentionally absent — TypeScript (TS2304) catches
+ * undefined names with better diagnostics and no false positives.
+ *
+ * The function ignores its input and always returns the canonical string so that
+ * repeated calls (e.g. on every project open) are fully idempotent and cannot
+ * accumulate duplicate entries the way regex patching did.
  */
-export function patchEslintConfig(config: string): string {
-  // Add globalIgnores for shadcn false positives
-  let patched = config.replace(
-    /globalIgnores\(\[(.*?)\]\)/s,
-    (_match, inner) => {
-      const existing = inner
-        .split(",")
-        .map((s: string) => s.trim())
-        .filter(Boolean);
-      const additions = [
-        "'src/components/ui/**'",
-        "'src/hooks/use-mobile.ts'",
-      ];
-      const merged = [...new Set([...existing, ...additions])];
-      return `globalIgnores([${merged.join(", ")}])`;
-    }
-  );
-  // Add no-undef rule to catch missing imports (e.g., lucide-react icons)
-  // This catches runtime errors like "Can't find variable: Plus" at lint time
-  patched = patched.replace(
-    /languageOptions:\s*\{/,
-    "rules: { 'no-undef': 'error' },\n  languageOptions: {"
-  );
-  return patched;
+export function patchEslintConfig(_existingConfig: string): string {
+  return `import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist', 'src/components/ui/**', 'src/hooks/use-mobile.ts']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+])
+`;
 }
 
 /**
@@ -114,6 +124,29 @@ export function patchViteFsAllow(config: string): string {
 }
 
 /**
+ * Patches a vite.config.ts to add `resolve.dedupe` for React packages.
+ * Without this, symlinked files outside the project root can resolve React
+ * independently, producing two React instances and causing "Invalid hook call".
+ * Idempotent — safe to call repeatedly.
+ */
+export function patchViteResolveDedupe(config: string): string {
+  const dedupeList = `['react', 'react-dom', 'react-router-dom', 'react-router']`;
+  if (config.includes("dedupe:")) return config;
+  if (config.includes("resolve:")) {
+    // Merge dedupe into existing resolve block
+    return config.replace(
+      /resolve:\s*\{/,
+      `resolve: {\n    dedupe: ${dedupeList},`
+    );
+  }
+  // Add resolve block before the closing })
+  return config.replace(
+    /,\n\}\)$/,
+    `,\n  resolve: {\n    dedupe: ${dedupeList},\n  },\n})`
+  );
+}
+
+/**
  * Returns the App.tsx for the component-preview/ or screen-preview/ project.
  * Sets dark class on documentElement so body { bg-background } picks up the
  * dark CSS variables. Reads initial state from ?dark= query param (sync, before
@@ -129,7 +162,10 @@ export function getPreviewAppTsx(cssImports: string[]): string {
   return `import React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 ${imports}
-import Generated from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
+import GeneratedComponent from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
+// Cast away required props — App.tsx renders the component without props at preview time.
+// The AI may define required props; casting to ComponentType prevents TS2739 here.
+const Generated = GeneratedComponent as React.ComponentType
 
 const queryClient = new QueryClient()
 
