@@ -128,6 +128,7 @@ pub fn run() {
             commands::fs::delete_file,
             commands::fs::delete_dir,
             commands::fs::rename_file,
+            commands::fs::create_symlink,
             commands::fs::reveal_in_explorer,
             commands::http::http_request,
             commands::ai::generate_completion,

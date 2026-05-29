@@ -26,6 +26,7 @@ export interface ProjectSettings {
   screensShowInspector: boolean;
   screensDarkPreview: boolean;
   screensPreviewPort: number;
+  screensCodeOpen: boolean;
 
   // Components panel
   componentsDevice: "desktop" | "tablet" | "mobile";
@@ -92,6 +93,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   screensShowInspector: false,
   screensDarkPreview: false,
   screensPreviewPort: 5175,
+  screensCodeOpen: false,
 
   componentsDevice: "desktop",
   componentsDarkPreview: false,

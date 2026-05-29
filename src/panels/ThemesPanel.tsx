@@ -291,7 +291,13 @@ export function ThemesPanel() {
               {themesShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
-                  messages={messages.map((m) => ({ role: m.role, content: m.content }))}
+                  messages={messages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                    ...(m.images?.length ? { images: m.images } : {}),
+                    ...(m.thinking ? { thinking: m.thinking } : {}),
+                    ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+                  }))}
                   host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}
                 />

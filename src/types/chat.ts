@@ -30,6 +30,8 @@ export interface ChatMessage {
   content: string
   thinking?: string
   images?: string[]
+  /** Referenced assets (@mentions) stored as compact display metadata */
+  mentions?: Array<{ type: MentionAsset["type"]; name: string; description?: string }>
   toolCalls?: ToolCallRecord[]
   /** Thinking/text chunks grouped by tool boundaries for cursor-like display */
   streamChunks?: StreamChunk[]
