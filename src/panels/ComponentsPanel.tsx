@@ -77,10 +77,10 @@ export function ComponentsPanel() {
   useEffect(() => { darkAtUrlArrival.current = componentsDarkPreview; }, [componentsDarkPreview]);
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
-  const initialPreviewSrc = useMemo(() => {
-    if (!runnerUrl || !componentId) return undefined;
-    return `${runnerUrl}/__preview/${componentId}?dark=${darkAtUrlArrival.current}`;
-  }, [runnerUrl, componentId]);
+  const initialPreviewSrc = useMemo(
+    () => (runnerUrl ? `${runnerUrl}?dark=${darkAtUrlArrival.current}` : undefined),
+    [runnerUrl]
+  );
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3, [true, true, componentsShowInspector]);
@@ -160,6 +160,20 @@ export function ComponentsPanel() {
       notify.error("Failed to write theme CSS", getErrorMessage(e));
     });
   }, [themeCss, runnerStatus, generatedDir]);
+
+  // ─── Navigate iframe to component's preview route ────────────────────────────
+  // Called on iframe load (app just mounted) and when componentId changes.
+
+  const navigateIframeToComponent = useCallback(() => {
+    if (!selectedComponent || !previewIframeRef.current?.contentWindow) return;
+    previewIframeRef.current.contentWindow.postMessage(
+      { type: "navigate", path: `/__preview/${selectedComponent}` }, "*"
+    );
+  }, [selectedComponent]);
+
+  useEffect(() => {
+    if (runnerUrl) navigateIframeToComponent();
+  }, [selectedComponent, runnerUrl, navigateIframeToComponent]);
 
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
@@ -256,13 +270,7 @@ export function ComponentsPanel() {
   useEffect(() => {
     if (loadedCode === undefined) return;
     setCode(loadedCode);
-    if (!loadedCode || !selectedComponent) return;
-    // Navigate iframe to this component's preview route
-    const iframe = previewIframeRef.current;
-    if (iframe?.contentWindow && runnerUrl) {
-      iframe.contentWindow.postMessage({ type: "navigate", path: `/__preview/${selectedComponent}` }, "*");
-    }
-  }, [loadedCode, selectedComponent, runnerUrl]);
+  }, [loadedCode]);
 
   const chatPath = componentId
     ? `projects/${settings.project}/components/${componentId}/chat.json`
@@ -532,6 +540,7 @@ export function ComponentsPanel() {
           src={initialPreviewSrc}
           className="w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-forms"
+          onLoad={navigateIframeToComponent}
         />
       );
     }

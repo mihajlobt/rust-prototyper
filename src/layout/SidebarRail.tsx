@@ -131,8 +131,13 @@ export function SidebarRail() {
         await deleteDir(`${base}/${section}/${name}`);
       }
       if (section === "screens") {
+        await deleteFile(`${generatedDir}/src/pages/${name}.tsx`).catch(() => {});
         await removeScreenFromNavigation(base, name);
         await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+      }
+      if (section === "components") {
+        await deleteDir(`${generatedDir}/src/components/${name}`).catch(() => {});
+        await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync router", getErrorMessage(e)); });
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
@@ -157,8 +162,13 @@ export function SidebarRail() {
         await renameFile(`${base}/${section}/${name}`, `${base}/${section}/${newId}`);
       }
       if (section === "screens") {
+        await renameFile(`${generatedDir}/src/pages/${name}.tsx`, `${generatedDir}/src/pages/${newId}.tsx`).catch(() => {});
         await renameScreenInNavigation(base, name, newId);
         await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+      }
+      if (section === "components") {
+        await renameFile(`${generatedDir}/src/components/${name}`, `${generatedDir}/src/components/${newId}`).catch(() => {});
+        await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync router", getErrorMessage(e)); });
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
       setRenameTarget(null);

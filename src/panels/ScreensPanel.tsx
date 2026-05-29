@@ -63,8 +63,8 @@ export function ScreensPanel() {
   const darkAtUrlArrival = useRef(screensDarkPreview);
   useEffect(() => { darkAtUrlArrival.current = screensDarkPreview; }, [screensDarkPreview]);
   const initialPreviewSrc = useMemo(
-    () => (runnerUrl && screenId ? `${runnerUrl}/${screenId}?dark=${darkAtUrlArrival.current}` : undefined),
-    [runnerUrl, screenId]
+    () => (runnerUrl ? `${runnerUrl}?dark=${darkAtUrlArrival.current}` : undefined),
+    [runnerUrl]
   );
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
@@ -158,21 +158,25 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [settings.project, runnerStatus, generatedDir, startRunner, ps.runnerPort, settings.iconLibrary]);
 
-  // ─── Navigate iframe to the active screen's route when screenId changes ──────
+  // ─── Navigate iframe to the active screen's route ────────────────────────────
+  // Called both on iframe load (guarantees the app is mounted) and when screenId
+  // changes while the iframe is already loaded (for subsequent screen switches).
 
-  useEffect(() => {
-    if (!screenId || !runnerUrl) return;
-    const iframe = previewIframeRef.current;
-    if (!iframe?.contentWindow) return;
-    // Use navigation.json to resolve the correct path for this screen
+  const navigateIframeToScreen = useCallback(() => {
+    if (!screenId || !previewIframeRef.current?.contentWindow) return;
     loadNavigation(`projects/${settings.project}`).then((nav) => {
       const navScreen = nav.screens.find((s) => s.id === screenId);
       const path = navScreen?.path ?? `/${screenId}`;
-      iframe.contentWindow?.postMessage({ type: "navigate", path }, "*");
+      previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path }, "*");
     }).catch(() => {
-      iframe.contentWindow?.postMessage({ type: "navigate", path: `/${screenId}` }, "*");
+      previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path: `/${screenId}` }, "*");
     });
-  }, [screenId, runnerUrl, settings.project]);
+  }, [screenId, settings.project]);
+
+  // Re-navigate when the selected screen changes (iframe already loaded)
+  useEffect(() => {
+    if (runnerUrl) navigateIframeToScreen();
+  }, [screenId, runnerUrl, navigateIframeToScreen]);
 
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
@@ -239,14 +243,6 @@ export function ScreensPanel() {
         const content = await readFile(screenPath);
         if (!cancelled && content) {
           setCode(content);
-          // Navigate iframe to the screen's route
-          if (previewIframeRef.current?.contentWindow && runnerUrl) {
-            loadNavigation(`projects/${settings.project}`).then((nav) => {
-              const navScreen = nav.screens.find((s) => s.id === screenId);
-              const path = navScreen?.path ?? `/${screenId}`;
-              previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path }, "*");
-            }).catch(() => {});
-          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -384,6 +380,7 @@ export function ScreensPanel() {
           src={initialPreviewSrc}
           className="w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-forms"
+          onLoad={navigateIframeToScreen}
         />
       );
     }
