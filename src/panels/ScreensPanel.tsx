@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { writeFile, createDir, readFile, deleteFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -26,10 +26,10 @@ import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasScreenPreviewScaffold, scaffoldScreenPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery, ensureScreenSymlink, ensureDataSymlink, ensureScreenPreviewViteConfig } from "@/lib/scaffold";
+import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
-import { getScreenPreviewDirPath, getScreenPreviewAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
-import { syncScreenPreviewRoutes } from "@/lib/navigation";
+import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
+import { syncGeneratedRouter, loadNavigation } from "@/lib/navigation";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
@@ -56,21 +56,21 @@ export function ScreensPanel() {
   const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
 
-  const { screensStatus, screensUrl, screensError, startScreens, stopScreens } = useDevServerStore();
+  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
   const darkAtUrlArrival = useRef(screensDarkPreview);
   useEffect(() => { darkAtUrlArrival.current = screensDarkPreview; }, [screensDarkPreview]);
   const initialPreviewSrc = useMemo(
-    () => (screensUrl ? `${screensUrl}?dark=${darkAtUrlArrival.current}` : undefined),
-    [screensUrl]
+    () => (runnerUrl && screenId ? `${runnerUrl}/${screenId}?dark=${darkAtUrlArrival.current}` : undefined),
+    [runnerUrl, screenId]
   );
 
-  const screenPreviewDir = getScreenPreviewDirPath(`projects/${settings.project}`);
+  const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
   const screenPath = screenId
-    ? `projects/${settings.project}/screens/${screenId}/screen.tsx`
-    : `projects/${settings.project}/screens/__placeholder__/screen.tsx`;
+    ? `projects/${settings.project}/generated/src/pages/${screenId}.tsx`
+    : `projects/${settings.project}/generated/src/pages/__placeholder__.tsx`;
 
   const chatPath = screenId
     ? `projects/${settings.project}/screens/${screenId}/chat.json`
@@ -116,69 +116,63 @@ export function ScreensPanel() {
     setCtxSelectedBrief(null);
   }, [settings.project]);
 
-  // ─── Ensure screens dev server is running ────────────────────────────────────
+  // ─── Ensure dev server is running ────────────────────────────────────────────
 
   useEffect(() => {
     let cancelled = false;
 
-    async function ensureScreensServer() {
+    async function ensureServer() {
       if (cancelled) return;
-      if (screensStatus === "running" || screensStatus === "starting") return;
+      if (runnerStatus === "running" || runnerStatus === "starting") return;
       if (stoppedManuallyRef.current) return;
 
-      const isScaffolded = await hasScreenPreviewScaffold(`projects/${settings.project}`);
+      const isScaffolded = await hasGeneratedScaffold(`projects/${settings.project}`);
       if (cancelled) return;
 
       if (!isScaffolded) {
         if (scaffoldAttemptedRef.current) return;
         scaffoldAttemptedRef.current = true;
-
-        useDevServerStore.getState().stopScreens();
-
+        useDevServerStore.getState().stopRunner();
         try {
           await withScaffoldNotifications(
-            "scaffold-screen-preview",
-            "Scaffolding screen preview",
-            (onStep) => scaffoldScreenPreview(screenPreviewDir, settings.iconLibrary, onStep)
+            "scaffold-generated",
+            "Scaffolding project",
+            (onStep) => scaffoldGenerated(generatedDir, settings.iconLibrary, onStep)
           );
         } catch {
           return;
         }
       } else {
-        // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
-        writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getScreenPreviewAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
-        ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
-        ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
-        ensureScreenSymlink(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to create screens symlink", getErrorMessage(e)); });
-        ensureDataSymlink(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to create data symlink", getErrorMessage(e)); });
-        ensureScreenPreviewViteConfig(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch Vite config", getErrorMessage(e)); });
-        ensureTanstackQuery(screenPreviewDir).catch(() => { /* non-fatal */ });
       }
 
       if (cancelled) return;
       try {
-        await startScreens(screenPreviewDir, ps.screensPreviewPort);
+        await startRunner(generatedDir, ps.runnerPort);
       } catch (e) {
         notify.error("Failed to start screen preview server", getErrorMessage(e));
       }
     }
 
-    ensureScreensServer();
+    ensureServer();
     return () => { cancelled = true; };
-  }, [settings.project, screensStatus, screenPreviewDir, startScreens, ps.screensPreviewPort, settings.iconLibrary]);
+  }, [settings.project, runnerStatus, generatedDir, startRunner, ps.runnerPort, settings.iconLibrary]);
 
   // ─── Navigate iframe to the active screen's route when screenId changes ──────
 
   useEffect(() => {
-    if (!screenId) return;
+    if (!screenId || !runnerUrl) return;
     const iframe = previewIframeRef.current;
     if (!iframe?.contentWindow) return;
-    // Navigate the iframe to the screen's route path via postMessage.
-    // The screen-preview App.tsx has a NavigationListener component that
-    // receives "navigate" messages and calls React Router's navigate().
-    iframe.contentWindow.postMessage({ type: "navigate", path: `/${screenId}` }, "*");
-  }, [screenId]);
+    // Use navigation.json to resolve the correct path for this screen
+    loadNavigation(`projects/${settings.project}`).then((nav) => {
+      const navScreen = nav.screens.find((s) => s.id === screenId);
+      const path = navScreen?.path ?? `/${screenId}`;
+      iframe.contentWindow?.postMessage({ type: "navigate", path }, "*");
+    }).catch(() => {
+      iframe.contentWindow?.postMessage({ type: "navigate", path: `/${screenId}` }, "*");
+    });
+  }, [screenId, runnerUrl, settings.project]);
 
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
@@ -186,42 +180,27 @@ export function ScreensPanel() {
     const iframe = previewIframeRef.current;
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: "set-dark", value: screensDarkPreview }, "*");
-  }, [screensDarkPreview, screensUrl]);
+  }, [screensDarkPreview, runnerUrl]);
 
-  // ─── Write current screen to screen-preview when screenId or code changes ───
-
-  // Single function used by both onOutput and onCodeOutput to apply generated screen code.
   const applyScreenCode = useCallback((code: string) => {
     setCode(code);
     const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
-    // Write to screen source + sync routes (so preview knows about new screens)
     createDir(parentDir)
       .then(() => writeFile(screenPath, code))
-      .then(() => syncScreenPreviewRoutes(`projects/${settings.project}`))
-      .then(({ skipped }) => {
-        for (const s of skipped) {
-          notify.warning(`Screen "${s.name}" excluded from preview`, s.reason);
-        }
-      })
+      .then(() => syncGeneratedRouter(`projects/${settings.project}`))
       .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
-    // Write to screen-preview Generated.tsx for live HMR preview
-    createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
-      .then(() => writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.GENERATED_TSX}`, code))
-      .catch((e) => { notify.error("Failed to write screen preview", getErrorMessage(e)); });
-  }, [screenPath, settings.project, screenPreviewDir]);
-
-  const writeToScreenPreview = useCallback(async (content: string) => {
-    if (!content) return;
-    try {
-      await createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`);
-      await writeFile(`${screenPreviewDir}/${PROJECT_PATHS.SRC.GENERATED_TSX}`, content);
-    } catch (e) {
-      notify.error("Failed to write screen preview", getErrorMessage(e));
+    // Navigate iframe to the screen's route after writing
+    if (screenId && previewIframeRef.current?.contentWindow && runnerUrl) {
+      loadNavigation(`projects/${settings.project}`).then((nav) => {
+        const navScreen = nav.screens.find((s) => s.id === screenId);
+        const path = navScreen?.path ?? `/${screenId}`;
+        previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path }, "*");
+      }).catch(() => {});
     }
-  }, [screenPreviewDir]);
+  }, [screenPath, settings.project, screenId, runnerUrl]);
 
   const saveScreenCode = useCallback(async (value: string) => {
-    if (!screenId) return;
+    if (!screenId || !value) return;
     try {
       const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
       await createDir(parentDir);
@@ -260,7 +239,14 @@ export function ScreensPanel() {
         const content = await readFile(screenPath);
         if (!cancelled && content) {
           setCode(content);
-          await writeToScreenPreview(content);
+          // Navigate iframe to the screen's route
+          if (previewIframeRef.current?.contentWindow && runnerUrl) {
+            loadNavigation(`projects/${settings.project}`).then((nav) => {
+              const navScreen = nav.screens.find((s) => s.id === screenId);
+              const path = navScreen?.path ?? `/${screenId}`;
+              previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path }, "*");
+            }).catch(() => {});
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -270,7 +256,7 @@ export function ScreensPanel() {
       }
     })();
     return () => { cancelled = true; };
-  }, [screenId, settings.project, screenPath, writeToScreenPreview]);
+  }, [screenId, settings.project, screenPath, runnerUrl]);
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
@@ -294,27 +280,6 @@ export function ScreensPanel() {
     onCodeOutput: (code) => applyScreenCode(code),
   });
 
-  // Sync @component mentions into screen-preview/src/components/.
-  // Copy on add, delete on remove — no stale files left behind.
-  const prevComponentMentionIds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const current = new Set(mentions.filter((m) => m.type === "component").map((m) => m.id));
-    // Copy newly-added components only
-    for (const m of mentions) {
-      if (m.type === "component" && m.code && !prevComponentMentionIds.current.has(m.id)) {
-        createDir(`${screenPreviewDir}/${PROJECT_PATHS.SRC.COMPONENTS_DIR}`)
-          .then(() => writeFile(`${screenPreviewDir}/src/components/${m.id}.tsx`, m.code))
-          .catch(() => {});
-      }
-    }
-    // Delete removed components
-    for (const id of prevComponentMentionIds.current) {
-      if (!current.has(id)) {
-        deleteFile(`${screenPreviewDir}/src/components/${id}.tsx`).catch(() => {});
-      }
-    }
-    prevComponentMentionIds.current = current;
-  }, [mentions, screenPreviewDir]);
 
   useEffect(() => {
     const selectedTheme = ps.stylePreset;
@@ -356,11 +321,11 @@ export function ScreensPanel() {
     // Load code for newly selected components
     for (const id of ctxSelectedComponentIds) {
       if (ctxComponentCode[id]) continue;
-      readFile(`projects/${settings.project}/components/${id}/component.tsx`)
+      readFile(`projects/${settings.project}/generated/src/components/${id}/component.tsx`)
         .then((code) => setCtxComponentCode((prev) => ({ ...prev, [id]: code })))
         .catch(() => {/* silently skip */ });
     }
-  }, [ctxSelectedComponentIds, settings.project, ctxComponentCode]);
+  }, [ctxSelectedComponentIds, settings.project]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -384,17 +349,17 @@ export function ScreensPanel() {
   const handleRetryPreview = () => {
     stoppedManuallyRef.current = false;
     scaffoldAttemptedRef.current = false;
-    startScreens(screenPreviewDir, ps.screensPreviewPort).catch(() => {} /* error shown in preview banner */);
+    startRunner(generatedDir, ps.runnerPort).catch(() => {});
   };
 
   const renderPreview = () => {
-    if (screensStatus === "error") {
+    if (runnerStatus === "error") {
       return (
         <div className="flex flex-col items-center justify-center gap-2 p-4 h-full text-center">
           <AlertCircle size={24} className="text-destructive" />
           <p className="text-xs font-medium text-destructive">Preview Error</p>
           <p className="text-[10px] text-muted-foreground max-w-full line-clamp-3">
-            {screensError || "Failed to start dev server"}
+            {runnerError || "Failed to start dev server"}
           </p>
           <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleRetryPreview}>
             Retry
@@ -403,7 +368,7 @@ export function ScreensPanel() {
       );
     }
 
-    if (screensStatus === "starting") {
+    if (runnerStatus === "starting") {
       return (
         <div className="flex flex-col items-center justify-center gap-2 h-full">
           <Loader2 size={20} className="animate-spin text-muted-foreground" />
@@ -412,7 +377,7 @@ export function ScreensPanel() {
       );
     }
 
-    if (screensStatus === "running" && screensUrl) {
+    if (runnerStatus === "running" && runnerUrl) {
       return (
         <iframe
           ref={previewIframeRef}
@@ -437,7 +402,7 @@ export function ScreensPanel() {
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
         pendingPermissions={pendingPermissions}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) { setCode(c); writeToScreenPreview(c); } }}
+        onApplyCode={(content) => { const c = extractCode(content); if (c) applyScreenCode(c); }}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
         onResolvePermission={(requestId, decision, toolName) => {
@@ -633,16 +598,16 @@ export function ScreensPanel() {
               <div className="h-full flex flex-col">
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
                   <span className="text-sm font-medium">Preview</span>
-                  {screensStatus === "running" ? (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopScreens(); }} title="Stop preview server">
+                  {runnerStatus === "running" ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopRunner(); }} title="Stop preview server">
                       <Square size={12} />
                     </Button>
-                  ) : screensStatus === "starting" ? (
+                  ) : runnerStatus === "starting" ? (
                     <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
                       <Loader2 size={12} className="animate-spin" />
                     </Button>
                   ) : (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startScreens(screenPreviewDir, ps.screensPreviewPort); }} title="Start preview server">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startRunner(generatedDir, ps.runnerPort); }} title="Start preview server">
                       <Play size={12} />
                     </Button>
                   )}

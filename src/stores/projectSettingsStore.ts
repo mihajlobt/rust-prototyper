@@ -25,7 +25,6 @@ export interface ProjectSettings {
   screensZoom: number;
   screensShowInspector: boolean;
   screensDarkPreview: boolean;
-  screensPreviewPort: number;
   screensCodeOpen: boolean;
 
   // Components panel
@@ -45,6 +44,7 @@ export interface ProjectSettings {
   // Runner panel
   runnerDevice: "desktop" | "tablet" | "mobile";
   runnerZoom: number;
+  runnerDarkPreview: boolean;
   runnerTerminalOpen: boolean;
   runnerActiveTab: "terminal" | "logs" | "network";
   runnerEditorTabs: string[];
@@ -69,7 +69,6 @@ export interface ProjectSettings {
 
   // Component preview
   shadcnMode: boolean;
-  devServerPort: number;
   runnerPort: number;
 }
 
@@ -92,7 +91,6 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   screensZoom: 1,
   screensShowInspector: false,
   screensDarkPreview: false,
-  screensPreviewPort: 5175,
   screensCodeOpen: false,
 
   componentsDevice: "desktop",
@@ -109,6 +107,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
 
   runnerDevice: "desktop",
   runnerZoom: 1,
+  runnerDarkPreview: false,
   runnerTerminalOpen: true,
   runnerActiveTab: "terminal",
   runnerEditorTabs: [],
@@ -131,7 +130,6 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   apisShowInspector: false,
 
   shadcnMode: true,
-  devServerPort: 5173,
   runnerPort: 5174,
 };
 

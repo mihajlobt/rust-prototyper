@@ -17,7 +17,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { writeFile, createDir, readDir, readFile, deleteFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -34,9 +34,10 @@ import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, type DesignBriefTemplate } from "@/lib/prompts";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { hasComponentPreviewScaffold, scaffoldComponentPreview, ensureEslintPatched, ensureTsconfigs, ensureDataDir, ensureTanstackQuery, ensureDataSymlink } from "@/lib/scaffold";
+import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
-import { getComponentPreviewDirPath, getAppTsx, PROJECT_PATHS } from "@/lib/scaffold-shadcn";
+import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
+import { syncGeneratedRouter } from "@/lib/navigation";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
@@ -48,8 +49,8 @@ export function ComponentsPanel() {
   const { ps, setPs, openComponent: setSelectedComponent } = useProjectSettingsStore();
   const queryClient = useQueryClient();
 
-  // Dev server state
-  const { previewStatus, previewUrl, previewError, startPreview, stopPreview } = useDevServerStore();
+  // Dev server state — shared runner server
+  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
@@ -74,18 +75,18 @@ export function ComponentsPanel() {
   // synchronously before React mounts — live changes go through postMessage.
   const darkAtUrlArrival = useRef(componentsDarkPreview);
   useEffect(() => { darkAtUrlArrival.current = componentsDarkPreview; }, [componentsDarkPreview]);
-  const initialPreviewSrc = useMemo(
-    () => (previewUrl ? `${previewUrl}?dark=${darkAtUrlArrival.current}` : undefined),
-    [previewUrl]
-  );
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
+  const initialPreviewSrc = useMemo(() => {
+    if (!runnerUrl || !componentId) return undefined;
+    return `${runnerUrl}/__preview/${componentId}?dark=${darkAtUrlArrival.current}`;
+  }, [runnerUrl, componentId]);
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3, [true, true, componentsShowInspector]);
 
   // Derived paths
-  const componentPreviewDir = getComponentPreviewDirPath(`projects/${settings.project}`);
+  const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
 
   // Switch to update prompt after first generation
   const hasGeneratedCode = code.length > 0;
@@ -94,7 +95,7 @@ export function ComponentsPanel() {
   const defaultSystem = hasGeneratedCode
     ? getComponentUpdatePrompt(settings.iconLibrary, code, ps.shadcnMode, settings.prompts["prompt.components.update"] || undefined) + designTokensSection
     : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + designTokensSection;
-  const componentPath = componentId ? `projects/${settings.project}/components/${componentId}/component.tsx` : undefined;
+  const componentPath = componentId ? `projects/${settings.project}/generated/src/components/${componentId}/component.tsx` : undefined;
   const systemContent = defaultSystem
     + buildDesignBriefSection(ctxSelectedBrief?.content ?? "")
     + buildApiContextSection(selectedApis, [])
@@ -113,63 +114,52 @@ export function ComponentsPanel() {
   useEffect(() => {
     let cancelled = false;
 
-    async function ensurePreviewServer() {
+    async function ensureServer() {
       if (cancelled) return;
-      if (previewStatus === "running" || previewStatus === "starting") return;
+      if (runnerStatus === "running" || runnerStatus === "starting") return;
       if (stoppedManuallyRef.current) return;
 
-      // Check if scaffolded
-      const isScaffolded = await hasComponentPreviewScaffold(`projects/${settings.project}`);
+      const isScaffolded = await hasGeneratedScaffold(`projects/${settings.project}`);
       if (cancelled) return;
 
       if (!isScaffolded) {
         if (scaffoldAttemptedRef.current) return;
         scaffoldAttemptedRef.current = true;
-
-        // Stop dev server before re-scaffolding to release file locks
-        useDevServerStore.getState().stopPreview();
-
+        useDevServerStore.getState().stopRunner();
         try {
           await withScaffoldNotifications(
-            "scaffold-component-preview",
-            "Scaffolding component preview",
-            (onStep) => scaffoldComponentPreview(componentPreviewDir, settings.iconLibrary, onStep)
+            "scaffold-generated",
+            "Scaffolding project",
+            (onStep) => scaffoldGenerated(generatedDir, settings.iconLibrary, onStep)
           );
         } catch {
           return;
         }
       } else {
-        // Keep App.tsx up to date (fixes dark mode for existing projects via HMR)
-        writeFile(`${componentPreviewDir}/${PROJECT_PATHS.SRC.APP_TSX}`, getAppTsx()).catch((e) => { notify.error("Failed to update App.tsx", getErrorMessage(e)); });
         ensureEslintPatched(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to patch ESLint config", getErrorMessage(e)); });
-        ensureTsconfigs(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to write tsconfigs", getErrorMessage(e)); });
-        ensureDataDir(`projects/${settings.project}`).catch((e) => { notify.error("Failed to initialize mock data directory", getErrorMessage(e)); });
-        ensureDataSymlink(`projects/${settings.project}`).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to create data symlink", getErrorMessage(e)); });
-        ensureTanstackQuery(componentPreviewDir).catch(() => { /* non-fatal */ });
       }
 
       if (cancelled) return;
       try {
-        await startPreview(componentPreviewDir, ps.devServerPort);
+        await startRunner(generatedDir, ps.runnerPort);
       } catch (e) {
         notify.error("Failed to start preview server", getErrorMessage(e));
       }
     }
 
-    ensurePreviewServer();
+    ensureServer();
     return () => { cancelled = true; };
-  }, [settings.project, previewStatus, componentPreviewDir, startPreview, ps.devServerPort, settings.iconLibrary]);
+  }, [settings.project, runnerStatus, generatedDir, startRunner, ps.runnerPort, settings.iconLibrary]);
 
   // ─── Write theme CSS when it changes ───────────────────────────────────────
 
   useEffect(() => {
-    if (!themeCss || previewStatus !== "running") return;
+    if (!themeCss || runnerStatus !== "running") return;
 
-    const themePath = `${componentPreviewDir}/src/styles/preview-theme.css`;
-    writeFile(themePath, themeCss).catch((e) => {
+    writeFile(`${generatedDir}/src/styles/preview-theme.css`, themeCss).catch((e) => {
       notify.error("Failed to write theme CSS", getErrorMessage(e));
     });
-  }, [themeCss, previewStatus, componentPreviewDir]);
+  }, [themeCss, runnerStatus, generatedDir]);
 
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
@@ -177,25 +167,18 @@ export function ComponentsPanel() {
     const iframe = previewIframeRef.current;
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: "set-dark", value: componentsDarkPreview }, "*");
-  }, [componentsDarkPreview, previewUrl]);
+  }, [componentsDarkPreview, runnerUrl]);
 
   const saveCode = useCallback(async (value: string) => {
-    if (!value) return;
+    if (!value || !selectedComponent) return;
     try {
-      // Write to Runner's App.tsx (Runner has no Generated wrapper — App IS the component)
-      const genDir = `projects/${settings.project}/generated`;
-      await writeFile(`${genDir}/src/App.tsx`, value);
-      // Write to component-preview/ Generated.tsx for the Vite component preview
-      await writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, value);
-      if (selectedComponent) {
-        const compDir = `projects/${settings.project}/components/${selectedComponent}`;
-        await createDir(compDir);
-        await writeFile(`${compDir}/component.tsx`, value);
-      }
+      const compDir = `${generatedDir}/src/components/${selectedComponent}`;
+      await createDir(compDir);
+      await writeFile(`${compDir}/component.tsx`, value);
     } catch (e) {
       notify.error("Failed to save generated code", getErrorMessage(e));
     }
-  }, [settings.project, selectedComponent, componentPreviewDir]);
+  }, [selectedComponent, generatedDir]);
 
   const handleCodeChange = useCallback((value: string) => {
     setCode(value);
@@ -273,32 +256,34 @@ export function ComponentsPanel() {
   useEffect(() => {
     if (loadedCode === undefined) return;
     setCode(loadedCode);
-    if (!loadedCode) return;
-    // Push to preview dirs so the Vite dev server shows the opened component immediately
-    writeFile(`${componentPreviewDir}/src/components/Generated.tsx`, loadedCode).catch((e) => { notify.error("Failed to write preview code", getErrorMessage(e)); });
-    const genDir = `projects/${settings.project}/generated`;
-    writeFile(`${genDir}/src/App.tsx`, loadedCode).catch((e) => { notify.error("Failed to write App.tsx", getErrorMessage(e)); });
-  }, [loadedCode, componentPreviewDir, settings.project]);
+    if (!loadedCode || !selectedComponent) return;
+    // Navigate iframe to this component's preview route
+    const iframe = previewIframeRef.current;
+    if (iframe?.contentWindow && runnerUrl) {
+      iframe.contentWindow.postMessage({ type: "navigate", path: `/__preview/${selectedComponent}` }, "*");
+    }
+  }, [loadedCode, selectedComponent, runnerUrl]);
 
   const chatPath = componentId
     ? `projects/${settings.project}/components/${componentId}/chat.json`
     : "projects/__placeholder__/chat.json";
 
   const componentOutputPath = componentId
-    ? `projects/${settings.project}/components/${componentId}/component.tsx`
+    ? `projects/${settings.project}/generated/src/components/${componentId}/component.tsx`
     : undefined;
 
   const handleSaveToRunner = useCallback(async () => {
     if (!code || !componentId) return;
-    const dest = `projects/${settings.project}/generated/${ps.directories.components}/${componentId}.tsx`;
+    const compDir = `${generatedDir}/src/components/${componentId}`;
     try {
-      await createDir(`projects/${settings.project}/generated/${ps.directories.components}`);
-      await writeFile(dest, code);
-      notify.success("Saved to Runner", dest);
+      await createDir(compDir);
+      await writeFile(`${compDir}/component.tsx`, code);
+      await syncGeneratedRouter(`projects/${settings.project}`);
+      notify.success("Saved to Runner", `${compDir}/component.tsx`);
     } catch (e) {
       notify.error("Save to Runner failed", getErrorMessage(e));
     }
-  }, [code, componentId, settings.project, ps.directories.components]);
+  }, [code, componentId, generatedDir, settings.project]);
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
@@ -321,44 +306,23 @@ export function ComponentsPanel() {
   const applyCode = useCallback(async (extracted: string) => {
     setCode(extracted);
     setPs({ componentsCodeOpen: true });
+    if (!selectedComponent) return;
     try {
-      // Write to Runner's App.tsx (Runner has no Generated wrapper — App IS the component)
-      const genDir = `projects/${settings.project}/generated`;
-      await writeFile(`${genDir}/src/App.tsx`, extracted);
-
-      // Write to component-preview/ for the Vite dev server (HMR will pick it up)
-      const previewDir = componentPreviewDir;
-      await createDir(`${previewDir}/src/components`);
-      await writeFile(`${previewDir}/src/components/Generated.tsx`, extracted);
-
-      if (selectedComponent) {
-        const compDir = `projects/${settings.project}/components/${selectedComponent}`;
-        await createDir(compDir);
-        await writeFile(`${compDir}/component.tsx`, extracted);
-        queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
+      const compDir = `${generatedDir}/src/components/${selectedComponent}`;
+      await createDir(compDir);
+      await writeFile(`${compDir}/component.tsx`, extracted);
+      await syncGeneratedRouter(`projects/${settings.project}`);
+      queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
+      // Navigate iframe to the component's preview route
+      const iframe = previewIframeRef.current;
+      if (iframe?.contentWindow && runnerUrl) {
+        iframe.contentWindow.postMessage({ type: "navigate", path: `/__preview/${selectedComponent}` }, "*");
       }
     } catch (e) {
       notify.error("Failed to apply generated code", getErrorMessage(e));
     }
-  }, [settings.project, selectedComponent, queryClient, componentPreviewDir, setPs]);
+  }, [settings.project, selectedComponent, queryClient, generatedDir, runnerUrl, setPs]);
 
-  // Sync @component mentions into component-preview/src/components/.
-  // Copy on add, delete on remove — no stale files left behind.
-  const prevComponentMentionIds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const current = new Set(mentions.filter((m) => m.type === "component").map((m) => m.id));
-    for (const m of mentions) {
-      if (m.type === "component" && m.code && !prevComponentMentionIds.current.has(m.id)) {
-        writeFile(`${componentPreviewDir}/src/components/${m.id}.tsx`, m.code).catch(() => {});
-      }
-    }
-    for (const id of prevComponentMentionIds.current) {
-      if (!current.has(id)) {
-        deleteFile(`${componentPreviewDir}/src/components/${id}.tsx`).catch(() => {});
-      }
-    }
-    prevComponentMentionIds.current = current;
-  }, [mentions, componentPreviewDir]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -369,7 +333,7 @@ export function ComponentsPanel() {
   const handleRetryPreview = useCallback(() => {
     scaffoldAttemptedRef.current = false;
     stoppedManuallyRef.current = false;
-    useDevServerStore.getState().stopPreview();
+    useDevServerStore.getState().stopRunner();
   }, []);
 
   const chatPane = (
@@ -537,13 +501,13 @@ export function ComponentsPanel() {
   // ─── Render preview content based on dev server status ─────────────────────
 
   const renderPreview = () => {
-    if (previewStatus === "error") {
+    if (runnerStatus === "error") {
       return (
         <div className="flex flex-col items-center justify-center gap-2 p-4 h-full text-center">
           <AlertCircle size={24} className="text-destructive" />
           <p className="text-xs font-medium text-destructive">Preview Error</p>
           <p className="text-[10px] text-muted-foreground max-w-full line-clamp-3">
-            {previewError || "Failed to start dev server"}
+            {runnerError || "Failed to start dev server"}
           </p>
           <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleRetryPreview}>
             Retry
@@ -552,7 +516,7 @@ export function ComponentsPanel() {
       );
     }
 
-    if (previewStatus === "starting") {
+    if (runnerStatus === "starting") {
       return (
         <div className="flex flex-col items-center justify-center gap-2 h-full">
           <Loader2 size={20} className="animate-spin text-muted-foreground" />
@@ -561,7 +525,7 @@ export function ComponentsPanel() {
       );
     }
 
-    if (previewStatus === "running" && previewUrl) {
+    if (runnerStatus === "running" && runnerUrl) {
       return (
         <iframe
           ref={previewIframeRef}
@@ -624,16 +588,16 @@ export function ComponentsPanel() {
               <div className="h-full flex flex-col">
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
                   <span className="text-sm font-medium">Preview</span>
-                  {previewStatus === "running" ? (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopPreview(); }} title="Stop preview server">
+                  {runnerStatus === "running" ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = true; stopRunner(); }} title="Stop preview server">
                       <Square size={12} />
                     </Button>
-                  ) : previewStatus === "starting" ? (
+                  ) : runnerStatus === "starting" ? (
                     <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting preview…">
                       <Loader2 size={12} className="animate-spin" />
                     </Button>
                   ) : (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startPreview(componentPreviewDir, ps.devServerPort); }} title="Start preview server">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startRunner(generatedDir, ps.runnerPort); }} title="Start preview server">
                       <Play size={12} />
                     </Button>
                   )}

@@ -9,13 +9,13 @@ This is a COMPONENT preview — NOT a full-page app generator. The preview area 
 ${TOOL_USAGE_SECTION}
 ${DATA_LAYER_SECTION}
 
-GLOBALS — DO NOT IMPORT ANY OF THESE, they are pre-loaded:
-- React and all hooks: useState, useEffect, useRef, useMemo, useCallback, useReducer, useContext, createContext
-- Lucide icons: any icon from lucide-react (Home, User, Settings, Search, Mail, Bell, Star, Menu, X, Check, Plus, Trash2, Edit, ChevronRight, ArrowLeft, etc.) — use directly, e.g. <Bell size={20} />
-
 CODE RULES:
-- NO import statements of any kind — they will break the runtime.
-- NO export keyword — just: function App() { ... }
+- EXPORTS: export default function ComponentName() { ... } — use PascalCase matching the component's name.
+- IMPORTS: all imports must be explicit TypeScript module imports:
+  - React hooks: import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+  - Lucide icons: import { Home, Bell, User } from 'lucide-react'
+  - Mock data: import { mockItems } from './data' (co-located data.ts)
+- MOCK DATA: put static arrays/objects in a co-located data.ts file. Import them — never inline large data in the component function.
 - TypeScript types for all props and state. Never use \`any\`. For icon props: React.ComponentType<{ size?: number; className?: string }>
 - Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
 - Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies.
@@ -41,10 +41,15 @@ ${TOOL_USAGE_SECTION}
 ${DATA_LAYER_SECTION}
 
 CODE RULES:
-- You MAY import shadcn components: import { Button } from "@/components/ui/button"
-- You MAY import cn utility: import { cn } from "@/lib/utils"
-- Do NOT import React or React hooks — they are available globally.
-- The function MUST be named \`App\` and be the default export: export default function App() { ... }
+- EXPORTS: export default function ComponentName() { ... } — use PascalCase matching the component's name.
+- IMPORTS: all imports must be explicit TypeScript module imports:
+  - shadcn components: import { Button } from "@/components/ui/button"
+  - cn utility: import { cn } from "@/lib/utils"
+  - React hooks: import { useState, useEffect, useRef } from 'react'
+  - Lucide icons: import { Home, Bell } from 'lucide-react'
+  - Mock data: import { mockItems } from './data' (co-located data.ts)
+  - Services: import { useMyStore } from '@/services/{name}' (only when user referenced API/data)
+- MOCK DATA: put static arrays/objects in a co-located data.ts file. Import them — never inline large data in the component function.
 - TypeScript types for all props and state. Never use \`any\`.
 - Style with Tailwind classes and CSS variables. Available variables: var(--background), var(--foreground), var(--card), var(--card-foreground), var(--primary), var(--primary-foreground), var(--secondary), var(--muted), var(--muted-foreground), var(--accent), var(--accent-foreground), var(--border), var(--input), var(--ring), var(--radius).
 - Do NOT hardcode hex or rgb colors — use CSS variables so the theme applies.
@@ -73,9 +78,10 @@ This is a COMPONENT preview — NOT a full-page app generator. Keep the componen
 ${TOOL_USAGE_SECTION}
 
 CODE RULES:
-- NO import statements of any kind. NO export keyword. Function must be named App.
+- Keep the existing export default function declaration and all imports intact.
+- Add or update imports as needed (React hooks from 'react', icons from 'lucide-react').
 - Preserve the component scope — do NOT expand into a full-screen layout.
-- Keep all existing hooks, state, and handlers intact.
+- Keep all existing hooks, state, and handlers intact unless replacing them.
 - Apply ONLY the requested changes.
 - TypeScript types throughout. Never use \`any\`.
 - Use CSS variables for colors (var(--primary), var(--accent), etc.) — not hardcoded hex.
@@ -90,11 +96,12 @@ ${SHADCN_COMPONENT_CATALOG}
 ${TOOL_USAGE_SECTION}
 
 CODE RULES:
-- You MAY import shadcn components: import { Button } from "@/components/ui/button"
-- You MAY import cn utility: import { cn } from "@/lib/utils"
-- Do NOT import React or React hooks — they are available globally.
+- Keep the existing export default function declaration and all imports intact.
+- Add new shadcn imports as needed: import { Button } from "@/components/ui/button"
+- Add cn utility if needed: import { cn } from "@/lib/utils"
+- Add React hooks if needed: import { useState } from 'react'
 - Preserve the component scope — do NOT expand into a full-screen layout.
-- Keep all existing hooks, state, and handlers intact.
+- Keep all existing hooks, state, and handlers intact unless replacing them.
 - Apply ONLY the requested changes.
 - Preserve any existing shadcn imports — do not remove them.
 - TypeScript types throughout. Never use \`any\`.

@@ -32,51 +32,13 @@ async fn setup_project_dir(proj_dir: &Path) {
     {
         use std::os::unix::fs::symlink;
 
-        let component_preview = proj_dir.join("component-preview");
-        if tokio::fs::try_exists(&component_preview).await.unwrap_or(false) {
+        let generated = proj_dir.join("generated");
+        if tokio::fs::try_exists(&generated).await.unwrap_or(false) {
+            // Symlink project_dir/node_modules → generated/node_modules so that
+            // tools running from the project root can resolve packages.
             let link = proj_dir.join("node_modules");
             if !tokio::fs::try_exists(&link).await.unwrap_or(false) {
-                let _ = symlink("component-preview/node_modules", &link);
-            }
-
-            let tsconfig = proj_dir.join("tsconfig.check.json");
-            let content = r#"{
-  "extends": "./component-preview/tsconfig.app.json",
-  "compilerOptions": {
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "types": [],
-    "typeRoots": ["./component-preview/node_modules/@types"]
-  },
-  "include": [
-    "components/**/*.tsx",
-    "components/**/*.ts",
-    "screens/**/*.tsx",
-    "screens/**/*.ts"
-  ]
-}
-"#;
-            let _ = tokio::fs::write(&tsconfig, content).await;
-
-            // Symlink component-preview/src/data → ../../data so that @/data imports
-            // in generated components resolve to the project-level data/ directory.
-            let src_dir = component_preview.join("src");
-            if tokio::fs::try_exists(&src_dir).await.unwrap_or(false) {
-                let data_link = src_dir.join("data");
-                if !tokio::fs::try_exists(&data_link).await.unwrap_or(false) {
-                    let _ = symlink("../../data", &data_link);
-                }
-            }
-
-            // Symlink screen-preview/src/screens → ../../screens so that @/screens/{id}/screen
-            // imports in routes.ts resolve to the project-level screens/ directory.
-            let screen_preview = proj_dir.join("screen-preview");
-            let screen_src_dir = screen_preview.join("src");
-            if tokio::fs::try_exists(&screen_src_dir).await.unwrap_or(false) {
-                let screens_link = screen_src_dir.join("screens");
-                if !tokio::fs::try_exists(&screens_link).await.unwrap_or(false) {
-                    let _ = symlink("../../screens", &screens_link);
-                }
+                let _ = symlink("generated/node_modules", &link);
             }
         }
     }

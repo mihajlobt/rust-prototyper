@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/dialog";
 
 import { writeFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
+import { queryClient } from "@/lib/queryClient";
+import { projectKeys } from "@/lib/queryKeys";
+import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
@@ -38,24 +41,29 @@ export function ThemesPanel() {
   const themesCodeOpen = ps.themesCodeOpen;
   const themesShowInspector = ps.themesShowInspector;
   const [css, setCss] = useState("");
+  const [previewKey, setPreviewKey] = useState(0);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
   const chatPath = `projects/${settings.project}/themes/${selectedThemeDir || "main"}/chat.json`;
 
   const themeDir = selectedThemeDir || "main";
   const themeOutputPath = `projects/${settings.project}/themes/${themeDir}/theme.css`;
+  const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
 
   const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
     try {
-      const themeDir = dirOverride || selectedThemeDir || "main";
-      const base = `projects/${settings.project}/themes/${themeDir}`;
+      const dir = dirOverride || selectedThemeDir || "main";
+      const base = `projects/${settings.project}/themes/${dir}`;
       await createDir(base);
       await writeFile(`${base}/theme.css`, content);
       await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
+      // Also write to generated/ so HMR picks up the theme in the preview
+      writeFile(`${generatedDir}/src/styles/preview-theme.css`, content).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: projectKeys.themeCss(settings.project, dir) });
     } catch (e) {
       notify.error("Failed to save theme", getErrorMessage(e));
     }
-  }, [settings.project, selectedThemeDir]);
+  }, [settings.project, selectedThemeDir, generatedDir]);
 
   const handleSaveToRunner = useCallback(async () => {
     if (!css) {
@@ -72,6 +80,13 @@ export function ThemesPanel() {
       notify.error("Save to Runner failed", getErrorMessage(e));
     }
   }, [css, settings.project, ps.directories.themes, themeDir]);
+
+  const applyGeneratedCss = useCallback((content: string) => {
+    setCss(content);
+    setPreviewKey((k) => k + 1);
+    persistTheme(content, "");
+    setPs({ themesCodeOpen: true });
+  }, [persistTheme, setPs]);
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
@@ -90,15 +105,16 @@ export function ThemesPanel() {
     ) + (themesDarkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : "") + outputFilePathSection(themeOutputPath),
     outputPath: themeOutputPath,
     onOutput: (content) => {
-      // Same extraction as the Apply button: strip fences, keep only the CSS block
-      const cleaned = content
-        .replace(/^```(?:css)?\s*/i, "")
-        .replace(/\s*```[\s\S]*$/i, "")  // strip closing fence + anything after it (summaries)
-        .trim();
-      const css = cleaned || content.trim();
-      setCss(css);
-      persistTheme(css, "");
-      setPs({ themesCodeOpen: true });
+      // Fallback: model responded with plain text instead of using write_file.
+      // Extract the CSS block (handles a comment before the fence).
+      const fenceMatch = content.match(/```(?:css)?\s*([\s\S]*?)(?:```|$)/i);
+      const extracted = fenceMatch ? fenceMatch[1].trim() : content.trim();
+      applyGeneratedCss(extracted);
+    },
+    onCodeOutput: (content) => {
+      // Primary path: model used write_file to output the CSS (as instructed).
+      // content is already stripped of fences by useChat's stripFences().
+      applyGeneratedCss(content);
     },
   });
 
@@ -110,7 +126,10 @@ export function ThemesPanel() {
   const { data: loadedCss } = useThemeCss(settings.project, selectedThemeDir);
 
   useEffect(() => {
-    if (loadedCss !== undefined) setCss(loadedCss);
+    if (loadedCss !== undefined) {
+      setCss(loadedCss);
+      setPreviewKey((k) => k + 1);
+    }
   }, [loadedCss]);
 
   const handleSaveConfirm = async () => {
@@ -357,7 +376,7 @@ export function ThemesPanel() {
                       style={{ width: deviceWidth[themesDevice] }}
                     >
                       <Frame
-                        key={selectedThemeDir}
+                        key={`${selectedThemeDir}-${previewKey}`}
                         className="w-full h-full border-0"
                         head={
                           <style>

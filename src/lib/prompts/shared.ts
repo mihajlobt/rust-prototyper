@@ -121,24 +121,26 @@ then use edit_file to make targeted changes. Only use write_file when creating a
 export function outputFilePathSection(outputPath: string): string {
   const parts = outputPath.split("/");
   const projectRoot = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
-  const isScreen = outputPath.includes("/screens/");
-  const activePreview = isScreen ? "screen-preview" : "component-preview";
+  const generatedRoot = `${projectRoot}/generated`;
   return `
 
 OUTPUT FILE — Your primary write_file output goes to: ${outputPath}
 When using read_file to verify or fix your code, use exactly this path: ${outputPath}
 
 WRITING ADDITIONAL FILES — use write_file with a "path" argument to create helpers alongside your primary file:
-- Service hooks:   ${activePreview}/src/services/{name}.ts     (import via "@/services/{name}")
-- Sub-components:  ${activePreview}/src/components/{Name}.tsx  (import via "@/components/{Name}")
-- Data files:      data/{name}.ts                              (import via "@/data/{name}")
-- Utilities:       ${activePreview}/src/lib/{name}.ts          (import via "@/lib/{name}")
-Paths are project-root-relative. Example: write_file(path="${activePreview}/src/services/weather.ts", content="...")
+- Service hooks:   ${generatedRoot}/src/services/{name}.ts          (import via "@/services/{name}")
+- Sub-components:  ${generatedRoot}/src/components/{Name}/component.tsx  (import via "@/components/{Name}/component")
+- Utilities:       ${generatedRoot}/src/utils/{name}.ts              (import via "@/utils/{name}")
+- Custom hooks:    ${generatedRoot}/src/hooks/{name}.ts              (import via "@/hooks/{name}")
+- Types:           ${generatedRoot}/src/types/{name}.ts              (import via "@/types/{name}")
+- Assets:          ${generatedRoot}/src/assets/{name}
+Paths are project-root-relative. Example: write_file(path="${generatedRoot}/src/services/weather.ts", content="...")
 
 PATH CONVENTIONS — all file paths are relative to the app data root:
 - Project root: ${projectRoot}/
-- glob and grep return paths relative to the PROJECT ROOT (e.g. "screens/x/screen.tsx")
-- read_file, write_file, and edit_file require paths from the APP DATA ROOT (e.g. "${projectRoot}/screens/x/screen.tsx")
+- Generated app root: ${generatedRoot}/src/
+- glob and grep return paths relative to the PROJECT ROOT (e.g. "generated/src/pages/home.tsx")
+- read_file, write_file, and edit_file require paths from the APP DATA ROOT (e.g. "${projectRoot}/generated/src/pages/home.tsx")
 - When using a path from glob/grep with read_file: prepend "${projectRoot}/" to it.`;
 }
 

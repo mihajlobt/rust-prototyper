@@ -4,7 +4,7 @@ import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
 import {
   Play, Square, Wrench, Package, PackagePlus, RotateCw,
-  Minus, Plus, Smartphone, Tablet, Monitor,
+  Minus, Plus, Smartphone, Tablet, Monitor, Moon,
   Terminal, ScrollText, Globe, Plus as PlusIcon,
   ChevronDown, ChevronUp, Save, FolderPlus, Loader2, X,
 } from "lucide-react";
@@ -116,6 +116,16 @@ export function RunnerPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabPath]);
 
+  const runnerDark = ps.runnerDarkPreview;
+  const runnerDarkRef = useRef(runnerDark);
+  useEffect(() => { runnerDarkRef.current = runnerDark; }, [runnerDark]);
+
+  // Sync dark mode into the preview iframe via postMessage
+  useEffect(() => {
+    if (!iframeRef.current?.contentWindow) return;
+    iframeRef.current.contentWindow.postMessage({ type: "set-dark", value: runnerDark }, "*");
+  }, [runnerDark, devUrl]);
+
   const runningRef = useRef(running);
   useEffect(() => { runningRef.current = running; }, [running]);
 
@@ -125,7 +135,7 @@ export function RunnerPanel() {
       logLinesRef.current = [...logLinesRef.current, { line: event.line, source: event.source }];
       setLogTick((t) => t + 1);
       if (runningRef.current && iframeRef.current && devUrl && /updated|hmr/i.test(event.line)) {
-        iframeRef.current.src = devUrl;
+        iframeRef.current.src = `${devUrl}?dark=${runnerDarkRef.current}`;
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
@@ -304,7 +314,7 @@ export function RunnerPanel() {
     catch (e) { notify.error("Kill all failed", getErrorMessage(e)); }
   };
 
-  const handleRefreshPreview = () => { if (iframeRef.current && devUrl) iframeRef.current.src = devUrl; };
+  const handleRefreshPreview = () => { if (iframeRef.current && devUrl) iframeRef.current.src = `${devUrl}?dark=${runnerDark}`; };
   const handleNewShell = async () => {
     if (!shellCommand.trim()) return;
     xtermRef.current?.writeln(`\x1b[36m> ${shellCommand}\x1b[0m`);
@@ -453,6 +463,7 @@ export function RunnerPanel() {
                       <div className="h-full flex flex-col">
                         <div className="panel-toolbar h-7 px-2 gap-1 bg-card">
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleRefreshPreview} title="Refresh"><RotateCw size={11} /></Button>
+                          <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setPs({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}><Moon size={11} /></Button>
                           <div className="w-px h-3 bg-border" />
                           <div className="flex items-center gap-0.5">
                             <Button variant={ps.runnerDevice === "mobile"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "mobile"  })} title="Mobile" ><Smartphone size={11} /></Button>
@@ -467,7 +478,7 @@ export function RunnerPanel() {
                         <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
                           {devUrl ? (
                             <div className="h-full bg-background shadow-lg border border-border overflow-hidden" style={{ width: deviceWidth[ps.runnerDevice], transform: `scale(${ps.runnerZoom})`, transformOrigin: "top center" }}>
-                              <iframe ref={iframeRef} src={devUrl} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
+                              <iframe ref={iframeRef} src={devUrl ? `${devUrl}?dark=${runnerDark}` : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
                             </div>
                           ) : (
                             <div className="flex items-center justify-center text-muted-foreground text-sm">

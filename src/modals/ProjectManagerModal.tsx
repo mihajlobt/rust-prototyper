@@ -13,7 +13,7 @@ import { Folder, Plus, Trash2, Loader2, Layout, Box, Palette, Workflow, Globe, C
 import { readDir, createDir, writeFile, deleteDir, readFile, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
-import { scaffoldGenerated, scaffoldComponentPreview, scaffoldScreenPreview } from "@/lib/scaffold";
+import { scaffoldGenerated } from "@/lib/scaffold";
 import { notify } from "@/hooks/useToast";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 
@@ -125,18 +125,8 @@ export function ProjectManagerModal() {
     try {
       await withScaffoldNotifications(
         "scaffold-generated",
-        `Creating project "${newProjectName}" (1/3 — generated app)`,
+        `Creating project "${newProjectName}"`,
         (onStep) => scaffoldGenerated(`${projectPath}/generated`, settings.iconLibrary, onStep)
-      );
-      await withScaffoldNotifications(
-        "scaffold-component-preview",
-        `Creating project "${newProjectName}" (2/3 — component preview)`,
-        (onStep) => scaffoldComponentPreview(`${projectPath}/component-preview`, settings.iconLibrary, onStep)
-      );
-      await withScaffoldNotifications(
-        "scaffold-screen-preview",
-        `Creating project "${newProjectName}" (3/3 — screen preview)`,
-        (onStep) => scaffoldScreenPreview(`${projectPath}/screen-preview`, settings.iconLibrary, onStep)
       );
     } catch {
       // withScaffoldNotifications shows the error toast

@@ -173,8 +173,8 @@ async fn execute_read_file(
         },
     };
 
-    // Resolve path: app-data-root-relative (e.g. "projects/abc/screens/x/screen.tsx")
-    // or project-relative (e.g. "screens/x/screen.tsx", "component-preview/src/lib/utils.ts").
+    // Resolve path: app-data-root-relative (e.g. "projects/abc/generated/src/pages/home.tsx")
+    // or project-relative (e.g. "generated/src/pages/home.tsx", "generated/src/components/foo/component.tsx").
     let target = match resolve_file_path(&parsed.path, app_data_dir, project_dir) {
         Some(t) => t,
         None => return ToolExecutionResult {
@@ -327,8 +327,8 @@ async fn execute_edit_file(
         },
     };
 
-    // Resolve path: app-data-root-relative (e.g. "projects/abc/screens/x/screen.tsx")
-    // or project-relative (e.g. "screens/x/screen.tsx", "component-preview/src/lib/utils.ts").
+    // Resolve path: app-data-root-relative (e.g. "projects/abc/generated/src/pages/home.tsx")
+    // or project-relative (e.g. "generated/src/pages/home.tsx", "generated/src/components/foo/component.tsx").
     let target = match resolve_file_path(&parsed.path, app_data_dir, project_dir) {
         Some(t) => t,
         None => return ToolExecutionResult {
@@ -568,6 +568,20 @@ fn fuzzy_block_match(content: &str, old: &str, new: &str, _replace_all: bool) ->
     None
 }
 
+/// Strip outer path wrappers so the result is relative to `generated/`.
+/// Handles:
+///   "projects/<id>/generated/src/pages/home.tsx" → "src/pages/home.tsx"
+///   "generated/src/pages/home.tsx"               → "src/pages/home.tsx"
+///   "src/pages/home.tsx"                          → "src/pages/home.tsx"
+fn to_generated_relative(path: &str) -> &str {
+    let p = if path.starts_with("projects/") {
+        path.splitn(3, '/').nth(2).unwrap_or(path)
+    } else {
+        path
+    };
+    p.strip_prefix("generated/").unwrap_or(p)
+}
+
 async fn execute_run_tsc(
     args: &serde_json::Value,
     project_dir: &Path,
@@ -591,71 +605,28 @@ async fn execute_run_tsc(
         };
     }
 
-    // Each component/screen dir has a tsconfig.json written at creation time (SidebarRail.tsx).
-    // It extends the preview project's tsconfig.app.json and scopes "files" to that one .tsx file.
-    // tsc ignores --project when files are passed as CLI args, so a dedicated tsconfig is the
-    // only correct way to scope checking to one file. See: https://github.com/microsoft/TypeScript/issues/41865
-    let (tsconfig_arg, tsc_preview_dir) = if let Some(ref file_path) = parsed.path {
-        // Strip "projects/<id>/" prefix — path must be relative to project_dir
-        let project_relative = if file_path.starts_with("projects/") {
-            file_path.splitn(3, '/').nth(2).unwrap_or(file_path.as_str())
-        } else {
-            file_path.as_str()
-        };
-        // Derive the directory containing the .tsx file
-        let (dir, filename) = project_relative
-            .rsplit_once('/')
-            .unwrap_or((project_relative, "component.tsx"));
-        let preview_dir = preview_dir_for_path(project_relative);
-        let tsconfig_path = project_dir.join(dir).join("tsconfig.json");
-        // Always overwrite the per-file tsconfig so the extends path is always correct
-        // for the right preview project (component-preview vs screen-preview).
-        // Stale tsconfigs that extend the wrong preview dir cause the entire wrong project
-        // to be typechecked, producing hundreds of spurious errors.
-        {
-            let extend_base = format!("../../{preview_dir}/tsconfig.app.json");
-            let type_roots = format!("../../{preview_dir}/node_modules/@types");
-            let tsconfig_content = format!(
-                r#"{{
-  "extends": "{}",
-  "compilerOptions": {{
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "types": [],
-    "typeRoots": ["{}"]
-  }},
-  "files": ["{}"]
-}}
-"#,
-                extend_base, type_roots, filename
-            );
-            let _ = tokio::fs::create_dir_all(&project_dir.join(dir)).await;
-            let _ = tokio::fs::write(&tsconfig_path, tsconfig_content).await;
-        }
-        let rel = format!("../{dir}/tsconfig.json");
-        let quoted = match shlex::try_quote(&rel) {
-            Ok(q) => q.into_owned(),
-            Err(_) => return ToolExecutionResult {
-                success: false,
-                output: format!("run_tsc: {}", ToolError::Security("path contains a nul byte".into())),
-                written_path: None,
-                written_content: None,
-            },
-        };
-        (quoted, preview_dir)
-    } else {
-        ("../tsconfig.check.json".to_string(), "component-preview")
-    };
+    // All generated code lives in generated/ which has its own complete tsconfig.app.json.
+    // Run tsc over the whole project; if a specific file path was given, filter the output.
+    let filter_path = parsed.path.as_deref().map(to_generated_relative).map(str::to_owned);
 
-    let command = format!(
-        r#"cd {tsc_preview_dir} && bun run tsc --noEmit --project {tsconfig_arg} 2>&1; echo "EXIT:$?""#
-    );
+    let command = r#"cd generated && bun run tsc --noEmit 2>&1; echo "EXIT:$?""#.to_string();
     let raw = run_sandboxed_command(&command, project_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
+    // When a specific file was requested, filter output to lines mentioning that file.
+    let output_text = if let Some(ref fp) = filter_path {
+        let filtered: Vec<&str> = body
+            .lines()
+            .filter(|l| l.contains(fp.as_str()) || l.trim().is_empty())
+            .collect();
+        if filtered.is_empty() { body.to_string() } else { filtered.join("\n") }
+    } else {
+        body.to_string()
+    };
+
     let output = match exit_code {
-        Some(code) => format!("{body}\nExit code: {code}"),
-        None => body.to_string(),
+        Some(code) => format!("{output_text}\nExit code: {code}"),
+        None => output_text,
     };
 
     ToolExecutionResult {
@@ -663,16 +634,6 @@ async fn execute_run_tsc(
         output,
         written_path: None,
         written_content: None,
-    }
-}
-
-/// Determine which preview project directory to use based on the file path.
-/// Components and themes live under `component-preview/`, screens under `screen-preview/`.
-fn preview_dir_for_path(project_relative: &str) -> &'static str {
-    if project_relative.starts_with("screens/") {
-        "screen-preview"
-    } else {
-        "component-preview"
     }
 }
 
@@ -699,28 +660,10 @@ async fn execute_run_lint(
         };
     }
 
-    // LLM may pass either a project-relative path ("components/foo/component.tsx")
-    // or a full app_data_dir-relative path ("projects/abc/components/foo/component.tsx").
-    // Strip "projects/<id>/" prefix so the path is always relative to project_dir.
-    let project_relative = if parsed.path.starts_with("projects/") {
-        parsed.path.splitn(3, '/').nth(2).unwrap_or(&parsed.path)
-    } else {
-        &parsed.path
-    };
-    let preview_dir = preview_dir_for_path(project_relative);
-    // ESLint v9 flat config only covers files within its project root directory tree.
-    // Files outside (e.g. `../components/...`, `../screens/...`) cause "couldn't find
-    // eslint.config.js" because ESLint searches upward from the linted file, not CWD.
-    //
-    // Screens: screen-preview copies screens to src/screens/{id}/screen.tsx — lint that copy.
-    // Everything else (components/, themes/, etc.): pass --config eslint.config.js explicitly
-    // so ESLint uses the preview project's config without needing to find it by traversal.
-    let (lint_target, explicit_config) = if project_relative.starts_with("screens/") {
-        (format!("src/{}", project_relative), false)
-    } else {
-        (format!("../{}", project_relative), true)
-    };
-    let escaped = match shlex::try_quote(&lint_target) {
+    // Strip outer prefixes so path is relative to generated/.
+    // ESLint v9 flat config applies to files inside the project root, so we run from generated/.
+    let generated_relative = to_generated_relative(&parsed.path).to_owned();
+    let escaped = match shlex::try_quote(&generated_relative) {
         Ok(s) => s.into_owned(),
         Err(_) => return ToolExecutionResult {
             success: false,
@@ -729,12 +672,7 @@ async fn execute_run_lint(
             written_content: None,
         },
     };
-    let eslint_cmd = if explicit_config {
-        format!("bunx eslint --config eslint.config.js {}", escaped)
-    } else {
-        format!("bunx eslint {}", escaped)
-    };
-    let command = format!("cd {preview_dir} && {} 2>&1; echo \"EXIT:$?\"", eslint_cmd);
+    let command = format!("cd generated && bunx eslint {} 2>&1; echo \"EXIT:$?\"", escaped);
     let raw = run_sandboxed_command(&command, project_dir).await;
 
     let (body, exit_code) = extract_exit_code(&raw);
@@ -768,14 +706,8 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
         };
     }
 
-    let project_relative = if parsed.path.starts_with("projects/") {
-        parsed.path.splitn(3, '/').nth(2).unwrap_or(&parsed.path)
-    } else {
-        &parsed.path
-    };
-
-    let preview_dir = preview_dir_for_path(project_relative);
-    let escaped = match shlex::try_quote(&format!("../{}", project_relative)) {
+    let generated_relative = to_generated_relative(&parsed.path).to_owned();
+    let escaped = match shlex::try_quote(&generated_relative) {
         Ok(s) => s.into_owned(),
         Err(_) => return ToolExecutionResult {
             success: false,
@@ -785,8 +717,8 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
         },
     };
 
-    // esbuild is a Vite dependency — available in both preview projects' node_modules.
-    let command = format!("cd {preview_dir} && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
+    // esbuild is a Vite dependency — available in generated/node_modules.
+    let command = format!("cd generated && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
     let raw = run_sandboxed_command(&command, project_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
@@ -903,8 +835,8 @@ async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path) -> ToolExec
     }
 }
 
-/// Resolve a path argument that may be app-data-root-relative (e.g. "projects/abc/screens/x/screen.tsx")
-/// or project-relative (e.g. "screens/x/screen.tsx" or "component-preview/src/lib/utils.ts").
+/// Resolve a path argument that may be app-data-root-relative (e.g. "projects/abc/generated/src/pages/home.tsx")
+/// or project-relative (e.g. "generated/src/pages/home.tsx" or "generated/src/components/foo/component.tsx").
 /// If the path starts with "projects/", treat it as app-data-root-relative.
 /// Otherwise, resolve it relative to the project directory.
 /// Returns None if the path contains ".." (path traversal).
@@ -970,31 +902,6 @@ async fn run_sandboxed_command(command: &str, project_dir: &Path) -> String {
     }
 }
 
-/// Expand combined short flags so the execpolicy sandbox can match them individually.
-/// agcodex-execpolicy 0.1 does not support option_bundling, so `-la` → `-l -a`.
-fn expand_combined_flags(command: &str) -> String {
-    let tokens = match shlex::split(command) {
-        Some(t) => t,
-        None => return command.to_string(),
-    };
-    let mut parts: Vec<String> = Vec::with_capacity(tokens.len() * 2);
-    for token in &tokens {
-        // Combined short flags: single '-', length > 2, all ASCII letters after '-'
-        if token.starts_with('-')
-            && !token.starts_with("--")
-            && token.len() > 2
-            && token[1..].chars().all(|c| c.is_ascii_alphabetic())
-        {
-            for ch in token[1..].chars() {
-                parts.push(format!("-{ch}"));
-            }
-        } else {
-            let quoted = shlex::try_quote(token).map(|q| q.into_owned()).unwrap_or_else(|_| token.to_string());
-            parts.push(quoted);
-        }
-    }
-    parts.join(" ")
-}
 
 /// Extract the non-glob prefix directory from a glob pattern so find can use it as the base.
 /// `projects/newesttest/**/*.tsx` → `projects/newesttest`
@@ -1022,8 +929,9 @@ async fn execute_bash(
         },
     };
 
-    let command = expand_combined_flags(&parsed.command);
-    match crate::sandbox::execute_sandboxed(&command, app_data_dir, 30).await {
+    // Do NOT apply expand_combined_flags here — the bash command is a raw shell
+    // pipeline with operators (&&, |, >) that must not be re-tokenized and re-quoted.
+    match crate::sandbox::execute_sandboxed(&parsed.command, app_data_dir, 30).await {
         Ok(result) => result,
         Err(crate::sandbox::SandboxError::InjectionDetected(detail)) => ToolExecutionResult {
             success: false,

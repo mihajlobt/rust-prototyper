@@ -288,9 +288,9 @@ pub async fn export_component(
     if output_path.contains("..") {
         return Err(AppError::Security("Invalid output path".into()));
     }
-    let component_path = resolve_path(&app, &format!("projects/{}/components/{}/component.tsx", project_id, component_id))?;
+    let component_path = resolve_path(&app, &format!("projects/{}/generated/src/components/{}/component.tsx", project_id, component_id))?;
     let project_dir = resolve_path(&app, &format!("projects/{}", project_id))?;
-    let component_preview_dir = project_dir.join("component-preview");
+    let generated_dir = project_dir.join("generated");
 
     let result = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
         let file = std::fs::File::create(&output_path).map_err(AppError::Io)?;
@@ -309,12 +309,12 @@ pub async fn export_component(
 
         let shadcn_components = scan_shadcn_imports(&component_source);
         if !shadcn_components.is_empty() {
-            let ui_dir = component_preview_dir.join("src").join("components").join("ui");
+            let ui_dir = generated_dir.join("src").join("components").join("ui");
             for comp_name in &shadcn_components {
                 add_file_to_zip(&mut zip, &ui_dir.join(format!("{}.tsx", comp_name)), &format!("components/ui/{}.tsx", comp_name))?;
             }
 
-            let utils_file = component_preview_dir.join("src").join("lib").join("utils.ts");
+            let utils_file = generated_dir.join("src").join("lib").join("utils.ts");
             let default_utils = r#"import { clsx, type ClassValue } from "clsx"; import { twMerge } from "tailwind-merge"; export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }"#;
             if utils_file.exists() {
                 add_file_to_zip(&mut zip, &utils_file, "lib/utils.ts")?;

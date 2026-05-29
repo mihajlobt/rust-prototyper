@@ -1,9 +1,6 @@
 /**
  * Shared constants and templates for scaffolding shadcn/ui projects.
  *
- * Used by both `scaffoldComponentPreview()` (component-preview/) and
- * `scaffoldGenerated()` (generated/) to ensure consistent project setup.
- *
  * Follows the shadcn Vite installation docs exactly:
  * https://ui.shadcn.com/docs/installation/vite
  *
@@ -25,10 +22,16 @@ export const PROJECT_PATHS = {
     ROUTER_TSX: "src/router.tsx",
     INDEX_CSS: "src/index.css",
     UTILS_TS: "src/lib/utils.ts",
-    GENERATED_TSX: "src/components/Generated.tsx",
     PREVIEW_THEME_CSS: "src/styles/preview-theme.css",
+    THEME_PREVIEW_TSX: "src/__theme-preview.tsx",
     COMPONENTS_DIR: "src/components",
     STYLES_DIR: "src/styles",
+    PAGES_DIR: "src/pages",
+    ASSETS_DIR: "src/assets",
+    HOOKS_DIR: "src/hooks",
+    SERVICES_DIR: "src/services",
+    UTILS_DIR: "src/utils",
+    TYPES_DIR: "src/types",
   },
 } as const;
 
@@ -146,190 +149,70 @@ export function patchViteResolveDedupe(config: string): string {
   );
 }
 
-/**
- * Returns the App.tsx for the component-preview/ or screen-preview/ project.
- * Sets dark class on documentElement so body { bg-background } picks up the
- * dark CSS variables. Reads initial state from ?dark= query param (sync, before
- * React mounts) and listens for set-dark postMessage for live toggling.
- *
- * Includes a class-based error boundary around <Generated /> that catches
- * render and commit-phase errors (e.g. React 19 frozen-props TypeError from
- * malformed AI-generated code) and displays a styled fallback with a retry
- * button, keeping the dark-mode shell and message listener intact.
- */
-export function getPreviewAppTsx(cssImports: string[]): string {
-  const imports = cssImports.map((p) => `import "${p}"`).join("\n");
-  return `import React from "react"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-${imports}
-import GeneratedComponent from "./${PROJECT_PATHS.SRC.GENERATED_TSX.replace('src/', '').replace('.tsx', '')}"
-// Cast away required props — App.tsx renders the component without props at preview time.
-// The AI may define required props; casting to ComponentType prevents TS2739 here.
-const Generated = GeneratedComponent as React.ComponentType
+/** Returns a static shadcn theme preview page written to generated/src/__theme-preview.tsx at scaffold time. */
+export function getThemePreviewTsx(): string {
+  return `import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
-const queryClient = new QueryClient()
-
-interface ErrorBoundaryState { hasError: boolean; error: Error | null }
-
-class PreviewErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBoundaryState> {
-  constructor(props: React.PropsWithChildren) {
-    super(props)
-    this.state = { hasError: false, error: null }
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error }
-  }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[PreviewErrorBoundary]", error, info)
-  }
-
-  render() {
-    if (this.state.hasError) {
-      const msg = this.state.error?.message || "An unexpected error occurred"
-      return (
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          height: "100%", width: "100%", padding: "24px", gap: "8px", textAlign: "center",
-        }}>
-          <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--destructive, #ef4444)" }}>Preview Error</p>
-          <p style={{ fontSize: "11px", color: "var(--muted-foreground, #888)", maxWidth: "100%", lineHeight: 1.4, wordBreak: "break-word" }}>{msg}</p>
-          <button style={{
-            marginTop: "4px", padding: "4px 12px", fontSize: "11px", fontWeight: 500,
-            border: "1px solid var(--border, #333)", borderRadius: "6px",
-            background: "transparent", color: "var(--foreground, #eee)", cursor: "pointer",
-          }} onClick={() => this.setState({ hasError: false, error: null })}>Retry</button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
-function App() {
-  const [dark, setDark] = React.useState(() => {
-    const d = new URLSearchParams(window.location.search).get("dark") === "true"
-    document.documentElement.classList.toggle("dark", d)
-    return d
-  })
-
-  React.useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark)
-  }, [dark])
-
-  React.useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === "set-dark") setDark(e.data.value as boolean)
-    }
-    window.addEventListener("message", handler)
-    return () => window.removeEventListener("message", handler)
-  }, [])
-
+export default function ThemePreview() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <PreviewErrorBoundary>
-        <Generated />
-      </PreviewErrorBoundary>
-    </QueryClientProvider>
+    <div className="p-8 space-y-6 bg-background min-h-screen">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground mb-1">Theme Preview</h1>
+        <p className="text-sm text-muted-foreground">Live preview of your theme applied to shadcn/ui components.</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Buttons</CardTitle>
+          <CardDescription>Primary interaction surfaces</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button>Primary</Button>
+          <Button variant="secondary">Secondary</Button>
+          <Button variant="outline">Outline</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="destructive">Destructive</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Badges &amp; Input</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Badge>Default</Badge>
+            <Badge variant="secondary">Secondary</Badge>
+            <Badge variant="outline">Outline</Badge>
+            <Badge variant="destructive">Destructive</Badge>
+          </div>
+          <Input placeholder="Input field" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Tabs</CardTitle></CardHeader>
+        <CardContent>
+          <Tabs defaultValue="tab1">
+            <TabsList>
+              <TabsTrigger value="tab1">Overview</TabsTrigger>
+              <TabsTrigger value="tab2">Details</TabsTrigger>
+              <TabsTrigger value="tab3">Settings</TabsTrigger>
+            </TabsList>
+            <TabsContent value="tab1" className="pt-3 text-sm text-muted-foreground">Overview content.</TabsContent>
+            <TabsContent value="tab2" className="pt-3 text-sm text-muted-foreground">Details content.</TabsContent>
+            <TabsContent value="tab3" className="pt-3 text-sm text-muted-foreground">Settings content.</TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
-
-export default App
 `;
-}
-
-/** Returns the App.tsx for the component-preview/ project (includes preview-theme.css). */
-export function getAppTsx(): string {
-  return getPreviewAppTsx([
-    `./${PROJECT_PATHS.SRC.INDEX_CSS.replace('src/', '')}`,
-    `./${PROJECT_PATHS.SRC.PREVIEW_THEME_CSS.replace('src/', '')}`,
-  ]);
-}
-
-/** Returns the App.tsx for the screen-preview/ project — React Router shell with all screens as routes. */
-export function getScreenPreviewAppTsx(): string {
-  return `import React, { useEffect } from "react"
-import "./index.css"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import { routes, defaultPath } from "./routes";
-
-const queryClient = new QueryClient()
-
-function NavigationListener() {
-  const navigate = useNavigate();
-  useEffect(() => {
-    function handler(event: MessageEvent) {
-      if (event.data?.type === "navigate" && typeof event.data.path === "string") {
-        navigate(event.data.path);
-      }
-    }
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, [navigate]);
-  return null;
-}
-
-function App() {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const dark = params.get("dark") === "true";
-    document.documentElement.classList.toggle("dark", dark);
-
-    function handler(event: MessageEvent) {
-      if (event.data?.type === "set-dark") {
-        document.documentElement.classList.toggle("dark", event.data.value);
-      }
-    }
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
-
-  if (routes.length === 0) {
-    return <div style={{ padding: 24, color: "var(--muted-foreground)" }}>No screens yet — create one in the Screens panel.</div>;
-  }
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <NavigationListener />
-        <Routes>
-          {routes.map((r) => (
-            <Route key={r.path} path={r.path} element={<r.component />} />
-          ))}
-          <Route path="*" element={<Navigate to={defaultPath} replace />} />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
-  );
-}
-
-export default App;
-`;
-}
-
-/** Returns the placeholder Generated.tsx source shown before any component is generated. */
-export function getGeneratedPlaceholderTsx(): string {
-  return `export default function Generated() {
-  return <div style={{ padding: 24 }}>Generated component will appear here</div>;
-}
-`;
-}
-
-/** Returns the placeholder theme CSS file content (populated at runtime when a theme is selected). */
-export function getPreviewThemeCss(): string {
-  return "";
-}
-
-/** Given a project data directory, returns the component-preview directory path. */
-export function getComponentPreviewDirPath(projectDir: string): string {
-  return `${projectDir}/component-preview`;
-}
-
-/** Given a project data directory, returns the screen-preview directory path. */
-export function getScreenPreviewDirPath(projectDir: string): string {
-  return `${projectDir}/screen-preview`;
 }
 
 /** Given a project data directory, returns the generated directory path. */
@@ -365,14 +248,69 @@ createRoot(document.getElementById('root')!).render(
 
 /**
  * Returns App.tsx for the generated/ app.
- * Delegates all routing to AppRouter from router.tsx.
+ * Includes dark mode support (postMessage + ?dark= param), navigation listener
+ * for iframe-driven screen navigation, and preview-theme.css for ThemesPanel.
  */
 export function getGeneratedAppTsx(): string {
-  return `import "./index.css"
+  return `import { useEffect, Component } from "react"
+import type { ReactNode, ErrorInfo } from "react"
+import { useNavigate } from "react-router-dom"
+import "./index.css"
+import "./styles/preview-theme.css"
 import { AppRouter } from "./router"
 
+function DarkModeManager() {
+  useEffect(() => {
+    const dark = new URLSearchParams(window.location.search).get("dark") === "true"
+    document.documentElement.classList.toggle("dark", dark)
+    function handler(e: MessageEvent) {
+      if (e.data?.type === "set-dark") document.documentElement.classList.toggle("dark", e.data.value as boolean)
+    }
+    window.addEventListener("message", handler)
+    return () => window.removeEventListener("message", handler)
+  }, [])
+  return null
+}
+
+function NavigationListener() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    function handler(e: MessageEvent) {
+      if (e.data?.type === "navigate" && typeof e.data.path === "string") navigate(e.data.path)
+    }
+    window.addEventListener("message", handler)
+    return () => window.removeEventListener("message", handler)
+  }, [navigate])
+  return null
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error("[AppErrorBoundary]", error, info) }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, fontFamily: "monospace", color: "red" }}>
+          <b>Preview error</b>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: 8, fontSize: 12 }}>
+            {(this.state.error as Error).message}
+          </pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
-  return <AppRouter />
+  return (
+    <AppErrorBoundary>
+      <DarkModeManager />
+      <NavigationListener />
+      <AppRouter />
+    </AppErrorBoundary>
+  )
 }
 `;
 }

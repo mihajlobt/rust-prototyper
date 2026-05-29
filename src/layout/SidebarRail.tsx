@@ -13,7 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, getErrorMessage } from "@/lib/ipc";
-import { addScreenToNavigation, removeScreenFromNavigation, renameScreenInNavigation, syncScreenPreviewRoutes } from "@/lib/navigation";
+import { addScreenToNavigation, removeScreenFromNavigation, renameScreenInNavigation, syncGeneratedRouter } from "@/lib/navigation";
+import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -22,39 +23,6 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { ProjectExplorer, SECTION_NAMES } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
-
-// Per-component/screen tsconfig scoped to the single .tsx file.
-// Extends component-preview's tsconfig (two levels up from components/<id>/ or screens/<id>/).
-// Written at creation/duplicate time so run_tsc can check only this file without output filtering.
-// See: https://github.com/microsoft/TypeScript/issues/41865
-async function syncRoutes(base: string) {
-  const { skipped } = await syncScreenPreviewRoutes(base);
-  for (const s of skipped) {
-    notify.warning(`Screen "${s.name}" excluded from preview`, s.reason);
-  }
-}
-
-const componentTsconfig = JSON.stringify({
-  extends: "../../component-preview/tsconfig.app.json",
-  compilerOptions: {
-    noUnusedLocals: false,
-    noUnusedParameters: false,
-    types: [],
-    typeRoots: ["../../component-preview/node_modules/@types"],
-  },
-  files: ["component.tsx"],
-}, null, 2);
-
-const screenTsconfig = JSON.stringify({
-  extends: "../../component-preview/tsconfig.app.json",
-  compilerOptions: {
-    noUnusedLocals: false,
-    noUnusedParameters: false,
-    types: [],
-    typeRoots: ["../../component-preview/node_modules/@types"],
-  },
-  files: ["screen.tsx"],
-}, null, 2);
 
 export function SidebarRail() {
   const { settings } = useAppStore();
@@ -67,6 +35,7 @@ export function SidebarRail() {
   const [renameTo, setRenameTo] = useState("");
 
   const base = `projects/${settings.project}`;
+  const generatedDir = getGeneratedDirPath(base);
 
   // --- Navigation ---
   const handleSetDefaultTheme = (name: string) => {
@@ -106,21 +75,21 @@ export function SidebarRail() {
     try {
       switch (newItemType) {
         case "screen": {
-          const dir = `${base}/screens/${id}`;
-          await createDir(dir);
-          await writeFile(`${dir}/screen.tsx`, `// ${newItemName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newItemName}</div>;\n}\n`);
-          await writeFile(`${dir}/chat.json`, "[]");
-          await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
+          const fnName = id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+          await createDir(`${base}/screens/${id}`);
+          await writeFile(`${base}/screens/${id}/chat.json`, "[]");
+          await writeFile(`${generatedDir}/src/pages/${id}.tsx`, `export default function ${fnName}() {\n  return <div>${newItemName}</div>;\n}\n`);
           await addScreenToNavigation(base, id);
-          await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+          await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
           break;
         }
         case "component": {
-          const dir = `${base}/components/${id}`;
-          await createDir(dir);
-          await writeFile(`${dir}/component.tsx`, `// ${newItemName}\nexport default function ${id.replace(/-/g, "_")}() {\n  return <div>${newItemName}</div>;\n}\n`);
-          await writeFile(`${dir}/prompt.json`, JSON.stringify({ name: newItemName, prompt: "", created: new Date().toISOString() }, null, 2));
-          await writeFile(`${dir}/tsconfig.json`, componentTsconfig);
+          const fnName = id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+          await createDir(`${base}/components/${id}`);
+          await writeFile(`${base}/components/${id}/prompt.json`, JSON.stringify({ name: newItemName, prompt: "", created: new Date().toISOString() }, null, 2));
+          await createDir(`${generatedDir}/src/components/${id}`);
+          await writeFile(`${generatedDir}/src/components/${id}/component.tsx`, `export default function ${fnName}() {\n  return <div>${newItemName}</div>;\n}\n`);
+          await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync router", getErrorMessage(e)); });
           break;
         }
         case "theme": {
@@ -163,7 +132,7 @@ export function SidebarRail() {
       }
       if (section === "screens") {
         await removeScreenFromNavigation(base, name);
-        await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+        await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
     } catch (e) {
@@ -189,7 +158,7 @@ export function SidebarRail() {
       }
       if (section === "screens") {
         await renameScreenInNavigation(base, name, newId);
-        await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+        await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       }
       await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
       setRenameTarget(null);
@@ -203,23 +172,21 @@ export function SidebarRail() {
     const newId = `${name}-copy`;
     try {
       if (section === "screens") {
-        const dir = `${base}/screens/${newId}`;
-        await createDir(dir);
-        const code = await readFile(`${base}/screens/${name}/screen.tsx`).catch(() => "");
+        await createDir(`${base}/screens/${newId}`);
+        const code = await readFile(`${generatedDir}/src/pages/${name}.tsx`).catch(() => "");
         const chat = await readFile(`${base}/screens/${name}/chat.json`).catch(() => "[]");
-        await writeFile(`${dir}/screen.tsx`, code);
-        await writeFile(`${dir}/chat.json`, chat);
-        await writeFile(`${dir}/tsconfig.json`, screenTsconfig);
+        await writeFile(`${base}/screens/${newId}/chat.json`, chat);
+        await writeFile(`${generatedDir}/src/pages/${newId}.tsx`, code);
         await addScreenToNavigation(base, newId);
-        await syncRoutes(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
+        await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
       } else if (section === "components") {
-        const dir = `${base}/components/${newId}`;
-        await createDir(dir);
-        const code = await readFile(`${base}/components/${name}/component.tsx`).catch(() => "");
+        await createDir(`${base}/components/${newId}`);
+        const code = await readFile(`${generatedDir}/src/components/${name}/component.tsx`).catch(() => "");
         const meta = await readFile(`${base}/components/${name}/prompt.json`).catch(() => "{}");
-        await writeFile(`${dir}/component.tsx`, code);
-        await writeFile(`${dir}/prompt.json`, meta);
-        await writeFile(`${dir}/tsconfig.json`, componentTsconfig);
+        await writeFile(`${base}/components/${newId}/prompt.json`, meta);
+        await createDir(`${generatedDir}/src/components/${newId}`);
+        await writeFile(`${generatedDir}/src/components/${newId}/component.tsx`, code);
+        await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync router", getErrorMessage(e)); });
       } else if (section === "themes") {
         const dir = `${base}/themes/${newId}`;
         await createDir(dir);

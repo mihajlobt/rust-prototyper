@@ -31,7 +31,7 @@ export function useComponentCode(project: string, name: string | null) {
     queryFn: async () => {
       if (!name) return "";
       try {
-        return await readFile(`projects/${project}/components/${name}/component.tsx`);
+        return await readFile(`projects/${project}/generated/src/components/${name}/component.tsx`);
       } catch {
         return "";
       }

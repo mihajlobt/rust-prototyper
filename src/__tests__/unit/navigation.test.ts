@@ -14,7 +14,6 @@ import {
   renameScreenInNavigation,
   addNavLink,
   removeNavLink,
-  syncScreenPreviewRoutes,
   syncGeneratedRouter,
   type Navigation,
 } from "@/lib/navigation";
@@ -280,97 +279,6 @@ describe("removeNavLink", () => {
   });
 });
 
-// ─── syncScreenPreviewRoutes ──────────────────────────────────────────────────
-
-describe("syncScreenPreviewRoutes", () => {
-  it("generates an empty routes.ts when no screens exist", async () => {
-    const { __files } = await getIpcMocks();
-    await setNavFile({ defaultScreen: "", screens: [], links: [] });
-    await syncScreenPreviewRoutes(PROJECT);
-    const routes = __files.get(`${PROJECT}/screen-preview/src/routes.ts`);
-    expect(routes).toBeDefined();
-    expect(routes).toContain("routes: Array");
-    expect(routes).toContain('defaultPath = "/"');
-  });
-
-  it("generates correct imports and route array for discovered screens", async () => {
-    const { __files, __dirs } = await getIpcMocks();
-    __dirs.set(`${PROJECT}/screens`, [
-      { name: "home", is_dir: true },
-      { name: "about", is_dir: true },
-    ]);
-    __files.set(`${PROJECT}/screens/home/screen.tsx`, "export default function App() {}");
-    __files.set(`${PROJECT}/screens/about/screen.tsx`, "export default function App() {}");
-    await setNavFile({
-      defaultScreen: "home",
-      screens: [
-        { id: "home", path: "/", title: "Home" },
-        { id: "about", path: "/about", title: "About" },
-      ],
-      links: [],
-    });
-
-    await syncScreenPreviewRoutes(PROJECT);
-
-    const routes = __files.get(`${PROJECT}/screen-preview/src/routes.ts`)!;
-    expect(routes).toContain("import Screen0 from '@/screens/home/screen'");
-    expect(routes).toContain("import Screen1 from '@/screens/about/screen'");
-    expect(routes).toContain('path: "/"');
-    expect(routes).toContain('path: "/about"');
-    expect(routes).toContain('defaultPath = "/"');
-  });
-
-  it("skips screen directories that have no screen.tsx on disk", async () => {
-    const { __files, __dirs } = await getIpcMocks();
-    __dirs.set(`${PROJECT}/screens`, [
-      { name: "home", is_dir: true },
-      { name: "draft", is_dir: true }, // no screen.tsx
-    ]);
-    __files.set(`${PROJECT}/screens/home/screen.tsx`, "export default function App() {}");
-    await setNavFile({
-      defaultScreen: "home",
-      screens: [
-        { id: "home", path: "/", title: "Home" },
-        { id: "draft", path: "/draft", title: "Draft" },
-      ],
-      links: [],
-    });
-
-    await syncScreenPreviewRoutes(PROJECT);
-
-    const routes = __files.get(`${PROJECT}/screen-preview/src/routes.ts`)!;
-    expect(routes).toContain("import Screen0 from '@/screens/home/screen'");
-    expect(routes).not.toContain("draft");
-  });
-
-  it("skips screen.tsx files that exist but have no export default (broken/partial write)", async () => {
-    const { __files, __dirs } = await getIpcMocks();
-    __dirs.set(`${PROJECT}/screens`, [
-      { name: "home", is_dir: true },
-      { name: "broken", is_dir: true }, // screen.tsx exists but has no export default
-    ]);
-    __files.set(`${PROJECT}/screens/home/screen.tsx`, "export default function App() {}");
-    __files.set(
-      `${PROJECT}/screens/broken/screen.tsx`,
-      "useEffect(() => { const t = setTimeout(() => {}, 500); return () => clearTimeout(t); }, []);",
-    );
-    await setNavFile({
-      defaultScreen: "home",
-      screens: [
-        { id: "home", path: "/", title: "Home" },
-        { id: "broken", path: "/broken", title: "Broken" },
-      ],
-      links: [],
-    });
-
-    await syncScreenPreviewRoutes(PROJECT);
-
-    const routes = __files.get(`${PROJECT}/screen-preview/src/routes.ts`)!;
-    expect(routes).toContain("import Screen0 from '@/screens/home/screen'");
-    expect(routes).not.toContain("broken");
-  });
-});
-
 // ─── syncGeneratedRouter ──────────────────────────────────────────────────────
 
 describe("syncGeneratedRouter", () => {
@@ -381,20 +289,20 @@ describe("syncGeneratedRouter", () => {
     expect(writeFile).not.toHaveBeenCalled();
   });
 
-  it("generates an empty Routes component when no screens exist", async () => {
+  it("generates an empty Routes component when no pages exist", async () => {
     const { __files } = await getIpcMocks();
     __files.set(`${PROJECT}/generated/package.json`, "{}");
     await setNavFile({ defaultScreen: "", screens: [], links: [] });
     await syncGeneratedRouter(PROJECT);
     const router = __files.get(`${PROJECT}/generated/src/router.tsx`)!;
     expect(router).toContain("AppRouter");
-    expect(router).not.toContain("import Screen");
+    expect(router).not.toContain("import Page");
   });
 
-  it("generates correct imports and routes for each screen", async () => {
+  it("generates correct imports and routes for each page", async () => {
     const { __files, __dirs } = await getIpcMocks();
     __files.set(`${PROJECT}/generated/package.json`, "{}");
-    __dirs.set(`${PROJECT}/generated/src/screens`, [
+    __dirs.set(`${PROJECT}/generated/src/pages`, [
       { name: "home.tsx", is_dir: false },
       { name: "about.tsx", is_dir: false },
     ]);
@@ -410,10 +318,26 @@ describe("syncGeneratedRouter", () => {
     await syncGeneratedRouter(PROJECT);
 
     const router = __files.get(`${PROJECT}/generated/src/router.tsx`)!;
-    expect(router).toContain("import Screen0 from './screens/home'");
-    expect(router).toContain("import Screen1 from './screens/about'");
+    expect(router).toContain("import Page0 from './pages/home'");
+    expect(router).toContain("import Page1 from './pages/about'");
     expect(router).toContain('path="/"');
     expect(router).toContain('path="/about"');
     expect(router).toContain('Navigate to="/"');
+  });
+
+  it("generates preview routes for discovered components", async () => {
+    const { __files, __dirs } = await getIpcMocks();
+    __files.set(`${PROJECT}/generated/package.json`, "{}");
+    __files.set(`${PROJECT}/generated/src/components/my-button/component.tsx`, "export default function MyButton() {}");
+    __dirs.set(`${PROJECT}/generated/src/components`, [
+      { name: "my-button", is_dir: true },
+    ]);
+    await setNavFile({ defaultScreen: "", screens: [], links: [] });
+
+    await syncGeneratedRouter(PROJECT);
+
+    const router = __files.get(`${PROJECT}/generated/src/router.tsx`)!;
+    expect(router).toContain("import Comp0 from './components/my-button/component'");
+    expect(router).toContain('path="/__preview/my-button"');
   });
 });

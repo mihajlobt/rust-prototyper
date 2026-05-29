@@ -1,5 +1,4 @@
-// Navigation manifest — maps screens to routes for the screen-preview router shell
-// and the generated/ app router (src/router.tsx).
+// Navigation manifest — maps screens to routes in the generated/ app router (src/router.tsx).
 // The agent can read/write navigation.json to control routing between screens.
 
 import { readFile, writeFile, readDir, isNotFoundError } from "@/lib/ipc";
@@ -106,8 +105,8 @@ export async function renameScreenInNavigation(projectDir: string, oldId: string
 }
 
 /**
- * Write generated/src/router.tsx from current navigation + screens on disk.
- * Called from FlowsView whenever navigation changes (edges/default screen).
+ * Write generated/src/router.tsx from current navigation + pages + components on disk.
+ * Called from FlowsView, ComponentsPanel, and ScreensPanel whenever content changes.
  * Silently skips if generated/ has not been scaffolded yet.
  */
 export async function syncGeneratedRouter(projectDir: string): Promise<void> {
@@ -119,118 +118,97 @@ export async function syncGeneratedRouter(projectDir: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
   const navById = new Map(nav.screens.map((s) => [s.id, s]));
 
-  // Discover screens from generated/src/screens/ (source of truth)
-  let screenIds: string[] = [];
+  // Discover pages from generated/src/pages/ (source of truth for screens)
+  let pageIds: string[] = [];
   try {
-    const entries = await readDir(`${generatedDir}/src/screens`);
-    screenIds = entries
+    const entries = await readDir(`${generatedDir}/src/pages`);
+    pageIds = entries
       .filter((e) => !e.is_dir && e.name.endsWith(".tsx"))
       .map((e) => e.name.replace(/\.tsx$/, ""));
-  } catch { /* no screens yet */ }
+  } catch { /* no pages yet */ }
+
+  // Discover components from generated/src/components/ (subdirs with component.tsx)
+  let componentIds: string[] = [];
+  try {
+    const entries = await readDir(`${generatedDir}/src/components`);
+    const dirs = entries.filter((e) => e.is_dir && e.name !== "ui");
+    const checks = await Promise.all(
+      dirs.map(async (e) => {
+        try {
+          await readFile(`${generatedDir}/src/components/${e.name}/component.tsx`);
+          return e.name;
+        } catch { return null; }
+      })
+    );
+    componentIds = checks.filter(Boolean) as string[];
+  } catch { /* no components yet */ }
 
   const routerPath = `${generatedDir}/src/router.tsx`;
 
-  if (screenIds.length === 0) {
-    await writeFile(routerPath,
-      `// Auto-generated from Flows panel. Edit navigation in the Flows panel, not here.\nimport { Routes, Route, Navigate } from 'react-router-dom'\n\nexport function AppRouter() {\n  return (\n    <Routes>\n      <Route path="*" element={<Navigate to="/" replace />} />\n    </Routes>\n  )\n}\n`
-    );
-    return;
-  }
-
-  const defaultId = nav.defaultScreen && screenIds.includes(nav.defaultScreen)
+  const defaultId = nav.defaultScreen && pageIds.includes(nav.defaultScreen)
     ? nav.defaultScreen
-    : screenIds[0];
-  const defaultPath = navById.get(defaultId)?.path ?? `/${defaultId}`;
+    : pageIds[0] ?? null;
+  const defaultNavPath = defaultId
+    ? (navById.get(defaultId)?.path ?? `/${defaultId}`)
+    : "/";
 
-  const imports = screenIds
-    .map((id, i) => `import Screen${i} from './screens/${id}'`)
+  const pageImports = pageIds
+    .map((id, i) => `import Page${i} from './pages/${id}'`)
     .join("\n");
 
-  const routes = screenIds
+  const componentImports = componentIds
+    .map((id, i) => `import Comp${i} from './components/${id}/component'`)
+    .join("\n");
+
+  const themeImport = `import ThemePreview from './__theme-preview'`;
+
+  const pageRoutes = pageIds
     .map((id, i) => {
       const path = navById.get(id)?.path ?? `/${id}`;
-      return `      <Route path="${path}" element={<Screen${i} />} />`;
+      return `      <Route path="${path}" element={<Page${i} />} />`;
     })
     .join("\n");
 
-  await writeFile(routerPath,
-    `// Auto-generated from Flows panel. Edit navigation in the Flows panel, not here.\nimport { Routes, Route, Navigate } from 'react-router-dom'\n${imports}\n\nexport function AppRouter() {\n  return (\n    <Routes>\n${routes}\n      <Route path="*" element={<Navigate to="${defaultPath}" replace />} />\n    </Routes>\n  )\n}\n`
-  );
-}
-
-/**
- * Write screen-preview/src/routes.ts from current screens in navigation.json.
- * Called whenever screens are created, deleted, renamed, or written by the AI agent.
- * Uses a symlink screen-preview/src/screens → ../../screens set up by ensureScreenSymlink().
- */
-export interface SkippedScreen { name: string; reason: string }
-
-export async function syncScreenPreviewRoutes(projectDir: string): Promise<{ skipped: SkippedScreen[] }> {
-  const screenPreviewDir = `${projectDir}/screen-preview`;
-
-  // Discover all screens from the filesystem (source of truth)
-  let screenEntries: Array<{ name: string }> = [];
-  try {
-    const entries = await readDir(`${projectDir}/screens`);
-    screenEntries = entries.filter((e) => e.is_dir);
-  } catch (e) {
-    if (!isNotFoundError(e)) throw e;
-  }
-
-  const nav = await loadNavigation(projectDir);
-  const navById = new Map(nav.screens.map((s) => [s.id, s]));
-
-  // Build routes from filesystem — only include screens that have a valid screen.tsx on disk.
-  // "Valid" means the file exists AND contains `export default`, so Vite can resolve the default
-  // import in routes.ts. A file without a default export (e.g. a partial/broken write) would
-  // cause a WebKit ESM error that blanks the entire preview for all screens.
-  const skipped: SkippedScreen[] = [];
-  const validEntries: typeof screenEntries = [];
-  await Promise.all(
-    screenEntries.map(async (entry) => {
-      try {
-        const content = await readFile(`${projectDir}/screens/${entry.name}/screen.tsx`);
-        if (!content.includes("export default")) {
-          skipped.push({ name: entry.name, reason: "screen.tsx has no export default — file may be incomplete" });
-        } else {
-          validEntries.push(entry);
-        }
-      } catch {
-        skipped.push({ name: entry.name, reason: "screen.tsx not found" });
-      }
-    })
-  );
-
-  const routes = validEntries.map((entry) => {
-    const navEntry = navById.get(entry.name);
-    return {
-      id: entry.name,
-      path: navEntry?.path ?? `/${entry.name}`,
-    };
-  });
-
-  const defaultPath = nav.defaultScreen
-    ? (navById.get(nav.defaultScreen)?.path ?? routes[0]?.path ?? "/")
-    : routes[0]?.path ?? "/";
-
-  if (routes.length === 0) {
-    await writeFile(
-      `${screenPreviewDir}/src/routes.ts`,
-      `// Auto-generated by Prototyper — do not edit manually.\nimport type { ComponentType } from 'react';\nexport const routes: Array<{ path: string; component: ComponentType }> = [];\nexport const defaultPath = "/";\n`
-    );
-    return { skipped };
-  }
-
-  const imports = routes
-    .map((r, i) => `import Screen${i} from '@/screens/${r.id}/screen';`)
+  const componentRoutes = componentIds
+    .map((id, i) => `      <Route path="/__preview/${id}" element={<PreviewShell><Comp${i} /></PreviewShell>} />`)
     .join("\n");
 
-  const routeArray = routes
-    .map((r, i) => `  { path: "${r.path}", component: Screen${i} },`)
+  const allRoutes = [pageRoutes, componentRoutes]
+    .filter(Boolean)
     .join("\n");
 
-  const content = `// Auto-generated by Prototyper — do not edit manually.\n${imports}\n\nexport const routes = [\n${routeArray}\n];\n\nexport const defaultPath = "${defaultPath}";\n`;
-
-  await writeFile(`${screenPreviewDir}/src/routes.ts`, content);
-  return { skipped };
+  const previewShell = `
+function PreviewShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background p-4 flex items-start justify-center">
+      <div className="w-full max-w-lg">{children}</div>
+    </div>
+  )
 }
+`.trim();
+
+  const hasAnyRoutes = pageIds.length > 0 || componentIds.length > 0;
+
+  const content = `// Auto-generated — edit navigation in the Flows panel, not here.
+import React from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+${pageImports}
+${componentImports}
+${themeImport}
+
+${previewShell}
+
+export function AppRouter() {
+  return (
+    <Routes>
+${allRoutes}
+      <Route path="/__theme-preview" element={<ThemePreview />} />
+      <Route path="*" element={<Navigate to="${hasAnyRoutes ? defaultNavPath : "/__theme-preview"}" replace />} />
+    </Routes>
+  )
+}
+`;
+
+  await writeFile(routerPath, content);
+}
+
