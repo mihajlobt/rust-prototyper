@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal } from "lucide-react";
+import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal, Dice3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
@@ -263,6 +263,16 @@ export function AssetsPanel() {
                     disabled={!isRunning}
                     min={0}
                   />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0"
+                    onClick={() => setSeed(Math.floor(Math.random() * 2147483647) + 1)}
+                    disabled={!isRunning}
+                    title="Randomize seed"
+                  >
+                    <Dice3 className="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
 

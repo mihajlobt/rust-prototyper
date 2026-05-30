@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
-import { FolderOpen, Trash2 } from "lucide-react";
+import { Copy, FolderOpen, Trash2 } from "lucide-react";
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem,
   ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { revealInExplorer } from "@/lib/ipc";
+import { notify } from "@/hooks/useToast";
 import type { AssetInfo } from "@/lib/bonsai";
 
 export type AssetViewMode = "list" | "grid";
@@ -42,6 +43,14 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl,
             onSelect={() => onSelect(index)}
             onDelete={() => onDelete(asset.file_name)}
             onReveal={() => revealInExplorer(asset.file_path)}
+            onCopyPrompt={() => {
+              if (asset.prompt) {
+                navigator.clipboard.writeText(asset.prompt);
+                notify.success("Copied", "Prompt copied to clipboard");
+              } else {
+                notify.error("No prompt", "This asset has no recorded prompt");
+              }
+            }}
             assetUrl={assetUrl}
           />
         ))}
@@ -60,6 +69,14 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl,
           onSelect={() => onSelect(index)}
           onDelete={() => onDelete(asset.file_name)}
           onReveal={() => revealInExplorer(asset.file_path)}
+          onCopyPrompt={() => {
+            if (asset.prompt) {
+              navigator.clipboard.writeText(asset.prompt);
+              notify.success("Copied", "Prompt copied to clipboard");
+            } else {
+              notify.error("No prompt", "This asset has no recorded prompt");
+            }
+          }}
           assetUrl={assetUrl}
         />
       ))}
@@ -74,6 +91,7 @@ interface AssetCardBaseProps {
   onSelect: () => void;
   onDelete: () => void;
   onReveal: () => void;
+  onCopyPrompt: () => void;
   assetUrl: (filePath: string) => string;
 }
 
@@ -86,6 +104,7 @@ function AssetCardList({
   onSelect,
   onDelete,
   onReveal,
+  onCopyPrompt,
   assetUrl,
 }: AssetCardBaseProps) {
   const highlightRef = useRef<HTMLButtonElement>(null);
@@ -138,6 +157,10 @@ function AssetCardList({
           <FolderOpen size={12} className="mr-2" />
           Show in File Explorer
         </ContextMenuItem>
+        <ContextMenuItem onClick={onCopyPrompt} disabled={!asset.prompt}>
+          <Copy size={12} className="mr-2" />
+          Copy Prompt
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
           <Trash2 size={12} className="mr-2" />
@@ -157,6 +180,7 @@ function AssetCardGrid({
   onSelect,
   onDelete,
   onReveal,
+  onCopyPrompt,
   assetUrl,
 }: AssetCardBaseProps) {
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -187,19 +211,19 @@ function AssetCardGrid({
           {/* Hover delete */}
           <button
             type="button"
-            className="absolute top-1 right-1 p-1 rounded bg-background/80 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute top-1 right-1 p-1 rounded bg-background/70 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity z-10"
             onClick={(event) => { event.stopPropagation(); onDelete(); }}
           >
             <Trash2 size={12} />
           </button>
-          {/* Metadata block below image — no truncation */}
-          <div className="p-2 border-t border-border bg-card">
-            <div className="text-xs leading-snug">
+          {/* Metadata overlay at bottom of thumbnail */}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent px-2 pt-6 pb-1.5">
+            <div className="text-xs leading-snug text-white/90 truncate">
               {asset.prompt ?? asset.file_name}
             </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono text-muted-foreground mt-1">
+            <div className="flex items-center gap-x-1.5 text-[10px] font-mono text-white/60 mt-0.5">
               <span>{asset.file_name}</span>
-              <span className="text-border">|</span>
+              <span className="text-white/30">|</span>
               <span>{(asset.file_size / 1024).toFixed(0)}KB</span>
             </div>
           </div>
@@ -209,6 +233,10 @@ function AssetCardGrid({
         <ContextMenuItem onClick={onReveal}>
           <FolderOpen size={12} className="mr-2" />
           Show in File Explorer
+        </ContextMenuItem>
+        <ContextMenuItem onClick={onCopyPrompt} disabled={!asset.prompt}>
+          <Copy size={12} className="mr-2" />
+          Copy Prompt
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
