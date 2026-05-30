@@ -607,9 +607,11 @@ async fn execute_run_tsc(
 
     // All generated code lives in generated/ which has its own complete tsconfig.app.json.
     // Run tsc over the whole project; if a specific file path was given, filter the output.
+    // Note: "bun run tsc" uses the root tsconfig.json which only has references and no files,
+    // so we must use "bun tsc --project tsconfig.app.json" to run against the actual source.
     let filter_path = parsed.path.as_deref().map(to_generated_relative).map(str::to_owned);
 
-    let command = r#"cd generated && bun run tsc --noEmit 2>&1; echo "EXIT:$?""#.to_string();
+    let command = r#"cd generated && bun tsc --noEmit --project tsconfig.app.json 2>&1; echo "EXIT:$?""#.to_string();
     let raw = run_sandboxed_command(&command, project_dir).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
