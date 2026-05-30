@@ -80,6 +80,7 @@ export function ComponentsPanel() {
     },
     [runnerUrl, selectedComponent, componentsDarkPreview]
   );
+  console.log("[ComponentsPanel] active preview:", initialPreviewSrc, { runnerUrl, selectedComponent, componentsDarkPreview });
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3, [true, true, componentsShowInspector]);

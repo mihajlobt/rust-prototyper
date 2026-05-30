@@ -69,6 +69,7 @@ export function ScreensPanel() {
     },
     [runnerUrl, screenId]
   );
+  console.log("[ScreensPanel] active preview:", initialPreviewSrc, { runnerUrl, screenId, dark: darkAtUrlArrival.current });
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
   const screenPath = screenId
