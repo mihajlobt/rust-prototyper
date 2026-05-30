@@ -17,6 +17,9 @@ export interface NavScreen {
   title: string;
   ports: NavPort[];
   layout?: string;
+  /** Canvas position in the Flows view */
+  x?: number;
+  y?: number;
 }
 
 export interface NavLink {
@@ -125,7 +128,16 @@ export async function addNavLink(
 
 export async function removeNavLink(projectDir: string, linkId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
+  const removed = nav.links.find((l) => l.id === linkId);
   nav.links = nav.links.filter((l) => l.id !== linkId);
+  // Clear targetScreenId on any hotspot whose port drove this link
+  if (removed) {
+    for (const hotspot of nav.hotspots) {
+      if (hotspot.portId === removed.fromPort) {
+        hotspot.targetScreenId = "";
+      }
+    }
+  }
   await saveNavigation(projectDir, nav);
 }
 

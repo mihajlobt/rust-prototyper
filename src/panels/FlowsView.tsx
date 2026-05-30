@@ -189,10 +189,12 @@ function buildNodes(screenIds: string[], nav: Navigation, existingNodes: ScreenN
   return screenIds.map((id, i) => {
     const navScreen = navScreenById.get(id);
     const ports = navScreen?.ports ?? getDefaultPorts(id);
+    // Priority: in-memory (drag in progress) > saved in navigation.json > grid default
+    const saved = navScreen?.x != null && navScreen?.y != null ? { x: navScreen.x, y: navScreen.y } : undefined;
     return {
       id,
       type: "screen" as const,
-      position: positionById.get(id) ?? { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
+      position: positionById.get(id) ?? saved ?? { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
       data: {
         label: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         isDefault: id === nav.defaultScreen,
@@ -300,6 +302,21 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
     [setPs]
   );
 
+  const onNodeDragStop = useCallback(
+    async (_: React.MouseEvent, node: ScreenNode) => {
+      try {
+        const nav = await loadNavigation(projectDir);
+        const screen = nav.screens.find((s) => s.id === node.id);
+        if (screen) {
+          screen.x = Math.round(node.position.x);
+          screen.y = Math.round(node.position.y);
+          await saveNavigation(projectDir, nav);
+        }
+      } catch { /* ignore persistence errors */ }
+    },
+    [projectDir]
+  );
+
   const actions = useMemo<FlowsActions>(
     () => ({
       openScreen: (id) => setPs({ activeView: "screens", activeScreen: id }),
@@ -360,6 +377,7 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
         onConnect={onConnect}
         onEdgesDelete={onEdgesDelete}
         onNodeDoubleClick={onNodeDoubleClick}
+        onNodeDragStop={onNodeDragStop}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         deleteKeyCode="Delete"
