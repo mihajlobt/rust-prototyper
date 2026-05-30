@@ -76,11 +76,12 @@ export function ComponentsPanel() {
   const initialPreviewSrc = useMemo(
     () => {
       if (!runnerUrl || !selectedComponent) return undefined;
-      return `${runnerUrl}/__preview/${selectedComponent}?dark=${componentsDarkPreview}`;
+      const base = runnerUrl.replace(/\/$/, "");
+      return `${base}/__preview/${selectedComponent}?dark=${componentsDarkPreview}`;
     },
     [runnerUrl, selectedComponent, componentsDarkPreview]
   );
-  console.log("[ComponentsPanel] active preview:", initialPreviewSrc, { runnerUrl, selectedComponent, componentsDarkPreview });
+  console.log("[ComponentsPanel] active preview:", initialPreviewSrc, { runnerUrl, selectedComponent });
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3, [true, true, componentsShowInspector]);
@@ -590,6 +591,11 @@ export function ComponentsPanel() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startRunner(generatedDir, ps.runnerPort); }} title="Start preview server">
                       <Play size={12} />
                     </Button>
+                  )}
+                  {initialPreviewSrc && (
+                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={initialPreviewSrc}>
+                      {initialPreviewSrc.replace(/^http:\/\/localhost:\d+/, "")}
+                    </span>
                   )}
                   <div className="flex-1" />
                   <Select value={selectedTheme} onValueChange={(v) => setPs({ stylePreset: v })}>

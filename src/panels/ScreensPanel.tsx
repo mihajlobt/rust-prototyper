@@ -65,11 +65,11 @@ export function ScreensPanel() {
   const initialPreviewSrc = useMemo(
     () => {
       if (!runnerUrl || !screenId) return undefined;
-      return `${runnerUrl}/${screenId}?dark=${darkAtUrlArrival.current}`;
+      const base = runnerUrl.replace(/\/$/, ""); // strip trailing slash to avoid //
+      return `${base}/${screenId}?dark=${darkAtUrlArrival.current}`;
     },
     [runnerUrl, screenId]
   );
-  console.log("[ScreensPanel] active preview:", initialPreviewSrc, { runnerUrl, screenId, dark: darkAtUrlArrival.current });
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
   const screenPath = screenId
@@ -582,6 +582,11 @@ export function ScreensPanel() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { stoppedManuallyRef.current = false; startRunner(generatedDir, ps.runnerPort); }} title="Start preview server">
                       <Play size={12} />
                     </Button>
+                  )}
+                  {initialPreviewSrc && (
+                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={initialPreviewSrc}>
+                      {initialPreviewSrc.replace(/^http:\/\/localhost:\d+/, "")}
+                    </span>
                   )}
                   <div className="flex-1" />
                   <Button
