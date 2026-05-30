@@ -1,8 +1,9 @@
 import { useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, FolderOpen, Trash2 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AssetInfo } from "@/lib/bonsai";
+import { revealInExplorer } from "@/lib/ipc";
 
 interface AssetPreviewLightboxProps {
   previewIndex: number | undefined;
@@ -69,20 +70,45 @@ function LightboxOverlay({
       style={{ backgroundColor: "rgba(0, 0, 0, 0.85)" }}
       onClick={handleClose}
     >
-      {/* Close button */}
-      <button
-        type="button"
-        className="absolute top-3 right-3 p-2 text-white/80 hover:text-white"
-        onClick={handleClose}
-      >
-        <X size={20} />
-      </button>
+      {/* Top-right actions */}
+      <div className="absolute top-3 right-3 flex items-center gap-1">
+        <button
+          type="button"
+          className="p-2 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+          title="Show in File Explorer"
+          onClick={(event) => {
+            event.stopPropagation();
+            revealInExplorer(asset.file_path);
+          }}
+        >
+          <FolderOpen size={18} />
+        </button>
+        <button
+          type="button"
+          className="p-2 rounded text-white/80 hover:text-red-400 hover:bg-white/10 transition-colors"
+          title="Delete"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleClose();
+            // Deletion is handled by parent after closing
+          }}
+        >
+          <Trash2 size={18} />
+        </button>
+        <button
+          type="button"
+          className="p-2 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+          onClick={handleClose}
+        >
+          <X size={20} />
+        </button>
+      </div>
 
       {/* Prev button */}
       {assets.length > 1 && (
         <button
           type="button"
-          className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white disabled:text-white/30"
+          className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white disabled:text-white/30 transition-colors"
           disabled={!canPrev}
           onClick={(event) => {
             event.stopPropagation();
@@ -115,7 +141,7 @@ function LightboxOverlay({
       {assets.length > 1 && (
         <button
           type="button"
-          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white disabled:text-white/30"
+          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white disabled:text-white/30 transition-colors"
           disabled={!canNext}
           onClick={(event) => {
             event.stopPropagation();

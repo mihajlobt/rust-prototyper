@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Image, Power, PowerOff, Loader2, RefreshCw, Settings2, AlertCircle, Clock, X, Terminal } from "lucide-react";
+import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
 import { useBonsai } from "@/hooks/useBonsai";
 import { toFileUrl } from "@/lib/ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { BonsaiConfigSection } from "@/panels/assets/BonsaiConfigSection";
+import { BonsaiConfigPopover } from "@/panels/assets/BonsaiConfigPopover";
 import { AssetGrid } from "@/panels/assets/AssetGrid";
 import { AssetPreviewLightbox } from "@/panels/assets/AssetPreviewLightbox";
 
@@ -28,8 +28,8 @@ export function AssetsPanel() {
   const [prompt, setPrompt] = useState("");
   const [selectedPreset, setSelectedPreset] = useState(0);
   const [steps, setSteps] = useState(4);
-  const [showConfig, setShowConfig] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | undefined>(undefined);
+  const [showLog, setShowLog] = useState(true);
   const xtermRef = useRef<XTerminalHandle>(null);
 
   const preset = SIZE_PRESETS[selectedPreset];
@@ -100,9 +100,7 @@ export function AssetsPanel() {
         <Image size={16} className="text-muted-foreground" />
         <span className="text-sm font-medium">Assets</span>
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={() => setShowConfig(!showConfig)} title="Server settings">
-          <Settings2 size={14} />
-        </Button>
+        <BonsaiConfigPopover />
         <Button
           variant={isRunning ? "destructive" : "default"}
           size="sm"
@@ -122,6 +120,9 @@ export function AssetsPanel() {
             <RefreshCw size={14} />
           </Button>
         )}
+        <Button variant={showLog ? "secondary" : "ghost"} size="sm" onClick={() => setShowLog(!showLog)} title="Toggle server log">
+          <Terminal size={14} />
+        </Button>
       </div>
 
       {/* Server status */}
@@ -148,9 +149,6 @@ export function AssetsPanel() {
         </div>
       )}
 
-      {/* Config section */}
-      {showConfig && <BonsaiConfigSection />}
-
       {/* Error display */}
       {bonsai.error && (
         <div className="px-3 py-2 text-sm text-destructive bg-destructive/10 border-b border-border flex items-start gap-2">
@@ -168,58 +166,59 @@ export function AssetsPanel() {
           {/* Left pane: generation form + assets */}
           <Allotment.Pane>
             <div className="h-full flex flex-col overflow-hidden">
-              {/* Generation form */}
-              {isRunning && (
-                <div className="px-3 py-3 border-b border-border space-y-3 shrink-0">
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe the image you want to generate..."
-                    className="w-full min-h-[80px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        handleGenerate();
-                      }
-                    }}
-                  />
-                  <div className="flex gap-2">
-                    {SIZE_PRESETS.map((presetItem, i) => (
-                      <Button
-                        key={presetItem.label}
-                        variant={selectedPreset === i ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setSelectedPreset(i)}
-                        className="text-xs"
-                      >
-                        {presetItem.label}
-                      </Button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-14">Steps</span>
-                    <Slider
-                      value={[steps]}
-                      onValueChange={([value]) => setSteps(value)}
-                      min={1}
-                      max={20}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <span className="text-xs text-muted-foreground w-6 text-right">{steps}</span>
-                  </div>
-                  <Button
-                    className="w-full"
-                    onClick={handleGenerate}
-                    disabled={bonsai.generating || !prompt.trim()}
-                  >
-                    {bonsai.generating ? (
-                      <><Loader2 size={14} className="animate-spin mr-2" />Generating...</>
-                    ) : (
-                      <><Image size={14} className="mr-2" />Generate</>
-                    )}
-                  </Button>
+              {/* Generation form — always visible, disabled when server not running */}
+              <div className="px-3 py-3 border-b border-border space-y-3 shrink-0">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe the image you want to generate..."
+                  className="w-full min-h-[80px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                  disabled={!isRunning}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      handleGenerate();
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  {SIZE_PRESETS.map((presetItem, i) => (
+                    <Button
+                      key={presetItem.label}
+                      variant={selectedPreset === i ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSelectedPreset(i)}
+                      className="text-xs"
+                      disabled={!isRunning}
+                    >
+                      {presetItem.label}
+                    </Button>
+                  ))}
                 </div>
-              )}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-14">Steps</span>
+                  <Slider
+                    value={[steps]}
+                    onValueChange={([value]) => setSteps(value)}
+                    min={1}
+                    max={20}
+                    step={1}
+                    className="flex-1"
+                    disabled={!isRunning}
+                  />
+                  <span className="text-xs text-muted-foreground w-6 text-right">{steps}</span>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleGenerate}
+                  disabled={!isRunning || bonsai.generating || !prompt.trim()}
+                >
+                  {bonsai.generating ? (
+                    <><Loader2 size={14} className="animate-spin mr-2" />Generating...</>
+                  ) : (
+                    <><Image size={14} className="mr-2" />Generate</>
+                  )}
+                </Button>
+              </div>
 
               {/* Last result preview */}
               {bonsai.lastResult && lastResultIndex >= 0 && (
@@ -273,7 +272,7 @@ export function AssetsPanel() {
           </Allotment.Pane>
 
           {/* Right pane: Bonsai server log */}
-          <Allotment.Pane>
+          <Allotment.Pane visible={showLog} preferredSize={40} minSize={120}>
             <div className="h-full flex flex-col">
               <div className="panel-toolbar px-3 py-1.5 border-b border-border flex items-center gap-2 shrink-0">
                 <Terminal size={12} className="text-muted-foreground" />
