@@ -50,7 +50,7 @@ export function ComponentsPanel() {
   const queryClient = useQueryClient();
 
   // Dev server state — shared runner server
-  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
+  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner, previewTarget } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
@@ -78,8 +78,12 @@ export function ComponentsPanel() {
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
   const initialPreviewSrc = useMemo(
-    () => (runnerUrl ? `${runnerUrl}?dark=${darkAtUrlArrival.current}` : undefined),
-    [runnerUrl]
+    () => {
+      if (!runnerUrl) return undefined;
+      const target = previewTarget ?? "/__theme-preview";
+      return `${runnerUrl}${target}?dark=${darkAtUrlArrival.current}`;
+    },
+    [runnerUrl, previewTarget]
   );
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
@@ -162,19 +166,6 @@ export function ComponentsPanel() {
   }, [themeCss, runnerStatus, generatedDir]);
 
   // ─── Navigate iframe to component's preview route ────────────────────────────
-  // Called on iframe load (app just mounted) and when componentId changes.
-
-  const navigateIframeToComponent = useCallback(() => {
-    if (!selectedComponent || !previewIframeRef.current?.contentWindow) return;
-    previewIframeRef.current.contentWindow.postMessage(
-      { type: "navigate", path: `/__preview/${selectedComponent}` }, "*"
-    );
-  }, [selectedComponent]);
-
-  useEffect(() => {
-    if (runnerUrl) navigateIframeToComponent();
-  }, [selectedComponent, runnerUrl, navigateIframeToComponent]);
-
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
   useEffect(() => {
@@ -540,7 +531,6 @@ export function ComponentsPanel() {
           src={initialPreviewSrc}
           className="w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-forms"
-          onLoad={navigateIframeToComponent}
         />
       );
     }

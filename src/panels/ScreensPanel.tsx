@@ -29,7 +29,7 @@ import { useDevServerStore } from "@/lib/dev-server-manager";
 import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
-import { syncGeneratedRouter, loadNavigation } from "@/lib/navigation";
+import { syncGeneratedRouter } from "@/lib/navigation";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
@@ -56,15 +56,19 @@ export function ScreensPanel() {
   const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
 
-  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
+  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner, previewTarget } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
   const darkAtUrlArrival = useRef(screensDarkPreview);
   useEffect(() => { darkAtUrlArrival.current = screensDarkPreview; }, [screensDarkPreview]);
   const initialPreviewSrc = useMemo(
-    () => (runnerUrl ? `${runnerUrl}?dark=${darkAtUrlArrival.current}` : undefined),
-    [runnerUrl]
+    () => {
+      if (!runnerUrl) return undefined;
+      const target = previewTarget ?? "/__theme-preview";
+      return `${runnerUrl}${target}?dark=${darkAtUrlArrival.current}`;
+    },
+    [runnerUrl, previewTarget]
   );
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
@@ -158,26 +162,6 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [settings.project, runnerStatus, generatedDir, startRunner, ps.runnerPort, settings.iconLibrary]);
 
-  // ─── Navigate iframe to the active screen's route ────────────────────────────
-  // Called both on iframe load (guarantees the app is mounted) and when screenId
-  // changes while the iframe is already loaded (for subsequent screen switches).
-
-  const navigateIframeToScreen = useCallback(() => {
-    if (!screenId || !previewIframeRef.current?.contentWindow) return;
-    loadNavigation(`projects/${settings.project}`).then((nav) => {
-      const navScreen = nav.screens.find((s) => s.id === screenId);
-      const path = navScreen?.path ?? `/${screenId}`;
-      previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path }, "*");
-    }).catch(() => {
-      previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path: `/${screenId}` }, "*");
-    });
-  }, [screenId, settings.project]);
-
-  // Re-navigate when the selected screen changes (iframe already loaded)
-  useEffect(() => {
-    if (runnerUrl) navigateIframeToScreen();
-  }, [screenId, runnerUrl, navigateIframeToScreen]);
-
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
 
   useEffect(() => {
@@ -193,14 +177,6 @@ export function ScreensPanel() {
       .then(() => writeFile(screenPath, code))
       .then(() => syncGeneratedRouter(`projects/${settings.project}`))
       .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
-    // Navigate iframe to the screen's route after writing
-    if (screenId && previewIframeRef.current?.contentWindow && runnerUrl) {
-      loadNavigation(`projects/${settings.project}`).then((nav) => {
-        const navScreen = nav.screens.find((s) => s.id === screenId);
-        const path = navScreen?.path ?? `/${screenId}`;
-        previewIframeRef.current?.contentWindow?.postMessage({ type: "navigate", path }, "*");
-      }).catch(() => {});
-    }
   }, [screenPath, settings.project, screenId, runnerUrl]);
 
   const saveScreenCode = useCallback(async (value: string) => {
@@ -380,7 +356,6 @@ export function ScreensPanel() {
           src={initialPreviewSrc}
           className="w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-forms"
-          onLoad={navigateIframeToScreen}
         />
       );
     }
