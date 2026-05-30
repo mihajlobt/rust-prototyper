@@ -78,38 +78,53 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
 
   const renderHandles = (ports: NavPort[], type: "target" | "source") => {
     if (ports.length === 0) return null;
-    if (ports.length === 1) {
+    const isInput = type === "target";
+    const showLabels = ports.length > 1;
+    return ports.map((port, index) => {
+      const topPct = ports.length === 1
+        ? 50
+        : ((index + 1) / (ports.length + 1)) * 100;
+      const isDefault = port.id.endsWith(":default-in") || port.id.endsWith(":default-out");
       return (
-        <Handle
-          type={type}
-          id={ports[0].id}
-          position={type === "target" ? Position.Left : Position.Right}
-          style={{ width: 10, height: 10, borderColor: getPortColor(ports[0]) }}
-        />
-      );
-    }
-    return (
-      <div
-        className={`absolute ${type === "target" ? "left-0 inset-y-0" : "right-0 inset-y-0"} flex flex-col justify-around`}
-        style={{ width: 12 }}
-      >
-        {ports.map((port) => (
+        <div
+          key={port.id}
+          className="absolute"
+          style={{ top: `${topPct}%`, [isInput ? "left" : "right"]: 0, transform: "translateY(-50%)" }}
+        >
           <Handle
-            key={port.id}
             type={type}
             id={port.id}
-            position={type === "target" ? Position.Left : Position.Right}
+            position={isInput ? Position.Left : Position.Right}
             style={{
-              width: 8,
-              height: 8,
+              position: "relative",
+              top: "unset",
+              left: "unset",
+              right: "unset",
+              transform: "none",
+              width: ports.length === 1 ? 10 : 8,
+              height: ports.length === 1 ? 10 : 8,
               borderColor: getPortColor(port),
-              left: type === "target" ? -4 : undefined,
-              right: type === "source" ? -4 : undefined,
+              flexShrink: 0,
             }}
           />
-        ))}
-      </div>
-    );
+          {showLabels && !isDefault && (
+            <span
+              className="absolute text-[7px] text-muted-foreground/70 whitespace-nowrap leading-none pointer-events-none"
+              style={{
+                top: "50%",
+                transform: "translateY(-50%)",
+                [isInput ? "left" : "right"]: 12,
+                maxWidth: 52,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {port.name}
+            </span>
+          )}
+        </div>
+      );
+    });
   };
 
   return (
@@ -117,7 +132,7 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
       <ContextMenuTrigger asChild>
         <div
           className="bg-card rounded-lg shadow-md cursor-pointer select-none"
-          style={{ width: 160, minHeight: 64, border: `1.5px solid ${borderColor}` }}
+          style={{ width: 160, minHeight: Math.max(64, (Math.max(inputPorts.length, outputPorts.length)) * 16 + 32), border: `1.5px solid ${borderColor}` }}
         >
           {renderHandles(inputPorts, "target")}
           {renderHandles(outputPorts, "source")}
@@ -212,7 +227,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   const { setPs } = useProjectSettingsStore();
   const projectDir = `projects/${settings.project}`;
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
+const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const loadFlow = useCallback(async () => {
@@ -225,8 +240,16 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
     }
   }, [projectDir, screenIds, setNodes, setEdges]);
 
+  // Re-load when project changes
   useEffect(() => {
     loadFlow();
+  }, [loadFlow]);
+
+  // Listen for navigation-changed events (emitted by PortsEditor/ScreensPanel after saves)
+  useEffect(() => {
+    const handler = () => loadFlow();
+    window.addEventListener("navigation-changed", handler);
+    return () => window.removeEventListener("navigation-changed", handler);
   }, [loadFlow]);
 
   const onConnect = useCallback(

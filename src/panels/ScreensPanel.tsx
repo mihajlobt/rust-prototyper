@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square, Plug, Palette, Puzzle } from "lucide-react";
+import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square, Plug, Palette, Puzzle, MousePointerClick, ArrowRight } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -29,7 +30,7 @@ import { useDevServerStore } from "@/lib/dev-server-manager";
 import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
-import { syncGeneratedRouter, loadNavigation, getDefaultPorts, type NavPort } from "@/lib/navigation";
+import { syncGeneratedRouter, loadNavigation, getDefaultPorts, updateScreenPorts, addHotspot, removeHotspot, createHotspotWithLink, type NavPort, type Hotspot } from "@/lib/navigation";
 import { PortsEditor } from "@/panels/flows/PortsEditor";
 
 export function ScreensPanel() {
@@ -46,6 +47,12 @@ export function ScreensPanel() {
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("screens-code", 3, [true, true, screensCodeOpen]);
   const [code, setCode] = useState("");
   const [themeCss, setThemeCss] = useState("");
+  const [screensCodeTab, setScreensCodeTab] = useState<"editor" | "ports">("editor");
+  const [selectingElementForPort, setSelectingElementForPort] = useState<{ portId: string; direction: "output" } | null>(null);
+  const [hotspotPending, setHotspotPending] = useState<{ selector: string; rect: { x: number; y: number; w: number; h: number }; portId: string } | null>(null);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
+    const [, setIframeScroll] = useState({ x: 0, y: 0 });
 
   // Generation context state — APIs, Design Brief, Components selectors
   interface CtxApi { id: string; name: string; method: string; url: string; proxyPath: string }
@@ -122,21 +129,25 @@ export function ScreensPanel() {
     setCtxSelectedBrief(null);
   }, [settings.project]);
 
-  // Load ports for the selected screen
-  useEffect(() => {
-    if (!screenId) { setScreenPorts([]); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const nav = await loadNavigation(`projects/${settings.project}`);
-        const screen = nav.screens.find((s) => s.id === screenId);
-        if (!cancelled) {
-          setScreenPorts(screen?.ports ?? getDefaultPorts(screenId));
-        }
-      } catch { /* ignore */ }
-    })();
-    return () => { cancelled = true; };
+  // Load ports and hotspots for the selected screen (and reload when navigation changes externally)
+  const reloadScreenNav = useCallback(async () => {
+    if (!screenId) { setScreenPorts([]); setHotspots([]); return; }
+    try {
+      const nav = await loadNavigation(`projects/${settings.project}`);
+      const screen = nav.screens.find((s) => s.id === screenId);
+      setScreenPorts(screen?.ports ?? getDefaultPorts(screenId));
+      setHotspots(nav.hotspots.filter((h) => h.screenId === screenId));
+    } catch { /* ignore */ }
   }, [screenId, settings.project]);
+
+  useEffect(() => {
+    reloadScreenNav();
+  }, [reloadScreenNav]);
+
+  useEffect(() => {
+    window.addEventListener("navigation-changed", reloadScreenNav);
+    return () => window.removeEventListener("navigation-changed", reloadScreenNav);
+  }, [reloadScreenNav]);
 
   // ─── Ensure dev server is running ────────────────────────────────────────────
 
@@ -187,6 +198,69 @@ export function ScreensPanel() {
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: "set-dark", value: screensDarkPreview }, "*");
   }, [screensDarkPreview, runnerUrl]);
+
+// ─── Element selection / hotspot creation from iframe ───────────────────
+
+  useEffect(() => {
+    console.log('[message-effect] running, selectingElementForPort:', selectingElementForPort?.portId);
+    if (!selectingElementForPort) return;
+
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type === "hotspot-created") {
+        const { portId, selector, rect } = event.data;
+        setHotspotPending({ selector, rect, portId });
+        return;
+      }
+      if (event.data?.type !== "element-selected") return;
+      const { portId, elementTag, elementText, selector, rect } = event.data;
+      if (portId !== selectingElementForPort.portId) return;
+
+      const newPorts = screenPorts.map((p) =>
+        p.id === portId
+          ? { ...p, name: elementText ? `${elementTag}: ${elementText.slice(0, 20)}` : elementTag }
+          : p
+      );
+      setScreenPorts(newPorts);
+      await updateScreenPorts(`projects/${settings.project}`, screenId ?? "", newPorts);
+      window.dispatchEvent(new Event("navigation-changed"));
+      setHotspotPending({ selector, rect, portId });
+      setSelectingElementForPort(null);
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [selectingElementForPort, screenPorts, screenId, settings.project]);
+
+  // ─── Listen for live hotspot positions from iframe ─────────────────────
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "__scroll-update") {
+        setIframeScroll({ x: event.data.scrollX, y: event.data.scrollY });
+      }
+      if (event.data?.type === "__hotspot-positions") {
+        const positions = event.data.positions as Record<string, { x: number; y: number; w: number; h: number }>;
+        for (const [portId, r] of Object.entries(positions)) {
+          const el = document.querySelector(`[data-portid="${portId}"]`) as HTMLElement | null;
+          if (el) {
+            el.style.left = `${r.x}px`;
+            el.style.top = `${r.y}px`;
+            el.style.width = `${r.w}px`;
+            el.style.height = `${r.h}px`;
+          }
+        }
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Send hotspot selectors to iframe whenever hotspots change
+  useEffect(() => {
+    const iframe = previewIframeRef.current;
+    if (!iframe?.contentWindow) return;
+    const payload = hotspots.map((h) => ({ portId: h.portId, selector: h.selector }));
+    iframe.contentWindow.postMessage({ type: "__set-hotspots", hotspots: payload }, "*");
+  }, [hotspots, runnerUrl]);
 
   const applyScreenCode = useCallback((code: string) => {
     setCode(code);
@@ -371,12 +445,198 @@ export function ScreensPanel() {
 
     if (runnerStatus === "running" && runnerUrl) {
       return (
-        <iframe
-          ref={previewIframeRef}
-          src={initialPreviewSrc}
-          className="w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-forms"
-        />
+        <div className="relative w-full h-full">
+          <iframe
+            ref={previewIframeRef}
+            src={initialPreviewSrc}
+            className="w-full h-full border-0"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            onLoad={() => {
+              // Inject message handlers directly into the iframe's DOM (no file overwrite, no Vite cache loop)
+              const iframe = previewIframeRef.current;
+              if (!iframe?.contentDocument) return;
+              if (iframe.contentDocument.getElementById('__prototyper-patch')) return;
+              const script = iframe.contentDocument.createElement('script');
+              script.id = '__prototyper-patch';
+script.textContent = `
+                (function() {
+                  window.__prototyper_patched = true;
+                  var __hotspots = [];
+
+                  function queryPositions() {
+                    var positions = {};
+                    for (var i = 0; i < __hotspots.length; i++) {
+                      var h = __hotspots[i];
+                      try {
+                        var el = document.querySelector(h.selector);
+                        if (el) {
+                          var r = el.getBoundingClientRect();
+                          positions[h.portId] = { x: r.left, y: r.top, w: r.width, h: r.height };
+                        }
+                      } catch(ignore) {}
+                    }
+                    window.parent.postMessage({ type: '__hotspot-positions', positions: positions }, '*');
+                  }
+
+                  // Fire on every scroll event (capture phase catches all scrollable containers)
+                  document.addEventListener('scroll', queryPositions, { capture: true, passive: true });
+
+                  // Also fire via rAF so resize/layout changes are caught too
+                  function rafLoop() {
+                    queryPositions();
+                    requestAnimationFrame(rafLoop);
+                  }
+                  requestAnimationFrame(rafLoop);
+
+                  window.addEventListener('message', function(event) {
+                    var type = event.data && event.data.type;
+                    if (type === '__set-hotspots') {
+                      __hotspots = event.data.hotspots || [];
+                      queryPositions(); // immediately send positions for new hotspots
+                    }
+                    if (type === 'find-element-at') {
+                      var x = event.data.x, y = event.data.y, portId = event.data.portId;
+                      var el = document.elementFromPoint(x, y);
+                      if (el && el !== document.body && el !== document.documentElement) {
+                        var rect = el.getBoundingClientRect();
+                        window.parent.postMessage({
+                          type: 'hotspot-created',
+                          portId: portId,
+                          selector: (function() {
+                            if (el.id) return '#' + el.id;
+                            var parts = [], cur = el;
+                            while (cur && cur !== document.body) {
+                              var par = cur.parentElement;
+                              if (!par) break;
+                              var tag = cur.tagName.toLowerCase();
+                              var sibs = Array.from(par.children).filter(function(c) { return c.tagName === cur.tagName; });
+                              var idx = sibs.indexOf(cur) + 1;
+                              parts.unshift(sibs.length > 1 ? tag + ':nth-of-type(' + idx + ')' : tag);
+                              cur = par;
+                            }
+                            return parts.join(' > ');
+                          })(),
+                          rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+                        }, '*');
+                      }
+                    }
+                  });
+                })();
+              `;
+              iframe.contentDocument.body.appendChild(script);
+              // Immediately send current hotspots so the rAF loop starts tracking
+              const hs = hotspots.map((h) => ({ portId: h.portId, selector: h.selector }));
+              iframe.contentWindow?.postMessage({ type: "__set-hotspots", hotspots: hs }, "*");
+            }}
+          />
+          {/* Deselect hotspot on background click */}
+          {selectedHotspotId && !selectingElementForPort && (
+            <div className="absolute inset-0 z-10" onClick={() => setSelectedHotspotId(null)} />
+          )}
+          {hotspots.map((h) => {
+            const isSelected = selectedHotspotId === h.id;
+            const port = screenPorts.find((p) => p.id === h.portId);
+            const targetName = h.targetScreenId
+              ? (screenIds.find((id) => id === h.targetScreenId) ?? h.targetScreenId).replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+              : null;
+            return (
+              <div
+                key={h.id}
+                data-portid={h.portId}
+                className="absolute z-20 group"
+                style={{
+                  left: h.rect.x,
+                  top: h.rect.y,
+                  width: h.rect.w,
+                  height: h.rect.h,
+                }}
+              >
+                {/* Hotspot highlight box */}
+                <div
+                  className="absolute inset-0 cursor-pointer rounded-sm transition-all"
+                  style={{
+                    border: `2px solid ${isSelected ? "oklch(0.85 0.2 195)" : "oklch(0.7 0.18 195)"}`,
+                    background: isSelected ? "oklch(0.7 0.18 195 / 0.3)" : "oklch(0.7 0.18 195 / 0.15)",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedHotspotId(isSelected ? null : h.id);
+                  }}
+                />
+
+                {/* Popover menu — shown when selected */}
+                {isSelected && (
+                  <div
+                    className="absolute z-30 bg-card border border-border rounded-md shadow-lg p-2 flex flex-col gap-1.5 min-w-[140px] text-[10px]"
+                    style={{ left: h.rect.w + 6, top: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Port name */}
+                    <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border pb-1">
+                      {port?.name ?? "Hotspot"}
+                    </div>
+
+                    {/* Target screen */}
+                    {targetName && (
+                      <button
+                        className="flex items-center gap-1 text-foreground/80 hover:text-foreground transition-colors"
+                        onClick={() => useProjectSettingsStore.getState().setPs({ activeScreen: h.targetScreenId })}
+                        title="Go to target screen"
+                      >
+                        <ArrowRight size={9} className="text-cyan-400 shrink-0" />
+                        <span className="truncate">{targetName}</span>
+                      </button>
+                    )}
+
+                    {/* Selector */}
+                    <div className="text-[8px] text-muted-foreground font-mono truncate" title={h.selector}>
+                      {h.selector.split(" > ").pop()}
+                    </div>
+
+                    {/* Delete */}
+                    <button
+                      className="flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors mt-0.5 border-t border-border pt-1"
+                      onClick={() => {
+                        removeHotspot(`projects/${settings.project}`, h.id).then(() => {
+                          setHotspots((prev) => prev.filter((hs) => hs.id !== h.id));
+                          setSelectedHotspotId(null);
+                          window.dispatchEvent(new Event("navigation-changed"));
+                        });
+                      }}
+                    >
+                      <Trash2 size={9} />
+                      <span>Delete hotspot</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {selectingElementForPort && (
+            <div
+              className="absolute inset-0 z-10 cursor-crosshair bg-cyan-500/5"
+              onClick={(e) => {
+                console.log('[click-catcher] click fired at', e.clientX, e.clientY);
+                const iframe = previewIframeRef.current;
+                if (!iframe?.contentWindow || !selectingElementForPort || !screenId) {
+                  console.log('[click-catcher] early return - iframe:', !!iframe?.contentWindow, 'selectingElementForPort:', !!selectingElementForPort, 'screenId:', screenId);
+                  return;
+                }
+                const zoom = screensZoom;
+                const wrapper = e.currentTarget as HTMLDivElement;
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const iframeX = (e.clientX - wrapperRect.left) / zoom;
+                const iframeY = (e.clientY - wrapperRect.top) / zoom;
+                console.log('[click-catcher] sending find-element-at', iframeX, iframeY);
+                // Ask iframe to find element at coords and report back via postMessage
+                iframe.contentWindow.postMessage(
+                  { type: "find-element-at", x: iframeX, y: iframeY, portId: `${screenId}:output-${Date.now()}` },
+                  "*"
+                );
+              }}
+            />
+          )}
+        </div>
       );
     }
 
@@ -562,35 +822,23 @@ export function ScreensPanel() {
             </Allotment.Pane>
             <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160} snap>
               {screensShowInspector && (
-                <Allotment vertical>
-                  <Allotment.Pane preferredSize={180} minSize={100}>
-                    <PortsEditor
-                      screenId={screenId ?? ""}
-                      projectDir={`projects/${settings.project}`}
-                      ports={screenPorts}
-                      onPortsChange={setScreenPorts}
-                    />
-                  </Allotment.Pane>
-                  <Allotment.Pane>
-                    <PromptInspector
-                      model={settings.modelId}
-                      messages={[
-                        { role: "system", content: systemContent },
-                        ...messages.map((m) => ({
-                          role: m.role,
-                          content: m.content,
-                          ...(m.images?.length ? { images: m.images } : {}),
-                          ...(m.thinking ? { thinking: m.thinking } : {}),
-                          ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
-                        })),
-                      ]}
-                      host={getHostForProvider(settings.provider, settings.host)}
-                      provider={settings.provider}
-                      think={resolveThinkParam({ thinking: canThink, thinkLevel: undefined }, isGptOssFamily, thinkEnabled, thinkLevel)}
-                      hasTools={!!(screenId && toolsEnabled)}
-                    />
-                  </Allotment.Pane>
-                </Allotment>
+                <PromptInspector
+                  model={settings.modelId}
+                  messages={[
+                    { role: "system", content: systemContent },
+                    ...messages.map((m) => ({
+                      role: m.role,
+                      content: m.content,
+                      ...(m.images?.length ? { images: m.images } : {}),
+                      ...(m.thinking ? { thinking: m.thinking } : {}),
+                      ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+                    })),
+                  ]}
+                  host={getHostForProvider(settings.provider, settings.host)}
+                  provider={settings.provider}
+                  think={resolveThinkParam({ thinking: canThink, thinkLevel: undefined }, isGptOssFamily, thinkEnabled, thinkLevel)}
+                  hasTools={!!(screenId && toolsEnabled)}
+                />
               )}
             </Allotment.Pane>
           </Allotment>
@@ -665,21 +913,155 @@ export function ScreensPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
-                <span className="text-xs font-medium flex-1">Code</span>
-                {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </PaneHeader>
+              <div className="h-full flex items-center border-b border-border bg-card px-2">
+                <Tabs value={screensCodeTab} onValueChange={(v) => setScreensCodeTab(v as "editor" | "ports")}>
+                  <TabsList variant="line" className="h-7">
+                    <TabsTrigger value="editor" className="text-[11px] gap-1">Editor</TabsTrigger>
+                    <TabsTrigger value="ports" className="text-[11px] gap-1 flex items-center gap-1">
+                      <MousePointerClick size={10} />
+                      Ports
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <div className="flex-1" />
+                {screensCodeTab === "ports" && (
+                  <Button
+                    variant={selectingElementForPort ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-6 text-[10px] gap-1"
+                    onClick={async () => {
+                      if (selectingElementForPort) {
+                        setSelectingElementForPort(null);
+                      } else {
+                        // Create a new output port and enter selection mode
+                        const portId = `${screenId}:output-${Date.now()}`;
+                        const newPort: NavPort = {
+                          id: portId,
+                          name: "New Output",
+                          direction: "output",
+                          type: "navigation",
+                          schema: "{}",
+                        };
+                        const newPorts = [...screenPorts, newPort];
+                        setScreenPorts(newPorts);
+                        await updateScreenPorts(`projects/${settings.project}`, screenId ?? "", newPorts);
+                        window.dispatchEvent(new Event("navigation-changed"));
+                        setSelectingElementForPort({ portId, direction: "output" });
+                      }
+                    }}
+                    title="Click an element in Preview to create an output port"
+                  >
+                    <MousePointerClick size={10} />
+                    {selectingElementForPort ? "Selecting…" : "Select Element"}
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
+                  {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                </Button>
+              </div>
             </Allotment.Pane>
             <Allotment.Pane visible={screensCodeOpen} preferredSize={252} minSize={100} snap>
               {screensCodeOpen && (
                 <div className="h-full overflow-hidden">
-                  <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
+                  {screensCodeTab === "editor" ? (
+                    <CodeMirrorEditor value={code} onChange={handleCodeChange} onBlur={handleCodeBlur} mode="tsx" />
+                  ) : (
+                    <PortsEditor
+                      screenId={screenId ?? ""}
+                      projectDir={`projects/${settings.project}`}
+                      ports={screenPorts}
+                      onPortsChange={setScreenPorts}
+                    />
+                  )}
                 </div>
               )}
             </Allotment.Pane>
           </Allotment>
         </Allotment.Pane>
       </Allotment>
+
+      {hotspotPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setHotspotPending(null)}>
+          <div className="bg-card border border-border rounded-lg p-4 w-72 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold mb-3">Link hotspot to screen</h3>
+            <div className="flex flex-col gap-1 max-h-60 overflow-auto">
+              {screenIds.filter((id) => id !== screenId).map((id) => (
+                <Button
+                  key={id}
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start w-full"
+                  onClick={async () => {
+                    if (!screenId || !hotspotPending) return;
+                    const portId = `${screenId}:output-${Date.now()}`;
+                    try {
+                      const hotspot = await createHotspotWithLink(
+                        `projects/${settings.project}`,
+                        screenId,
+                        portId,
+                        hotspotPending.selector,
+                        hotspotPending.rect,
+                        id
+                      );
+                      setHotspots((prev) => [...prev, hotspot]);
+                      await syncGeneratedRouter(`projects/${settings.project}`);
+                      window.dispatchEvent(new Event("navigation-changed"));
+                    } catch (err) {
+                      notify.error("Failed to create hotspot", String(err));
+                    }
+                    setHotspotPending(null);
+                  }}
+                >
+                  {id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                </Button>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="justify-start w-full text-muted-foreground"
+                onClick={async () => {
+                  if (!screenId || !hotspotPending) return;
+                  const portId = `${screenId}:output-${Date.now()}`;
+                  const projectDir = `projects/${settings.project}`;
+                  const nav = await loadNavigation(projectDir);
+                  const screen = nav.screens.find((s) => s.id === screenId);
+                  if (!screen) return;
+                  const port: NavPort = {
+                    id: portId,
+                    name: hotspotPending.selector.split(" ").pop() ?? "Hotspot",
+                    direction: "output",
+                    type: "navigation",
+                    schema: "{}",
+                  };
+                  if (!screen.ports.some((p) => p.id === portId)) {
+                    screen.ports.push(port);
+                  }
+                  await updateScreenPorts(projectDir, screenId, screen.ports);
+                  const hotspot: Hotspot = {
+                    id: `hotspot-${Date.now()}`,
+                    screenId,
+                    selector: hotspotPending.selector,
+                    rect: hotspotPending.rect,
+                    targetScreenId: "",
+                    portId,
+                    createdAt: Date.now(),
+                  };
+                  await addHotspot(projectDir, hotspot);
+                  setHotspots((prev) => [...prev, hotspot]);
+                  await syncGeneratedRouter(projectDir);
+                  window.dispatchEvent(new Event("navigation-changed"));
+                  setHotspotPending(null);
+                }}
+              >
+                Just a port (no link yet)
+              </Button>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setHotspotPending(null)} className="mt-3 w-full">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
