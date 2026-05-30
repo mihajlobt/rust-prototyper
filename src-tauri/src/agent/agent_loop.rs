@@ -415,7 +415,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                         }
                     }
 
-                    let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj).await;
+                    let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj, permission_mode).await;
                     if name == "write_file" && result.success {
                         wc.fetch_add(1, Ordering::SeqCst);
                     }

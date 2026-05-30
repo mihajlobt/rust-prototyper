@@ -70,7 +70,7 @@ async function patchEslint(projectDir: string): Promise<void> {
   const configPath = `${projectDir}/${P.ESLINT_CONFIG_JS}`;
   try {
     const raw = await readFile(configPath);
-    const patched = patchEslintConfig(raw);
+    const patched = patchEslintConfig();
     if (patched !== raw) {
       await writeFile(configPath, patched);
     }

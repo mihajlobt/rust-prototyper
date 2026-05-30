@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use crate::commands::ai::ToolPermissionMode;
 use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs};
 
 enum ToolError {
@@ -39,17 +40,19 @@ pub async fn execute_tool(
     app_data_dir: &Path,
     output_path: &str,
     project_dir: &Path,
+    permission_mode: ToolPermissionMode,
 ) -> ToolExecutionResult {
+    let skip_policy = matches!(permission_mode, ToolPermissionMode::AutoAcceptAll);
     match name {
         "write_file" => execute_write_file(args, app_data_dir, output_path, project_dir).await,
         "read_file" => execute_read_file(args, app_data_dir, project_dir).await,
         "edit_file" => execute_edit_file(args, app_data_dir, project_dir).await,
-        "bash" => execute_bash(args, app_data_dir).await,
-        "run_tsc" => execute_run_tsc(args, project_dir).await,
-        "run_lint" => execute_run_lint(args, project_dir).await,
-        "run_build" => execute_run_build(args, project_dir).await,
-        "glob" => execute_glob(args, app_data_dir).await,
-        "grep" => execute_grep(args, app_data_dir).await,
+        "bash" => execute_bash(args, app_data_dir, skip_policy).await,
+        "run_tsc" => execute_run_tsc(args, project_dir, skip_policy).await,
+        "run_lint" => execute_run_lint(args, project_dir, skip_policy).await,
+        "run_build" => execute_run_build(args, project_dir, skip_policy).await,
+        "glob" => execute_glob(args, app_data_dir, skip_policy).await,
+        "grep" => execute_grep(args, app_data_dir, skip_policy).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
@@ -585,6 +588,7 @@ fn to_generated_relative(path: &str) -> &str {
 async fn execute_run_tsc(
     args: &serde_json::Value,
     project_dir: &Path,
+    skip_policy: bool,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<TscCheckArgs>(args.clone()) {
         Ok(p) => p,
@@ -612,7 +616,7 @@ async fn execute_run_tsc(
     let filter_path = parsed.path.as_deref().map(to_generated_relative).map(str::to_owned);
 
     let command = r#"cd generated && bun tsc --noEmit --project tsconfig.app.json 2>&1; echo "EXIT:$?""#.to_string();
-    let raw = run_sandboxed_command(&command, project_dir, false).await;
+    let raw = run_sandboxed_command(&command, project_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     // When a specific file was requested, filter output to lines mentioning that file.
@@ -642,6 +646,7 @@ async fn execute_run_tsc(
 async fn execute_run_lint(
     args: &serde_json::Value,
     project_dir: &Path,
+    skip_policy: bool,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<LintCheckArgs>(args.clone()) {
         Ok(p) => p,
@@ -675,7 +680,7 @@ async fn execute_run_lint(
         },
     };
     let command = format!("cd generated && bunx eslint {} 2>&1; echo \"EXIT:$?\"", escaped);
-    let raw = run_sandboxed_command(&command, project_dir, false).await;
+    let raw = run_sandboxed_command(&command, project_dir, skip_policy).await;
 
     let (body, exit_code) = extract_exit_code(&raw);
 
@@ -688,7 +693,7 @@ async fn execute_run_lint(
     }
 }
 
-async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
+async fn execute_run_build(args: &serde_json::Value, project_dir: &Path, skip_policy: bool) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<LintCheckArgs>(args.clone()) {
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
@@ -721,7 +726,7 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
 
     // esbuild is a Vite dependency — available in generated/node_modules.
     let command = format!("cd generated && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
-    let raw = run_sandboxed_command(&command, project_dir, false).await;
+    let raw = run_sandboxed_command(&command, project_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     ToolExecutionResult {
@@ -732,7 +737,7 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
     }
 }
 
-async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path) -> ToolExecutionResult {
+async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path, skip_policy: bool) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<GlobArgs>(args.clone()) {
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
@@ -770,7 +775,7 @@ async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path) -> ToolExec
     let command = format!(
         r#"find {escaped_base} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f | head -200; echo "EXIT:$?""#
     );
-    let raw = run_sandboxed_command(&command, app_data_dir, false).await;
+    let raw = run_sandboxed_command(&command, app_data_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     ToolExecutionResult {
@@ -781,7 +786,7 @@ async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path) -> ToolExec
     }
 }
 
-async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path) -> ToolExecutionResult {
+async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path, skip_policy: bool) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<GrepArgs>(args.clone()) {
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
@@ -825,7 +830,7 @@ async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path) -> ToolExec
     let command = format!(
         r#"grep -rn --include='*.tsx' --include='*.ts' --include='*.css' --include='*.json' --exclude-dir=node_modules --exclude-dir=.git {escaped_pattern} {escaped_path} | head -100; echo "EXIT:$?""#
     );
-    let raw = run_sandboxed_command(&command, app_data_dir, false).await;
+    let raw = run_sandboxed_command(&command, app_data_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     // grep exits 1 when no matches found — that's not an error for our purposes.
@@ -920,6 +925,7 @@ fn glob_base_dir(pattern: &str) -> &str {
 async fn execute_bash(
     args: &serde_json::Value,
     app_data_dir: &Path,
+    skip_policy: bool,
 ) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<BashArgs>(args.clone()) {
         Ok(p) => p,
@@ -933,7 +939,7 @@ async fn execute_bash(
 
     // Do NOT apply expand_combined_flags here — the bash command is a raw shell
     // pipeline with operators (&&, |, >) that must not be re-tokenized and re-quoted.
-    match crate::sandbox::execute_sandboxed(&parsed.command, app_data_dir, 30, false).await {
+    match crate::sandbox::execute_sandboxed(&parsed.command, app_data_dir, 30, skip_policy).await {
         Ok(result) => result,
         Err(crate::sandbox::SandboxError::InjectionDetected(detail)) => ToolExecutionResult {
             success: false,
@@ -960,6 +966,7 @@ async fn execute_bash(
 async fn execute_bash(
     args: &serde_json::Value,
     app_data_dir: &Path,
+    _skip_policy: bool,
 ) -> ToolExecutionResult {
     use std::process::Stdio;
     use tokio::process::Command;

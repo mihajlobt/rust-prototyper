@@ -78,7 +78,7 @@ export const SHADCN_INIT_COMMAND: string =
  * repeated calls (e.g. on every project open) are fully idempotent and cannot
  * accumulate duplicate entries the way regex patching did.
  */
-export function patchEslintConfig(_existingConfig: string): string {
+export function patchEslintConfig(): string {
   return `import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
