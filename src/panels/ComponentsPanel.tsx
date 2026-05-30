@@ -302,6 +302,7 @@ export function ComponentsPanel() {
     thinkEnabled, toggleThink, thinkLevel, setThinkLevel, isGptOssFamily, canThink, canVision,
     toolsEnabled, toggleTools, canTools,
     mentions, addMention, removeMention,
+    setActiveBriefName,
     pendingPermissions,
   } = useChat({
     entityId: componentId ? `component-${componentId}` : "component-none",
@@ -433,13 +434,13 @@ export function ComponentsPanel() {
                   {ctxSelectedBrief && (
                     <span
                       className="ml-0.5 cursor-pointer text-muted-foreground hover:text-foreground"
-                      onClick={(e) => { e.stopPropagation(); setCtxSelectedBrief(null); }}
+                      onClick={(e) => { e.stopPropagation(); setCtxSelectedBrief(null); setActiveBriefName(""); }}
                     >×</span>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-72">
-                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => setCtxSelectedBrief(allBriefs.find((b) => b.name === v) ?? null)}>
+                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => { const b = allBriefs.find((bb) => bb.name === v) ?? null; setCtxSelectedBrief(b); setActiveBriefName(b?.name ?? ""); }}>
                   <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Built-in</DropdownMenuLabel>
                   {DESIGN_BRIEF_TEMPLATES.map((brief) => (
                     <DropdownMenuRadioItem key={brief.name} value={brief.name} className="flex-col items-start gap-0.5 py-2">

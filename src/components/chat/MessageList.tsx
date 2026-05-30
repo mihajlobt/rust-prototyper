@@ -1,5 +1,6 @@
 import { memo } from "react"
 import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import type { MentionAsset } from "@/types/chat"
 
@@ -262,6 +263,13 @@ const MessageBubble = memo(function MessageBubble({
                   className="max-h-20 max-w-20 rounded object-contain border border-border"
                 />
               ))}
+            </div>
+          )}
+          {message.brief && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-accent/10 text-[10px] text-muted-foreground">
+              <Palette size={10} className="text-primary shrink-0" />
+              <span className="font-medium text-foreground">{message.brief}</span>
+              <span>brief</span>
             </div>
           )}
           {hasMentions && (

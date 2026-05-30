@@ -320,6 +320,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [mentions, setMentions] = useState<MentionAsset[]>([])
+  const activeBriefNameRef = useRef<string>("")
 
   const caps = useModelCapabilities(modelId)
 
@@ -432,11 +433,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const userContent = mentionContext ? `${mentionContext}\n\n${currentInput}` : currentInput
 
+    const briefName = activeBriefNameRef.current
     const userMessage: ChatMessage = {
       role: "user",
       content: userContent,
       ...(currentAttachments.length > 0 ? { images: currentAttachments.map((a) => a.base64) } : {}),
       ...(currentMentions.length > 0 ? { mentions: currentMentions.map((m) => ({ type: m.type, name: m.name, description: m.description })) } : {}),
+      ...(briefName ? { brief: briefName } : {}),
     }
     const assistantPlaceholder: ChatMessage = { role: "assistant", content: "" }
     const updatedMessages: ChatMessage[] = [...currentChat.messages, userMessage, assistantPlaceholder]
@@ -632,6 +635,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     mentions,
     addMention,
     removeMention,
+    setActiveBriefName: (name: string) => { activeBriefNameRef.current = name },
     thinkEnabled,
     toggleThink: () => setThinkEnabled((v) => !v),
     thinkLevel,
