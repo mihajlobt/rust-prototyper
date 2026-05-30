@@ -123,6 +123,12 @@ export async function addNavLink(
   const id = `${from}:${fromPort}->${to}:${toPort}`;
   if (nav.links.some((l) => l.id === id)) return;
   nav.links.push({ id, from, fromPort, to, toPort, type, params });
+  // Keep any hotspot for this port in sync with the new target
+  for (const hotspot of nav.hotspots) {
+    if (hotspot.portId === fromPort) {
+      hotspot.targetScreenId = to;
+    }
+  }
   await saveNavigation(projectDir, nav);
 }
 
