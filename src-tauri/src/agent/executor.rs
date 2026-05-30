@@ -612,7 +612,7 @@ async fn execute_run_tsc(
     let filter_path = parsed.path.as_deref().map(to_generated_relative).map(str::to_owned);
 
     let command = r#"cd generated && bun tsc --noEmit --project tsconfig.app.json 2>&1; echo "EXIT:$?""#.to_string();
-    let raw = run_sandboxed_command(&command, project_dir).await;
+    let raw = run_sandboxed_command(&command, project_dir, false).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     // When a specific file was requested, filter output to lines mentioning that file.
@@ -675,7 +675,7 @@ async fn execute_run_lint(
         },
     };
     let command = format!("cd generated && bunx eslint {} 2>&1; echo \"EXIT:$?\"", escaped);
-    let raw = run_sandboxed_command(&command, project_dir).await;
+    let raw = run_sandboxed_command(&command, project_dir, false).await;
 
     let (body, exit_code) = extract_exit_code(&raw);
 
@@ -721,7 +721,7 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path) -> Tool
 
     // esbuild is a Vite dependency — available in generated/node_modules.
     let command = format!("cd generated && bunx esbuild {} --jsx=automatic --loader:.tsx=tsx 2>&1; echo \"EXIT:$?\"", escaped);
-    let raw = run_sandboxed_command(&command, project_dir).await;
+    let raw = run_sandboxed_command(&command, project_dir, false).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     ToolExecutionResult {
@@ -770,7 +770,7 @@ async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path) -> ToolExec
     let command = format!(
         r#"find {escaped_base} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f | head -200; echo "EXIT:$?""#
     );
-    let raw = run_sandboxed_command(&command, app_data_dir).await;
+    let raw = run_sandboxed_command(&command, app_data_dir, false).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     ToolExecutionResult {
@@ -825,7 +825,7 @@ async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path) -> ToolExec
     let command = format!(
         r#"grep -rn --include='*.tsx' --include='*.ts' --include='*.css' --include='*.json' --exclude-dir=node_modules --exclude-dir=.git {escaped_pattern} {escaped_path} | head -100; echo "EXIT:$?""#
     );
-    let raw = run_sandboxed_command(&command, app_data_dir).await;
+    let raw = run_sandboxed_command(&command, app_data_dir, false).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
     // grep exits 1 when no matches found — that's not an error for our purposes.
@@ -868,15 +868,15 @@ fn extract_exit_code(raw: &str) -> (&str, Option<i32>) {
 }
 
 #[cfg(target_os = "linux")]
-async fn run_sandboxed_command(command: &str, project_dir: &Path) -> String {
-    match crate::sandbox::execute_sandboxed(command, project_dir, 60).await {
+async fn run_sandboxed_command(command: &str, project_dir: &Path, skip_policy: bool) -> String {
+    match crate::sandbox::execute_sandboxed(command, project_dir, 60, skip_policy).await {
         Ok(result) => result.output,
         Err(e) => format!("sandbox error: {e}"),
     }
 }
 
 #[cfg(not(target_os = "linux"))]
-async fn run_sandboxed_command(command: &str, project_dir: &Path) -> String {
+async fn run_sandboxed_command(command: &str, project_dir: &Path, _skip_policy: bool) -> String {
     use std::process::Stdio;
     use tokio::process::Command;
     use tokio::time::{timeout, Duration};
@@ -933,7 +933,7 @@ async fn execute_bash(
 
     // Do NOT apply expand_combined_flags here — the bash command is a raw shell
     // pipeline with operators (&&, |, >) that must not be re-tokenized and re-quoted.
-    match crate::sandbox::execute_sandboxed(&parsed.command, app_data_dir, 30).await {
+    match crate::sandbox::execute_sandboxed(&parsed.command, app_data_dir, 30, false).await {
         Ok(result) => result,
         Err(crate::sandbox::SandboxError::InjectionDetected(detail)) => ToolExecutionResult {
             success: false,

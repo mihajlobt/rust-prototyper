@@ -19,14 +19,17 @@ pub async fn execute_sandboxed(
     command: &str,
     project_dir: &Path,
     timeout_secs: u64,
+    skip_policy: bool,
 ) -> Result<ToolExecutionResult, SandboxError> {
-    if let Err(e) = policy::validate_command(command) {
-        return Ok(ToolExecutionResult {
-            success: false,
-            output: e.to_string(),
-            written_path: None,
-            written_content: None,
-        });
+    if !skip_policy {
+        if let Err(e) = policy::validate_command(command) {
+            return Ok(ToolExecutionResult {
+                success: false,
+                output: e.to_string(),
+                written_path: None,
+                written_content: None,
+            });
+        }
     }
 
     let mut child_cmd = bwrap::build_sandbox_command(project_dir, command)?;

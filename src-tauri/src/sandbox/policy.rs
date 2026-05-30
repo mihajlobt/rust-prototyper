@@ -55,20 +55,6 @@ pub fn validate_command(command: &str) -> Result<(), SandboxError> {
         ));
     }
 
-    validate_with_policy(command)
-}
-
-fn detect_shell_injection(command: &str) -> bool {
-    for pattern in INJECTION_PATTERNS.iter() {
-        if pattern.is_match(command) {
-            return true;
-        }
-    }
-    false
-}
-
-#[cfg(target_os = "linux")]
-fn validate_with_policy(command: &str) -> Result<(), SandboxError> {
     let policy = match POLICY.as_ref() {
         Ok(p) => p,
         Err(e) => {
@@ -87,15 +73,9 @@ fn validate_with_policy(command: &str) -> Result<(), SandboxError> {
         }
     };
 
-    // Compound commands (&&, ||, ;, |) go through `sh -c` and cannot be
-    // meaningfully checked by inspecting the first token only.
-    // The injection pre-filter (detect_shell_injection) already ran before
-    // this function; the bwrap + Landlock + seccomp sandbox contains the rest.
-    let shell_ops = ["&&", "||", ";", "|"];
-    if parts.iter().any(|t| shell_ops.contains(&t.as_str())) {
-        return Ok(());
-    }
-
+    // All commands — including compound ones — must pass policy validation.
+    // Compound commands are NOT exempt. The bwrap + Landlock + seccomp sandbox
+    // contains the rest; bypassing policy for pipes/AND/OR defeats the purpose.
     let program = parts[0].clone();
     let args: Vec<&str> = parts[1..].iter().map(String::as_str).collect();
     let exec_call = ExecCall::new(&program, &args);
@@ -106,9 +86,18 @@ fn validate_with_policy(command: &str) -> Result<(), SandboxError> {
             Err(SandboxError::PolicyDenied(format!(
                 "execution policy denied: {:?} — {reason}", cause
             )))
-        }
+        },
         Err(e) => Err(SandboxError::PolicyDenied(format!(
             "execution policy check failed: {e:?}"
         ))),
     }
+}
+
+fn detect_shell_injection(command: &str) -> bool {
+    for pattern in INJECTION_PATTERNS.iter() {
+        if pattern.is_match(command) {
+            return true;
+        }
+    }
+    false
 }

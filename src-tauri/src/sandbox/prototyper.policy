@@ -23,6 +23,15 @@ define_program(
 define_program(
     program="cat",
     system_path=["/usr/bin/cat", "/bin/cat"],
+    options=[
+        flag("-n"),
+        flag("-b"),
+        flag("-s"),
+        flag("-T"),
+        flag("-v"),
+        flag("-e"),
+        flag("-A"),
+    ],
     args=[ARG_OPAQUE_VALUE],
 )
 
@@ -136,6 +145,17 @@ define_program(
 define_program(
     program="sed",
     system_path=["/usr/bin/sed", "/bin/sed"],
+    options=[
+        flag("-n"),
+        flag("-i"),
+        flag("-e"),
+        flag("-f"),
+        flag("-r"),
+        flag("-E"),
+        flag("-z"),
+        flag("-l"),
+        flag("-s"),
+    ],
     args=[ARG_OPAQUE_VALUE],
 )
 
