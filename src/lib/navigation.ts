@@ -388,22 +388,56 @@ function PreviewShell({ children }: { children: React.ReactNode }) {
 
   const hasAnyRoutes = pageIds.length > 0 || componentIds.length > 0;
 
+  // Build hotspot navigation links: { selector, path }
+  const hotspotLinks = nav.hotspots
+    .filter((h) => h.targetScreenId && h.selector)
+    .map((h) => {
+      const targetPath = navById.get(h.targetScreenId)?.path ?? `/${h.targetScreenId}`;
+      return `  { selector: ${JSON.stringify(h.selector)}, path: ${JSON.stringify(targetPath)} }`;
+    });
+
+  const hotspotNavigator = hotspotLinks.length > 0 ? `
+const HOTSPOT_LINKS: Array<{ selector: string; path: string }> = [
+${hotspotLinks.join(",\n")},
+]
+
+function HotspotNavigator() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      const target = e.target as Element
+      for (const link of HOTSPOT_LINKS) {
+        try {
+          if (target.closest(link.selector)) { navigate(link.path); return }
+        } catch { /* ignore invalid selectors */ }
+      }
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [navigate])
+  return null
+}
+`.trim() : "";
+
   const content = `// Auto-generated — edit navigation in the Flows panel, not here.
-import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 ${pageImports}
 ${componentImports}
 ${themeImport}
 
 ${previewShell}
-
+${hotspotNavigator ? "\n" + hotspotNavigator : ""}
 export function AppRouter() {
   return (
-    <Routes>
+    <>
+      ${hotspotLinks.length > 0 ? "<HotspotNavigator />" : ""}
+      <Routes>
 ${allRoutes}
-      <Route path="/__theme-preview" element={<ThemePreview />} />
-      <Route path="*" element={<Navigate to="${hasAnyRoutes ? defaultNavPath : "/__theme-preview"}" replace />} />
-    </Routes>
+        <Route path="/__theme-preview" element={<ThemePreview />} />
+        <Route path="*" element={<Navigate to="${hasAnyRoutes ? defaultNavPath : "/__theme-preview"}" replace />} />
+      </Routes>
+    </>
   )
 }
 `;
