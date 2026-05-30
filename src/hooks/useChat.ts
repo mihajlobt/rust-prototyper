@@ -421,10 +421,11 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const mentionContext = currentMentions
       .map((m) => {
         if (m.type === "api") {
-          // API context as prose — no code fence needed
-          return `<!-- @${m.name} -->\nAPI: ${m.name}\n${m.code}\n<!-- end @${m.name} -->`
+          const slug = m.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+          const hookName = "use" + m.name.replace(/[^a-zA-Z0-9]+(.)?/g, (_: string, c: string) => (c ? c.toUpperCase() : "")).replace(/^./, (c: string) => c.toUpperCase())
+          return `<!-- @${m.name} -->\nAPI available: ${m.name}\n${m.code}\nService hook: import { ${hookName} } from '@/services/${slug}'\nYou MUST use this hook. Do NOT use fetch() directly, useEffect for data fetching, or mock data.\n<!-- end @${m.name} -->`
         }
-        const lang = m.type === "theme" ? "css" : "tsx"
+        const lang = m.type === "theme" ? "css" : m.type === "file" ? "md" : "tsx"
         return `<!-- @${m.name} -->\n\`\`\`${lang}\n${m.code}\n\`\`\`\n<!-- end @${m.name} -->`
       })
       .join("\n\n")

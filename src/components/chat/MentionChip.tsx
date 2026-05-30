@@ -1,4 +1,4 @@
-import { X, Component, Palette, Monitor, Plug } from "lucide-react"
+import { X, Component, Palette, Monitor, Plug, FileText } from "lucide-react"
 import type { MentionAsset } from "@/types/chat"
 
 const TYPE_ICONS: Record<MentionAsset["type"], React.ReactNode> = {
@@ -6,6 +6,7 @@ const TYPE_ICONS: Record<MentionAsset["type"], React.ReactNode> = {
   theme: <Palette size={10} />,
   screen: <Monitor size={10} />,
   api: <Plug size={10} />,
+  file: <FileText size={10} />,
 }
 
 interface MentionChipProps {

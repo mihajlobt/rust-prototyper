@@ -39,7 +39,7 @@ export interface ChatMessage {
 
 export interface MentionAsset {
   id: string
-  type: "component" | "theme" | "screen" | "api"
+  type: "component" | "theme" | "screen" | "api" | "file"
   name: string
   path: string
   code: string

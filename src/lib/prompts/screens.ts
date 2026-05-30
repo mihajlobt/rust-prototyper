@@ -1,6 +1,6 @@
 // Screen generation prompts.
 
-import { type IconLibrary, getIconLibraryPromptSection, TOOL_USAGE_SECTION, DATA_LAYER_SECTION } from "./shared";
+import { type IconLibrary, getIconLibraryPromptSection, TOOL_USAGE_SECTION, DATA_LAYER_SECTION, API_MENTION_RULE } from "./shared";
 
 export const SCREEN_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer. Generate a complete, production-quality UI screen.
 
@@ -36,7 +36,7 @@ Example: <button onClick={() => nav('/dashboard')}>Go to Dashboard</button>`;
 
 export function getScreenNewPrompt(iconLibrary: IconLibrary, screenIds?: string[], customBase?: string): string {
   const navSection = getNavigationSection(screenIds ?? []);
-  return `${customBase ?? SCREEN_NEW_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}${navSection}`;
+  return `${customBase ?? SCREEN_NEW_PROMPT_BASE}\n\n${API_MENTION_RULE}\n\n${getIconLibraryPromptSection(iconLibrary)}${navSection}`;
 }
 
 export const SCREEN_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer making surgical edits to a TSX screen.
@@ -58,5 +58,5 @@ export function getScreenUpdatePrompt(iconLibrary: IconLibrary, currentCode?: st
   const codeSection = currentCode
     ? `\n\nCURRENT CODE — edit this code to apply the user's requested changes:\n\`\`\`tsx\n${currentCode}\n\`\`\``
     : "";
-  return `${customBase ?? SCREEN_UPDATE_PROMPT_BASE}\n\n${getIconLibraryPromptSection(iconLibrary)}${navSection}${codeSection}`;
+  return `${customBase ?? SCREEN_UPDATE_PROMPT_BASE}\n\n${API_MENTION_RULE}\n\n${getIconLibraryPromptSection(iconLibrary)}${navSection}${codeSection}`;
 }

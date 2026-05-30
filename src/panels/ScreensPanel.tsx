@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+
 import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Download, Sun, Moon, Trash2, Loader2, AlertCircle, Play, Square, Plug, Palette, Puzzle, MousePointerClick, ArrowRight } from "lucide-react";
 import {
@@ -33,6 +34,7 @@ import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { syncGeneratedRouter, loadNavigation, getDefaultPorts, updateScreenPorts, addHotspot, removeHotspot, createHotspotWithLink, type NavPort, type Hotspot } from "@/lib/navigation";
 import { PortsEditor } from "@/panels/flows/PortsEditor";
 
+
 export function ScreensPanel() {
   const { settings } = useAppStore();
   const { ps, setPs } = useProjectSettingsStore();
@@ -52,7 +54,7 @@ export function ScreensPanel() {
   const [hotspotPending, setHotspotPending] = useState<{ selector: string; rect: { x: number; y: number; w: number; h: number }; portId: string } | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
-    const [, setIframeScroll] = useState({ x: 0, y: 0 });
+  const [computedHotspots, setComputedHotspots] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
 
   // Generation context state — APIs, Design Brief, Components selectors
   interface CtxApi { id: string; name: string; method: string; url: string; proxyPath: string }
@@ -131,12 +133,13 @@ export function ScreensPanel() {
 
   // Load ports and hotspots for the selected screen (and reload when navigation changes externally)
   const reloadScreenNav = useCallback(async () => {
-    if (!screenId) { setScreenPorts([]); setHotspots([]); return; }
+    if (!screenId) { setScreenPorts([]); setHotspots([]); setComputedHotspots({}); return; }
     try {
       const nav = await loadNavigation(`projects/${settings.project}`);
       const screen = nav.screens.find((s) => s.id === screenId);
       setScreenPorts(screen?.ports ?? getDefaultPorts(screenId));
       setHotspots(nav.hotspots.filter((h) => h.screenId === screenId));
+      setComputedHotspots({});
     } catch { /* ignore */ }
   }, [screenId, settings.project]);
 
@@ -199,68 +202,45 @@ export function ScreensPanel() {
     iframe.contentWindow.postMessage({ type: "set-dark", value: screensDarkPreview }, "*");
   }, [screensDarkPreview, runnerUrl]);
 
-// ─── Element selection / hotspot creation from iframe ───────────────────
+  // ─── Hotspot position tracking via postMessage ────────────────────────────
+  // contentDocument is cross-origin (parent:1420 vs iframe:5178+), so we use
+  // postMessage exclusively. The generated project's main.tsx handles __set-hotspots
+  // and sends back __hotspot-positions on scroll/resize.
 
-  useEffect(() => {
-    console.log('[message-effect] running, selectingElementForPort:', selectingElementForPort?.portId);
-    if (!selectingElementForPort) return;
+  const hotspotsRef = useRef(hotspots);
+  useEffect(() => { hotspotsRef.current = hotspots; }, [hotspots]);
 
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.data?.type === "hotspot-created") {
-        const { portId, selector, rect } = event.data;
-        setHotspotPending({ selector, rect, portId });
-        return;
-      }
-      if (event.data?.type !== "element-selected") return;
-      const { portId, elementTag, elementText, selector, rect } = event.data;
-      if (portId !== selectingElementForPort.portId) return;
-
-      const newPorts = screenPorts.map((p) =>
-        p.id === portId
-          ? { ...p, name: elementText ? `${elementTag}: ${elementText.slice(0, 20)}` : elementTag }
-          : p
-      );
-      setScreenPorts(newPorts);
-      await updateScreenPorts(`projects/${settings.project}`, screenId ?? "", newPorts);
-      window.dispatchEvent(new Event("navigation-changed"));
-      setHotspotPending({ selector, rect, portId });
-      setSelectingElementForPort(null);
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [selectingElementForPort, screenPorts, screenId, settings.project]);
-
-  // ─── Listen for live hotspot positions from iframe ─────────────────────
+  // Listen for position updates from the iframe
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      if (event.data?.type === "__scroll-update") {
-        setIframeScroll({ x: event.data.scrollX, y: event.data.scrollY });
-      }
-      if (event.data?.type === "__hotspot-positions") {
-        const positions = event.data.positions as Record<string, { x: number; y: number; w: number; h: number }>;
-        for (const [portId, r] of Object.entries(positions)) {
-          const el = document.querySelector(`[data-portid="${portId}"]`) as HTMLElement | null;
-          if (el) {
-            el.style.left = `${r.x}px`;
-            el.style.top = `${r.y}px`;
-            el.style.width = `${r.w}px`;
-            el.style.height = `${r.h}px`;
-          }
-        }
-      }
+      if (event.data?.type !== "__hotspot-positions") return;
+      const positions = event.data.positions as Record<string, { x: number; y: number; w: number; h: number }>;
+      setComputedHotspots((prev) => ({ ...prev, ...positions }));
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  // Send hotspot selectors to iframe whenever hotspots change
+  // Tell the iframe which hotspots to track whenever the list changes
   useEffect(() => {
     const iframe = previewIframeRef.current;
     if (!iframe?.contentWindow) return;
     const payload = hotspots.map((h) => ({ portId: h.portId, selector: h.selector }));
     iframe.contentWindow.postMessage({ type: "__set-hotspots", hotspots: payload }, "*");
   }, [hotspots, runnerUrl]);
+
+  // Listen for element-selected from iframe (hotspot creation flow)
+  useEffect(() => {
+    if (!selectingElementForPort) return;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "element-selected") return;
+      const { selector, rect } = event.data as { selector: string; rect: { x: number; y: number; w: number; h: number } };
+      setHotspotPending({ selector, rect, portId: selectingElementForPort.portId });
+      setSelectingElementForPort(null);
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [selectingElementForPort]);
 
   const applyScreenCode = useCallback((code: string) => {
     setCode(code);
@@ -445,88 +425,17 @@ export function ScreensPanel() {
 
     if (runnerStatus === "running" && runnerUrl) {
       return (
-        <div className="relative w-full h-full">
+        <div className="relative w-full h-full overflow-hidden">
           <iframe
             ref={previewIframeRef}
             src={initialPreviewSrc}
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms"
             onLoad={() => {
-              // Inject message handlers directly into the iframe's DOM (no file overwrite, no Vite cache loop)
               const iframe = previewIframeRef.current;
-              if (!iframe?.contentDocument) return;
-              if (iframe.contentDocument.getElementById('__prototyper-patch')) return;
-              const script = iframe.contentDocument.createElement('script');
-              script.id = '__prototyper-patch';
-script.textContent = `
-                (function() {
-                  window.__prototyper_patched = true;
-                  var __hotspots = [];
-
-                  function queryPositions() {
-                    var positions = {};
-                    for (var i = 0; i < __hotspots.length; i++) {
-                      var h = __hotspots[i];
-                      try {
-                        var el = document.querySelector(h.selector);
-                        if (el) {
-                          var r = el.getBoundingClientRect();
-                          positions[h.portId] = { x: r.left, y: r.top, w: r.width, h: r.height };
-                        }
-                      } catch(ignore) {}
-                    }
-                    window.parent.postMessage({ type: '__hotspot-positions', positions: positions }, '*');
-                  }
-
-                  // Fire on every scroll event (capture phase catches all scrollable containers)
-                  document.addEventListener('scroll', queryPositions, { capture: true, passive: true });
-
-                  // Also fire via rAF so resize/layout changes are caught too
-                  function rafLoop() {
-                    queryPositions();
-                    requestAnimationFrame(rafLoop);
-                  }
-                  requestAnimationFrame(rafLoop);
-
-                  window.addEventListener('message', function(event) {
-                    var type = event.data && event.data.type;
-                    if (type === '__set-hotspots') {
-                      __hotspots = event.data.hotspots || [];
-                      queryPositions(); // immediately send positions for new hotspots
-                    }
-                    if (type === 'find-element-at') {
-                      var x = event.data.x, y = event.data.y, portId = event.data.portId;
-                      var el = document.elementFromPoint(x, y);
-                      if (el && el !== document.body && el !== document.documentElement) {
-                        var rect = el.getBoundingClientRect();
-                        window.parent.postMessage({
-                          type: 'hotspot-created',
-                          portId: portId,
-                          selector: (function() {
-                            if (el.id) return '#' + el.id;
-                            var parts = [], cur = el;
-                            while (cur && cur !== document.body) {
-                              var par = cur.parentElement;
-                              if (!par) break;
-                              var tag = cur.tagName.toLowerCase();
-                              var sibs = Array.from(par.children).filter(function(c) { return c.tagName === cur.tagName; });
-                              var idx = sibs.indexOf(cur) + 1;
-                              parts.unshift(sibs.length > 1 ? tag + ':nth-of-type(' + idx + ')' : tag);
-                              cur = par;
-                            }
-                            return parts.join(' > ');
-                          })(),
-                          rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
-                        }, '*');
-                      }
-                    }
-                  });
-                })();
-              `;
-              iframe.contentDocument.body.appendChild(script);
-              // Immediately send current hotspots so the rAF loop starts tracking
-              const hs = hotspots.map((h) => ({ portId: h.portId, selector: h.selector }));
-              iframe.contentWindow?.postMessage({ type: "__set-hotspots", hotspots: hs }, "*");
+              if (!iframe?.contentWindow) return;
+              const payload = hotspotsRef.current.map((h) => ({ portId: h.portId, selector: h.selector }));
+              iframe.contentWindow.postMessage({ type: "__set-hotspots", hotspots: payload }, "*");
             }}
           />
           {/* Deselect hotspot on background click */}
@@ -539,16 +448,17 @@ script.textContent = `
             const targetName = h.targetScreenId
               ? (screenIds.find((id) => id === h.targetScreenId) ?? h.targetScreenId).replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
               : null;
+            const rect = computedHotspots[h.portId] ?? h.rect;
             return (
               <div
                 key={h.id}
                 data-portid={h.portId}
                 className="absolute z-20 group"
                 style={{
-                  left: h.rect.x,
-                  top: h.rect.y,
-                  width: h.rect.w,
-                  height: h.rect.h,
+                  left: rect.x,
+                  top: rect.y,
+                  width: rect.w,
+                  height: rect.h,
                 }}
               >
                 {/* Hotspot highlight box */}
@@ -568,7 +478,7 @@ script.textContent = `
                 {isSelected && (
                   <div
                     className="absolute z-30 bg-card border border-border rounded-md shadow-lg p-2 flex flex-col gap-1.5 min-w-[140px] text-[10px]"
-                    style={{ left: h.rect.w + 6, top: 0 }}
+                    style={{ left: rect.w + 6, top: 0 }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {/* Port name */}
@@ -612,30 +522,7 @@ script.textContent = `
               </div>
             );
           })}
-          {selectingElementForPort && (
-            <div
-              className="absolute inset-0 z-10 cursor-crosshair bg-cyan-500/5"
-              onClick={(e) => {
-                console.log('[click-catcher] click fired at', e.clientX, e.clientY);
-                const iframe = previewIframeRef.current;
-                if (!iframe?.contentWindow || !selectingElementForPort || !screenId) {
-                  console.log('[click-catcher] early return - iframe:', !!iframe?.contentWindow, 'selectingElementForPort:', !!selectingElementForPort, 'screenId:', screenId);
-                  return;
-                }
-                const zoom = screensZoom;
-                const wrapper = e.currentTarget as HTMLDivElement;
-                const wrapperRect = wrapper.getBoundingClientRect();
-                const iframeX = (e.clientX - wrapperRect.left) / zoom;
-                const iframeY = (e.clientY - wrapperRect.top) / zoom;
-                console.log('[click-catcher] sending find-element-at', iframeX, iframeY);
-                // Ask iframe to find element at coords and report back via postMessage
-                iframe.contentWindow.postMessage(
-                  { type: "find-element-at", x: iframeX, y: iframeY, portId: `${screenId}:output-${Date.now()}` },
-                  "*"
-                );
-              }}
-            />
-          )}
+          {/* No click catcher needed — enable-link-mode handles interaction inside the iframe */}
         </div>
       );
     }
@@ -929,24 +816,14 @@ script.textContent = `
                     variant={selectingElementForPort ? "secondary" : "ghost"}
                     size="sm"
                     className="h-6 text-[10px] gap-1"
-                    onClick={async () => {
+                    onClick={() => {
                       if (selectingElementForPort) {
                         setSelectingElementForPort(null);
+                        previewIframeRef.current?.contentWindow?.postMessage({ type: "disable-link-mode" }, "*");
                       } else {
-                        // Create a new output port and enter selection mode
                         const portId = `${screenId}:output-${Date.now()}`;
-                        const newPort: NavPort = {
-                          id: portId,
-                          name: "New Output",
-                          direction: "output",
-                          type: "navigation",
-                          schema: "{}",
-                        };
-                        const newPorts = [...screenPorts, newPort];
-                        setScreenPorts(newPorts);
-                        await updateScreenPorts(`projects/${settings.project}`, screenId ?? "", newPorts);
-                        window.dispatchEvent(new Event("navigation-changed"));
                         setSelectingElementForPort({ portId, direction: "output" });
+                        previewIframeRef.current?.contentWindow?.postMessage({ type: "enable-link-mode", portId }, "*");
                       }
                     }}
                     title="Click an element in Preview to create an output port"

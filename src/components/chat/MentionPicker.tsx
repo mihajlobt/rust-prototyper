@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Component, Palette, Monitor, Plug } from "lucide-react"
+import { Component, Palette, Monitor, Plug, FileText } from "lucide-react"
 import { readFile } from "@/lib/ipc"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { MentionAsset } from "@/types/chat"
@@ -18,6 +18,7 @@ const TYPE_ICONS: Record<MentionAsset["type"], React.ReactNode> = {
   theme: <Palette size={11} />,
   screen: <Monitor size={11} />,
   api: <Plug size={11} />,
+  file: <FileText size={11} />,
 }
 
 interface MentionPickerProps {
@@ -184,6 +185,22 @@ async function loadProjectAssets(projectPath: string): Promise<PickerItem[]> {
       })
     }
   } catch { /* no themes dir */ }
+
+  // Markdown docs — .md files at the project root (e.g. coding-standards.md, README.md)
+  try {
+    const entries = await readDir(projectPath)
+    for (const e of entries) {
+      if (!e.is_dir && e.name.endsWith(".md")) {
+        assets.push({
+          id: e.name,
+          type: "file",
+          name: e.name,
+          description: "Markdown document",
+          path: `${projectPath}/${e.name}`,
+        })
+      }
+    }
+  } catch { /* no docs */ }
 
   // APIs — code computed eagerly; description = "METHOD url"
   try {

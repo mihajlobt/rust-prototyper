@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe } from "lucide-react"
+import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { MentionAsset } from "@/types/chat"
 
@@ -10,6 +10,7 @@ function mentionIcon(type: MentionAsset["type"]) {
     case "component": return <Box size={13} className="shrink-0 text-purple-400" />
     case "theme": return <Palette size={13} className="shrink-0 text-pink-400" />
     case "api": return <Globe size={13} className="shrink-0 text-yellow-400" />
+    case "file": return <FileText size={13} className="shrink-0 text-green-400" />
   }
 }
 
@@ -18,6 +19,7 @@ const MENTION_TYPE_LABEL: Record<MentionAsset["type"], string> = {
   component: "Component",
   theme: "Theme",
   api: "API",
+  file: "File",
 }
 
 /** Card showing a referenced project item in a user message */
@@ -245,6 +247,8 @@ const MessageBubble = memo(function MessageBubble({
   if (message.role === "user") {
     const hasImages = !!message.images?.length
     const hasMentions = !!message.mentions?.length
+    // Strip injected mention context blocks from display — chips above already show them
+    const displayContent = content.replace(/<!-- @[^>]+ -->\n[\s\S]*?<!-- end @[^>]+ -->\n\n?/g, "").trim()
     return (
       <Message className="justify-end group">
         <div className="flex flex-col items-end gap-1 max-w-[85%]">
@@ -268,11 +272,11 @@ const MessageBubble = memo(function MessageBubble({
             </div>
           )}
           <MessageContent markdown className="text-sm">
-            {content}
+            {displayContent}
           </MessageContent>
           <MessageActions className="opacity-0 group-hover:opacity-100 transition-opacity">
             <MessageAction tooltip="Copy message">
-              <MsgActionBtn onClick={() => navigator.clipboard.writeText(content)}>
+              <MsgActionBtn onClick={() => navigator.clipboard.writeText(displayContent)}>
                 <Copy size={13} />
               </MsgActionBtn>
             </MessageAction>

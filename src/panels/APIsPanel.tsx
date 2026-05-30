@@ -215,7 +215,12 @@ function jsonToTsInterface(name: string, json: unknown): string {
     return typeof val;
   }
   try {
-    return `export interface ${name} ${inferType(json)}`;
+    const body = inferType(json);
+    // interface syntax only works for object bodies — arrays and primitives need type alias
+    if (Array.isArray(json) || typeof json !== "object" || json === null) {
+      return `export type ${name} = ${body}`;
+    }
+    return `export interface ${name} ${body}`;
   } catch {
     return `// Could not infer type from response`;
   }
@@ -270,7 +275,7 @@ function buildServiceFile(api: SavedApi, tsInterface: string, interfaceName: str
   const hookName =
     "use" +
     api.name.replace(/[^a-zA-Z0-9]+(.)?/g, (_, c) => (c ? c.toUpperCase() : "")).replace(/^./, (c) => c.toUpperCase());
-  const base = api.proxyPath?.trim() || api.url.replace(/\/[^/]*$/, "");
+  const base = api.url;
   const queryKey = slug.replace(/-/g, "_");
 
   return `import { useQuery } from '@tanstack/react-query'

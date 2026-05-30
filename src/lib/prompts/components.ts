@@ -1,6 +1,6 @@
 // Component generation prompts.
 
-import { type IconLibrary, getIconLibraryPromptSection, TOOL_USAGE_SECTION, SHADCN_COMPONENT_CATALOG, DATA_LAYER_SECTION } from "./shared";
+import { type IconLibrary, getIconLibraryPromptSection, TOOL_USAGE_SECTION, SHADCN_COMPONENT_CATALOG, DATA_LAYER_SECTION, API_MENTION_RULE } from "./shared";
 
 export const COMPONENT_NEW_PROMPT_BASE = `You are an expert React/TypeScript developer generating focused, reusable UI components.
 
@@ -68,7 +68,7 @@ DO NOT generate full pages, dashboards, multi-section layouts, or full-screen ap
 
 export function getComponentNewPrompt(iconLibrary: IconLibrary, shadcnMode?: boolean, customBase?: string): string {
   const base = customBase ?? (shadcnMode ? COMPONENT_NEW_PROMPT_SHADCN : COMPONENT_NEW_PROMPT_BASE);
-  return `${base}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
+  return `${base}\n\n${API_MENTION_RULE}\n\n${getIconLibraryPromptSection(iconLibrary)}`;
 }
 
 export const COMPONENT_UPDATE_PROMPT_BASE = `You are an expert React/TypeScript developer updating a focused UI component.
@@ -113,5 +113,5 @@ export function getComponentUpdatePrompt(iconLibrary: IconLibrary, currentCode?:
   const codeSection = currentCode
     ? `\n\nCURRENT CODE — edit this code to apply the user's requested changes:\n\`\`\`tsx\n${currentCode}\n\`\`\``
     : "";
-  return `${base}\n\n${getIconLibraryPromptSection(iconLibrary)}${codeSection}`;
+  return `${base}\n\n${API_MENTION_RULE}\n\n${getIconLibraryPromptSection(iconLibrary)}${codeSection}`;
 }

@@ -94,6 +94,13 @@ SHARED MOCK DATA — available at @/data/store:
 
 // ─── Shared tool-calling section (DRY — used by screen and component prompts) ──
 
+export const API_MENTION_RULE = `API MENTIONS — CRITICAL:
+If the user message contains an <!-- @API --> block, you MUST:
+1. Import the service hook shown (e.g. import { useJSONPlaceholderPosts } from '@/services/jsonplaceholder-posts')
+2. Use that hook to fetch data — do NOT use fetch(), useEffect for data fetching, or hardcoded mock data
+3. Handle loading and error states from the hook (isLoading, isError, error, data)
+The hook uses TanStack Query and is already wired to the correct endpoint.`
+
 export const TOOL_USAGE_SECTION = `TOOL USAGE — REQUIRED:
 You MUST call the write_file tool. The content argument is the raw source code written directly to a file.
 
@@ -220,18 +227,33 @@ export function buildApiContextSection(
 ): string {
   if (apis.length === 0) return "";
   const lines = apis.map((api) => {
-    const base = api.proxyPath?.trim() || api.url;
+    const proxyBase = api.proxyPath?.trim();
+    let callUrl: string;
+    if (proxyBase) {
+      try {
+        const urlPath = new URL(api.url).pathname;
+        callUrl = urlPath !== "/" ? `${proxyBase}${urlPath}` : proxyBase;
+      } catch {
+        callUrl = proxyBase;
+      }
+    } else {
+      callUrl = api.url;
+    }
     const keyMatch = api.url.match(/\{\{(\w+)\}\}/);
     const authNote = keyMatch ? `\n    Auth env var: import.meta.env.VITE_${keyMatch[1]}` : "";
-    return `  ${api.method} ${base}  (${api.name})${authNote}`;
+    const slug = api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const hookName = "use" + api.name.replace(/[^a-zA-Z0-9]+(.)?/g, (_: string, c: string) => (c ? c.toUpperCase() : "")).replace(/^./, (c: string) => c.toUpperCase());
+    return `  ${api.method} ${callUrl}  (${api.name})${authNote}\n    Service hook: import { ${hookName} } from '@/services/${slug}'`;
   });
   return [
     "\n\nAVAILABLE APIS — use @tanstack/react-query for all data fetching:",
     ...lines,
     "",
     "Import: import { useQuery } from '@tanstack/react-query'",
-    "Use proxy paths as base URLs (e.g. /api/weather, not https://api.openweathermap.org) — CORS-free in dev.",
-    "Always add loading and error states. Import service hooks from '@/services/{name}' if available.",
+    "HOW THE PROXY WORKS: the full call URL is listed above (e.g. /api/github/search/repositories).",
+    "Vite strips the prefix and forwards the rest to the real API — CORS-free in dev.",
+    "REQUIRED: use the service hook listed for each API above — do NOT use fetch() directly or mock data.",
+    "Always handle loading and error states from the hook (isLoading, isError, data).",
     "For TanStack Query: wrap the tree with <QueryClientProvider> in main.tsx (already done by scaffold).",
   ].join("\n");
 }

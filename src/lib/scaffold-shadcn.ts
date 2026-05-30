@@ -234,9 +234,39 @@ import App from './App.tsx'
 
 const queryClient = new QueryClient()
 
+// Hotspot position tracking
+let __hotspots: { portId: string; selector: string }[] = [];
+let __linkModeCleanup: (() => void) | null = null;
+
+function sendHotspotPositions() {
+  const positions: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  for (const h of __hotspots) {
+    try {
+      const el = document.querySelector(h.selector);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        positions[h.portId] = { x: r.left, y: r.top, w: r.width, h: r.height };
+      }
+    } catch (_) { /* ignore invalid selectors */ }
+  }
+  window.parent.postMessage({ type: '__hotspot-positions', positions }, '*');
+}
+
+document.addEventListener('scroll', sendHotspotPositions, { capture: true, passive: true });
+window.addEventListener('resize', sendHotspotPositions, { passive: true });
+
 // Global message listener
 window.addEventListener('message', (event) => {
-  console.log('[iframe msg]', event.data?.type, event.data);
+  if (event.data?.type === '__set-hotspots') {
+    __hotspots = (event.data.hotspots as { portId: string; selector: string }[]) || [];
+    sendHotspotPositions();
+    return;
+  }
+  if (event.data?.type === 'disable-link-mode') {
+    __linkModeCleanup?.();
+    __linkModeCleanup = null;
+    return;
+  }
   if (event.data?.type === 'enable-element-select') {
     const portId = event.data.portId as string;
     if (!portId || !document.body) return;
@@ -347,8 +377,10 @@ window.addEventListener('message', (event) => {
       document.removeEventListener('mouseover', hoverHandler, true);
       document.removeEventListener('click', clickHandler, true);
       document.removeEventListener('keydown', keyHandler);
+      __linkModeCleanup = null;
     };
 
+    __linkModeCleanup = cleanup;
     const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') cleanup(); };
 
     document.addEventListener('mouseover', hoverHandler, true);
@@ -362,13 +394,13 @@ function getSelector(el: Element): string {
   const parts: string[] = [];
   let current: Element | null = el;
   while (current && current !== document.body) {
-    const parent = current.parentElement;
-    if (!parent) break;
+    const parentEl: HTMLElement | null = current.parentElement;
+    if (!parentEl) break;
     const tag = current.tagName.toLowerCase();
-    const siblings = Array.from(parent.children).filter((c) => c.tagName === current!.tagName);
+    const siblings = Array.from(parentEl.children).filter((c: Element) => c.tagName === current!.tagName);
     const idx = siblings.indexOf(current) + 1;
     parts.unshift(siblings.length > 1 ? tag + ':nth-of-type(' + idx + ')' : tag);
-    current = parent;
+    current = parentEl;
   }
   return parts.join(' > ');
 }
@@ -487,22 +519,19 @@ export function getGeneratedViteConfig(proxy: Record<string, string> = {}): stri
   server: {
     proxy: {
 ${entries.map(([prefix, targetUrl]) => {
-  // targetUrl stores origin+pathname (e.g. "https://api.example.com/v2/endpoint")
-  // Vite proxy target must be origin-only; the pathname becomes the rewrite destination.
+  // Strip only the prefix — caller is responsible for including the full path.
+  // e.g. fetch('/api/github/search/repositories?q=react') strips '/api/github'
+  //      → '/search/repositories?q=react' → https://api.github.com/search/repositories?q=react
   let origin = targetUrl;
-  let rewriteTo = "";
   try {
-    const p = new URL(targetUrl);
-    origin = p.origin;
-    rewriteTo = p.pathname !== "/" ? p.pathname : "";
+    origin = new URL(targetUrl).origin;
   } catch { /* malformed URL — use as-is */ }
   const safeOrigin = origin.replace(/"/g, "").replace(/\\/g, "");
-  const safeRewrite = rewriteTo.replace(/"/g, "").replace(/\\/g, "");
   const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '\\/');
   return `      "${prefix}": {
         target: "${safeOrigin}",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^${escaped}/, "${safeRewrite}"),
+        rewrite: (path) => path.replace(/^${escaped}/, ""),
       },`;
 }).join('\n')}
     },
