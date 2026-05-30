@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Box, Palette, LayoutGrid, Globe, Search, ChevronDown, ChevronRight, Clock, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -7,7 +7,7 @@ import {
   ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { readDir, readFile, writeFile, deleteDir, renameFile, createDir, getErrorMessage } from "@/lib/ipc";
+import { readDir, readFile, writeFile, deleteDir, deleteFile, renameFile, createDir, getErrorMessage } from "@/lib/ipc";
 import { save, confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -83,7 +83,6 @@ export function LibraryPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const project = settings.project || "default";
   const base = `projects/${project}`;
@@ -125,11 +124,6 @@ export function LibraryPanel() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: projectKeys.library(project) });
 
-  // Focus rename input when it mounts
-  useEffect(() => {
-    if (renamingId) setTimeout(() => renameInputRef.current?.focus(), 0);
-  }, [renamingId]);
-
   // ─── Filtering & sorting ───────────────────────────────────────────────────
 
   const filtered = items
@@ -168,7 +162,7 @@ export function LibraryPanel() {
     };
     try {
       if (item.type === "api") {
-        await renameFile(paths.api, `${paths.api}.deleted`);
+        await deleteFile(paths.api);
       } else {
         await deleteDir(paths[item.type]);
       }
@@ -369,7 +363,7 @@ export function LibraryPanel() {
                       {/* Name / rename input */}
                       {isRenaming ? (
                         <input
-                          ref={renameInputRef}
+                          autoFocus
                           value={renameValue}
                           onChange={(e) => setRenameValue(e.target.value)}
                           onKeyDown={(e) => {

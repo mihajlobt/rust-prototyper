@@ -314,7 +314,7 @@ export function ComponentsPanel() {
       await writeFile(`${compDir}/component.tsx`, extracted);
       await syncGeneratedRouter(`projects/${settings.project}`);
       queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
-      saveItemMeta(`projects/${settings.project}`, "components", selectedComponent, prompt)
+      void saveItemMeta(`projects/${settings.project}`, "components", selectedComponent, prompt)
         .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
     } catch (e) {
       notify.error("Failed to apply generated code", getErrorMessage(e));

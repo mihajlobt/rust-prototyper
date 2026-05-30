@@ -256,9 +256,9 @@ export function ScreensPanel() {
     createDir(parentDir)
       .then(() => writeFile(screenPath, code))
       .then(() => syncGeneratedRouter(`projects/${settings.project}`))
-      .then(() => { if (screenId) saveItemMeta(`projects/${settings.project}`, "screens", screenId, prompt).then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) })); })
+      .then(() => { if (screenId) void saveItemMeta(`projects/${settings.project}`, "screens", screenId, prompt).then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) })); })
       .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
-  }, [screenPath, settings.project, screenId]);
+  }, [screenPath, settings.project, screenId, queryClient]);
 
   const saveScreenCode = useCallback(async (value: string) => {
     if (!screenId || !value) return;
