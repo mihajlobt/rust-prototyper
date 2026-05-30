@@ -135,11 +135,13 @@ export function RunnerPanel() {
       logLinesRef.current = [...logLinesRef.current, { line: event.line, source: event.source }];
       setLogTick((t) => t + 1);
       if (runningRef.current && iframeRef.current && devUrl && /updated|hmr/i.test(event.line)) {
-        iframeRef.current.src = `${devUrl}?dark=${runnerDarkRef.current}`;
+        iframeRef.current.src = `${devUrl.replace(/\/$/, "")}?dark=${runnerDarkRef.current}`;
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
-  }, [devUrl]);
+  }, [devUrl, runnerDark]);
+
+  // ── Tab management ──────────────────────────────────────────────────────
 
   // ── Tab management ──────────────────────────────────────────────────────
 
@@ -474,11 +476,16 @@ export function RunnerPanel() {
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomOut}><Minus size={11} /></Button>
                           <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none" onClick={zoomReset}>{Math.round(ps.runnerZoom * 100)}%</button>
                           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomIn}><Plus size={11} /></Button>
+                          {devUrl && (
+                            <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={devUrl}>
+                              {devUrl.replace(/\/$/, "").replace(/^http:\/\/localhost:\d+/, "")}
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
                           {devUrl ? (
                             <div className="h-full bg-background shadow-lg border border-border overflow-hidden" style={{ width: deviceWidth[ps.runnerDevice], transform: `scale(${ps.runnerZoom})`, transformOrigin: "top center" }}>
-                              <iframe ref={iframeRef} src={devUrl ? `${devUrl}?dark=${runnerDark}` : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
+                              <iframe ref={iframeRef} src={devUrl ? `${devUrl.replace(/\/$/, "")}?dark=${runnerDark}` : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
                             </div>
                           ) : (
                             <div className="flex items-center justify-center text-muted-foreground text-sm">
