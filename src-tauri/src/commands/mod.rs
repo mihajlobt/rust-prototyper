@@ -6,3 +6,4 @@ pub(crate) mod ai_providers;
 pub mod ai_ollama;
 pub mod export;
 pub mod workflows;
+pub mod bonsai;

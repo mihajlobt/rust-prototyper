@@ -8,6 +8,7 @@ import {
   BookOpen,
   Terminal,
   PanelLeft,
+  Image,
 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SettingsModal } from "@/modals/SettingsModal";
@@ -24,6 +25,7 @@ const tabs = [
   { id: "flows", label: "Flows", icon: Route },
   { id: "workflows", label: "Workflows", icon: GitBranch },
   { id: "apis", label: "APIs", icon: Terminal },
+  { id: "assets", label: "Assets", icon: Image },
   { id: "runner", label: "Runner", icon: Play },
   { id: "library", label: "Library", icon: BookOpen },
 ];

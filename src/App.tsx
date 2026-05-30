@@ -9,6 +9,7 @@ import { ThemesPanel } from "./panels/ThemesPanel";
 import { APIsPanel } from "./panels/APIsPanel";
 import { RunnerPanel } from "./panels/RunnerPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
+import { AssetsPanel } from "./panels/AssetsPanel";
 import { FlowsPanel } from "./panels/FlowsPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
 import { useAppStore } from "./stores/appStore";
@@ -81,6 +82,7 @@ export default function App() {
                   <WorkflowsView />
                 </div>
                 {ps.activeView === "apis"       && <APIsPanel />}
+                {ps.activeView === "assets"     && <AssetsPanel />}
                 {ps.activeView === "runner"     && <RunnerPanel />}
                 {ps.activeView === "library"    && <LibraryPanel />}
               </ErrorBoundary>

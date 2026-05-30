@@ -383,3 +383,4 @@ export function getErrorMessage(error: unknown): string {
 
 import { safeInvoke, safeInvokeSilent } from "./notifications";
 export { safeInvoke, safeInvokeSilent };
+export * from "./bonsai";

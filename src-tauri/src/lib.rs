@@ -2,12 +2,14 @@ mod agent;
 pub mod commands;
 pub mod sandbox;
 
-use std::sync::{atomic::AtomicU64, Mutex};
+use std::sync::{atomic::AtomicU16, atomic::AtomicU64, Mutex};
 use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_shell::process::CommandChild;
 use tokio_util::sync::CancellationToken;
+
+use commands::bonsai::{BonsaiServer, BonsaiServerConfig};
 
 pub struct AppState {
     pub active_processes: Mutex<HashMap<u32, CommandChild>>,
@@ -17,6 +19,9 @@ pub struct AppState {
     pub pending_permissions: Mutex<HashMap<u64, commands::ai::PendingToolPermission>>,
     /// Monotonically increasing counter for permission IDs.
     pub next_permission_id: AtomicU64,
+    pub bonsai_process: tokio::sync::Mutex<Option<BonsaiServer>>,
+    pub bonsai_port: AtomicU16,
+    pub bonsai_config: Mutex<BonsaiServerConfig>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -31,6 +36,8 @@ pub enum AppError {
     Security(String),
     #[error("HTTP error: {0}")]
     Http(String),
+    #[error("Bonsai error: {0}")]
+    Bonsai(String),
 }
 
 impl serde::Serialize for AppError {
@@ -109,6 +116,9 @@ pub fn run() {
             http_client,
             pending_permissions: Mutex::new(HashMap::new()),
             next_permission_id: AtomicU64::new(1),
+            bonsai_process: tokio::sync::Mutex::new(None),
+            bonsai_port: AtomicU16::new(0),
+            bonsai_config: Mutex::new(BonsaiServerConfig::default()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::process::bun_dev,
@@ -143,6 +153,16 @@ pub fn run() {
             commands::workflows::save_workflow,
             commands::workflows::load_workflow,
             commands::workflows::list_workflows,
+            commands::bonsai::bonsai_start_server,
+            commands::bonsai::bonsai_stop_server,
+            commands::bonsai::bonsai_server_status,
+            commands::bonsai::bonsai_generate_image,
+            commands::bonsai::bonsai_list_assets,
+            commands::bonsai::bonsai_delete_asset,
+            commands::bonsai::bonsai_get_server_config,
+            commands::bonsai::bonsai_save_server_config,
+            commands::bonsai::bonsai_schedule_stop,
+            commands::bonsai::bonsai_cancel_stop,
         ])
         .setup(|_app| Ok(()))
         .on_window_event(|window, event| {
@@ -151,6 +171,19 @@ pub fn run() {
                     let mut processes = state.active_processes.lock().unwrap();
                     for (_, child) in processes.drain() {
                         let _ = child.kill();
+                    }
+                    drop(processes);
+                }
+                if let Some(state) = window.try_state::<AppState>() {
+                    // Use start_kill() (sync) instead of kill().await because this handler is synchronous.
+                    // The process will be forcefully terminated when the app exits regardless.
+                    if let Ok(mut bonsai) = state.bonsai_process.try_lock() {
+                        if let Some(mut server) = bonsai.take() {
+                            if let Some(timer) = server.stop_timer.take() {
+                                timer.abort();
+                            }
+                            let _ = server.child.start_kill();
+                        }
                     }
                 }
                 #[cfg(unix)]
