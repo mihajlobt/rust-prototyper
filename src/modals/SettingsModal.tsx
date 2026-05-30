@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, RotateCcw, Plus, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide-react";
+import { Settings, RotateCcw, Trash2, Server, Cloud, Zap, Bot, Library } from "lucide-react";
 import { SelectSeparator, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -28,28 +28,14 @@ import { notify } from "@/hooks/useToast";
 import { readFile, writeFile, bunInstall, getErrorMessage } from "@/lib/ipc";
 import { EDITOR_THEMES } from "@/components/CodeMirrorEditor";
 import { ICON_LIBRARY_PACKAGES, PROMPT_DEFINITIONS, type IconLibrary, type PromptGroup } from "@/lib/prompts";
+import { StylesEditor } from "@/modals/StylesEditor";
 import type { ToolPermissionMode } from "@/lib/ipc";
 
 export function SettingsModal() {
   const { settings, setSettings } = useSettings();
   const { ps, setPs } = useProjectSettingsStore();
   const [open, setOpen] = useState(false);
-  const [newPresetName, setNewPresetName] = useState("");
-  const [newPresetValue, setNewPresetValue] = useState("");
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
-
-  const addPreset = async () => {
-    if (!newPresetName || !newPresetValue) return;
-    const next = [...settings.styles, { name: newPresetName, value: newPresetValue }];
-    await setSettings({ styles: next });
-    setNewPresetName("");
-    setNewPresetValue("");
-  };
-
-  const removePreset = async (index: number) => {
-    const next = settings.styles.filter((_, i) => i !== index);
-    await setSettings({ styles: next });
-  };
 
   const setPrompt = async (key: string, value: string) => {
     const next = { ...settings.prompts, [key]: value };
@@ -461,37 +447,8 @@ export function SettingsModal() {
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="styles" className="flex-1 mt-4">
-            <ScrollArea className="flex-1 overflow-hidden">
-              <div className="space-y-2">
-                <Label>New Style Preset</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Name"
-                    value={newPresetName}
-                    onChange={(e) => setNewPresetName(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Value"
-                    value={newPresetValue}
-                    onChange={(e) => setNewPresetValue(e.target.value)}
-                  />
-                  <Button size="sm" onClick={addPreset}>
-                    <Plus size={14} />
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-1">
-                {settings.styles.map((preset, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 rounded bg-muted">
-                    <span className="text-sm">{preset.name}</span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removePreset(i)}>
-                      <Trash2 size={12} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
+          <TabsContent value="styles" className="flex-1 overflow-hidden mt-4">
+            <StylesEditor />
           </TabsContent>
 
           <TabsContent value="prompts" className="flex-1 mt-4">

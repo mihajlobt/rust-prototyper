@@ -16,6 +16,8 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import { saveItemMeta } from "@/lib/item-meta";
@@ -33,6 +35,7 @@ import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { FileEntry } from "@/lib/ipc";
 import { getComponentNewPrompt, getComponentUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, type DesignBriefTemplate } from "@/lib/prompts";
+import { useSettings } from "@/hooks/useSettings";
 import { extractCode } from "@/lib/preview";
 import { useDevServerStore } from "@/lib/dev-server-manager";
 import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
@@ -47,8 +50,19 @@ import { MessageList, ChatInput } from "@/components/chat";
 
 export function ComponentsPanel() {
   const { settings } = useAppStore();
+  const { settings: globalSettings } = useSettings();
   const { ps, setPs, openComponent: setSelectedComponent } = useProjectSettingsStore();
   const queryClient = useQueryClient();
+
+  const allBriefs: DesignBriefTemplate[] = [
+    ...DESIGN_BRIEF_TEMPLATES,
+    ...globalSettings.styles.map((s) => ({
+      name: s.name,
+      description: s.value.slice(0, 80) + (s.value.length > 80 ? "…" : ""),
+      palette: [] as string[],
+      content: s.value,
+    })),
+  ];
 
   // Dev server state — shared runner server
   const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
@@ -425,7 +439,8 @@ export function ComponentsPanel() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-72">
-                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => setCtxSelectedBrief(DESIGN_BRIEF_TEMPLATES.find((b) => b.name === v) ?? null)}>
+                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => setCtxSelectedBrief(allBriefs.find((b) => b.name === v) ?? null)}>
+                  <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Built-in</DropdownMenuLabel>
                   {DESIGN_BRIEF_TEMPLATES.map((brief) => (
                     <DropdownMenuRadioItem key={brief.name} value={brief.name} className="flex-col items-start gap-0.5 py-2">
                       <div className="flex items-center gap-2 w-full">
@@ -439,6 +454,18 @@ export function ComponentsPanel() {
                       <span className="text-[10px] text-muted-foreground pl-0.5">{brief.description}</span>
                     </DropdownMenuRadioItem>
                   ))}
+                  {globalSettings.styles.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Custom</DropdownMenuLabel>
+                      {globalSettings.styles.map((s) => (
+                        <DropdownMenuRadioItem key={s.name} value={s.name} className="flex-col items-start gap-0.5 py-1.5">
+                          <span className="text-xs font-medium">{s.name}</span>
+                          <span className="text-[10px] text-muted-foreground pl-0.5 line-clamp-1">{s.value.slice(0, 60)}</span>
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>

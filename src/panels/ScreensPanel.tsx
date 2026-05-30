@@ -9,6 +9,8 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +24,7 @@ import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, buildComponentsSection, type DesignBriefTemplate } from "@/lib/prompts";
+import { useSettings } from "@/hooks/useSettings";
 import { saveItemMeta } from "@/lib/item-meta";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { extractCode } from "@/lib/preview";
@@ -40,7 +43,18 @@ import { PortsEditor } from "@/panels/flows/PortsEditor";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
+  const { settings: globalSettings } = useSettings();
   const { ps, setPs } = useProjectSettingsStore();
+
+  const allBriefs: DesignBriefTemplate[] = [
+    ...DESIGN_BRIEF_TEMPLATES,
+    ...globalSettings.styles.map((s) => ({
+      name: s.name,
+      description: s.value.slice(0, 80) + (s.value.length > 80 ? "…" : ""),
+      palette: [] as string[],
+      content: s.value,
+    })),
+  ];
   const screenId = ps.activeScreen;
   const screensDevice = ps.screensDevice;
   const screensShowInspector = ps.screensShowInspector;
@@ -586,7 +600,8 @@ export function ScreensPanel() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-72">
-                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => setCtxSelectedBrief(DESIGN_BRIEF_TEMPLATES.find((b) => b.name === v) ?? null)}>
+                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => setCtxSelectedBrief(allBriefs.find((b) => b.name === v) ?? null)}>
+                  <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Built-in</DropdownMenuLabel>
                   {DESIGN_BRIEF_TEMPLATES.map((brief) => (
                     <DropdownMenuRadioItem key={brief.name} value={brief.name} className="flex-col items-start gap-0.5 py-2">
                       <div className="flex items-center gap-2 w-full">
@@ -600,6 +615,18 @@ export function ScreensPanel() {
                       <span className="text-[10px] text-muted-foreground pl-0.5">{brief.description}</span>
                     </DropdownMenuRadioItem>
                   ))}
+                  {globalSettings.styles.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Custom</DropdownMenuLabel>
+                      {globalSettings.styles.map((s) => (
+                        <DropdownMenuRadioItem key={s.name} value={s.name} className="flex-col items-start gap-0.5 py-1.5">
+                          <span className="text-xs font-medium">{s.name}</span>
+                          <span className="text-[10px] text-muted-foreground pl-0.5 line-clamp-1">{s.value.slice(0, 60)}</span>
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
