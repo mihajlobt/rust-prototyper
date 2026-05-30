@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { saveItemMeta } from "@/lib/item-meta";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -303,12 +304,18 @@ export function ComponentsPanel() {
     setCode(extracted);
     setPs({ componentsCodeOpen: true });
     if (!selectedComponent) return;
+    const entityId = componentId ? `component-${componentId}` : "component-none";
+    const msgs = useChatStore.getState().chats[entityId]?.messages ?? [];
+    const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+    const prompt = lastUser?.content ?? "";
     try {
       const compDir = `${generatedDir}/src/components/${selectedComponent}`;
       await createDir(compDir);
       await writeFile(`${compDir}/component.tsx`, extracted);
       await syncGeneratedRouter(`projects/${settings.project}`);
       queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
+      saveItemMeta(`projects/${settings.project}`, "components", selectedComponent, prompt)
+        .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
     } catch (e) {
       notify.error("Failed to apply generated code", getErrorMessage(e));
     }

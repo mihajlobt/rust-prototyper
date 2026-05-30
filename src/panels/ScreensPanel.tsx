@@ -13,6 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { useQueryClient } from "@tanstack/react-query";
+import { projectKeys } from "@/lib/queryKeys";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -20,6 +22,7 @@ import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { PromptInspector } from "@/components/PromptInspector";
 import { save } from "@tauri-apps/plugin-dialog";
 import { getScreenNewPrompt, getScreenUpdatePrompt, outputFilePathSection, extractDesignTokenNames, getDesignTokensSection, DESIGN_BRIEF_TEMPLATES, buildDesignBriefSection, buildApiContextSection, buildComponentsSection, type DesignBriefTemplate } from "@/lib/prompts";
+import { saveItemMeta } from "@/lib/item-meta";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { extractCode } from "@/lib/preview";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
@@ -44,6 +47,7 @@ export function ScreensPanel() {
   const screensZoom = ps.screensZoom;
   const screensDarkPreview = ps.screensDarkPreview;
   const screensCodeOpen = ps.screensCodeOpen;
+  const queryClient = useQueryClient();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("screens-inspector", 3, [true, true, screensShowInspector]);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("screens-code", 3, [true, true, screensCodeOpen]);
@@ -245,11 +249,16 @@ export function ScreensPanel() {
   const applyScreenCode = useCallback((code: string) => {
     setCode(code);
     const parentDir = screenPath.substring(0, screenPath.lastIndexOf("/"));
+    const entityId = screenId ? `screen-${screenId}` : "screen-none";
+    const msgs = useChatStore.getState().chats[entityId]?.messages ?? [];
+    const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+    const prompt = lastUser?.content ?? "";
     createDir(parentDir)
       .then(() => writeFile(screenPath, code))
       .then(() => syncGeneratedRouter(`projects/${settings.project}`))
+      .then(() => { if (screenId) saveItemMeta(`projects/${settings.project}`, "screens", screenId, prompt).then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) })); })
       .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
-  }, [screenPath, settings.project]);
+  }, [screenPath, settings.project, screenId]);
 
   const saveScreenCode = useCallback(async (value: string) => {
     if (!screenId || !value) return;
@@ -323,7 +332,6 @@ export function ScreensPanel() {
     // Tool models: write_file fires with raw code (no fences) for the primary output file only.
     onCodeOutput: (code) => applyScreenCode(code),
   });
-
 
   useEffect(() => {
     const selectedTheme = ps.stylePreset;

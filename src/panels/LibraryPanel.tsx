@@ -1,297 +1,530 @@
-import { useState, useEffect, useCallback } from "react";
-import { Box, Palette, LayoutGrid, Terminal, Search, Trash2, Copy, Download, Edit2, ExternalLink } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Box, Palette, LayoutGrid, Globe, Search, ChevronDown, ChevronRight, Clock, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { readDir, readFile, writeFile, deleteDir, createDir, renameFile, getErrorMessage } from "@/lib/ipc";
+import {
+  ContextMenu, ContextMenuContent, ContextMenuItem,
+  ContextMenuSeparator, ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { readDir, readFile, writeFile, deleteDir, renameFile, createDir, getErrorMessage } from "@/lib/ipc";
 import { save, confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
+import { projectKeys } from "@/lib/queryKeys";
+import type { ItemMeta } from "@/lib/item-meta";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ItemType = "component" | "theme" | "screen" | "api";
+type SortKey = "updated" | "name" | "type";
 
 interface LibraryItem {
   id: string;
   name: string;
-  type: "component" | "theme" | "screen" | "api";
-  description?: string;
+  type: ItemType;
+  meta: ItemMeta | null;
 }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const TYPE_COLORS: Record<ItemType, string> = {
+  screen:    "text-sky-400",
+  component: "text-violet-400",
+  theme:     "text-rose-400",
+  api:       "text-amber-400",
+};
+
+const TYPE_BG: Record<ItemType, string> = {
+  screen:    "bg-sky-400/10",
+  component: "bg-violet-400/10",
+  theme:     "bg-rose-400/10",
+  api:       "bg-amber-400/10",
+};
+
+const TYPE_ICONS: Record<ItemType, React.ReactNode> = {
+  screen:    <LayoutGrid size={12} />,
+  component: <Box size={12} />,
+  theme:     <Palette size={12} />,
+  api:       <Globe size={12} />,
+};
+
+const TYPE_LABELS: Record<ItemType, string> = {
+  screen: "Screen", component: "Component", theme: "Theme", api: "API",
+};
+
+const ALL_TYPES: ItemType[] = ["screen", "component", "theme", "api"];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function stripMentionBlocks(text: string): string {
+  return text.replace(/<!-- @[^>]+ -->\n[\s\S]*?<!-- end @[^>]+ -->\n\n?/g, "").trim();
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function LibraryPanel() {
   const { settings } = useAppStore();
-  const { openComponent, openScreen, openTheme, openWorkflow } = useProjectSettingsStore();
+  const { openComponent, openScreen, openTheme, openApi } = useProjectSettingsStore();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
-  const [items, setItems] = useState<LibraryItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<ItemType | "all">("all");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const loadItems = useCallback(async () => {
-    setLoading(true);
-    const all: LibraryItem[] = [];
-    const project = settings.project || "default";
-    const base = `./projects/${project}`;
+  const project = settings.project || "default";
+  const base = `projects/${project}`;
 
-    const dirs: Record<string, string> = {
-      component: `${base}/components`,
-      theme: `${base}/themes`,
-      screen: `${base}/screens`,
-      api: `${base}/apis`,
-    };
+  // ─── Load via TanStack Query ───────────────────────────────────────────────
 
-    for (const [type, dir] of Object.entries(dirs)) {
-      try {
-        const entries = await readDir(dir);
-        for (const entry of entries) {
-          if (!entry.is_dir) continue;
-          let description = "";
-          try {
-            const meta = await readFile(`${entry.path}/prompt.json`);
-            const parsed = JSON.parse(meta);
-            description = parsed.prompt || "";
-          } catch {
-            // ignore
+  const { data: items = [], isFetching } = useQuery({
+    queryKey: projectKeys.library(project),
+    queryFn: async (): Promise<LibraryItem[]> => {
+      const all: LibraryItem[] = [];
+      const dirMap: Array<{ type: ItemType; dir: string; isDir: boolean }> = [
+        { type: "screen",    dir: `${base}/screens`,    isDir: true  },
+        { type: "component", dir: `${base}/components`,  isDir: true  },
+        { type: "theme",     dir: `${base}/themes`,      isDir: true  },
+        { type: "api",       dir: `${base}/apis`,        isDir: false },
+      ];
+      for (const { type, dir, isDir } of dirMap) {
+        try {
+          const entries = await readDir(dir);
+          for (const entry of entries) {
+            if (isDir && !entry.is_dir) continue;
+            if (!isDir && entry.is_dir) continue;
+            const id = entry.name.replace(/\.json$/, "");
+            let meta: ItemMeta | null = null;
+            if (isDir) {
+              try {
+                const raw = await readFile(`${dir}/${entry.name}/meta.json`);
+                meta = JSON.parse(raw) as ItemMeta;
+              } catch { /* no meta yet */ }
+            }
+            all.push({ id, name: id, type, meta });
           }
-          all.push({
-            id: entry.name,
-            name: entry.name,
-            type: type as LibraryItem["type"],
-            description,
-          });
-        }
-      } catch {
-        // directory may not exist yet
+        } catch { /* dir may not exist */ }
       }
-    }
-
-    setItems(all);
-    setLoading(false);
-  }, [settings.project]);
-
-  useEffect(() => {
-    loadItems();
-  }, [loadItems]);
-
-  const filtered = items.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      (item.description?.toLowerCase() || "").includes(search.toLowerCase());
-    const matchesTab = activeTab === "all" || item.type === activeTab;
-    return matchesSearch && matchesTab;
+      return all;
+    },
+    staleTime: 5_000,
   });
 
-  const typeIcons: Record<string, React.ReactNode> = {
-    component: <Box size={14} />,
-    theme: <Palette size={14} />,
-    screen: <LayoutGrid size={14} />,
-    api: <Terminal size={14} />,
-  };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: projectKeys.library(project) });
 
-  const typeGradients: Record<string, string> = {
-    component: "from-blue-500 to-purple-500",
-    theme: "from-pink-500 to-orange-500",
-    screen: "from-green-500 to-teal-500",
-    api: "from-gray-500 to-slate-500",
+  // Focus rename input when it mounts
+  useEffect(() => {
+    if (renamingId) setTimeout(() => renameInputRef.current?.focus(), 0);
+  }, [renamingId]);
+
+  // ─── Filtering & sorting ───────────────────────────────────────────────────
+
+  const filtered = items
+    .filter((item) => {
+      if (typeFilter !== "all" && item.type !== typeFilter) return false;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const prompt = item.meta?.initialPrompt ? stripMentionBlocks(item.meta.initialPrompt).toLowerCase() : "";
+      return item.name.toLowerCase().includes(q) || prompt.includes(q);
+    })
+    .sort((a, b) => {
+      if (sortKey === "name") return a.name.localeCompare(b.name);
+      if (sortKey === "type") return a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
+      // updated: items with meta first (newest), then alphabetical
+      const ta = a.meta?.updatedAt ?? 0;
+      const tb = b.meta?.updatedAt ?? 0;
+      return tb - ta || a.name.localeCompare(b.name);
+    });
+
+  // ─── Actions ───────────────────────────────────────────────────────────────
+
+  const openItem = (item: LibraryItem) => {
+    if (item.type === "component") openComponent(item.id);
+    else if (item.type === "screen") openScreen(item.id);
+    else if (item.type === "theme") openTheme(item.id);
+    else if (item.type === "api") openApi(item.id);
   };
 
   const handleDelete = async (item: LibraryItem) => {
-    if (!(await confirm(`Delete ${item.type} "${item.name}"?`))) return;
-    const project = settings.project || "default";
-    const base = `./projects/${project}`;
-    const paths: Record<string, string> = {
+    if (!(await confirm(`Delete ${TYPE_LABELS[item.type].toLowerCase()} "${item.name}"?`))) return;
+    const paths: Record<ItemType, string> = {
       component: `${base}/components/${item.id}`,
-      theme: `${base}/themes/${item.id}`,
-      screen: `${base}/screens/${item.id}`,
-      api: `${base}/apis/${item.id}`,
+      theme:     `${base}/themes/${item.id}`,
+      screen:    `${base}/screens/${item.id}`,
+      api:       `${base}/apis/${item.id}.json`,
     };
     try {
-      await deleteDir(paths[item.type]);
-      await loadItems();
+      if (item.type === "api") {
+        await renameFile(paths.api, `${paths.api}.deleted`);
+      } else {
+        await deleteDir(paths[item.type]);
+      }
+      if (expandedId === `${item.type}-${item.id}`) setExpandedId(null);
+      invalidate();
     } catch (e) {
       notify.error("Delete failed", getErrorMessage(e));
     }
   };
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-
-  const handleRename = async (item: LibraryItem) => {
-    if (!editName.trim() || editName === item.name) {
-      setEditingId(null);
+  const handleDuplicate = async (item: LibraryItem) => {
+    if (item.type === "api") {
+      notify.error("Duplicate", "Duplicate is not supported for APIs");
       return;
     }
-    const project = settings.project || "default";
-    const base = `./projects/${project}`;
-    const paths: Record<string, { from: string; to: string }> = {
-      component: { from: `${base}/components/${item.id}`, to: `${base}/components/${editName.toLowerCase().replace(/\s+/g, "-")}` },
-      theme: { from: `${base}/themes/${item.id}`, to: `${base}/themes/${editName.toLowerCase().replace(/\s+/g, "-")}` },
-      screen: { from: `${base}/screens/${item.id}`, to: `${base}/screens/${editName.toLowerCase().replace(/\s+/g, "-")}` },
-      api: { from: `${base}/apis/${item.id}.json`, to: `${base}/apis/${editName.toLowerCase().replace(/\s+/g, "-")}.json` },
-    };
+    const srcDir = `${base}/${item.type}s/${item.id}`;
+    const destId = `${item.id}-copy`;
+    const destDir = `${base}/${item.type}s/${destId}`;
     try {
-      await renameFile(paths[item.type].from, paths[item.type].to);
-      setEditingId(null);
-      await loadItems();
-    } catch (e) {
-      notify.error("Rename failed", getErrorMessage(e));
-    }
-  };
-
-  const handleDuplicate = async (item: LibraryItem) => {
-    const project = settings.project || "default";
-    const base = `./projects/${project}`;
-    const newId = `${item.id}-copy`;
-    const paths: Record<string, { from: string; to: string }> = {
-      component: { from: `${base}/components/${item.id}`, to: `${base}/components/${newId}` },
-      theme: { from: `${base}/themes/${item.id}`, to: `${base}/themes/${newId}` },
-      screen: { from: `${base}/screens/${item.id}`, to: `${base}/screens/${newId}` },
-      api: { from: `${base}/apis/${item.id}.json`, to: `${base}/apis/${newId}.json` },
-    };
-    try {
-      if (item.type === "api") {
-        const content = await readFile(paths[item.type].from);
-        await writeFile(paths[item.type].to, content);
-      } else {
-        // Recursive directory copy
-        const copyDir = async (src: string, dest: string) => {
-          await createDir(dest);
-          const entries = await readDir(src);
-          for (const entry of entries) {
-            const srcPath = `${src}/${entry.name}`;
-            const destPath = `${dest}/${entry.name}`;
-            if (entry.is_dir) {
-              await copyDir(srcPath, destPath);
-            } else {
-              const content = await readFile(srcPath);
-              await writeFile(destPath, content);
-            }
+      const copyDir = async (src: string, dest: string) => {
+        await createDir(dest);
+        const entries = await readDir(src);
+        for (const entry of entries) {
+          if (entry.is_dir) {
+            await copyDir(`${src}/${entry.name}`, `${dest}/${entry.name}`);
+          } else {
+            const content = await readFile(`${src}/${entry.name}`);
+            await writeFile(`${dest}/${entry.name}`, content);
           }
-        };
-        await copyDir(paths[item.type].from, paths[item.type].to);
-      }
-      await loadItems();
+        }
+      };
+      await copyDir(srcDir, destDir);
+      invalidate();
     } catch (e) {
       notify.error("Duplicate failed", getErrorMessage(e));
     }
   };
 
   const handleExport = async (item: LibraryItem) => {
-    const project = settings.project || "default";
-    const base = `./projects/${project}`;
-    const paths: Record<string, string> = {
+    const paths: Record<ItemType, string> = {
       component: `${base}/components/${item.id}/component.tsx`,
-      theme: `${base}/themes/${item.id}/theme.css`,
-      screen: `${base}/screens/${item.id}/screen.tsx`,
-      api: `${base}/apis/${item.id}.json`,
+      theme:     `${base}/themes/${item.id}/theme.css`,
+      screen:    `${base}/screens/${item.id}/screen.tsx`,
+      api:       `${base}/apis/${item.id}.json`,
     };
+    const exts: Record<ItemType, string> = { component: "tsx", theme: "css", screen: "tsx", api: "json" };
     try {
       const content = await readFile(paths[item.type]);
-      const outputPath = await save({
-        filters: [{ name: item.type === "api" ? "JSON" : item.type === "theme" ? "CSS" : "TSX", extensions: [item.type === "api" ? "json" : item.type === "theme" ? "css" : "tsx"] }],
-        defaultPath: `${item.name}.${item.type === "api" ? "json" : item.type === "theme" ? "css" : "tsx"}`,
+      const dest = await save({
+        filters: [{ name: item.type.toUpperCase(), extensions: [exts[item.type]] }],
+        defaultPath: `${item.name}.${exts[item.type]}`,
       });
-      if (!outputPath) return;
-      await writeFile(outputPath, content);
-      notify.success("Exported", `Saved to ${outputPath}`);
+      if (!dest) return;
+      await writeFile(dest, content);
+      notify.success("Exported", dest);
     } catch (e) {
       notify.error("Export failed", getErrorMessage(e));
     }
   };
 
+  const startRename = (item: LibraryItem) => {
+    setRenamingId(`${item.type}-${item.id}`);
+    setRenameValue(item.name);
+  };
+
+  const commitRename = async (item: LibraryItem) => {
+    setRenamingId(null);
+    const newId = renameValue.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!newId || newId === item.id) return;
+    const paths: Record<ItemType, { from: string; to: string }> = {
+      component: { from: `${base}/components/${item.id}`,       to: `${base}/components/${newId}` },
+      theme:     { from: `${base}/themes/${item.id}`,           to: `${base}/themes/${newId}` },
+      screen:    { from: `${base}/screens/${item.id}`,          to: `${base}/screens/${newId}` },
+      api:       { from: `${base}/apis/${item.id}.json`,        to: `${base}/apis/${newId}.json` },
+    };
+    try {
+      await renameFile(paths[item.type].from, paths[item.type].to);
+      invalidate();
+    } catch (e) {
+      notify.error("Rename failed", getErrorMessage(e));
+    }
+  };
+
+  const copyPrompt = async (item: LibraryItem) => {
+    const prompt = item.meta?.initialPrompt ? stripMentionBlocks(item.meta.initialPrompt) : "";
+    if (!prompt) { notify.error("No prompt", "This item has no recorded prompt"); return; }
+    await navigator.clipboard.writeText(prompt);
+    notify.success("Copied", "Initial prompt copied to clipboard");
+  };
+
+  // ─── Counts ────────────────────────────────────────────────────────────────
+
+  const counts = {
+    all: items.length,
+    screen:    items.filter((i) => i.type === "screen").length,
+    component: items.filter((i) => i.type === "component").length,
+    theme:     items.filter((i) => i.type === "theme").length,
+    api:       items.filter((i) => i.type === "api").length,
+  };
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="h-full flex flex-col p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+    <div className="h-full flex flex-col bg-background">
+
+      {/* Toolbar */}
+      <div className="shrink-0 border-b border-border px-3 pt-3 pb-2 space-y-2">
+        {/* Search */}
+        <div className="relative">
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Search library..."
+            placeholder="Search by name or prompt…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
+            className="pl-7 h-7 text-xs"
           />
         </div>
-        <Button variant="outline" size="sm" onClick={loadItems} disabled={loading}>
-          {loading ? "…" : "Refresh"}
-        </Button>
+
+        {/* Type filter + sort */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            {(["all", ...ALL_TYPES] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={[
+                  "flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors",
+                  typeFilter === t
+                    ? t === "all"
+                      ? "bg-foreground/10 text-foreground font-medium"
+                      : `${TYPE_BG[t as ItemType]} ${TYPE_COLORS[t as ItemType]} font-medium`
+                    : "text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                {t !== "all" && <span className={typeFilter === t ? TYPE_COLORS[t as ItemType] : ""}>{TYPE_ICONS[t as ItemType]}</span>}
+                <span className="capitalize">{t === "all" ? "All" : TYPE_LABELS[t as ItemType]}</span>
+                <span className="opacity-50 text-[10px]">{counts[t]}</span>
+              </button>
+            ))}
+          </div>
+
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer hover:text-foreground"
+          >
+            <option value="updated">Recent</option>
+            <option value="name">Name</option>
+            <option value="type">Type</option>
+          </select>
+        </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <TabsList variant="line" className="h-7">
-          <TabsTrigger value="all" className="text-[11px] gap-1"><LayoutGrid size={10} />All</TabsTrigger>
-          <TabsTrigger value="component" className="text-[11px] gap-1"><Box size={10} />Components</TabsTrigger>
-          <TabsTrigger value="theme" className="text-[11px] gap-1"><Palette size={10} />Themes</TabsTrigger>
-          <TabsTrigger value="screen" className="text-[11px] gap-1"><LayoutGrid size={10} />Screens</TabsTrigger>
-          <TabsTrigger value="api" className="text-[11px] gap-1"><Terminal size={10} />APIs</TabsTrigger>
-        </TabsList>
+      {/* List */}
+      <ScrollArea className="flex-1">
+        <div className="py-1">
+          {isFetching && items.length === 0 && (
+            <p className="text-center text-xs text-muted-foreground py-6">Loading…</p>
+          )}
+          {!isFetching && filtered.length === 0 && (
+            <p className="text-center text-xs text-muted-foreground py-6">
+              {search || typeFilter !== "all" ? "No items match" : "No items yet"}
+            </p>
+          )}
 
-        <TabsContent value={activeTab} className="flex-1 overflow-hidden mt-2">
-          <ScrollArea className="h-full overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filtered.map((item) => (
-                <div
-                  key={`${item.type}-${item.id}`}
-                  className="rounded-lg border border-border bg-card hover:border-primary/50 transition-colors overflow-hidden"
-                >
-                  <div className={`w-full h-2 bg-gradient-to-r ${typeGradients[item.type]}`} />
-                  <div className="p-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-muted-foreground">{typeIcons[item.type]}</span>
-                    {editingId === `${item.type}-${item.id}` ? (
-                      <Input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="h-6 text-xs"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleRename(item);
-                          if (e.key === "Escape") setEditingId(null);
-                        }}
-                        onBlur={() => handleRename(item)}
-                        autoFocus
-                      />
-                    ) : (
-                      <span className="font-medium text-sm">{item.name}</span>
+          {filtered.map((item) => {
+            const rowKey = `${item.type}-${item.id}`;
+            const isExpanded = expandedId === rowKey;
+            const isRenaming = renamingId === rowKey;
+            const prompt = item.meta?.initialPrompt ? stripMentionBlocks(item.meta.initialPrompt) : "";
+
+            return (
+              <ContextMenu key={rowKey}>
+                <ContextMenuTrigger asChild>
+                  <div>
+                    {/* Main row */}
+                    <div
+                      className={[
+                        "group flex items-center gap-2 px-3 py-2 cursor-pointer select-none",
+                        "hover:bg-accent/5 transition-colors",
+                        isExpanded ? "bg-accent/5" : "",
+                      ].join(" ")}
+                      onClick={() => {
+                        if (!isRenaming) setExpandedId(isExpanded ? null : rowKey);
+                      }}
+                      onDoubleClick={() => openItem(item)}
+                    >
+                      {/* Expand chevron */}
+                      <span className="text-muted-foreground/40 w-3 shrink-0">
+                        {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      </span>
+
+                      {/* Type icon */}
+                      <span className={`shrink-0 ${TYPE_COLORS[item.type]}`}>
+                        {TYPE_ICONS[item.type]}
+                      </span>
+
+                      {/* Name / rename input */}
+                      {isRenaming ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename(item);
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          onBlur={() => commitRename(item)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 min-w-0 text-xs bg-transparent border-b border-primary outline-none"
+                        />
+                      ) : (
+                        <span className="flex-1 min-w-0 text-xs font-medium truncate text-foreground">
+                          {item.name}
+                        </span>
+                      )}
+
+                      {/* Meta: updated time */}
+                      {item.meta ? (
+                        <span className="shrink-0 text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
+                          <Clock size={9} />
+                          {relativeTime(item.meta.updatedAt)}
+                        </span>
+                      ) : (
+                        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${TYPE_BG[item.type]} ${TYPE_COLORS[item.type]}`}>
+                          {TYPE_LABELS[item.type]}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Expanded detail */}
+                    {isExpanded && (
+                      <div className="mx-3 mb-2 rounded border border-border/50 bg-muted/20 text-[11px] overflow-hidden">
+                        {/* Metadata row */}
+                        <div className="flex items-center gap-3 px-3 py-2 border-b border-border/40 text-muted-foreground">
+                          <span className={`flex items-center gap-1 ${TYPE_COLORS[item.type]}`}>
+                            {TYPE_ICONS[item.type]}
+                            <span className="font-medium">{TYPE_LABELS[item.type]}</span>
+                          </span>
+                          {item.meta ? (
+                            <>
+                              <span>Created {relativeTime(item.meta.createdAt)}</span>
+                              <span>·</span>
+                              <span>Updated {relativeTime(item.meta.updatedAt)}</span>
+                              {item.meta.updates.length > 0 && (
+                                <>
+                                  <span>·</span>
+                                  <span>{item.meta.updates.length + 1} generations</span>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <span className="italic opacity-60">No metadata recorded yet</span>
+                          )}
+                        </div>
+
+                        {/* Initial prompt */}
+                        {prompt && (
+                          <div className="px-3 py-2 border-b border-border/40">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Initial prompt</p>
+                            <p className="text-foreground/80 leading-relaxed">{prompt}</p>
+                          </div>
+                        )}
+
+                        {/* Update history */}
+                        {item.meta && item.meta.updates.length > 0 && (
+                          <div className="px-3 py-2">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Updates</p>
+                            <div className="space-y-1.5">
+                              {item.meta.updates.map((u, idx) => (
+                                <div key={idx} className="flex gap-2">
+                                  <span className="text-muted-foreground/50 shrink-0 tabular-nums">{relativeTime(u.at)}</span>
+                                  <span className="text-foreground/70 leading-relaxed line-clamp-2">
+                                    {stripMentionBlocks(u.prompt)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Quick actions */}
+                        <div className="flex items-center gap-1 px-3 py-2 border-t border-border/40">
+                          <button
+                            onClick={() => openItem(item)}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-accent/10 hover:bg-accent/20 text-foreground/70 hover:text-foreground transition-colors"
+                          >
+                            Open in editor
+                          </button>
+                          <button
+                            onClick={() => handleDuplicate(item)}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Duplicate
+                          </button>
+                          <button
+                            onClick={() => handleExport(item)}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Export
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item)}
+                            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors ml-auto"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     )}
-                    <Badge variant="secondary" className="text-[10px] h-4 ml-auto capitalize">
-                      {item.type}
-                    </Badge>
                   </div>
-                  {item.description && (
-                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{item.description}</p>
+                </ContextMenuTrigger>
+
+                <ContextMenuContent className="w-48">
+                  <ContextMenuItem onClick={() => openItem(item)}>
+                    Open in editor
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onClick={() => startRename(item)}>
+                    Rename
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => handleDuplicate(item)} disabled={item.type === "api"}>
+                    Duplicate
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  {prompt && (
+                    <ContextMenuItem onClick={() => copyPrompt(item)}>
+                      Copy initial prompt
+                    </ContextMenuItem>
                   )}
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Open in editor" onClick={() => {
-                      if (item.type === "component") openComponent(item.id);
-                      else if (item.type === "screen") openScreen(item.id);
-                      else if (item.type === "theme") openTheme(item.id);
-                      else if (item.type === "api") openWorkflow(item.id);
-                    }}>
-                      <ExternalLink size={12} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditingId(`${item.type}-${item.id}`); setEditName(item.name); }}>
-                      <Edit2 size={12} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDuplicate(item)}>
-                      <Copy size={12} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleExport(item)}>
-                      <Download size={12} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDelete(item)}>
-                      <Trash2 size={12} />
-                    </Button>
-                  </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {filtered.length === 0 && (
-              <div className="text-center text-sm text-muted-foreground py-8">
-                {loading ? "Loading…" : "No items match your search"}
-              </div>
-            )}
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
+                  <ContextMenuItem onClick={() => handleExport(item)}>
+                    Export file
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem
+                    onClick={() => handleDelete(item)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    Delete
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            );
+          })}
+        </div>
+      </ScrollArea>
+
+      {/* Footer count */}
+      {items.length > 0 && (
+        <div className="shrink-0 px-3 py-2 border-t border-border text-[10px] text-muted-foreground flex items-center gap-1">
+          <Plus size={9} />
+          {filtered.length === items.length
+            ? `${items.length} item${items.length !== 1 ? "s" : ""}`
+            : `${filtered.length} of ${items.length}`}
+        </div>
+      )}
     </div>
   );
 }
