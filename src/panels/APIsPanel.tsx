@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Allotment } from "allotment";
 import {
-  Send, Plus, Trash2, Save, Copy, Key, RefreshCw, Database, X, Plug,
+  Send, Plus, Trash2, Save, Copy, Key, RefreshCw, Database, X, Plug, Globe, Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -671,7 +671,11 @@ export function APIsPanel() {
               <ScrollArea className="flex-1 overflow-hidden">
                 <div className="p-2 space-y-1">
                   {apis.length === 0 && (
-                    <div className="text-xs text-muted-foreground px-1 pt-1">No APIs — add one or pick a template</div>
+                    <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+                      <Globe size={20} className="opacity-30" />
+                      <p className="text-xs font-medium">No APIs yet</p>
+                      <p className="text-[10px] opacity-60">Add an API or pick a template to get started</p>
+                    </div>
                   )}
                   {apis.map((api) => (
                     <div
@@ -706,7 +710,11 @@ export function APIsPanel() {
                 <ScrollArea className="flex-1 overflow-hidden">
                   <div className="p-3 space-y-3">
                     {apiKeys.length === 0 && (
-                      <p className="text-xs text-muted-foreground">No API keys yet. Add keys here to sync them as VITE_* env vars to your generated project.</p>
+                      <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground text-center">
+                        <Key size={20} className="opacity-30" />
+                        <p className="text-xs font-medium">No API keys yet</p>
+                        <p className="text-[10px] opacity-60 leading-relaxed">Add keys here to sync them as VITE_* env vars to your generated project</p>
+                      </div>
                     )}
                     {apiKeys.map((k) => (
                       <div key={k.id} className="space-y-1">
@@ -1053,7 +1061,11 @@ export function APIsPanel() {
                     {response ? (
                       <CodeMirrorEditor value={JSON.stringify(response.headers, null, 2)} mode="json" readOnly />
                     ) : (
-                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">No response yet</div>
+                      <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                        <Terminal size={24} className="opacity-25" />
+                        <p className="text-sm font-medium">No response yet</p>
+                        <p className="text-xs opacity-60">Send a request to see the response</p>
+                      </div>
                     )}
                   </TabsContent>
 

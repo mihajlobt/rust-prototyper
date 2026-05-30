@@ -4,9 +4,10 @@ import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
 import {
   Play, Square, Wrench, Package, PackagePlus, RotateCw,
-  Minus, Plus, Smartphone, Tablet, Monitor, Moon,
+  Minus, Plus, Smartphone, Tablet, Monitor, Moon, Sun,
   Terminal, ScrollText, Globe, Plus as PlusIcon,
   ChevronDown, ChevronUp, Save, FolderPlus, Loader2, X,
+  FileCode, FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,6 +45,7 @@ export function RunnerPanel() {
   const devServerStore = useDevServerStore();
   const running = devServerStore.runnerStatus === "running" || devServerStore.runnerStatus === "starting";
   const devUrl = devServerStore.runnerUrl;
+  const runnerDark = ps.runnerDarkPreview;
 
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [tabContents, setTabContents] = useState<Record<string, string>>({});
@@ -116,30 +118,22 @@ export function RunnerPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabPath]);
 
-  const runnerDark = ps.runnerDarkPreview;
-  const runnerDarkRef = useRef(runnerDark);
-  useEffect(() => { runnerDarkRef.current = runnerDark; }, [runnerDark]);
-
-  // Sync dark mode into the preview iframe via postMessage
-  useEffect(() => {
-    if (!iframeRef.current?.contentWindow) return;
-    iframeRef.current.contentWindow.postMessage({ type: "set-dark", value: runnerDark }, "*");
-  }, [runnerDark, devUrl]);
-
   const runningRef = useRef(running);
   useEffect(() => { runningRef.current = running; }, [running]);
 
+  // Reload iframe on HMR — dark mode is sent via postMessage, not URL param
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       xtermRef.current?.writeln(event.line);
       logLinesRef.current = [...logLinesRef.current, { line: event.line, source: event.source }];
       setLogTick((t) => t + 1);
-      if (runningRef.current && iframeRef.current && devUrl && /updated|hmr/i.test(event.line)) {
-        iframeRef.current.src = `${devUrl.replace(/\/$/, "")}?dark=${runnerDarkRef.current}`;
+      if (runningRef.current && iframeRef.current && devUrl) {
+        const base = devUrl.endsWith("/") ? devUrl.slice(0, -1) : devUrl;
+        iframeRef.current.src = base;
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
-  }, [devUrl, runnerDark]);
+  }, [devUrl]);
 
   // ── Tab management ──────────────────────────────────────────────────────
 
@@ -316,7 +310,10 @@ export function RunnerPanel() {
     catch (e) { notify.error("Kill all failed", getErrorMessage(e)); }
   };
 
-  const handleRefreshPreview = () => { if (iframeRef.current && devUrl) iframeRef.current.src = `${devUrl}?dark=${runnerDark}`; };
+  const handleRefreshPreview = () => {
+    if (!iframeRef.current || !devUrl) return;
+    iframeRef.current.contentWindow?.postMessage({ type: "reload" }, "*");
+  };
   const handleNewShell = async () => {
     if (!shellCommand.trim()) return;
     xtermRef.current?.writeln(`\x1b[36m> ${shellCommand}\x1b[0m`);
@@ -374,7 +371,13 @@ export function RunnerPanel() {
                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setNewFileParentDir(generatedDir); setShowNewFile(true); }}><PlusIcon size={10} /></Button>
                   </div>
                 </div>
-                {files.length === 0 && <div className="text-xs text-muted-foreground px-1">No files yet</div>}
+                {files.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+                      <FolderOpen size={20} className="opacity-30" />
+                      <p className="text-xs font-medium">No files yet</p>
+                      <p className="text-[10px] opacity-60">Files from your generated project will appear here</p>
+                    </div>
+                  )}
                 <FileTree entries={files} selectedFile={activeTabPath} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={openTab} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={(p) => { setNewFileParentDir(p); setNewFileName(""); setShowNewFile(true); }} onNewFolder={startNewFolder} onCollapse={(p) => { expandedDirs.delete(p); setExpandedDirs(new Set(expandedDirs)); }} onReveal={revealInExplorer} depth={0} />
               </div>
             </ScrollArea>
@@ -455,7 +458,11 @@ export function RunnerPanel() {
                             />
                           </div>
                         ) : (
-                          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-4">Select a file to edit</div>
+                          <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                            <FileCode size={28} className="opacity-25" />
+                            <div className="text-sm font-medium">No file selected</div>
+                            <p className="text-xs opacity-60">Select a file from the tree to edit</p>
+                          </div>
                         )}
                       </div>
                     </Allotment.Pane>
@@ -464,28 +471,31 @@ export function RunnerPanel() {
                     <Allotment.Pane minSize={300}>
                       <div className="h-full flex flex-col">
                         <div className="panel-toolbar h-7 px-2 gap-1 bg-card">
-                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleRefreshPreview} title="Refresh"><RotateCw size={11} /></Button>
-                          <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setPs({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}><Moon size={11} /></Button>
-                          <div className="w-px h-3 bg-border" />
-                          <div className="flex items-center gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={handleRefreshPreview} title="Refresh"><RotateCw size={11} /></Button>
+                          <span className="text-[10px] text-muted-foreground shrink-0">Preview:</span>
+                          {devUrl ? (
+                            <span className="text-xs text-muted-foreground font-mono truncate max-w-[180px]" title={devUrl}>
+                              {devUrl.replace(/\/$/, "").replace(/^http:\/\/localhost:\d+/, "") || "/"}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground font-mono">—</span>
+                          )}
+                          <div className="flex items-center gap-0.5 ml-auto shrink-0">
                             <Button variant={ps.runnerDevice === "mobile"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "mobile"  })} title="Mobile" ><Smartphone size={11} /></Button>
                             <Button variant={ps.runnerDevice === "tablet"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "tablet"  })} title="Tablet" ><Tablet     size={11} /></Button>
                             <Button variant={ps.runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "desktop" })} title="Desktop"><Monitor    size={11} /></Button>
                           </div>
-                          <div className="w-px h-3 bg-border" />
-                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomOut}><Minus size={11} /></Button>
-                          <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none" onClick={zoomReset}>{Math.round(ps.runnerZoom * 100)}%</button>
-                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={zoomIn}><Plus size={11} /></Button>
-                          {devUrl && (
-                            <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={devUrl}>
-                              {devUrl.replace(/\/$/, "").replace(/^http:\/\/localhost:\d+/, "")}
-                            </span>
-                          )}
+                          <div className="w-px h-3 bg-border shrink-0" />
+                          <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setPs({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
+                          <div className="w-px h-3 bg-border shrink-0" />
+                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomOut}><Minus size={11} /></Button>
+                          <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none shrink-0" onClick={zoomReset}>{Math.round(ps.runnerZoom * 100)}%</button>
+<Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomIn}><Plus size={11} /></Button>
                         </div>
                         <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
                           {devUrl ? (
                             <div className="h-full bg-background shadow-lg border border-border overflow-hidden" style={{ width: deviceWidth[ps.runnerDevice], transform: `scale(${ps.runnerZoom})`, transformOrigin: "top center" }}>
-                              <iframe ref={iframeRef} src={devUrl ? `${devUrl.replace(/\/$/, "")}?dark=${runnerDark}` : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
+                              <iframe ref={iframeRef} src={devUrl ? devUrl.replace(/\/$/, "") : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
                             </div>
                           ) : (
                             <div className="flex items-center justify-center text-muted-foreground text-sm">
@@ -534,7 +544,12 @@ export function RunnerPanel() {
                           {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
                             <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : "text-green-400"].join(" ")}>{item.line}</div>
                           ))}
-                          {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && <div className="text-green-400 opacity-40">No log events yet…</div>}
+                          {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-8 gap-2 text-green-400/40">
+                              <Terminal size={20} />
+                              <p className="text-xs font-medium">No log events yet</p>
+                            </div>
+                          )}
                         </div></ScrollArea>
                       )}
                       {ps.runnerActiveTab === "network" && (
@@ -547,7 +562,12 @@ export function RunnerPanel() {
                               if (hmr) return { method: "HMR", path: hmr[1], status: 0 };
                               return null;
                             }).filter(Boolean) as Array<{ method: string; path: string; status: number }>;
-                            if (requests.length === 0) return <div className="text-green-400 opacity-40">No network requests logged yet…</div>;
+                            if (requests.length === 0) return (
+                              <div className="flex flex-col items-center justify-center py-8 gap-2 text-green-400/40">
+                                <Globe size={20} />
+                                <p className="text-xs font-medium">No network requests yet</p>
+                              </div>
+                            );
                             return requests.map((req, i) => (
                               <div key={i} className="flex items-center gap-2">
                                 <span className={["font-bold px-1 py-0.5 rounded", req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" : req.status >= 400 ? "bg-red-500/20 text-red-400" : req.method === "HMR" ? "bg-blue-500/20 text-blue-400" : "bg-muted text-muted-foreground"].join(" ")}>{req.method}</span>
