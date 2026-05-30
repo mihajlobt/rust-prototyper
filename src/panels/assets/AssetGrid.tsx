@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { FolderOpen, Trash2 } from "lucide-react";
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem,
@@ -16,9 +17,10 @@ interface AssetGridProps {
   onDelete: (fileName: string) => void;
   assetUrl: (filePath: string) => string;
   viewMode: AssetViewMode;
+  highlightFileName?: string;
 }
 
-export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl, viewMode }: AssetGridProps) {
+export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl, viewMode, highlightFileName }: AssetGridProps) {
   if (assets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
@@ -36,6 +38,7 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl,
             key={asset.file_name}
             asset={asset}
             isSelected={selectedIndex === index}
+            isHighlighted={asset.file_name === highlightFileName}
             onSelect={() => onSelect(index)}
             onDelete={() => onDelete(asset.file_name)}
             onReveal={() => revealInExplorer(asset.file_path)}
@@ -53,6 +56,7 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl,
           key={asset.file_name}
           asset={asset}
           isSelected={selectedIndex === index}
+          isHighlighted={asset.file_name === highlightFileName}
           onSelect={() => onSelect(index)}
           onDelete={() => onDelete(asset.file_name)}
           onReveal={() => revealInExplorer(asset.file_path)}
@@ -66,6 +70,7 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl,
 interface AssetCardBaseProps {
   asset: AssetInfo;
   isSelected: boolean;
+  isHighlighted: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onReveal: () => void;
@@ -77,19 +82,30 @@ interface AssetCardBaseProps {
 function AssetCardList({
   asset,
   isSelected,
+  isHighlighted,
   onSelect,
   onDelete,
   onReveal,
   assetUrl,
 }: AssetCardBaseProps) {
+  const highlightRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (isHighlighted && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isHighlighted]);
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <button
+          ref={highlightRef}
           type="button"
           className={cn(
             "asset-row w-full flex items-start gap-2 px-3 py-1.5 border-b border-border text-left hover:bg-muted/50 transition-colors",
             isSelected && "bg-muted/50 border-l-2 border-l-primary",
+            isHighlighted && "asset-highlight",
           )}
           onClick={onSelect}
         >
@@ -137,18 +153,29 @@ function AssetCardList({
 function AssetCardGrid({
   asset,
   isSelected,
+  isHighlighted,
   onSelect,
   onDelete,
   onReveal,
   assetUrl,
 }: AssetCardBaseProps) {
+  const highlightRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isHighlighted && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isHighlighted]);
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          ref={highlightRef}
           className={cn(
             "relative rounded-sm overflow-hidden border cursor-pointer group transition-colors",
             isSelected ? "border-primary" : "border-border hover:border-primary/50",
+            isHighlighted && "asset-highlight",
           )}
           onClick={onSelect}
         >

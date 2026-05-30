@@ -406,3 +406,12 @@
 .react-flow__edge.selected .edge-delete-btn {
   opacity: 100 !important;
 }
+
+/* ─── Asset highlight flash ─── */
+@keyframes asset-highlight {
+  0% { background-color: oklch(0.7 0.15 180 / 0.3); }
+  100% { background-color: transparent; }
+}
+.asset-highlight {
+  animation: asset-highlight 1.5s ease-out;
+}

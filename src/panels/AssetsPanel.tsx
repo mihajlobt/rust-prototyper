@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid } from "lucide-react";
+import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
@@ -101,14 +101,21 @@ export function AssetsPanel() {
     return toFileUrl(filePath);
   };
 
-  const lastResultIndex = bonsai.lastResult
-    ? bonsai.assets.findIndex((a) => a.file_name === bonsai.lastResult!.file_name)
-    : -1;
+  // Track which asset was just generated so we can highlight it in the gallery.
+  // Clears after the highlight animation plays so it doesn't re-trigger on re-renders.
+  const [highlightFileName, setHighlightFileName] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (bonsai.lastResult?.file_name) {
+      setHighlightFileName(bonsai.lastResult.file_name);
+      const timer = setTimeout(() => setHighlightFileName(undefined), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [bonsai.lastResult?.file_name]);
 
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
-      <div className="panel-toolbar px-3 py-2 border-b border-border flex items-center gap-2">
+      <div className="panel-toolbar px-3 py-2 gap-2">
         <Image size={16} className="text-muted-foreground" />
         <span className="text-sm font-medium">Assets</span>
         {isRunning && (
@@ -171,7 +178,7 @@ export function AssetsPanel() {
 
       {/* Error display */}
       {bonsai.error && (
-        <div className="px-3 py-2 text-sm text-destructive bg-destructive/10 border-b border-border flex items-start gap-2">
+        <div className="px-3 py-2 text-sm text-destructive bg-destructive/10 border-b flex gap-2">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <span className="flex-1">{bonsai.error}</span>
           <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={bonsai.clearError}>
@@ -189,12 +196,12 @@ export function AssetsPanel() {
               {/* Generation controls — compact strip */}
               <div className="shrink-0 border-b border-border">
                 {/* Prompt row with generate action */}
-                <div className="flex gap-1.5 px-3 pt-2 pb-1.5">
+                <div className="flex gap-1.5 px-3 pt-2 pb-1.5 font-mono text-sm">
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Describe the image to generate..."
-                    className="flex-1 min-h-[56px] max-h-[120px] resize-y rounded-sm border border-input bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    className="flex-1 min-h-[56px] resize-y border bg-background p-2 focus:ring-ring disabled:opacity-50"
                     disabled={!isRunning}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -204,15 +211,15 @@ export function AssetsPanel() {
                     }}
                   />
                   <Button
-                    className="shrink-0 self-end"
-                    size="sm"
+                    className="self-stretch min-h-[56px] w-12 rounded-sm bg-gradient-to-b from-primary to-primary/80"
                     onClick={handleGenerate}
                     disabled={!isRunning || bonsai.generating || !prompt.trim()}
+                    title="Generate (Ctrl+Enter)"
                   >
                     {bonsai.generating ? (
-                      <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={18} className="animate-spin" />
                     ) : (
-                      <Image size={14} />
+                      <SendHorizonal size={18} />
                     )}
                   </Button>
                 </div>
@@ -234,8 +241,8 @@ export function AssetsPanel() {
                 </div>
 
                 {/* Params row: steps + seed */}
-                <div className="flex items-center gap-3 px-3 pb-2">
-                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">steps</span>
+                <div className="flex gap-3 px-3 pb-2 font-mono text-[10px] text-muted-foreground">
+                  <span className="shrink-0">steps</span>
                   <Slider
                     value={[steps]}
                     onValueChange={([value]) => setSteps(value)}
@@ -245,40 +252,19 @@ export function AssetsPanel() {
                     className="w-24"
                     disabled={!isRunning}
                   />
-                  <span className="text-[10px] font-mono text-muted-foreground w-3 text-right">{steps}</span>
+                  <span className="w-3 text-right">{steps}</span>
                   <span className="text-border">|</span>
-                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">seed</span>
+                  <span className="shrink-0">seed</span>
                   <input
                     type="number"
                     value={seed}
                     onChange={(e) => setSeed(Number(e.target.value))}
-                    className="w-16 h-6 rounded-sm border border-input bg-background px-1.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    className="w-16 h-6 rounded-sm border border-input bg-background px-1.5"
                     disabled={!isRunning}
                     min={0}
                   />
                 </div>
               </div>
-
-              {/* Last result preview */}
-              {bonsai.lastResult && lastResultIndex >= 0 && (
-                <div className="px-3 py-2 border-b border-border shrink-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Last</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">{bonsai.lastResult.width}×{bonsai.lastResult.height}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">seed:{bonsai.lastResult.seed}</span>
-                  </div>
-                  <div
-                    className="relative rounded-sm overflow-hidden cursor-pointer border border-border hover:border-primary/50 transition-colors"
-                    onClick={() => setPreviewIndex(lastResultIndex)}
-                  >
-                    <img
-                      src={assetUrl(bonsai.lastResult.file_path)}
-                      alt={bonsai.lastResult.file_name}
-                      className="w-full h-auto max-h-48 object-contain bg-muted/30"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* Assets grid */}
               <div className="flex-1 overflow-auto">
@@ -297,6 +283,7 @@ export function AssetsPanel() {
                     onDelete={handleDelete}
                     assetUrl={assetUrl}
                     viewMode={viewMode}
+                    highlightFileName={highlightFileName}
                   />
                 )}
               </div>
@@ -306,7 +293,7 @@ export function AssetsPanel() {
           {/* Right pane: Bonsai server log */}
           <Allotment.Pane visible={showLog} preferredSize={40} minSize={120}>
             <div className="h-full flex flex-col">
-              <div className="panel-toolbar px-3 py-1.5 border-b border-border flex items-center gap-2 shrink-0">
+              <div className="panel-toolbar px-3 py-1.5 gap-2">
                 <Terminal size={12} className="text-muted-foreground" />
                 <span className="text-[10px] font-medium text-muted-foreground">Server Log</span>
                 <div className="flex-1" />
