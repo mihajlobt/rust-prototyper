@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { type EdgeProps, BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from "@xyflow/react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FlowsActionsContext } from "@/panels/FlowsView";
+import { FlowsActionsContext } from "@/panels/flows/FlowsContext";
 
 export function CustomEdge({
   id,

@@ -1,4 +1,5 @@
-import { useCallback, useContext, useEffect, createContext, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { FlowsActionsContext, useFlowsActions, type FlowsActions } from "@/panels/flows/FlowsContext";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -32,23 +33,6 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { getErrorMessage } from "@/lib/ipc";
 import { CustomEdge } from "@/panels/flows/CustomEdge";
-
-// ─── Actions context (avoids prop-drilling into React Flow node components) ─
-
-interface FlowsActions {
-  openScreen: (id: string) => void;
-  setDefaultScreen: (id: string) => void;
-  disconnectEdges: (nodeId: string) => void;
-  deleteEdge: (edgeId: string) => void;
-}
-
-export const FlowsActionsContext = createContext<FlowsActions | null>(null);
-
-function useFlowsActions(): FlowsActions {
-  const ctx = useContext(FlowsActionsContext);
-  if (!ctx) throw new Error("useFlowsActions must be used inside FlowsActionsContext.Provider");
-  return ctx;
-}
 
 // ─── Screen node data ──────────────────────────────────────────────────────
 
