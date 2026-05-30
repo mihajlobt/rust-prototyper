@@ -29,7 +29,8 @@ import { useDevServerStore } from "@/lib/dev-server-manager";
 import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
-import { syncGeneratedRouter } from "@/lib/navigation";
+import { syncGeneratedRouter, loadNavigation, getDefaultPorts, type NavPort } from "@/lib/navigation";
+import { PortsEditor } from "@/panels/flows/PortsEditor";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
@@ -55,6 +56,7 @@ export function ScreensPanel() {
   const [ctxSelectedComponentIds, setCtxSelectedComponentIds] = useState<string[]>([]);
   const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
+  const [screenPorts, setScreenPorts] = useState<NavPort[]>([]);
 
   const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
@@ -120,6 +122,22 @@ export function ScreensPanel() {
     setCtxSelectedBrief(null);
   }, [settings.project]);
 
+  // Load ports for the selected screen
+  useEffect(() => {
+    if (!screenId) { setScreenPorts([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const nav = await loadNavigation(`projects/${settings.project}`);
+        const screen = nav.screens.find((s) => s.id === screenId);
+        if (!cancelled) {
+          setScreenPorts(screen?.ports ?? getDefaultPorts(screenId));
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [screenId, settings.project]);
+
   // ─── Ensure dev server is running ────────────────────────────────────────────
 
   useEffect(() => {
@@ -177,7 +195,7 @@ export function ScreensPanel() {
       .then(() => writeFile(screenPath, code))
       .then(() => syncGeneratedRouter(`projects/${settings.project}`))
       .catch((e) => { notify.error("Failed to save screen", getErrorMessage(e)); });
-  }, [screenPath, settings.project, screenId, runnerUrl]);
+  }, [screenPath, settings.project]);
 
   const saveScreenCode = useCallback(async (value: string) => {
     if (!screenId || !value) return;
@@ -297,6 +315,8 @@ export function ScreensPanel() {
         .then((code) => setCtxComponentCode((prev) => ({ ...prev, [id]: code })))
         .catch(() => {/* silently skip */ });
     }
+    // ctxComponentCode is state — adding it to deps would cause infinite re-render loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctxSelectedComponentIds, settings.project]);
 
   const deviceWidth = {
@@ -542,23 +562,35 @@ export function ScreensPanel() {
             </Allotment.Pane>
             <Allotment.Pane visible={screensShowInspector} preferredSize={240} minSize={160} snap>
               {screensShowInspector && (
-                <PromptInspector
-                  model={settings.modelId}
-                  messages={[
-                    { role: "system", content: systemContent },
-                    ...messages.map((m) => ({
-                      role: m.role,
-                      content: m.content,
-                      ...(m.images?.length ? { images: m.images } : {}),
-                      ...(m.thinking ? { thinking: m.thinking } : {}),
-                      ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
-                    })),
-                  ]}
-                  host={getHostForProvider(settings.provider, settings.host)}
-                  provider={settings.provider}
-                  think={resolveThinkParam({ thinking: canThink, thinkLevel: undefined }, isGptOssFamily, thinkEnabled, thinkLevel)}
-                  hasTools={!!(screenId && toolsEnabled)}
-                />
+                <Allotment vertical>
+                  <Allotment.Pane preferredSize={180} minSize={100}>
+                    <PortsEditor
+                      screenId={screenId ?? ""}
+                      projectDir={`projects/${settings.project}`}
+                      ports={screenPorts}
+                      onPortsChange={setScreenPorts}
+                    />
+                  </Allotment.Pane>
+                  <Allotment.Pane>
+                    <PromptInspector
+                      model={settings.modelId}
+                      messages={[
+                        { role: "system", content: systemContent },
+                        ...messages.map((m) => ({
+                          role: m.role,
+                          content: m.content,
+                          ...(m.images?.length ? { images: m.images } : {}),
+                          ...(m.thinking ? { thinking: m.thinking } : {}),
+                          ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+                        })),
+                      ]}
+                      host={getHostForProvider(settings.provider, settings.host)}
+                      provider={settings.provider}
+                      think={resolveThinkParam({ thinking: canThink, thinkLevel: undefined }, isGptOssFamily, thinkEnabled, thinkLevel)}
+                      hasTools={!!(screenId && toolsEnabled)}
+                    />
+                  </Allotment.Pane>
+                </Allotment>
               )}
             </Allotment.Pane>
           </Allotment>

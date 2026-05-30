@@ -16,26 +16,29 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Layout, Star } from "lucide-react";
+import { Layout, Star, Unplug } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Separator } from "@/components/ui/separator";
-import { loadNavigation, saveNavigation, addNavLink, removeNavLink, syncGeneratedRouter, type Navigation } from "@/lib/navigation";
+import { loadNavigation, saveNavigation, addNavLink, removeNavLink, syncGeneratedRouter, getDefaultPorts, type Navigation, type NavPort } from "@/lib/navigation";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
 import { getErrorMessage } from "@/lib/ipc";
+import { CustomEdge } from "@/panels/flows/CustomEdge";
 
 // ─── Actions context (avoids prop-drilling into React Flow node components) ─
 
 interface FlowsActions {
   openScreen: (id: string) => void;
   setDefaultScreen: (id: string) => void;
+  disconnectEdges: (nodeId: string) => void;
 }
 
 const FlowsActionsContext = createContext<FlowsActions | null>(null);
@@ -51,6 +54,7 @@ function useFlowsActions(): FlowsActions {
 interface ScreenNodeData {
   label: string;
   isDefault: boolean;
+  ports: NavPort[];
   [key: string]: unknown;
 }
 
@@ -66,6 +70,48 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
     ? "var(--ring)"
     : "var(--border)";
 
+  const inputPorts = data.ports.filter((p) => p.direction === "input");
+  const outputPorts = data.ports.filter((p) => p.direction === "output");
+
+  const getPortColor = (port: NavPort) =>
+    port.type === "data" ? "var(--status-done)" : "var(--primary)";
+
+  const renderHandles = (ports: NavPort[], type: "target" | "source") => {
+    if (ports.length === 0) return null;
+    if (ports.length === 1) {
+      return (
+        <Handle
+          type={type}
+          id={ports[0].id}
+          position={type === "target" ? Position.Left : Position.Right}
+          style={{ width: 10, height: 10, borderColor: getPortColor(ports[0]) }}
+        />
+      );
+    }
+    return (
+      <div
+        className={`absolute ${type === "target" ? "left-0 inset-y-0" : "right-0 inset-y-0"} flex flex-col justify-around`}
+        style={{ width: 12 }}
+      >
+        {ports.map((port) => (
+          <Handle
+            key={port.id}
+            type={type}
+            id={port.id}
+            position={type === "target" ? Position.Left : Position.Right}
+            style={{
+              width: 8,
+              height: 8,
+              borderColor: getPortColor(port),
+              left: type === "target" ? -4 : undefined,
+              right: type === "source" ? -4 : undefined,
+            }}
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -73,8 +119,8 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
           className="bg-card rounded-lg shadow-md cursor-pointer select-none"
           style={{ width: 160, minHeight: 64, border: `1.5px solid ${borderColor}` }}
         >
-          <Handle type="target" position={Position.Left} style={{ width: 10, height: 10, borderColor }} />
-          <Handle type="source" position={Position.Right} style={{ width: 10, height: 10, borderColor }} />
+          {renderHandles(inputPorts, "target")}
+          {renderHandles(outputPorts, "source")}
 
           <div className="px-3 pt-1.5 pb-2">
             <div
@@ -102,12 +148,19 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
             <Star size={12} className="mr-1" />Set as entry screen
           </ContextMenuItem>
         </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem onClick={() => actions.disconnectEdges(id)}>
+            <Unplug size={12} className="mr-1" />Disconnect edges
+          </ContextMenuItem>
+        </ContextMenuGroup>
       </ContextMenuContent>
     </ContextMenu>
   );
 }
 
 const nodeTypes = { screen: ScreenNodeComponent };
+const edgeTypes = { flow: CustomEdge };
 
 // ─── Layout helpers ────────────────────────────────────────────────────────
 
@@ -117,16 +170,21 @@ const V_GAP = 130;
 
 function buildNodes(screenIds: string[], nav: Navigation, existingNodes: ScreenNode[]): ScreenNode[] {
   const positionById = new Map(existingNodes.map((n) => [n.id, n.position]));
-  return screenIds.map((id, i) => ({
-    id,
-    type: "screen" as const,
-    // Preserve user-dragged positions — only use grid for new nodes
-    position: positionById.get(id) ?? { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
-    data: {
-      label: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      isDefault: id === nav.defaultScreen,
-    },
-  }));
+  const navScreenById = new Map(nav.screens.map((s) => [s.id, s]));
+  return screenIds.map((id, i) => {
+    const navScreen = navScreenById.get(id);
+    const ports = navScreen?.ports ?? getDefaultPorts(id);
+    return {
+      id,
+      type: "screen" as const,
+      position: positionById.get(id) ?? { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
+      data: {
+        label: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        isDefault: id === nav.defaultScreen,
+        ports,
+      },
+    };
+  });
 }
 
 function buildEdges(nav: Navigation): Edge[] {
@@ -134,9 +192,12 @@ function buildEdges(nav: Navigation): Edge[] {
     id: link.id,
     source: link.from,
     target: link.to,
-    type: "smoothstep",
-    animated: true,
-    style: { stroke: "var(--primary)", strokeWidth: 1.5 },
+    sourceHandle: link.fromPort,
+    targetHandle: link.toPort,
+    type: "flow",
+    animated: link.type === "navigation",
+    style: { stroke: link.type === "data" ? "var(--status-done)" : "var(--primary)", strokeWidth: 1.5, strokeDasharray: link.type === "data" ? "5,5" : undefined },
+    data: { linkType: link.type },
   }));
 }
 
@@ -171,14 +232,16 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (!connection.source || !connection.target) return;
+      const fromPort = connection.sourceHandle ?? `${connection.source}:default-out`;
+      const toPort = connection.targetHandle ?? `${connection.target}:default-in`;
       try {
-        await addNavLink(projectDir, connection.source, connection.target);
+        await addNavLink(projectDir, connection.source, fromPort, connection.target, toPort, "navigation");
         setEdges((eds) =>
           addEdge(
             {
               ...connection,
-              id: `${connection.source}->${connection.target}`,
-              type: "smoothstep",
+              id: `${connection.source}:${fromPort}->${connection.target}:${toPort}`,
+              type: "flow",
               animated: true,
               style: { stroke: "var(--primary)", strokeWidth: 1.5 },
             },
@@ -234,8 +297,22 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
           notify.error("Failed to update entry screen", getErrorMessage(e));
         }
       },
+      disconnectEdges: async (id) => {
+        try {
+          const edgesToRemove = edges.filter((e) => e.source === id || e.target === id);
+          for (const edge of edgesToRemove) {
+            await removeNavLink(projectDir, edge.id);
+          }
+          setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
+          await syncGeneratedRouter(projectDir);
+        } catch (e) {
+          notify.error("Failed to disconnect edges", getErrorMessage(e));
+        }
+      },
     }),
-    [projectDir, setPs, setNodes]
+    // setEdges is a stable setter from useEdgesState — safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectDir, setPs, setNodes, edges]
   );
 
   if (screenIds.length === 0) {
@@ -254,6 +331,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

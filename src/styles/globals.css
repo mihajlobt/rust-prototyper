@@ -400,3 +400,9 @@
 [data-sonner-toast] {
   border-width: 1px;
 }
+
+/* ─── Custom Edge Delete Button ─── */
+.react-flow__edge:hover .edge-delete-btn,
+.react-flow__edge.selected .edge-delete-btn {
+  opacity: 100 !important;
+}

@@ -3,16 +3,31 @@
 
 import { readFile, writeFile, readDir, isNotFoundError } from "@/lib/ipc";
 
+export interface NavPort {
+  id: string;
+  name: string;
+  direction: "input" | "output";
+  type: "navigation" | "data";
+  schema: string;
+}
+
 export interface NavScreen {
   id: string;
   path: string;
   title: string;
+  ports: NavPort[];
+  layout?: string;
 }
 
 export interface NavLink {
   id: string;
   from: string;
+  fromPort: string;
   to: string;
+  toPort: string;
+  type: "navigation" | "data";
+  payloadSchema?: string;
+  params?: Record<string, string>;
 }
 
 export interface Navigation {
@@ -35,7 +50,6 @@ export async function loadNavigation(projectDir: string): Promise<Navigation> {
       throw new Error(`navigation.json has unexpected shape`);
     }
     const nav = parsed as Partial<Navigation>;
-    // Normalize — older files may be missing links
     return {
       defaultScreen: nav.defaultScreen ?? "",
       screens: nav.screens ?? [],
@@ -51,6 +65,13 @@ export async function saveNavigation(projectDir: string, nav: Navigation): Promi
   await writeFile(`${projectDir}/${NAVIGATION_FILE}`, JSON.stringify(nav, null, 2));
 }
 
+export function getDefaultPorts(screenId: string): NavPort[] {
+  return [
+    { id: `${screenId}:default-in`, name: "Default In", direction: "input", type: "navigation", schema: "{}" },
+    { id: `${screenId}:default-out`, name: "Default Out", direction: "output", type: "navigation", schema: "{}" },
+  ];
+}
+
 export async function addScreenToNavigation(projectDir: string, screenId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
   if (nav.screens.some((s) => s.id === screenId)) return;
@@ -58,6 +79,7 @@ export async function addScreenToNavigation(projectDir: string, screenId: string
     id: screenId,
     path: `/${screenId}`,
     title: screenId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    ports: getDefaultPorts(screenId),
   });
   if (!nav.defaultScreen) nav.defaultScreen = screenId;
   await saveNavigation(projectDir, nav);
@@ -73,17 +95,37 @@ export async function removeScreenFromNavigation(projectDir: string, screenId: s
   await saveNavigation(projectDir, nav);
 }
 
-export async function addNavLink(projectDir: string, from: string, to: string): Promise<void> {
+export async function addNavLink(
+  projectDir: string,
+  from: string,
+  fromPort: string,
+  to: string,
+  toPort: string,
+  type: "navigation" | "data" = "navigation",
+  params?: Record<string, string>
+): Promise<void> {
   const nav = await loadNavigation(projectDir);
-  const id = `${from}->${to}`;
+  const id = `${from}:${fromPort}->${to}:${toPort}`;
   if (nav.links.some((l) => l.id === id)) return;
-  nav.links.push({ id, from, to });
+  nav.links.push({ id, from, fromPort, to, toPort, type, params });
   await saveNavigation(projectDir, nav);
 }
 
 export async function removeNavLink(projectDir: string, linkId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
   nav.links = nav.links.filter((l) => l.id !== linkId);
+  await saveNavigation(projectDir, nav);
+}
+
+export async function updateNavLink(
+  projectDir: string,
+  linkId: string,
+  updates: Partial<Pick<NavLink, "fromPort" | "toPort" | "type" | "payloadSchema" | "params">>
+): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  const link = nav.links.find((l) => l.id === linkId);
+  if (!link) return;
+  Object.assign(link, updates);
   await saveNavigation(projectDir, nav);
 }
 
@@ -95,30 +137,50 @@ export async function renameScreenInNavigation(projectDir: string, oldId: string
     screen.path = `/${newId}`;
     screen.title = newId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
-  // Update any links that reference the renamed screen
   for (const link of nav.links) {
-    if (link.from === oldId) { link.from = newId; link.id = `${newId}->${link.to}`; }
-    if (link.to === oldId)   { link.to = newId;   link.id = `${link.from}->${newId}`; }
+    if (link.from === oldId) { link.from = newId; link.id = `${newId}:${link.fromPort}->${link.to}:${link.toPort}`; }
+    if (link.to === oldId)   { link.to = newId; link.id = `${link.from}:${link.fromPort}->${newId}:${link.toPort}`; }
   }
   if (nav.defaultScreen === oldId) nav.defaultScreen = newId;
   await saveNavigation(projectDir, nav);
 }
 
-/**
- * Write generated/src/router.tsx from current navigation + pages + components on disk.
- * Called from FlowsView, ComponentsPanel, and ScreensPanel whenever content changes.
- * Silently skips if generated/ has not been scaffolded yet.
- */
+export async function updateScreenPorts(
+  projectDir: string,
+  screenId: string,
+  ports: NavPort[]
+): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  const screen = nav.screens.find((s) => s.id === screenId);
+  if (!screen) return;
+  screen.ports = ports;
+  await saveNavigation(projectDir, nav);
+}
+
+export async function updateScreenLayout(
+  projectDir: string,
+  screenId: string,
+  layout: string | undefined
+): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  const screen = nav.screens.find((s) => s.id === screenId);
+  if (!screen) return;
+  screen.layout = layout;
+  await saveNavigation(projectDir, nav);
+}
+
+function getChildPath(path: string, parentPath: string): string {
+  return path.startsWith(parentPath + "/") ? path.slice(parentPath.length + 1) : path;
+}
+
 export async function syncGeneratedRouter(projectDir: string): Promise<void> {
   const generatedDir = `${projectDir}/generated`;
 
-  // Skip if generated/ not scaffolded yet
   try { await readFile(`${generatedDir}/package.json`); } catch { return; }
 
   const nav = await loadNavigation(projectDir);
   const navById = new Map(nav.screens.map((s) => [s.id, s]));
 
-  // Discover pages from generated/src/pages/ (source of truth for screens)
   let pageIds: string[] = [];
   try {
     const entries = await readDir(`${generatedDir}/src/pages`);
@@ -127,7 +189,6 @@ export async function syncGeneratedRouter(projectDir: string): Promise<void> {
       .map((e) => e.name.replace(/\.tsx$/, ""));
   } catch { /* no pages yet */ }
 
-  // Discover components from generated/src/components/ (subdirs with component.tsx)
   let componentIds: string[] = [];
   try {
     const entries = await readDir(`${generatedDir}/src/components`);
@@ -162,18 +223,65 @@ export async function syncGeneratedRouter(projectDir: string): Promise<void> {
 
   const themeImport = `import ThemePreview from './__theme-preview'`;
 
-  const pageRoutes = pageIds
-    .map((id, i) => {
-      const path = navById.get(id)?.path ?? `/${id}`;
-      return `      <Route path="${path}" element={<Page${i} />} />`;
-    })
-    .join("\n");
+  const layoutGroups = new Map<string | null, string[]>();
+  for (const screen of nav.screens) {
+    if (!pageIds.includes(screen.id)) continue;
+    const groupKey = screen.layout ?? null;
+    if (!layoutGroups.has(groupKey)) layoutGroups.set(groupKey, []);
+    layoutGroups.get(groupKey)!.push(screen.id);
+  }
+
+  function buildRoutes(screenIdsGroup: string[]): string {
+    return screenIdsGroup
+      .map((id) => {
+        const path = navById.get(id)?.path ?? `/${id}`;
+        const idx = pageIds.indexOf(id);
+        return `      <Route path="${path}" element={<Page${idx} />} />`;
+      })
+      .join("\n");
+  }
+
+  function buildNestedRoutes(parentId: string, childIds: string[]): string {
+    const parentScreen = navById.get(parentId);
+    if (!parentScreen) return "";
+    const parentIdx = pageIds.indexOf(parentId);
+    const childrenRoutes = childIds
+      .map((id) => {
+        const childPath = navById.get(id)?.path ?? `/${id}`;
+        const childLocalPath = getChildPath(childPath, parentScreen.path);
+        const idx = pageIds.indexOf(id);
+        return `        <Route path="${childLocalPath}" element={<Page${idx} />} />`;
+      })
+      .join("\n");
+    return `      <Route path="${parentScreen.path}" element={<Page${parentIdx} />}>\n${childrenRoutes}\n      </Route>`;
+  }
+
+  const topLevelRoutes: string[] = [];
+  const nestedRoutes: Array<{ parent: string; children: string[] }> = [];
+
+  for (const [groupKey, screenIdsGroup] of layoutGroups) {
+    if (groupKey === null) {
+      topLevelRoutes.push(buildRoutes(screenIdsGroup));
+    } else {
+      const children = screenIdsGroup.filter((id) => id !== groupKey);
+      if (children.length > 0 && navById.has(groupKey)) {
+        nestedRoutes.push({ parent: groupKey, children });
+      } else {
+        topLevelRoutes.push(buildRoutes(screenIdsGroup));
+      }
+    }
+  }
+
+  const allPageRoutes = [
+    ...topLevelRoutes,
+    ...nestedRoutes.map(({ parent, children }) => buildNestedRoutes(parent, children)),
+  ].join("\n");
 
   const componentRoutes = componentIds
     .map((id, i) => `      <Route path="/__preview/${id}" element={<PreviewShell><Comp${i} /></PreviewShell>} />`)
     .join("\n");
 
-  const allRoutes = [pageRoutes, componentRoutes]
+  const allRoutes = [allPageRoutes, componentRoutes]
     .filter(Boolean)
     .join("\n");
 
@@ -211,4 +319,3 @@ ${allRoutes}
 
   await writeFile(routerPath, content);
 }
-
