@@ -39,9 +39,10 @@ interface FlowsActions {
   openScreen: (id: string) => void;
   setDefaultScreen: (id: string) => void;
   disconnectEdges: (nodeId: string) => void;
+  deleteEdge: (edgeId: string) => void;
 }
 
-const FlowsActionsContext = createContext<FlowsActions | null>(null);
+export const FlowsActionsContext = createContext<FlowsActions | null>(null);
 
 function useFlowsActions(): FlowsActions {
   const ctx = useContext(FlowsActionsContext);
@@ -347,6 +348,15 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
           await syncGeneratedRouter(projectDir);
         } catch (e) {
           notify.error("Failed to disconnect edges", getErrorMessage(e));
+        }
+      },
+      deleteEdge: async (edgeId) => {
+        try {
+          await removeNavLink(projectDir, edgeId);
+          setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+          await syncGeneratedRouter(projectDir);
+        } catch (e) {
+          notify.error("Failed to delete link", getErrorMessage(e));
         }
       },
     }),
