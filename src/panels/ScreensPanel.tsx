@@ -594,7 +594,8 @@ export function ScreensPanel() {
                   {ctxSelectedBrief ? ctxSelectedBrief.name : "Brief"}
                   {ctxSelectedBrief && (
                     <span
-                      className="ml-0.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                      className="ml-0.5 text-muted-foreground hover:text-foreground"
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => { e.stopPropagation(); setCtxSelectedBrief(null); setActiveBriefName(""); }}
                     >×</span>
                   )}

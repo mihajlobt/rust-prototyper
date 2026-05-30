@@ -210,32 +210,7 @@ export function SettingsModal() {
                   </div>
                 </section>
 
-                {/* Dev Server */}
-                <section className="space-y-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dev Server</p>
-                  <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="runnerPort" className="text-sm">Runner Port</Label>
-                      <Input
-                        id="runnerPort"
-                        type="number"
-                        min={1024}
-                        max={65535}
-                        value={ps.runnerPort}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val) && val >= 1024 && val <= 65535) {
-                            setPs({ runnerPort: val });
-                          }
-                        }}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Restart dev servers for port changes to take effect.</p>
-                </section>
-
-                {/* Danger */}
+                {/* Layout */}
                 <section className="border-t border-border pt-4 space-y-2">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Layout</p>
                   <div className="flex items-center gap-4">
@@ -408,41 +383,75 @@ export function SettingsModal() {
           <TabsContent value="directories" className="flex-1 mt-4">
             <ScrollArea className="flex-1 overflow-hidden">
               <div className="space-y-6">
-                <p className="text-xs text-muted-foreground">
-                  Paths where generated files are written inside the Runner project, relative to{" "}
-                  <code className="text-[11px] bg-muted px-1 py-0.5 rounded">generated/</code>.
-                  Directories are created automatically.
-                </p>
-                <div className="grid grid-cols-3 gap-4">
+
+                {/* Fixed paths — read-only reference */}
+                <section className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Project paths</p>
+                  <p className="text-xs text-muted-foreground">Fixed paths inside the generated Vite project where files are written.</p>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    {[
+                      { label: "Components",   path: "generated/src/components/{name}/component.tsx" },
+                      { label: "Screens",      path: "generated/src/pages/{name}.tsx" },
+                      { label: "Active theme", path: "generated/src/styles/preview-theme.css" },
+                    ].map(({ label, path }, i, arr) => (
+                      <div key={label} className={`flex items-center gap-4 px-3 py-2.5 ${i < arr.length - 1 ? "border-b border-border" : ""}`}>
+                        <span className="text-sm text-muted-foreground w-28 shrink-0">{label}</span>
+                        <code className="text-xs font-mono text-foreground/80">{path}</code>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Theme export path — the one actually configurable setting */}
+                <section className="space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Theme export path</p>
+                  <p className="text-xs text-muted-foreground">
+                    Where <strong>Save to Runner</strong> in the Themes panel writes exported CSS files, relative to <code className="text-[11px] bg-muted px-1 py-0.5 rounded">generated/</code>.
+                  </p>
                   <div className="space-y-1.5">
-                    <Label htmlFor="dir-themes" className="text-sm">Themes</Label>
-                    <Input id="dir-themes" value={ps.directories.themes}
+                    <Input
+                      value={ps.directories.themes}
                       onChange={(e) => setPs({ directories: { ...ps.directories, themes: e.target.value } })}
-                      placeholder="src/styles/themes" className="font-mono text-xs" />
-                    <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.themes || "…"}/name.css`}</p>
+                      placeholder="src/styles/themes"
+                      className="font-mono text-xs max-w-xs"
+                    />
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      generated/{ps.directories.themes || "…"}/{"{name}"}.css
+                    </p>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="dir-components" className="text-sm">Components</Label>
-                    <Input id="dir-components" value={ps.directories.components}
-                      onChange={(e) => setPs({ directories: { ...ps.directories, components: e.target.value } })}
-                      placeholder="src/components" className="font-mono text-xs" />
-                    <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.components || "…"}/name.tsx`}</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="dir-screens" className="text-sm">Screens</Label>
-                    <Input id="dir-screens" value={ps.directories.screens}
-                      onChange={(e) => setPs({ directories: { ...ps.directories, screens: e.target.value } })}
-                      placeholder="src/screens" className="font-mono text-xs" />
-                    <p className="text-[10px] text-muted-foreground font-mono">{`generated/${ps.directories.screens || "…"}/name.tsx`}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 border-t border-border pt-4">
-                  <Button variant="outline" size="sm"
-                    onClick={() => setPs({ directories: { themes: "src/styles/themes", components: "src/components", screens: "src/screens" } })}>
-                    Reset to defaults
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPs({ directories: { ...ps.directories, themes: "src/styles/themes" } })}
+                    disabled={ps.directories.themes === "src/styles/themes"}
+                  >
+                    Reset to default
                   </Button>
-                  <p className="text-xs text-muted-foreground">Restore the default output paths</p>
-                </div>
+                </section>
+
+                {/* Runner port */}
+                <section className="space-y-3 border-t border-border pt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Dev Server</p>
+                  <div className="flex items-center gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="runnerPort" className="text-sm">Runner port</Label>
+                      <Input
+                        id="runnerPort"
+                        type="number"
+                        min={1024}
+                        max={65535}
+                        value={ps.runnerPort}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1024 && val <= 65535) setPs({ runnerPort: val });
+                        }}
+                        className="h-8 text-xs w-28"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-5">Restart the dev server for port changes to take effect.</p>
+                  </div>
+                </section>
+
               </div>
             </ScrollArea>
           </TabsContent>
