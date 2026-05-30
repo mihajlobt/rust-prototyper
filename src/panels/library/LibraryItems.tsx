@@ -7,7 +7,7 @@ import {
   TYPE_COLORS, TYPE_BG, TYPE_LABELS,
   relativeTime, stripMentionBlocks,
 } from "./types";
-import type { LibraryItem } from "./types";
+import type { LibraryItem, RowActions } from "./types";
 
 // Icons live here (JSX can't be in a .ts file)
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -174,8 +174,6 @@ function RenameInput({ value, onChange, onCommit, onCancel }: {
     />
   );
 }
-
-import type { RowActions } from "./types";
 
 // ─── List row ─────────────────────────────────────────────────────────────────
 

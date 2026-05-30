@@ -12,15 +12,27 @@ export function StylesEditor() {
   const [expandedIndex, setExpandedIndex] = useState<number | "new" | null>(null);
   const [newName, setNewName] = useState("");
   const [newContent, setNewContent] = useState("");
+  // Local draft so typing doesn't write to disk on every keystroke
+  const [draftName, setDraftName] = useState("");
+  const [draftValue, setDraftValue] = useState("");
 
-  const updateStyle = async (index: number, patch: Partial<{ name: string; value: string }>) => {
-    const next = settings.styles.map((s, i) => i === index ? { ...s, ...patch } : s);
+  const openStyle = (i: number) => {
+    setDraftName(settings.styles[i].name);
+    setDraftValue(settings.styles[i].value);
+    setExpandedIndex(i);
+  };
+
+  const saveStyle = async (i: number) => {
+    const next = settings.styles.map((s, idx) =>
+      idx === i ? { name: draftName || s.name, value: draftValue } : s
+    );
     await setSettings({ styles: next });
   };
 
   const deleteStyle = async (index: number) => {
     await setSettings({ styles: settings.styles.filter((_, i) => i !== index) });
     if (expandedIndex === index) setExpandedIndex(null);
+    else if (typeof expandedIndex === "number" && expandedIndex > index) setExpandedIndex(expandedIndex - 1);
   };
 
   const addStyle = async () => {
@@ -95,7 +107,7 @@ export function StylesEditor() {
                   {/* Row header */}
                   <div
                     className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => setExpandedIndex(isOpen ? null : i)}
+                    onClick={() => isOpen ? setExpandedIndex(null) : openStyle(i)}
                   >
                     <span className="text-muted-foreground/50 shrink-0">
                       {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -118,18 +130,20 @@ export function StylesEditor() {
                     <div className="px-3 pb-3 space-y-2 border-t border-border bg-muted/20">
                       <Input
                         className="mt-2 h-7 text-sm font-medium"
-                        value={style.name}
-                        onChange={(e) => updateStyle(i, { name: e.target.value })}
+                        value={draftName}
+                        onChange={(e) => setDraftName(e.target.value)}
+                        onBlur={() => saveStyle(i)}
                         placeholder="Style name"
                       />
                       <Textarea
                         className="font-mono text-xs min-h-[200px] resize-y"
-                        value={style.value}
-                        onChange={(e) => updateStyle(i, { value: e.target.value })}
+                        value={draftValue}
+                        onChange={(e) => setDraftValue(e.target.value)}
+                        onBlur={() => saveStyle(i)}
                         placeholder="Design brief content (markdown)…"
                       />
                       <p className="text-[10px] text-muted-foreground">
-                        Changes save automatically. This style will appear in the Brief dropdown in Screens and Components.
+                        Changes are saved when you click outside a field. This style appears in the Brief dropdown in Screens and Components.
                       </p>
                     </div>
                   )}

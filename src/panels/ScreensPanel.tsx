@@ -348,6 +348,11 @@ export function ScreensPanel() {
     onCodeOutput: (code) => applyScreenCode(code),
   });
 
+  // Clear the brief ref whenever ctxSelectedBrief is cleared from any source
+  useEffect(() => {
+    if (!ctxSelectedBrief) setActiveBriefName("");
+  }, [ctxSelectedBrief, setActiveBriefName]);
+
   useEffect(() => {
     const selectedTheme = ps.stylePreset;
     if (!selectedTheme) {

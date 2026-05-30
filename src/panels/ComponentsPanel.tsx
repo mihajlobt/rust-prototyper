@@ -315,6 +315,11 @@ export function ComponentsPanel() {
     onCodeOutput: (code) => applyCode(code),
   });
 
+  // Clear the brief ref whenever ctxSelectedBrief is cleared from any source
+  useEffect(() => {
+    if (!ctxSelectedBrief) setActiveBriefName("");
+  }, [ctxSelectedBrief, setActiveBriefName]);
+
   const applyCode = useCallback(async (extracted: string) => {
     setCode(extracted);
     setPs({ componentsCodeOpen: true });

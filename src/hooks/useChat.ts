@@ -635,7 +635,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     mentions,
     addMention,
     removeMention,
-    setActiveBriefName: (name: string) => { activeBriefNameRef.current = name },
+    setActiveBriefName: useCallback((name: string) => { activeBriefNameRef.current = name }, []),
     thinkEnabled,
     toggleThink: () => setThinkEnabled((v) => !v),
     thinkLevel,
