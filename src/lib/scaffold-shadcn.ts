@@ -237,19 +237,30 @@ const queryClient = new QueryClient()
 // Hotspot position tracking
 let __hotspots: { portId: string; selector: string }[] = [];
 let __linkModeCleanup: (() => void) | null = null;
+let __retryHandle = 0;
 
 function sendHotspotPositions() {
+  if (!__hotspots.length) return;
   const positions: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  let found = 0;
   for (const h of __hotspots) {
     try {
       const el = document.querySelector(h.selector);
       if (el) {
         const r = el.getBoundingClientRect();
         positions[h.portId] = { x: r.left, y: r.top, w: r.width, h: r.height };
+        found++;
       }
     } catch (_) { /* ignore invalid selectors */ }
   }
   window.parent.postMessage({ type: '__hotspot-positions', positions }, '*');
+  // React renders async after onLoad — retry until elements appear (up to ~1s)
+  if (found < __hotspots.length && __retryHandle < 60) {
+    __retryHandle++;
+    requestAnimationFrame(sendHotspotPositions);
+  } else {
+    __retryHandle = 0;
+  }
 }
 
 document.addEventListener('scroll', sendHotspotPositions, { capture: true, passive: true });
@@ -259,6 +270,7 @@ window.addEventListener('resize', sendHotspotPositions, { passive: true });
 window.addEventListener('message', (event) => {
   if (event.data?.type === '__set-hotspots') {
     __hotspots = (event.data.hotspots as { portId: string; selector: string }[]) || [];
+    __retryHandle = 0;
     sendHotspotPositions();
     return;
   }

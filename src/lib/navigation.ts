@@ -193,7 +193,7 @@ export async function removeHotspot(projectDir: string, hotspotId: string): Prom
   if (hotspot) {
     const screen = nav.screens.find((s) => s.id === hotspot.screenId);
     if (screen) {
-      screen.ports = screen.ports.filter((p) => p.id !== hotspot.portId);
+      screen.ports = (screen.ports ?? []).filter((p) => p.id !== hotspot.portId);
     }
     nav.links = nav.links.filter((l) => l.fromPort !== hotspot.portId);
   }
@@ -217,6 +217,7 @@ export async function createHotspotWithLink(
   const nav = await loadNavigation(projectDir);
   const screen = nav.screens.find((s) => s.id === screenId);
   if (!screen) throw new Error(`Screen ${screenId} not found`);
+  screen.ports ??= [];
 
   const hotspot: Hotspot = {
     id: `hotspot-${Date.now()}`,

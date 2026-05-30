@@ -14,6 +14,7 @@ import {
 import { writeFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
+import { saveItemMeta } from "@/lib/item-meta";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { useAppStore } from "@/stores/appStore";
 import { useChat } from "@/hooks/useChat";
@@ -86,7 +87,13 @@ export function ThemesPanel() {
     setPreviewKey((k) => k + 1);
     persistTheme(content, "");
     setPs({ themesCodeOpen: true });
-  }, [persistTheme, setPs]);
+    const entityId = `theme-${selectedThemeDir || "main"}`;
+    const msgs = useChatStore.getState().chats[entityId]?.messages ?? [];
+    const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+    const prompt = lastUser?.content ?? "";
+    void saveItemMeta(`projects/${settings.project}`, "themes", selectedThemeDir || "main", prompt)
+      .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
+  }, [persistTheme, setPs, settings.project, selectedThemeDir]);
 
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
