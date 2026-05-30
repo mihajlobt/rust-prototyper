@@ -50,7 +50,7 @@ export function ComponentsPanel() {
   const queryClient = useQueryClient();
 
   // Dev server state — shared runner server
-  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner, previewTarget } = useDevServerStore();
+  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
@@ -70,20 +70,15 @@ export function ComponentsPanel() {
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const selectedTheme = ps.stylePreset;
   const [themeCss, setThemeCss] = useState("");
-  // Snapshot of dark mode at the time the preview URL first becomes available.
-  // Used to set the initial state in the iframe via query param so it reads it
-  // synchronously before React mounts — live changes go through postMessage.
-  const darkAtUrlArrival = useRef(componentsDarkPreview);
-  useEffect(() => { darkAtUrlArrival.current = componentsDarkPreview; }, [componentsDarkPreview]);
+  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
   const initialPreviewSrc = useMemo(
     () => {
-      if (!runnerUrl) return undefined;
-      const target = previewTarget ?? "/__theme-preview";
-      return `${runnerUrl}${target}?dark=${darkAtUrlArrival.current}`;
+      if (!runnerUrl || !selectedComponent) return undefined;
+      return `${runnerUrl}/__preview/${selectedComponent}?dark=${componentsDarkPreview}`;
     },
-    [runnerUrl, previewTarget]
+    [runnerUrl, selectedComponent, componentsDarkPreview]
   );
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
@@ -312,15 +307,10 @@ export function ComponentsPanel() {
       await writeFile(`${compDir}/component.tsx`, extracted);
       await syncGeneratedRouter(`projects/${settings.project}`);
       queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
-      // Navigate iframe to the component's preview route
-      const iframe = previewIframeRef.current;
-      if (iframe?.contentWindow && runnerUrl) {
-        iframe.contentWindow.postMessage({ type: "navigate", path: `/__preview/${selectedComponent}` }, "*");
-      }
     } catch (e) {
       notify.error("Failed to apply generated code", getErrorMessage(e));
     }
-  }, [settings.project, selectedComponent, queryClient, generatedDir, runnerUrl, setPs]);
+  }, [settings.project, selectedComponent, queryClient, generatedDir, setPs]);
 
 
   const deviceWidth = {

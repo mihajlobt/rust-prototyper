@@ -15,7 +15,6 @@ import {
 import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, getErrorMessage } from "@/lib/ipc";
 import { addScreenToNavigation, removeScreenFromNavigation, renameScreenInNavigation, syncGeneratedRouter } from "@/lib/navigation";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
-import { useDevServerStore } from "@/lib/dev-server-manager";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -28,7 +27,6 @@ import type { SectionName } from "@/components/ProjectExplorer";
 export function SidebarRail() {
   const { settings } = useAppStore();
   const { setPs, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectSettingsStore();
-  const { setPreviewTarget } = useDevServerStore();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -46,13 +44,9 @@ export function SidebarRail() {
   };
 
   const handleSelectAsset = (section: SectionName, name: string) => {
-    if (section === "screens") {
-      setPreviewTarget(`/${name}`);
-      openScreen(name);
-    } else if (section === "components") {
-      setPreviewTarget(`/__preview/${name}`);
-      openComponent(name);
-    } else if (section === "themes") openTheme(name);
+    if (section === "screens") openScreen(name);
+    else if (section === "components") openComponent(name);
+    else if (section === "themes") openTheme(name);
     else if (section === "workflows") openWorkflow(name);
     else if (section === "apis") openApi(name.replace(/\.json$/, ""));
   };

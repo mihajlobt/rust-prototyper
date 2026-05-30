@@ -12,16 +12,9 @@ export interface DevServerState {
   runnerUrl: string | null;
   runnerError: string | null;
 
-  // Current preview target: screen path (e.g. "/homepage") or
-  // component preview path (e.g. "/__preview/org-users").
-  // Set by panel components (ScreensPanel, ComponentsPanel) when the user
-  // opens a screen or component. The iframe src is computed from this.
-  previewTarget: string | null;
-
   // Actions
   startRunner: (generatedDir: string, port?: number) => Promise<string>;
   stopRunner: () => void;
-  setPreviewTarget: (path: string | null) => void;
 }
 
 // ─── Internal State ───────────────────────────────────────────────────────────
@@ -64,9 +57,6 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
   runnerStatus: "idle",
   runnerUrl: null,
   runnerError: null,
-  previewTarget: null,
-
-  setPreviewTarget: (path) => set({ previewTarget: path }),
 
   // ── startRunner ───────────────────────────────────────────────────────────
 
@@ -158,7 +148,7 @@ export const useDevServerStore = create<DevServerState>()((set, get) => ({
     const stopped = new Error("Runner dev server was stopped before URL was captured");
     for (const w of runnerUrlWaiters) w.reject(stopped);
     runnerUrlWaiters = [];
-    set({ runnerStatus: "idle", runnerUrl: null, runnerError: null, previewTarget: null });
+    set({ runnerStatus: "idle", runnerUrl: null, runnerError: null });
   },
 
 }));

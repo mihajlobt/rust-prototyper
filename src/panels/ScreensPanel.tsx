@@ -56,7 +56,7 @@ export function ScreensPanel() {
   const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
 
-  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner, previewTarget } = useDevServerStore();
+  const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
@@ -64,11 +64,10 @@ export function ScreensPanel() {
   useEffect(() => { darkAtUrlArrival.current = screensDarkPreview; }, [screensDarkPreview]);
   const initialPreviewSrc = useMemo(
     () => {
-      if (!runnerUrl) return undefined;
-      const target = previewTarget ?? "/__theme-preview";
-      return `${runnerUrl}${target}?dark=${darkAtUrlArrival.current}`;
+      if (!runnerUrl || !screenId) return undefined;
+      return `${runnerUrl}/${screenId}?dark=${darkAtUrlArrival.current}`;
     },
-    [runnerUrl, previewTarget]
+    [runnerUrl, screenId]
   );
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
