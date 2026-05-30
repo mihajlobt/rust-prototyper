@@ -8,6 +8,7 @@ export function useBonsai() {
   const store = useBonsaiStore();
 
   useEffect(() => {
+    if (!project) return;
     store.loadConfig();
     store.refreshStatus();
     store.listAssets(project);
@@ -35,17 +36,25 @@ export function useBonsai() {
   const startServer = useCallback(() => store.startServer(), []);
   const stopServer = useCallback(() => store.stopServer(), []);
   const generateImage = useCallback(
-    (prompt: string, opts?: { width?: number; height?: number; steps?: number; seed?: number; backend?: string }) =>
-      store.generateImage({
+    (prompt: string, opts?: { width?: number; height?: number; steps?: number; seed?: number; backend?: string }) => {
+      if (!project) return Promise.resolve(null);
+      return store.generateImage({
         projectId: project,
         prompt,
         ...opts,
-      }),
+      });
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable, project is the only reactive dep
     [project]
   );
-  const refreshAssets = useCallback(() => store.listAssets(project), [project]);
-  const deleteAsset = useCallback((fileName: string) => store.deleteAsset(project, fileName), [project]);
+  const refreshAssets = useCallback(() => {
+    if (!project) return;
+    store.listAssets(project);
+  }, [project]);
+  const deleteAsset = useCallback((fileName: string) => {
+    if (!project) return;
+    store.deleteAsset(project, fileName);
+  }, [project]);
 
   return {
     ...store,

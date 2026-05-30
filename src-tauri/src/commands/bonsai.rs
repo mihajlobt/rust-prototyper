@@ -29,9 +29,7 @@ pub struct BonsaiServerConfig {
     pub install_path: String,
     pub port: u16,
     pub variant: String,
-    pub auto_start: bool,
     pub auto_stop_timeout_secs: u64,
-    pub max_memory_gb: f64,
 }
 
 impl Default for BonsaiServerConfig {
@@ -40,9 +38,7 @@ impl Default for BonsaiServerConfig {
             install_path: String::new(),
             port: DEFAULT_PORT,
             variant: "ternary".to_string(),
-            auto_start: false,
             auto_stop_timeout_secs: 60,
-            max_memory_gb: 4.0,
         }
     }
 }
@@ -207,9 +203,13 @@ pub async fn bonsai_start_server(
 
     // Phase 1: Kill any stale Bonsai process group (without holding the process lock).
     // Kill all ports in range first, then check our tracked process.
-    for offset in 0..=MAX_PORT_OFFSET {
-        kill_port_sync(config.port + offset);
-    }
+    // spawn_blocking avoids blocking the async runtime with synchronous lsof/kill calls.
+    let ports_to_kill: Vec<u16> = (0..=MAX_PORT_OFFSET).map(|offset| config.port + offset).collect();
+    tokio::task::spawn_blocking(move || {
+        for port in ports_to_kill {
+            kill_port_sync(port);
+        }
+    }).await.map_err(|e| bonsai_error(format!("Port cleanup task failed: {}", e)))?;
     {
         let mut bonsai_guard = state.bonsai_process.lock().await;
         if let Some(mut server) = bonsai_guard.take() {
@@ -221,7 +221,9 @@ pub async fn bonsai_start_server(
             // Drop lock before async kill — never hold locks across awaits
             drop(bonsai_guard);
             kill_process_group(pid).await;
-            kill_port_sync(port);
+            tokio::task::spawn_blocking(move || kill_port_sync(port))
+                .await
+                .map_err(|e| bonsai_error(format!("Port cleanup task failed: {}", e)))?;
         }
     }
     state.bonsai_port.store(0, Ordering::Relaxed);
@@ -448,7 +450,9 @@ pub async fn bonsai_stop_server(
             }
         }
 
-        kill_port_sync(server.port);
+        tokio::task::spawn_blocking(move || kill_port_sync(server.port))
+            .await
+            .map_err(|e| bonsai_error(format!("Port cleanup task failed: {}", e)))?;
     }
     Ok(())
 }
@@ -469,8 +473,7 @@ pub async fn bonsai_server_status(state: State<'_, AppState>) -> Result<BonsaiSe
 
 /// Schedule an automatic stop. The spawned task sleeps for the configured timeout,
 /// then emits a `bonsai:stop-timeout` event that the frontend listens for to call
-/// `bonsai_stop_server`. It also directly stops the server after emitting the event
-/// as a safety net.
+/// `bonsai_stop_server`.
 #[tauri::command]
 pub async fn bonsai_schedule_stop(
     app: AppHandle,
@@ -483,22 +486,27 @@ pub async fn bonsai_schedule_stop(
         config.auto_stop_timeout_secs
         // config guard dropped here — no longer holding std Mutex
     };
-    let mut bonsai_guard = state.bonsai_process.lock().await;
 
+    // Check if a timer already exists — clone out, drop lock, then spawn.
+    let has_timer = {
+        let guard = state.bonsai_process.lock().await;
+        guard.as_ref().map_or(true, |s| s.stop_timer.is_some())
+    };
+    if has_timer {
+        return Ok(());
+    }
+
+    // Spawn the timer without holding the lock.
+    let app_handle = app.clone();
+    let stop_handle = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(timeout_secs)).await;
+        let _ = app_handle.emit("bonsai:stop-timeout", ());
+    });
+
+    // Briefly re-lock to store the handle.
+    let mut bonsai_guard = state.bonsai_process.lock().await;
     if let Some(ref mut server) = *bonsai_guard {
-        if server.stop_timer.is_some() {
-            return Ok(());
-        }
-        let app_handle = app.clone();
-        let stop_handle = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(timeout_secs)).await;
-            // Notify frontend so it can update UI state
-            let _ = app_handle.emit("bonsai:stop-timeout", ());
-            // The frontend will call bonsai_stop_server after receiving this event
-        });
         server.stop_timer = Some(stop_handle);
-        // Store whether a timer is active so frontend can query it
-        // (bonsai_server_status could be extended to include this info)
     }
     Ok(())
 }
@@ -552,8 +560,8 @@ async fn kill_process_group(pid: u32) {
         .await;
 }
 
-/// Cross-platform port killing — reuses the same pattern as process.rs kill_port_impl.
-/// Runs on spawn_blocking to not block the async runtime.
+/// Cross-platform port killing — synchronous, must be called via `tokio::task::spawn_blocking`
+/// to avoid blocking the async runtime.
 fn kill_port_sync(port: u16) {
     #[cfg(unix)]
     {

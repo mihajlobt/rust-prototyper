@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal } from "lucide-react";
+import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
@@ -8,7 +8,7 @@ import { useBonsai } from "@/hooks/useBonsai";
 import { toFileUrl } from "@/lib/ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { BonsaiConfigPopover } from "@/panels/assets/BonsaiConfigPopover";
-import { AssetGrid } from "@/panels/assets/AssetGrid";
+import { AssetGrid, type AssetViewMode } from "@/panels/assets/AssetGrid";
 import { AssetPreviewLightbox } from "@/panels/assets/AssetPreviewLightbox";
 
 interface BonsaiLogEvent {
@@ -16,11 +16,18 @@ interface BonsaiLogEvent {
   source: "stdout" | "stderr" | "system";
 }
 
+// Per Bonsai-Image-Demo README — dimensions must be multiples of 32
 const SIZE_PRESETS = [
   { label: "512²", width: 512, height: 512 },
-  { label: "768×512", width: 768, height: 512 },
-  { label: "512×768", width: 512, height: 768 },
-  { label: "1024×768", width: 1024, height: 768 },
+  { label: "1024²", width: 1024, height: 1024 },
+  { label: "624×416", width: 624, height: 416 },
+  { label: "1248×832", width: 1248, height: 832 },
+  { label: "416×624", width: 416, height: 624 },
+  { label: "832×1248", width: 832, height: 1248 },
+  { label: "704×352", width: 704, height: 352 },
+  { label: "1408×704", width: 1408, height: 704 },
+  { label: "352×704", width: 352, height: 704 },
+  { label: "704×1408", width: 704, height: 1408 },
 ];
 
 export function AssetsPanel() {
@@ -28,28 +35,32 @@ export function AssetsPanel() {
   const [prompt, setPrompt] = useState("");
   const [selectedPreset, setSelectedPreset] = useState(0);
   const [steps, setSteps] = useState(4);
+  const [seed, setSeed] = useState(0);
   const [previewIndex, setPreviewIndex] = useState<number | undefined>(undefined);
   const [showLog, setShowLog] = useState(true);
+  const [viewMode, setViewMode] = useState<AssetViewMode>("list");
   const xtermRef = useRef<XTerminalHandle>(null);
 
   const preset = SIZE_PRESETS[selectedPreset];
   const isRunning = bonsai.serverStatus?.healthy ?? false;
 
-  const listenerRegisteredRef = useRef(false);
-  // xtermRef is stable — guard prevents double-mount, ref.current is always valid
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (listenerRegisteredRef.current) return;
-    listenerRegisteredRef.current = true;
-    let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
+    let unlistenFn: UnlistenFn | null = null;
     listen<BonsaiLogEvent>("bonsai:log", (event) => {
       const { line, source } = event.payload;
       const color = source === "stderr" ? "\x1b[31m" : source === "system" ? "\x1b[36m" : "";
       xtermRef.current?.writeln(`${color}${line}\x1b[0m`);
-    }).then((fn) => { unlisten = fn; });
+    }).then((fn) => {
+      if (!cancelled) {
+        unlistenFn = fn;
+      } else {
+        fn();
+      }
+    });
     return () => {
-      unlisten?.();
-      listenerRegisteredRef.current = false;
+      cancelled = true;
+      unlistenFn?.();
     };
   }, []);
 
@@ -68,8 +79,9 @@ export function AssetsPanel() {
       width: preset.width,
       height: preset.height,
       steps,
+      seed: seed === 0 ? undefined : seed,
     });
-  }, [prompt, preset, steps, bonsai]);
+  }, [prompt, preset, steps, seed, bonsai]);
 
   const handleDelete = useCallback(async (fileName: string) => {
     await bonsai.deleteAsset(fileName);
@@ -99,7 +111,29 @@ export function AssetsPanel() {
       <div className="panel-toolbar px-3 py-2 border-b border-border flex items-center gap-2">
         <Image size={16} className="text-muted-foreground" />
         <span className="text-sm font-medium">Assets</span>
+        {isRunning && (
+          <>
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500 shrink-0" />
+            {bonsai.serverStatus?.default_family && (
+              <span className="text-xs text-muted-foreground truncate max-w-[160px]">
+                {bonsai.serverStatus.default_family}
+              </span>
+            )}
+          </>
+        )}
         <div className="flex-1" />
+        {isRunning && (
+          <Button
+            variant={bonsai.stopScheduled ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={bonsai.stopScheduled ? bonsai.cancelStop : bonsai.scheduleStop}
+            title={bonsai.stopScheduled ? "Cancel auto-stop" : "Auto-stop server"}
+          >
+            <Clock size={12} />
+            {bonsai.stopScheduled ? "Cancel" : "Auto-stop"}
+          </Button>
+        )}
         <BonsaiConfigPopover />
         <Button
           variant={isRunning ? "destructive" : "default"}
@@ -116,38 +150,24 @@ export function AssetsPanel() {
           )}
         </Button>
         {bonsai.assets.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={bonsai.refreshAssets} title="Refresh assets">
-            <RefreshCw size={14} />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+              title={viewMode === "list" ? "Gallery view" : "List view"}
+            >
+              {viewMode === "list" ? <LayoutGrid size={14} /> : <LayoutList size={14} />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={bonsai.refreshAssets} title="Refresh assets">
+              <RefreshCw size={14} />
+            </Button>
+          </>
         )}
         <Button variant={showLog ? "secondary" : "ghost"} size="sm" onClick={() => setShowLog(!showLog)} title="Toggle server log">
           <Terminal size={14} />
         </Button>
       </div>
-
-      {/* Server status */}
-      {isRunning && bonsai.serverStatus && (
-        <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border bg-muted/30 flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-green-500 shrink-0" />
-          <span>Bonsai server running</span>
-          {bonsai.serverStatus.supported_families.length > 0 && (
-            <span className="ml-auto truncate">
-              {bonsai.serverStatus.supported_families.join(", ")}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Auto-stop indicator */}
-      {bonsai.stopScheduled && (
-        <div className="px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-b border-border flex items-center gap-2">
-          <Clock size={12} />
-          <span className="flex-1">Auto-stop scheduled</span>
-          <Button variant="ghost" size="sm" className="h-5 text-xs" onClick={bonsai.cancelStop}>
-            Cancel
-          </Button>
-        </div>
-      )}
 
       {/* Error display */}
       {bonsai.error && (
@@ -166,66 +186,89 @@ export function AssetsPanel() {
           {/* Left pane: generation form + assets */}
           <Allotment.Pane>
             <div className="h-full flex flex-col overflow-hidden">
-              {/* Generation form — always visible, disabled when server not running */}
-              <div className="px-3 py-3 border-b border-border space-y-3 shrink-0">
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe the image you want to generate..."
-                  className="w-full min-h-[80px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                  disabled={!isRunning}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      handleGenerate();
-                    }
-                  }}
-                />
-                <div className="flex gap-2">
+              {/* Generation controls — compact strip */}
+              <div className="shrink-0 border-b border-border">
+                {/* Prompt row with generate action */}
+                <div className="flex gap-1.5 px-3 pt-2 pb-1.5">
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Describe the image to generate..."
+                    className="flex-1 min-h-[56px] max-h-[120px] resize-y rounded-sm border border-input bg-background px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    disabled={!isRunning}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        handleGenerate();
+                      }
+                    }}
+                  />
+                  <Button
+                    className="shrink-0 self-end"
+                    size="sm"
+                    onClick={handleGenerate}
+                    disabled={!isRunning || bonsai.generating || !prompt.trim()}
+                  >
+                    {bonsai.generating ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Image size={14} />
+                    )}
+                  </Button>
+                </div>
+
+                {/* Size presets row */}
+                <div className="flex flex-wrap gap-1 px-3 pb-1.5">
                   {SIZE_PRESETS.map((presetItem, i) => (
                     <Button
                       key={presetItem.label}
                       variant={selectedPreset === i ? "default" : "outline"}
                       size="sm"
                       onClick={() => setSelectedPreset(i)}
-                      className="text-xs"
+                      className="text-[10px] font-mono h-6 px-1.5"
                       disabled={!isRunning}
                     >
                       {presetItem.label}
                     </Button>
                   ))}
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground w-14">Steps</span>
+
+                {/* Params row: steps + seed */}
+                <div className="flex items-center gap-3 px-3 pb-2">
+                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">steps</span>
                   <Slider
                     value={[steps]}
                     onValueChange={([value]) => setSteps(value)}
                     min={1}
                     max={20}
                     step={1}
-                    className="flex-1"
+                    className="w-24"
                     disabled={!isRunning}
                   />
-                  <span className="text-xs text-muted-foreground w-6 text-right">{steps}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground w-3 text-right">{steps}</span>
+                  <span className="text-border">|</span>
+                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">seed</span>
+                  <input
+                    type="number"
+                    value={seed}
+                    onChange={(e) => setSeed(Number(e.target.value))}
+                    className="w-16 h-6 rounded-sm border border-input bg-background px-1.5 text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    disabled={!isRunning}
+                    min={0}
+                  />
                 </div>
-                <Button
-                  className="w-full"
-                  onClick={handleGenerate}
-                  disabled={!isRunning || bonsai.generating || !prompt.trim()}
-                >
-                  {bonsai.generating ? (
-                    <><Loader2 size={14} className="animate-spin mr-2" />Generating...</>
-                  ) : (
-                    <><Image size={14} className="mr-2" />Generate</>
-                  )}
-                </Button>
               </div>
 
               {/* Last result preview */}
               {bonsai.lastResult && lastResultIndex >= 0 && (
                 <div className="px-3 py-2 border-b border-border shrink-0">
-                  <div className="text-xs font-medium text-muted-foreground mb-1.5">Last Generated</div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Last</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">{bonsai.lastResult.width}×{bonsai.lastResult.height}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">seed:{bonsai.lastResult.seed}</span>
+                  </div>
                   <div
-                    className="relative rounded-md overflow-hidden cursor-pointer border border-border hover:border-primary/50 transition-colors"
+                    className="relative rounded-sm overflow-hidden cursor-pointer border border-border hover:border-primary/50 transition-colors"
                     onClick={() => setPreviewIndex(lastResultIndex)}
                   >
                     <img
@@ -233,9 +276,6 @@ export function AssetsPanel() {
                       alt={bonsai.lastResult.file_name}
                       className="w-full h-auto max-h-48 object-contain bg-muted/30"
                     />
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1.5">
-                    {bonsai.lastResult.width}×{bonsai.lastResult.height} — seed: {bonsai.lastResult.seed}
                   </div>
                 </div>
               )}
@@ -256,18 +296,10 @@ export function AssetsPanel() {
                     onSelect={handleSelectAsset}
                     onDelete={handleDelete}
                     assetUrl={assetUrl}
+                    viewMode={viewMode}
                   />
                 )}
               </div>
-
-              {/* Auto-stop controls */}
-              {isRunning && !bonsai.stopScheduled && (
-                <div className="px-3 py-1.5 border-t border-border text-xs text-muted-foreground shrink-0">
-                  <Button variant="ghost" size="sm" className="h-5 text-xs" onClick={bonsai.scheduleStop}>
-                    <Clock size={10} className="mr-1" />Auto-stop
-                  </Button>
-                </div>
-              )}
             </div>
           </Allotment.Pane>
 
@@ -296,6 +328,7 @@ export function AssetsPanel() {
         setPreviewIndex={setPreviewIndex}
         assets={bonsai.assets}
         assetUrl={assetUrl}
+        onDelete={handleDelete}
       />
     </div>
   );

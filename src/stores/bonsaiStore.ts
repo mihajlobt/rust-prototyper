@@ -53,13 +53,11 @@ interface BonsaiActions {
 
 export type BonsaiStore = BonsaiState & BonsaiActions;
 
-const defaultConfig: BonsaiServerConfig = {
+export const BONSAI_DEFAULT_CONFIG: BonsaiServerConfig = {
   install_path: "",
   port: 8000,
   variant: "ternary",
-  auto_start: false,
   auto_stop_timeout_secs: 60,
-  max_memory_gb: 4.0,
 };
 
 export const useBonsaiStore = create<BonsaiStore>()((set, get) => ({
@@ -112,9 +110,9 @@ export const useBonsaiStore = create<BonsaiStore>()((set, get) => ({
   loadConfig: async () => {
     try {
       const config = await bonsaiGetServerConfig();
-      set({ config: config ?? defaultConfig });
+      set({ config: config ?? BONSAI_DEFAULT_CONFIG });
     } catch {
-      set({ config: defaultConfig });
+      set({ config: BONSAI_DEFAULT_CONFIG });
     }
   },
 

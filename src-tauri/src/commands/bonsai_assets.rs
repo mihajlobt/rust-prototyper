@@ -22,6 +22,18 @@ pub struct AssetInfo {
     pub file_path: String,
     pub file_size: u64,
     pub created_at: u64,
+    pub prompt: Option<String>,
+}
+
+/// Sidecar metadata saved alongside each generated image.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BonsaiAssetMeta {
+    pub prompt: String,
+    pub width: u32,
+    pub height: u32,
+    pub steps: u32,
+    pub seed: u64,
+    pub variant: String,
 }
 
 /// Generate an image via the Bonsai server. The 300s timeout is intentional —
@@ -45,6 +57,9 @@ pub async fn bonsai_generate_image(
     }
 
     // Validate project_id to prevent path traversal
+    if project_id.is_empty() {
+        return Err(bonsai_error("Project ID cannot be empty"));
+    }
     if project_id.contains("..") || project_id.starts_with('/') || project_id.starts_with('\\') {
         return Err(bonsai_error("Invalid project ID"));
     }
@@ -112,6 +127,23 @@ pub async fn bonsai_generate_image(
         .await
         .map_err(|e| bonsai_error(format!("Failed to write image: {}", e)))?;
 
+    // Write sidecar metadata JSON alongside the image
+    let variant = state.bonsai_config.lock().unwrap().variant.clone();
+    let meta = BonsaiAssetMeta {
+        prompt: prompt.clone(),
+        width: image_width,
+        height: image_height,
+        steps: image_steps,
+        seed: seed_value,
+        variant,
+    };
+    let meta_path = file_path.with_extension("json");
+    let meta_bytes = serde_json::to_vec_pretty(&meta)
+        .map_err(|e| bonsai_error(format!("Failed to serialize metadata: {}", e)))?;
+    tokio::fs::write(&meta_path, meta_bytes)
+        .await
+        .map_err(|e| bonsai_error(format!("Failed to write metadata: {}", e)))?;
+
     Ok(BonsaiGenerateResult {
         file_path: file_path.to_string_lossy().to_string(),
         file_name,
@@ -127,6 +159,9 @@ pub async fn bonsai_list_assets(
     project_id: String,
 ) -> Result<Vec<AssetInfo>, AppError> {
     // Validate project_id to prevent path traversal
+    if project_id.is_empty() {
+        return Err(bonsai_error("Project ID cannot be empty"));
+    }
     if project_id.contains("..") || project_id.starts_with('/') || project_id.starts_with('\\') {
         return Err(bonsai_error("Invalid project ID"));
     }
@@ -154,18 +189,34 @@ pub async fn bonsai_list_assets(
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-        let file_path = path.to_string_lossy().to_string();
+        // Only list PNG files — sidecar JSONs are metadata, not assets
+        if !file_name.ends_with(".png") {
+            continue;
+        }
+        let file_path_str = path.to_string_lossy().to_string();
         let created_at = metadata.modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
+        // Read sidecar metadata if present
+        let prompt = {
+            let meta_path = path.with_extension("json");
+            match tokio::fs::read_to_string(&meta_path).await {
+                Ok(json_str) => serde_json::from_str::<BonsaiAssetMeta>(&json_str)
+                    .ok()
+                    .map(|m| m.prompt),
+                Err(_) => None,
+            }
+        };
+
         assets.push(AssetInfo {
             file_name,
-            file_path,
+            file_path: file_path_str,
             file_size: metadata.len(),
             created_at,
+            prompt,
         });
     }
 
@@ -180,6 +231,9 @@ pub async fn bonsai_delete_asset(
     file_name: String,
 ) -> Result<(), AppError> {
     // Validate inputs to prevent path traversal
+    if project_id.is_empty() {
+        return Err(bonsai_error("Project ID cannot be empty"));
+    }
     if project_id.contains("..") || project_id.starts_with('/') || project_id.starts_with('\\') {
         return Err(bonsai_error("Invalid project ID"));
     }
@@ -195,7 +249,16 @@ pub async fn bonsai_delete_asset(
 
     tokio::fs::remove_file(&file_path)
         .await
-        .map_err(|e| bonsai_error(format!("Failed to delete asset: {}", e)))
+        .map_err(|e| bonsai_error(format!("Failed to delete asset: {}", e)))?;
+
+    // Also delete the sidecar metadata JSON if it exists
+    let meta_path = file_path.with_extension("json");
+    if meta_path.exists() {
+        if let Err(e) = tokio::fs::remove_file(&meta_path).await {
+            eprintln!("Warning: failed to delete sidecar metadata {}: {}", meta_path.display(), e);
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

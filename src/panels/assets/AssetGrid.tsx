@@ -7,15 +7,18 @@ import { cn } from "@/lib/utils";
 import { revealInExplorer } from "@/lib/ipc";
 import type { AssetInfo } from "@/lib/bonsai";
 
+export type AssetViewMode = "list" | "grid";
+
 interface AssetGridProps {
   assets: AssetInfo[];
   selectedIndex: number | undefined;
   onSelect: (index: number) => void;
   onDelete: (fileName: string) => void;
   assetUrl: (filePath: string) => string;
+  viewMode: AssetViewMode;
 }
 
-export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl }: AssetGridProps) {
+export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl, viewMode }: AssetGridProps) {
   if (assets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
@@ -25,10 +28,28 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl 
     );
   }
 
+  if (viewMode === "grid") {
+    return (
+      <div className="grid grid-cols-2 gap-2 p-3">
+        {assets.map((asset, index) => (
+          <AssetCardGrid
+            key={asset.file_name}
+            asset={asset}
+            isSelected={selectedIndex === index}
+            onSelect={() => onSelect(index)}
+            onDelete={() => onDelete(asset.file_name)}
+            onReveal={() => revealInExplorer(asset.file_path)}
+            assetUrl={assetUrl}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-2 p-3">
+    <div className="flex flex-col">
       {assets.map((asset, index) => (
-        <AssetCard
+        <AssetCardList
           key={asset.file_name}
           asset={asset}
           isSelected={selectedIndex === index}
@@ -42,27 +63,91 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl 
   );
 }
 
-function AssetCard({
-  asset,
-  isSelected,
-  onSelect,
-  onDelete,
-  onReveal,
-  assetUrl,
-}: {
+interface AssetCardBaseProps {
   asset: AssetInfo;
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onReveal: () => void;
   assetUrl: (filePath: string) => string;
-}) {
+}
+
+/* ── List view: dense row with inline thumbnail ── */
+
+function AssetCardList({
+  asset,
+  isSelected,
+  onSelect,
+  onDelete,
+  onReveal,
+  assetUrl,
+}: AssetCardBaseProps) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "asset-row w-full flex items-start gap-2 px-3 py-1.5 border-b border-border text-left hover:bg-muted/50 transition-colors",
+            isSelected && "bg-muted/50 border-l-2 border-l-primary",
+          )}
+          onClick={onSelect}
+        >
+          <img
+            src={assetUrl(asset.file_path)}
+            alt={asset.file_name}
+            className="w-10 h-10 rounded-sm object-cover shrink-0 bg-muted/30 border border-border"
+          />
+          <div className="flex-1 min-w-0 py-0.5">
+            <div className="text-xs leading-tight" title={asset.prompt ?? asset.file_name}>
+              {asset.prompt ?? asset.file_name}
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground leading-tight mt-0.5">
+              <span>{asset.file_name}</span>
+              <span className="text-border">|</span>
+              <span>{(asset.file_size / 1024).toFixed(0)}KB</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="p-1 rounded text-muted-foreground opacity-0 hover:text-destructive shrink-0 [&:hover_->_svg]:text-destructive"
+            onClick={(event) => { event.stopPropagation(); onDelete(); }}
+          >
+            <Trash2 size={12} />
+          </button>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem onClick={onReveal}>
+          <FolderOpen size={12} className="mr-2" />
+          Show in File Explorer
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+          <Trash2 size={12} className="mr-2" />
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/* ── Grid view: thumbnail card with full metadata below ── */
+
+function AssetCardGrid({
+  asset,
+  isSelected,
+  onSelect,
+  onDelete,
+  onReveal,
+  assetUrl,
+}: AssetCardBaseProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
           className={cn(
-            "relative rounded-md overflow-hidden border cursor-pointer group transition-colors",
+            "relative rounded-sm overflow-hidden border cursor-pointer group transition-colors",
             isSelected ? "border-primary" : "border-border hover:border-primary/50",
           )}
           onClick={onSelect}
@@ -72,20 +157,24 @@ function AssetCard({
             alt={asset.file_name}
             className="w-full aspect-square object-cover"
           />
-          {/* Top-right delete button on hover */}
+          {/* Hover delete */}
           <button
             type="button"
-            className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/70 hover:text-white hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-all"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
+            className="absolute top-1 right-1 p-1 rounded bg-background/80 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(event) => { event.stopPropagation(); onDelete(); }}
           >
             <Trash2 size={12} />
           </button>
-          {/* Filename label at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-            <span className="text-[10px] text-white truncate block">{asset.file_name}</span>
+          {/* Metadata block below image — no truncation */}
+          <div className="p-2 border-t border-border bg-card">
+            <div className="text-xs leading-snug">
+              {asset.prompt ?? asset.file_name}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-mono text-muted-foreground mt-1">
+              <span>{asset.file_name}</span>
+              <span className="text-border">|</span>
+              <span>{(asset.file_size / 1024).toFixed(0)}KB</span>
+            </div>
           </div>
         </div>
       </ContextMenuTrigger>

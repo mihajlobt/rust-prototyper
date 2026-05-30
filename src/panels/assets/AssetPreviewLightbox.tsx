@@ -10,6 +10,7 @@ interface AssetPreviewLightboxProps {
   setPreviewIndex: Dispatch<SetStateAction<number | undefined>>;
   assets: AssetInfo[];
   assetUrl: (filePath: string) => string;
+  onDelete?: (fileName: string) => void;
 }
 
 function LightboxOverlay({
@@ -17,8 +18,10 @@ function LightboxOverlay({
   setPreviewIndex,
   assets,
   assetUrl,
+  onDelete,
 }: AssetPreviewLightboxProps) {
   const asset = previewIndex !== undefined ? assets[previewIndex] : undefined;
+  const currentIndex = previewIndex ?? 0;
   const canPrev = previewIndex !== undefined && previewIndex > 0;
   const canNext = previewIndex !== undefined && previewIndex < assets.length - 1;
 
@@ -66,41 +69,42 @@ function LightboxOverlay({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.85)" }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/95"
       onClick={handleClose}
     >
-      {/* Top-right actions */}
-      <div className="absolute top-3 right-3 flex items-center gap-1">
+      {/* Top bar — close + actions */}
+      <div className="absolute top-0 left-0 right-0 h-10 flex items-center gap-1 px-3 border-b border-border bg-background">
+        <span className="text-xs font-mono text-muted-foreground">{currentIndex + 1}/{assets.length}</span>
+        <div className="flex-1" />
         <button
           type="button"
-          className="p-2 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           title="Show in File Explorer"
           onClick={(event) => {
             event.stopPropagation();
             revealInExplorer(asset.file_path);
           }}
         >
-          <FolderOpen size={18} />
+          <FolderOpen size={14} />
         </button>
         <button
           type="button"
-          className="p-2 rounded text-white/80 hover:text-red-400 hover:bg-white/10 transition-colors"
+          className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
           title="Delete"
           onClick={(event) => {
             event.stopPropagation();
+            if (onDelete) onDelete(asset.file_name);
             handleClose();
-            // Deletion is handled by parent after closing
           }}
         >
-          <Trash2 size={18} />
+          <Trash2 size={14} />
         </button>
         <button
           type="button"
-          className="p-2 rounded text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           onClick={handleClose}
         >
-          <X size={20} />
+          <X size={14} />
         </button>
       </div>
 
@@ -108,18 +112,18 @@ function LightboxOverlay({
       {assets.length > 1 && (
         <button
           type="button"
-          className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white disabled:text-white/30 transition-colors"
+          className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground disabled:text-muted-foreground/30 transition-colors"
           disabled={!canPrev}
           onClick={(event) => {
             event.stopPropagation();
             handlePrev();
           }}
         >
-          <ChevronLeft size={28} />
+          <ChevronLeft size={20} />
         </button>
       )}
 
-      {/* Image */}
+      {/* Image + metadata */}
       <div
         className="flex flex-col items-center max-h-full px-14 py-10"
         onClick={(event) => event.stopPropagation()}
@@ -127,13 +131,20 @@ function LightboxOverlay({
         <img
           src={assetUrl(asset.file_path)}
           alt={asset.file_name}
-          className="max-w-full max-h-[calc(100vh-8rem)] object-contain select-none"
+          className="max-w-full max-h-[calc(100vh-10rem)] object-contain select-none border border-border"
           draggable={false}
         />
-        <div className="mt-2 text-xs text-neutral-400 flex items-center gap-3">
-          <span className="truncate max-w-[200px]">{asset.file_name}</span>
-          <span>{(asset.file_size / 1024).toFixed(1)} KB</span>
-          <span>{new Date(asset.created_at * 1000).toLocaleString()}</span>
+
+        {/* Metadata strip — monospace, code-native */}
+        <div className="mt-3 flex flex-col items-center gap-1.5 max-w-[600px]">
+          {asset.prompt && (
+            <span className="text-sm text-foreground text-center leading-snug">{asset.prompt}</span>
+          )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 justify-center font-mono text-[10px] text-muted-foreground">
+            <span className="truncate max-w-[200px]">{asset.file_name}</span>
+            <span>{(asset.file_size / 1024).toFixed(1)}KB</span>
+            <span>{new Date(asset.created_at * 1000).toLocaleString()}</span>
+          </div>
         </div>
       </div>
 
@@ -141,14 +152,14 @@ function LightboxOverlay({
       {assets.length > 1 && (
         <button
           type="button"
-          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white disabled:text-white/30 transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground disabled:text-muted-foreground/30 transition-colors"
           disabled={!canNext}
           onClick={(event) => {
             event.stopPropagation();
             handleNext();
           }}
         >
-          <ChevronRight size={28} />
+          <ChevronRight size={20} />
         </button>
       )}
     </div>,

@@ -4,9 +4,7 @@ export interface BonsaiServerConfig {
   install_path: string;
   port: number;
   variant: string;
-  auto_start: boolean;
   auto_stop_timeout_secs: number;
-  max_memory_gb: number;
 }
 
 export interface BonsaiServerInfo {
@@ -40,6 +38,7 @@ export interface AssetInfo {
   file_path: string;
   file_size: number;
   created_at: number;
+  prompt?: string;
 }
 
 export async function bonsaiStartServer(): Promise<BonsaiServerInfo> {
