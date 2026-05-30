@@ -1,9 +1,12 @@
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use crate::{app_data_dir, resolve_path, AppError, AppState};
+use crate::{AppError, AppState};
+
+// Re-export types from bonsai_assets so consumers can import from one path
+pub use super::bonsai_assets::{BonsaiGenerateResult, AssetInfo};
 
 const DEFAULT_PORT: u16 = 8000;
 const MAX_PORT_OFFSET: u16 = 5;
@@ -62,26 +65,7 @@ pub struct BonsaiServerStatus {
     pub default_family: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct BonsaiGenerateResult {
-    /// Relative path from app data dir (e.g. "projects/default/assets/bonsai_xxx.png")
-    pub relative_path: String,
-    pub file_name: String,
-    pub width: u32,
-    pub height: u32,
-    pub seed: u64,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AssetInfo {
-    pub file_name: String,
-    /// Relative path from app data dir
-    pub relative_path: String,
-    pub file_size: u64,
-    pub created_at: u64,
-}
-
-fn bonsai_error(msg: impl Into<String>) -> AppError {
+pub(crate) fn bonsai_error(msg: impl Into<String>) -> AppError {
     AppError::Bonsai(msg.into())
 }
 
@@ -121,6 +105,21 @@ fn find_available_port(base: u16, max_offset: u16) -> Option<u16> {
         if let Ok(listener) = std::net::TcpListener::bind(format!("127.0.0.1:{}", port)) {
             drop(listener);
             return Some(port);
+        }
+    }
+    None
+}
+
+/// Find the transformer-gemlite-* subdirectory within a model directory.
+/// Returns the first match (e.g. transformer-gemlite-int2 for ternary, transformer-gemlite-int1 for binary).
+fn find_transformer_dir(model_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    if let Ok(entries) = std::fs::read_dir(model_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.starts_with("transformer-gemlite-") && entry.path().is_dir() {
+                return Some(entry.path());
+            }
         }
     }
     None
@@ -203,46 +202,61 @@ pub async fn bonsai_start_server(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<BonsaiServerInfo, AppError> {
-    // Acquire config lock first (lock ordering: config before process)
+    // Clone config from std Mutex, then release before acquiring any tokio Mutex
     let config = state.bonsai_config.lock().unwrap().clone();
-    // Config lock is released here (no explicit drop needed — lock guard dropped at end of scope)
-    // but we already cloned config above so we can use it after the lock is gone.
 
-    // Hold process lock throughout to prevent concurrent start races
-    let mut bonsai_guard = state.bonsai_process.lock().await;
-
-    // Check if server is already running
-    if let Some(ref server) = *bonsai_guard {
-        let current_port = server.port;
-        if let Ok(status) = check_server_health(&state.http_client, current_port).await {
-            if status.healthy {
-                return Ok(BonsaiServerInfo {
-                    port: current_port,
-                    pid: server.pid,
-                    healthy: true,
-                    kind: status.kind,
-                    supported_families: status.supported_families,
-                    default_family: status.default_family,
-                });
-            }
-        }
-        // Unhealthy — clean up existing process
+    // Phase 1: Kill any stale Bonsai process group (without holding the process lock).
+    // Kill all ports in range first, then check our tracked process.
+    for offset in 0..=MAX_PORT_OFFSET {
+        kill_port_sync(config.port + offset);
+    }
+    {
+        let mut bonsai_guard = state.bonsai_process.lock().await;
         if let Some(mut server) = bonsai_guard.take() {
             if let Some(timer) = server.stop_timer.take() {
                 timer.abort();
             }
-            let _ = server.child.kill().await;
-            kill_port_sync(server.port);
+            let pid = server.pid;
+            let port = server.port;
+            // Drop lock before async kill — never hold locks across awaits
+            drop(bonsai_guard);
+            kill_process_group(pid).await;
+            kill_port_sync(port);
         }
-        state.bonsai_port.store(0, Ordering::Relaxed);
     }
+    state.bonsai_port.store(0, Ordering::Relaxed);
+
+    // Phase 2: Check if a server is already running (brief lock, no await between lock acquire and drop)
+    {
+        let bonsai_guard = state.bonsai_process.lock().await;
+        if let Some(ref server) = *bonsai_guard {
+            // Release lock before doing async health check — never hold locks across awaits
+            let current_port = server.port;
+            let current_pid = server.pid;
+            drop(bonsai_guard);
+            if let Ok(status) = check_server_health(&state.http_client, current_port).await {
+                if status.healthy {
+                    return Ok(BonsaiServerInfo {
+                        port: current_port,
+                        pid: current_pid,
+                        healthy: true,
+                        kind: status.kind,
+                        supported_families: status.supported_families,
+                        default_family: status.default_family,
+                    });
+                }
+            }
+        }
+    }
+
+    // Phase 3: Spawn and health-check without holding the lock.
+    // Only brief lock acquisitions when reading/writing BonsaiServer state.
+    // Avoids holding tokio::sync::Mutex across .await (blocks other commands).
+    // See: https://tokio.rs/tokio/topics/tracing — "Don't hold locks across awaits"
 
     // Find available port
     let port = find_available_port(config.port, MAX_PORT_OFFSET)
         .ok_or_else(|| bonsai_error("No available port in range 8000-8005"))?;
-
-    // Clean up any stale process on that port
-    kill_port_sync(port);
 
     // Validate install path (prevents path traversal and gives actionable error)
     let install_path = if config.install_path.is_empty() {
@@ -251,41 +265,49 @@ pub async fn bonsai_start_server(
         validate_install_path(&config.install_path)?
     };
 
-    // Try serve.sh first, fall back to python -m
-    let serve_script = install_path.join("scripts").join("serve.sh");
-    let (use_python, cmd_str) = if serve_script.exists() {
-        (false, serve_script.to_string_lossy().to_string())
-    } else {
-        // Fall back to running python directly
-        (true, "python3".to_string())
-    };
+    // Replicate env vars from serve.sh (lines 94-180) — only need backend API, not the Next.js frontend
+    let variant = &config.variant;
+    let model_dir = install_path.join(format!("models/bonsai-image-4B-{}-gemlite", variant));
 
-    let mut child = if use_python {
-        tokio::process::Command::new("python3")
-            .args(["-m", "backend.local_backend"])
-            .env("BONSAI_VARIANT", &config.variant)
-            .env("BACKEND_PORT", port.to_string())
-            .current_dir(&install_path)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| bonsai_error(format!(
-                "Failed to start Bonsai server: {}. Make sure python3 is installed and Bonsai Image Demo is set up.",
-                e
-            )))?
-    } else {
-        tokio::process::Command::new("sh")
-            .arg(&cmd_str)
-            .env("BONSAI_VARIANT", &config.variant)
-            .env("BACKEND_PORT", port.to_string())
-            .current_dir(&install_path)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| bonsai_error(format!("Failed to start Bonsai server: {}", e)))?
-    };
+    let transformer_path = find_transformer_dir(&model_dir)
+        .ok_or_else(|| bonsai_error(format!(
+            "No transformer-gemlite-* dir under {}. Run: ./scripts/download_model.sh {}",
+            model_dir.display(), variant
+        )))?;
+
+    let text_encoder_path = model_dir.join("text_encoder-hqq-4bit");
+    let vae_path = model_dir.join("vae");
+    let tokenizer_path = model_dir.join("text_encoder-hqq-4bit/tokenizer");
+    let _ = app.emit("bonsai:log", serde_json::json!({
+        "line": format!("Starting Bonsai on port {} ({}); model dir: {}", port, variant, model_dir.display()),
+        "source": "system"
+    }));
+
+    let venv_uvicorn = install_path.join(".venv/bin/uvicorn");
+    let backend_module = "scripts.local_backend:app";
+    let mut cmd = tokio::process::Command::new(&venv_uvicorn);
+    cmd.arg(backend_module)
+        .arg("--port").arg(port.to_string())
+        .env("BONSAI_VARIANT", variant)
+        .env("BACKEND_PORT", port.to_string())
+        .env("MFLUX_STUDIO_GPU_DEFAULT_BACKEND", format!("bonsai-{}-gemlite", variant))
+        .env("MFLUX_STUDIO_GPU_TERNARY_TRANSFORMER_PATH", transformer_path.to_string_lossy().to_string())
+        // GpuPipeline requires both; point binary to ternary for single-variant use
+        .env("MFLUX_STUDIO_GPU_BINARY_TRANSFORMER_PATH", transformer_path.to_string_lossy().to_string())
+        .env("MFLUX_STUDIO_GPU_TEXT_ENCODER_PATH", text_encoder_path.to_string_lossy().to_string())
+        .env("MFLUX_STUDIO_GPU_VAE_PATH", vae_path.to_string_lossy().to_string())
+        .env("MFLUX_STUDIO_GPU_TOKENIZER_PATH", tokenizer_path.to_string_lossy().to_string())
+        .current_dir(&install_path)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+
+    // New process group so kill -{pgid} reaches the whole tree including CUDA workers
+    #[cfg(unix)]
+    cmd.process_group(0);
+
+    let mut child = cmd.spawn()
+        .map_err(|e| bonsai_error(format!("Failed to start Bonsai server: {}", e)))?;
 
     let pid = child.id().ok_or_else(|| bonsai_error("Failed to get process ID — process may have exited immediately"))?;
 
@@ -316,13 +338,10 @@ pub async fn bonsai_start_server(
             }
         });
     }
-
-    // Emit initial startup message
     let _ = app.emit("bonsai:log", serde_json::json!({
-        "line": format!("Starting Bonsai server on port {}...", port),
+        "line": format!("Spawning process (install: {})...", install_path.display()),
         "source": "system"
     }));
-
     let start_time = Instant::now();
     let timeout = Duration::from_secs(HEALTH_CHECK_TIMEOUT_SECS);
     let mut delay = Duration::from_secs(1);
@@ -349,6 +368,7 @@ pub async fn bonsai_start_server(
 
         if let Ok(status) = check_server_health(&state.http_client, port).await {
             if status.healthy {
+                let kind_label = status.kind.clone();
                 let info = BonsaiServerInfo {
                     port,
                     pid,
@@ -357,6 +377,8 @@ pub async fn bonsai_start_server(
                     supported_families: status.supported_families,
                     default_family: status.default_family,
                 };
+                // Acquire lock only briefly to write the server state — no await inside
+                let mut bonsai_guard = state.bonsai_process.lock().await;
                 *bonsai_guard = Some(BonsaiServer {
                     child,
                     pid,
@@ -364,9 +386,10 @@ pub async fn bonsai_start_server(
                     started_at: Instant::now(),
                     stop_timer: None,
                 });
+                drop(bonsai_guard);
                 state.bonsai_port.store(port, Ordering::Relaxed);
                 let _ = app.emit("bonsai:log", serde_json::json!({
-                    "line": format!("✓ Bonsai server healthy on port {} ({} backend)", port, status.kind),
+                    "line": format!("✓ Bonsai server healthy on port {} ({} backend)", port, kind_label),
                     "source": "system"
                 }));
                 return Ok(info);
@@ -387,8 +410,14 @@ pub async fn bonsai_stop_server(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let mut bonsai_guard = state.bonsai_process.lock().await;
-    if let Some(mut server) = bonsai_guard.take() {
+    // Take the server out and release lock immediately — never hold lock across awaits
+    let server_opt = {
+        let mut bonsai_guard = state.bonsai_process.lock().await;
+        bonsai_guard.take()
+    };
+    state.bonsai_port.store(0, Ordering::Relaxed);
+
+    if let Some(mut server) = server_opt {
         let _ = app.emit("bonsai:log", serde_json::json!({
             "line": format!("Stopping Bonsai server (PID {} on port {})...", server.pid, server.port),
             "source": "system"
@@ -397,6 +426,11 @@ pub async fn bonsai_stop_server(
             timer.abort();
         }
 
+        // Kill the whole process group (uvicorn + CUDA workers) for proper GPU cleanup.
+        // process_group(0) was set at spawn, so PGID == PID.
+        kill_process_group(server.pid).await;
+
+        // Also try async kill on the tracked child as a fallback
         let _ = server.child.kill().await;
 
         let deadline = Instant::now() + Duration::from_secs(GRACEFUL_SHUTDOWN_TIMEOUT_SECS);
@@ -414,10 +448,8 @@ pub async fn bonsai_stop_server(
             }
         }
 
-        // Use existing kill_port from process.rs (cross-platform, tested)
         kill_port_sync(server.port);
     }
-    state.bonsai_port.store(0, Ordering::Relaxed);
     Ok(())
 }
 
@@ -435,215 +467,6 @@ pub async fn bonsai_server_status(state: State<'_, AppState>) -> Result<BonsaiSe
     check_server_health(&state.http_client, port).await
 }
 
-/// Generate an image. The 300s timeout is intentional — image generation with
-/// model loading can take several minutes. The async reqwest call won't block
-/// other Tauri commands since Tokio handles concurrent tasks.
-#[tauri::command]
-pub async fn bonsai_generate_image(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    project_id: String,
-    prompt: String,
-    width: Option<u32>,
-    height: Option<u32>,
-    steps: Option<u32>,
-    seed: Option<u64>,
-    backend: Option<String>,
-) -> Result<BonsaiGenerateResult, AppError> {
-    let port = state.bonsai_port.load(Ordering::Relaxed);
-    if port == 0 {
-        return Err(bonsai_error("Bonsai server is not running"));
-    }
-
-    // Validate project_id to prevent path traversal
-    if project_id.contains("..") || project_id.starts_with('/') || project_id.starts_with('\\') {
-        return Err(bonsai_error("Invalid project ID"));
-    }
-
-    let image_width = width.unwrap_or(512);
-    let image_height = height.unwrap_or(512);
-    let image_steps = steps.unwrap_or(4);
-    let seed_value = seed.unwrap_or_else(|| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64
-    });
-
-    let mut body = serde_json::json!({
-        "prompt": prompt,
-        "width": image_width,
-        "height": image_height,
-        "steps": image_steps,
-        "seed": seed_value,
-    });
-    if let Some(ref backend_value) = backend {
-        body["backend"] = serde_json::json!(backend_value);
-    }
-
-    // Use resolve_path for secure path construction
-    let assets_dir = resolve_path(&app, &format!("projects/{}/assets", project_id))?;
-    tokio::fs::create_dir_all(&assets_dir)
-        .await
-        .map_err(|e| bonsai_error(format!("Failed to create assets dir: {}", e)))?;
-
-    let url = format!("http://127.0.0.1:{}/generate", port);
-    let response = state
-        .http_client
-        .post(&url)
-        .json(&body)
-        .timeout(Duration::from_secs(300))
-        .send()
-        .await
-        .map_err(|e| bonsai_error(format!("Generation request failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        let status_code = response.status();
-        let error_body = response.text().await.unwrap_or_default();
-        return Err(bonsai_error(format!("Generation failed ({}): {}", status_code, error_body)));
-    }
-
-    let png_bytes = response
-        .bytes()
-        .await
-        .map_err(|e| bonsai_error(format!("Failed to read image data: {}", e)))?;
-
-    if png_bytes.len() < 1024 {
-        return Err(bonsai_error("Generated image is too small, possibly an error response"));
-    }
-
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let file_name = format!("bonsai_{}_{}.png", timestamp, seed_value);
-    let file_path = assets_dir.join(&file_name);
-
-    tokio::fs::write(&file_path, &png_bytes)
-        .await
-        .map_err(|e| bonsai_error(format!("Failed to write image: {}", e)))?;
-
-    // Return relative path instead of absolute
-    let app_data = app_data_dir(&app)?;
-    let relative_path = file_path
-        .strip_prefix(&app_data)
-        .unwrap_or(&file_path)
-        .to_string_lossy()
-        .to_string();
-
-    Ok(BonsaiGenerateResult {
-        relative_path,
-        file_name,
-        width: image_width,
-        height: image_height,
-        seed: seed_value,
-    })
-}
-
-#[tauri::command]
-pub async fn bonsai_list_assets(
-    app: AppHandle,
-    project_id: String,
-) -> Result<Vec<AssetInfo>, AppError> {
-    // Validate project_id to prevent path traversal
-    if project_id.contains("..") || project_id.starts_with('/') || project_id.starts_with('\\') {
-        return Err(bonsai_error("Invalid project ID"));
-    }
-
-    let app_data = app_data_dir(&app)?;
-    let assets_dir = resolve_path(&app, &format!("projects/{}/assets", project_id))?;
-
-    if !assets_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut entries = tokio::fs::read_dir(&assets_dir)
-        .await
-        .map_err(|e| bonsai_error(format!("Failed to read assets dir: {}", e)))?;
-
-    let mut assets = Vec::new();
-    while let Some(entry) = entries.next_entry().await.map_err(|e| bonsai_error(format!("Failed to read entry: {}", e)))? {
-        let path = entry.path();
-        let metadata = entry.metadata()
-            .await
-            .map_err(|e| bonsai_error(format!("Failed to read metadata: {}", e)))?;
-        if !metadata.is_file() {
-            continue;
-        }
-        let file_name = path.file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        let relative_path = path
-            .strip_prefix(&app_data)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .to_string();
-        let created_at = metadata.modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-
-        assets.push(AssetInfo {
-            file_name,
-            relative_path,
-            file_size: metadata.len(),
-            created_at,
-        });
-    }
-
-    assets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    Ok(assets)
-}
-
-#[tauri::command]
-pub async fn bonsai_delete_asset(
-    app: AppHandle,
-    project_id: String,
-    file_name: String,
-) -> Result<(), AppError> {
-    // Validate inputs to prevent path traversal
-    if project_id.contains("..") || project_id.starts_with('/') || project_id.starts_with('\\') {
-        return Err(bonsai_error("Invalid project ID"));
-    }
-    if file_name.contains("..") || file_name.contains('/') || file_name.contains('\\') {
-        return Err(bonsai_error("Invalid file name"));
-    }
-
-    let file_path = resolve_path(&app, &format!("projects/{}/assets/{}", project_id, file_name))?;
-
-    if !file_path.exists() {
-        return Err(bonsai_error(format!("Asset not found: {}", file_name)));
-    }
-
-    tokio::fs::remove_file(&file_path)
-        .await
-        .map_err(|e| bonsai_error(format!("Failed to delete asset: {}", e)))
-}
-
-#[tauri::command]
-pub async fn bonsai_get_server_config(state: State<'_, AppState>) -> Result<BonsaiServerConfig, AppError> {
-    let config = state.bonsai_config.lock().unwrap().clone();
-    Ok(config)
-}
-
-#[tauri::command]
-pub async fn bonsai_save_server_config(
-    state: State<'_, AppState>,
-    config: BonsaiServerConfig,
-) -> Result<(), AppError> {
-    // Validate install_path prevents path traversal if non-empty
-    if !config.install_path.is_empty() {
-        if config.install_path.contains("..") {
-            return Err(bonsai_error("Install path must not contain '..'"));
-        }
-    }
-    let mut current = state.bonsai_config.lock().unwrap();
-    *current = config;
-    Ok(())
-}
-
 /// Schedule an automatic stop. The spawned task sleeps for the configured timeout,
 /// then emits a `bonsai:stop-timeout` event that the frontend listens for to call
 /// `bonsai_stop_server`. It also directly stops the server after emitting the event
@@ -653,8 +476,13 @@ pub async fn bonsai_schedule_stop(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let config = state.bonsai_config.lock().unwrap().clone();
-    let timeout_secs = config.auto_stop_timeout_secs;
+    // Acquire config lock, clone data, drop guard before acquiring process lock.
+    // Lock ordering: std Mutex (config) before tokio Mutex (process) — never hold both.
+    let timeout_secs = {
+        let config = state.bonsai_config.lock().unwrap().clone();
+        config.auto_stop_timeout_secs
+        // config guard dropped here — no longer holding std Mutex
+    };
     let mut bonsai_guard = state.bonsai_process.lock().await;
 
     if let Some(ref mut server) = *bonsai_guard {
@@ -684,6 +512,44 @@ pub async fn bonsai_cancel_stop(state: State<'_, AppState>) -> Result<(), AppErr
         }
     }
     Ok(())
+}
+
+/// Kill a process group by sending SIGTERM, waiting briefly, then SIGKILL.
+/// The uvicorn process is started in its own process group (PGID = PID),
+/// so killing the group also kills Python/CUDA worker children.
+/// Async — uses tokio::time::sleep, never blocks the runtime.
+#[cfg(unix)]
+async fn kill_process_group(pid: u32) {
+    // Send SIGTERM to the process group (negative PID = process group)
+    let pgid = format!("-{}", pid);
+    let _ = tokio::process::Command::new("kill")
+        .arg(&pgid)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
+
+    // Give group 2 seconds to clean up GPU memory gracefully
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // If still alive, SIGKILL the whole group
+    let _ = tokio::process::Command::new("kill")
+        .args(["-9", &pgid])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
+}
+
+#[cfg(windows)]
+async fn kill_process_group(pid: u32) {
+    // On Windows, taskkill /T kills the process tree
+    let _ = tokio::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .await;
 }
 
 /// Cross-platform port killing — reuses the same pattern as process.rs kill_port_impl.

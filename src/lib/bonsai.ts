@@ -26,8 +26,8 @@ export interface BonsaiServerStatus {
 }
 
 export interface BonsaiGenerateResult {
-  /** Relative path from app data dir (e.g. "projects/default/assets/bonsai_xxx.png") */
-  relative_path: string;
+  /** Absolute file path for use with convertFileSrc */
+  file_path: string;
   file_name: string;
   width: number;
   height: number;
@@ -36,8 +36,8 @@ export interface BonsaiGenerateResult {
 
 export interface AssetInfo {
   file_name: string;
-  /** Relative path from app data dir */
-  relative_path: string;
+  /** Absolute file path for use with convertFileSrc */
+  file_path: string;
   file_size: number;
   created_at: number;
 }

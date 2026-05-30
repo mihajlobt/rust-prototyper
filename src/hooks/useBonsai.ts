@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useBonsaiStore } from "@/stores/bonsaiStore";
 import { useAppStore } from "@/stores/appStore";
@@ -10,17 +10,25 @@ export function useBonsai() {
   useEffect(() => {
     store.loadConfig();
     store.refreshStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable
-  }, []);
+    store.listAssets(project);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable, project is the only reactive dep
+  }, [project]);
 
-  // Listen for auto-stop timer event from Rust backend
+  // Listen for auto-stop timer event from Rust backend.
+  // Guard with ref to prevent double-listening in React 19 Strict Mode (dev double-mount).
+  const stopTimeoutRegisteredRef = useRef(false);
   useEffect(() => {
+    if (stopTimeoutRegisteredRef.current) return;
+    stopTimeoutRegisteredRef.current = true;
     let unlisten: UnlistenFn | null = null;
     listen("bonsai:stop-timeout", () => {
       store.stopServer();
       store.setStopScheduled(false);
     }).then((fn) => { unlisten = fn; });
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+      stopTimeoutRegisteredRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable
   }, []);
 

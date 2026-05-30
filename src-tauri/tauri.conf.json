@@ -19,6 +19,10 @@
       }
     ],
     "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**/*", "$APPCACHE/**/*", "$RESOURCE/**/*"]
+      },
       "csp": "default-src 'self'; img-src 'self' data: asset: https://asset.localhost; connect-src 'self' http://localhost:* https://api.openai.com https://api.anthropic.com; style-src 'self' 'unsafe-inline'"
     }
   },
