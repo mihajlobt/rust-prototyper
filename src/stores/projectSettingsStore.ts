@@ -70,6 +70,11 @@ export interface ProjectSettings {
   // Component preview
   shadcnMode: boolean;
   runnerPort: number;
+
+  // Assets panel
+  assetsViewMode: "list" | "grid";
+  assetsShowLog: boolean;
+  assetsSortOrder: "newest" | "oldest" | "largest" | "smallest" | "name";
 }
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
@@ -131,6 +136,10 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
 
   shadcnMode: true,
   runnerPort: 5174,
+
+  assetsViewMode: "list",
+  assetsShowLog: true,
+  assetsSortOrder: "newest",
 };
 
 // ─── Store handle cache — one open handle per project ─────────────────────────

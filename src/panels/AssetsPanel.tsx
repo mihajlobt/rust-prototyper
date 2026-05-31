@@ -1,14 +1,17 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal, Dice3, Square } from "lucide-react";
+import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal, Dice3, Square, ArrowDownUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
 import { useBonsai } from "@/hooks/useBonsai";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { toFileUrl } from "@/lib/ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { BonsaiConfigPopover } from "@/panels/assets/BonsaiConfigPopover";
-import { AssetGrid, type AssetViewMode } from "@/panels/assets/AssetGrid";
+import { AssetGrid } from "@/panels/assets/AssetGrid";
 import { AssetPreviewLightbox } from "@/panels/assets/AssetPreviewLightbox";
 
 interface BonsaiLogEvent {
@@ -32,13 +35,14 @@ const SIZE_PRESETS = [
 
 export function AssetsPanel() {
   const bonsai = useBonsai();
+  const ps = useProjectSettingsStore((s) => s.ps);
+  const setPs = useProjectSettingsStore((s) => s.setPs);
+  const { ref: allotmentRef, onDragEnd, defaultSizes } = useAllotmentLayout("assets", 2, [true, ps.assetsShowLog]);
   const [prompt, setPrompt] = useState("");
   const [selectedPreset, setSelectedPreset] = useState(0);
   const [steps, setSteps] = useState(4);
   const [seed, setSeed] = useState(0);
   const [previewIndex, setPreviewIndex] = useState<number | undefined>(undefined);
-  const [showLog, setShowLog] = useState(true);
-  const [viewMode, setViewMode] = useState<AssetViewMode>("list");
   const xtermRef = useRef<XTerminalHandle>(null);
 
   const preset = SIZE_PRESETS[selectedPreset];
@@ -83,20 +87,6 @@ export function AssetsPanel() {
     });
   }, [prompt, preset, steps, seed, bonsai]);
 
-  const handleDelete = useCallback(async (fileName: string) => {
-    await bonsai.deleteAsset(fileName);
-    if (previewIndex !== undefined) {
-      const deletedIndex = bonsai.assets.findIndex((a) => a.file_name === fileName);
-      if (deletedIndex === previewIndex) {
-        setPreviewIndex(undefined);
-      }
-    }
-  }, [bonsai, previewIndex]);
-
-  const handleSelectAsset = useCallback((index: number) => {
-    setPreviewIndex(index);
-  }, []);
-
   const assetUrl = (filePath: string) => {
     return toFileUrl(filePath);
   };
@@ -111,6 +101,32 @@ export function AssetsPanel() {
       return () => clearTimeout(timer);
     }
   }, [bonsai.lastResult?.file_name]);
+
+  const sortedAssets = useMemo(() => {
+    const assets = [...bonsai.assets];
+    switch (ps.assetsSortOrder) {
+      case "oldest": return assets.sort((a, b) => a.created_at - b.created_at);
+      case "largest": return assets.sort((a, b) => b.file_size - a.file_size);
+      case "smallest": return assets.sort((a, b) => a.file_size - b.file_size);
+      case "name": return assets.sort((a, b) => a.file_name.localeCompare(b.file_name));
+      case "newest":
+      default: return assets.sort((a, b) => b.created_at - a.created_at);
+    }
+  }, [bonsai.assets, ps.assetsSortOrder]);
+
+  const handleDelete = useCallback(async (fileName: string) => {
+    await bonsai.deleteAsset(fileName);
+    if (previewIndex !== undefined) {
+      const deletedIndex = sortedAssets.findIndex((a) => a.file_name === fileName);
+      if (deletedIndex === previewIndex) {
+        setPreviewIndex(undefined);
+      }
+    }
+  }, [bonsai, previewIndex, sortedAssets]);
+
+  const handleSelectAsset = useCallback((index: number) => {
+    setPreviewIndex(index);
+  }, []);
 
   return (
     <div className="h-full flex flex-col">
@@ -156,22 +172,7 @@ export function AssetsPanel() {
             <><Power size={14} className="mr-1" />Start</>
           )}
         </Button>
-        {bonsai.assets.length > 0 && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
-              title={viewMode === "list" ? "Gallery view" : "List view"}
-            >
-              {viewMode === "list" ? <LayoutGrid size={14} /> : <LayoutList size={14} />}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={bonsai.refreshAssets} title="Refresh assets">
-              <RefreshCw size={14} />
-            </Button>
-          </>
-        )}
-        <Button variant={showLog ? "secondary" : "ghost"} size="sm" onClick={() => setShowLog(!showLog)} title="Toggle server log">
+        <Button variant={ps.assetsShowLog ? "secondary" : "ghost"} size="sm" onClick={() => setPs({ assetsShowLog: !ps.assetsShowLog })} title="Toggle server log">
           <Terminal size={14} />
         </Button>
       </div>
@@ -189,7 +190,7 @@ export function AssetsPanel() {
 
       {/* Main content area with split: controls + log */}
       <div className="flex-1 overflow-hidden">
-        <Allotment defaultSizes={[60, 40]} minSize={120}>
+        <Allotment ref={allotmentRef} onDragEnd={onDragEnd} defaultSizes={defaultSizes} onVisibleChange={(_i, v) => setPs({ assetsShowLog: v })} minSize={120}>
           {/* Left pane: generation form + assets */}
           <Allotment.Pane>
             <div className="h-full flex flex-col overflow-hidden">
@@ -292,22 +293,51 @@ export function AssetsPanel() {
                     </span>
                   </div>
                 ) : (
-                  <AssetGrid
-                    assets={bonsai.assets}
-                    selectedIndex={previewIndex}
-                    onSelect={handleSelectAsset}
-                    onDelete={handleDelete}
-                    assetUrl={assetUrl}
-                    viewMode={viewMode}
-                    highlightFileName={highlightFileName}
-                  />
+                  <>
+                    <div className="sticky top-0 z-10 flex justify-end items-center gap-1 px-2 py-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => setPs({ assetsViewMode: ps.assetsViewMode === "list" ? "grid" : "list" })}
+                        title={ps.assetsViewMode === "list" ? "Gallery view" : "List view"}
+                      >
+                        {ps.assetsViewMode === "list" ? <LayoutGrid size={13} /> : <LayoutList size={13} />}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={bonsai.refreshAssets} title="Refresh assets">
+                        <RefreshCw size={13} />
+                      </Button>
+                      <Select value={ps.assetsSortOrder} onValueChange={(v) => setPs({ assetsSortOrder: v as typeof ps.assetsSortOrder })}>
+                        <SelectTrigger className="h-6 w-auto gap-1 border-none shadow-sm text-[10px] font-mono px-1.5 [&>svg]:hidden hover:bg-muted">
+                          <ArrowDownUp size={11} className="shrink-0" />
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="newest">Newest first</SelectItem>
+                          <SelectItem value="oldest">Oldest first</SelectItem>
+                          <SelectItem value="largest">Largest first</SelectItem>
+                          <SelectItem value="smallest">Smallest first</SelectItem>
+                          <SelectItem value="name">Name A–Z</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <AssetGrid
+                      assets={sortedAssets}
+                      selectedIndex={previewIndex}
+                      onSelect={handleSelectAsset}
+                      onDelete={handleDelete}
+                      assetUrl={assetUrl}
+                      viewMode={ps.assetsViewMode}
+                      highlightFileName={highlightFileName}
+                    />
+                  </>
                 )}
               </div>
             </div>
           </Allotment.Pane>
 
           {/* Right pane: Bonsai server log */}
-          <Allotment.Pane visible={showLog} preferredSize={40} minSize={120}>
+          <Allotment.Pane visible={ps.assetsShowLog} preferredSize={40} minSize={120}>
             <div className="h-full flex flex-col">
               <div className="panel-toolbar px-3 py-1.5 gap-2">
                 <Terminal size={12} className="text-muted-foreground" />
@@ -329,7 +359,7 @@ export function AssetsPanel() {
       <AssetPreviewLightbox
         previewIndex={previewIndex}
         setPreviewIndex={setPreviewIndex}
-        assets={bonsai.assets}
+        assets={sortedAssets}
         assetUrl={assetUrl}
         onDelete={handleDelete}
       />
