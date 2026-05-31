@@ -552,90 +552,95 @@ export function ScreensPanel() {
               iframe.contentWindow.postMessage({ type: "__set-hotspots", hotspots: payload }, "*");
             }}
           />
-          {/* Deselect hotspot on background click */}
-          {selectedHotspotId && !selectingElementForPort && (
-            <div className="absolute inset-0 z-10" onClick={() => setSelectedHotspotId(null)} />
-          )}
-          {hotspots.map((h) => {
-            const isSelected = selectedHotspotId === h.id;
-            const port = screenPorts.find((p) => p.id === h.portId);
-            const targetName = h.targetScreenId
-              ? (screenIds.find((id) => id === h.targetScreenId) ?? h.targetScreenId).replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-              : null;
-            const rect = computedHotspots[h.portId] ?? h.rect;
-            return (
-              <div
-                key={h.id}
-                data-portid={h.portId}
-                className="absolute z-20 group"
-                style={{
-                  left: rect.x,
-                  top: rect.y,
-                  width: rect.w,
-                  height: rect.h,
-                }}
-              >
-                {/* Hotspot highlight box */}
-                <div
-                  className="absolute inset-0 cursor-pointer rounded-sm transition-all"
-                  style={{
-                    border: `2px solid ${isSelected ? "oklch(0.85 0.2 195)" : "oklch(0.7 0.18 195)"}`,
-                    background: isSelected ? "oklch(0.7 0.18 195 / 0.3)" : "oklch(0.7 0.18 195 / 0.15)",
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedHotspotId(isSelected ? null : h.id);
-                  }}
-                />
-
-                {/* Popover menu — shown when selected */}
-                {isSelected && (
+          {/* Hotspot highlights — only visible when the Ports tab is active */}
+          {screensCodeTab === "ports" && (
+            <>
+              {/* Deselect hotspot on background click */}
+              {selectedHotspotId && !selectingElementForPort && (
+                <div className="absolute inset-0 z-10" onClick={() => setSelectedHotspotId(null)} />
+              )}
+              {hotspots.map((h) => {
+                const isSelected = selectedHotspotId === h.id;
+                const port = screenPorts.find((p) => p.id === h.portId);
+                const targetName = h.targetScreenId
+                  ? (screenIds.find((id) => id === h.targetScreenId) ?? h.targetScreenId).replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+                  : null;
+                const rect = computedHotspots[h.portId] ?? h.rect;
+                return (
                   <div
-                    className="absolute z-30 bg-card border border-border rounded-md shadow-lg p-2 flex flex-col gap-1.5 min-w-[140px] text-[10px]"
-                    style={{ left: rect.w + 6, top: 0 }}
-                    onClick={(e) => e.stopPropagation()}
+                    key={h.id}
+                    data-portid={h.portId}
+                    className="absolute z-20 group"
+                    style={{
+                      left: rect.x,
+                      top: rect.y,
+                      width: rect.w,
+                      height: rect.h,
+                    }}
                   >
-                    {/* Port name */}
-                    <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border pb-1">
-                      {port?.name ?? "Hotspot"}
-                    </div>
-
-                    {/* Target screen */}
-                    {targetName && (
-                      <button
-                        className="flex items-center gap-1 text-foreground/80 hover:text-foreground transition-colors"
-                        onClick={() => useProjectSettingsStore.getState().setPs({ activeScreen: h.targetScreenId })}
-                        title="Go to target screen"
-                      >
-                        <ArrowRight size={9} className="text-cyan-400 shrink-0" />
-                        <span className="truncate">{targetName}</span>
-                      </button>
-                    )}
-
-                    {/* Selector */}
-                    <div className="text-[8px] text-muted-foreground font-mono truncate" title={h.selector}>
-                      {h.selector.split(" > ").pop()}
-                    </div>
-
-                    {/* Delete */}
-                    <button
-                      className="flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors mt-0.5 border-t border-border pt-1"
-                      onClick={() => {
-                        removeHotspot(`projects/${settings.project}`, h.id).then(() => {
-                          setHotspots((prev) => prev.filter((hs) => hs.id !== h.id));
-                          setSelectedHotspotId(null);
-                          window.dispatchEvent(new Event("navigation-changed"));
-                        });
+                    {/* Hotspot highlight box */}
+                    <div
+                      className="absolute inset-0 cursor-pointer rounded-sm transition-all"
+                      style={{
+                        border: `2px solid ${isSelected ? "oklch(0.85 0.2 195)" : "oklch(0.7 0.18 195)"}`,
+                        background: isSelected ? "oklch(0.7 0.18 195 / 0.3)" : "oklch(0.7 0.18 195 / 0.15)",
                       }}
-                    >
-                      <Trash2 size={9} />
-                      <span>Delete hotspot</span>
-                    </button>
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedHotspotId(isSelected ? null : h.id);
+                      }}
+                    />
+
+                    {/* Popover menu — shown when selected */}
+                    {isSelected && (
+                      <div
+                        className="absolute z-30 bg-card border border-border rounded-md shadow-lg p-2 flex flex-col gap-1.5 min-w-[140px] text-[10px]"
+                        style={{ left: rect.w + 6, top: 0 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Port name */}
+                        <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider border-b border-border pb-1">
+                          {port?.name ?? "Hotspot"}
+                        </div>
+
+                        {/* Target screen */}
+                        {targetName && (
+                          <button
+                            className="flex items-center gap-1 text-foreground/80 hover:text-foreground transition-colors"
+                            onClick={() => useProjectSettingsStore.getState().setPs({ activeScreen: h.targetScreenId })}
+                            title="Go to target screen"
+                          >
+                            <ArrowRight size={9} className="text-cyan-400 shrink-0" />
+                            <span className="truncate">{targetName}</span>
+                          </button>
+                        )}
+
+                        {/* Selector */}
+                        <div className="text-[8px] text-muted-foreground font-mono truncate" title={h.selector}>
+                          {h.selector.split(" > ").pop()}
+                        </div>
+
+                        {/* Delete */}
+                        <button
+                          className="flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors mt-0.5 border-t border-border pt-1"
+                          onClick={() => {
+                            removeHotspot(`projects/${settings.project}`, h.id).then(() => {
+                              setHotspots((prev) => prev.filter((hs) => hs.id !== h.id));
+                              setSelectedHotspotId(null);
+                              window.dispatchEvent(new Event("navigation-changed"));
+                            });
+                          }}
+                        >
+                          <Trash2 size={9} />
+                          <span>Delete hotspot</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </>
+          )}
           {/* No click catcher needed — enable-link-mode handles interaction inside the iframe */}
         </div>
       );
