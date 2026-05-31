@@ -550,7 +550,7 @@ body { margin: 0; font-family: sans-serif; }
                   Design
                 </button>
                 <div className="flex-1" />
-                {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {themesCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100} snap>
