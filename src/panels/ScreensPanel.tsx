@@ -970,7 +970,7 @@ export function ScreensPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <div className="h-full flex items-center border-b border-border bg-card px-2">
+              <PaneHeader>
                 <Tabs value={screensCodeTab} onValueChange={(v) => setPs({ screensCodeTab: v as "editor" | "ports" })}>
                   <TabsList variant="line" className="h-7">
                     <TabsTrigger value="editor" className="text-[11px] gap-1">Editor</TabsTrigger>
@@ -980,12 +980,11 @@ export function ScreensPanel() {
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
-                <div className="flex-1" />
                 {screensCodeTab === "ports" && (
                   <Button
                     variant={selectingElementForPort ? "secondary" : "ghost"}
                     size="sm"
-                    className="h-6 text-[10px] gap-1"
+                    className="h-6 text-[10px] gap-1 ml-1"
                     onClick={() => {
                       if (selectingElementForPort) {
                         setSelectingElementForPort(null);
@@ -1002,10 +1001,11 @@ export function ScreensPanel() {
                     {selectingElementForPort ? "Selecting…" : "Select Element"}
                   </Button>
                 )}
+                <div className="flex-1" />
                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
                   {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
                 </Button>
-              </div>
+              </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={screensCodeOpen} preferredSize={252} minSize={100} snap>
               {screensCodeOpen && (
