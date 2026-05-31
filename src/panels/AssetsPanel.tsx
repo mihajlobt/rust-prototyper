@@ -131,9 +131,9 @@ export function AssetsPanel() {
         <div className="flex-1" />
         {isRunning && (
           <Button
-            variant={bonsai.stopScheduled ? "secondary" : "ghost"}
+            variant="outline"
             size="sm"
-            className="h-7 text-xs gap-1"
+            className={bonsai.stopScheduled ? "h-7 text-xs gap-1 border-status-paused text-status-paused hover:bg-status-paused/10" : "h-7 text-xs gap-1"}
             onClick={bonsai.stopScheduled ? bonsai.cancelStop : bonsai.scheduleStop}
             title={bonsai.stopScheduled ? "Cancel auto-stop" : "Auto-stop server"}
           >
