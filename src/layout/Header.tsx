@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 const tabs = [
   { id: "screens", label: "Screens", icon: LayoutGrid },
   { id: "components", label: "Components", icon: Box },
-  { id: "themes", label: "Themes", icon: Palette },
+  { id: "themes", label: "Design", icon: Palette },
   { id: "flows", label: "Flows", icon: Route },
   { id: "workflows", label: "Workflows", icon: GitBranch },
   { id: "apis", label: "APIs", icon: Terminal },

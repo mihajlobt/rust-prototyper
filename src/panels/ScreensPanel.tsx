@@ -30,6 +30,7 @@ import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { extractCode } from "@/lib/preview";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
+import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
@@ -38,6 +39,7 @@ import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { syncGeneratedRouter, loadNavigation, getDefaultPorts, updateScreenPorts, addHotspot, removeHotspot, createHotspotWithLink, type NavPort, type Hotspot } from "@/lib/navigation";
+import { loadDesignBrief } from "@/lib/design/persist";
 import { PortsEditor } from "@/panels/flows/PortsEditor";
 
 
@@ -67,23 +69,31 @@ export function ScreensPanel() {
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("screens-code", 3, [true, true, screensCodeOpen]);
   const [code, setCode] = useState("");
   const [themeCss, setThemeCss] = useState("");
-  const [screensCodeTab, setScreensCodeTab] = useState<"editor" | "ports">("editor");
+  const screensCodeTab = ps.screensCodeTab;
   const [selectingElementForPort, setSelectingElementForPort] = useState<{ portId: string; direction: "output" } | null>(null);
   const [hotspotPending, setHotspotPending] = useState<{ selector: string; rect: { x: number; y: number; w: number; h: number }; portId: string } | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
   const [computedHotspots, setComputedHotspots] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
+  const [livePreviewPath, setLivePreviewPath] = useState<string | null>(null);
 
-  // Generation context state — APIs, Design Brief, Components selectors
+  // Generation context state — APIs, Design Brief, Components selectors.
+  // The loaded lists + code cache are local/derived; the user's *selections*
+  // live in uiStore (session, keyed by project) so they survive panel remounts.
   interface CtxApi { id: string; name: string; method: string; url: string; proxyPath: string }
   interface CtxComponent { id: string; name: string }
   const [ctxApis, setCtxApis] = useState<CtxApi[]>([]);
-  const [ctxSelectedApiIds, setCtxSelectedApiIds] = useState<string[]>([]);
   const [ctxComponents, setCtxComponents] = useState<CtxComponent[]>([]);
-  const [ctxSelectedComponentIds, setCtxSelectedComponentIds] = useState<string[]>([]);
-  const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
   const [screenPorts, setScreenPorts] = useState<NavPort[]>([]);
+
+  const genContext = useUIStore((s) => s.screensGenContext[settings.project] ?? EMPTY_GEN_CONTEXT);
+  const setGenContext = useUIStore((s) => s.setScreensGenContext);
+  const ctxSelectedApiIds = genContext.apiIds;
+  const ctxSelectedComponentIds = genContext.componentIds;
+  const ctxSelectedBrief = genContext.brief;
+  // DESIGN.md of the active design language (auto-applied unless removed)
+  const [activeDesignBrief, setActiveDesignBrief] = useState<string>("");
 
   const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
@@ -134,19 +144,17 @@ export function ScreensPanel() {
     : getScreenNewPrompt(settings.iconLibrary, screenIds, settings.prompts["prompt.screens.new"] || undefined)
   )
     + designTokensSection
-    + buildDesignBriefSection(ctxSelectedBrief?.content ?? "")
+    + buildDesignBriefSection(ctxSelectedBrief?.content ?? (ps.applyDesignBrief ? activeDesignBrief : ""))
     + buildApiContextSection(selectedApis, [])
     + buildComponentsSection(selectedComponents)
     + outputFilePathSection(screenPath);
 
-  // Reset guards and context selections whenever the active project changes
+  // Reset scaffold guards and the component-code cache when the active project changes.
+  // (Context selections live in uiStore keyed by project, so they reset implicitly.)
   useEffect(() => {
     scaffoldAttemptedRef.current = false;
     stoppedManuallyRef.current = false;
-    setCtxSelectedApiIds([]);
-    setCtxSelectedComponentIds([]);
     setCtxComponentCode({});
-    setCtxSelectedBrief(null);
   }, [settings.project]);
 
   // Load ports and hotspots for the selected screen (and reload when navigation changes externally)
@@ -239,6 +247,16 @@ export function ScreensPanel() {
     return () => window.removeEventListener("message", handler);
   }, []);
 
+  // Track the live route inside the iframe — generated app posts __route-change on every navigation
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== "__route-change") return;
+      setLivePreviewPath(event.data.path as string);
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
   // Tell the iframe which hotspots to track whenever the list changes
   useEffect(() => {
     const iframe = previewIframeRef.current;
@@ -305,6 +323,9 @@ export function ScreensPanel() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [code, saveScreenCode]);
 
+  // Reset live path when the active screen or runner changes
+  useEffect(() => { setLivePreviewPath(null); }, [screenId, runnerUrl]);
+
   // Load existing screen code when screenId changes
   useEffect(() => {
     if (!screenId) { setCode(""); return; }
@@ -348,10 +369,21 @@ export function ScreensPanel() {
     onCodeOutput: (code) => applyScreenCode(code),
   });
 
-  // Clear the brief ref whenever ctxSelectedBrief is cleared from any source
+  // Keep useChat's brief-name ref in sync with the selected brief — covers both
+  // clearing and restoration of the selection after a panel remount.
   useEffect(() => {
-    if (!ctxSelectedBrief) setActiveBriefName("");
+    setActiveBriefName(ctxSelectedBrief?.name ?? "");
   }, [ctxSelectedBrief, setActiveBriefName]);
+
+  // Load the active design language's DESIGN.md brief when the selected design changes
+  useEffect(() => {
+    if (!ps.stylePreset) { setActiveDesignBrief(""); return; }
+    let cancelled = false;
+    loadDesignBrief(`projects/${settings.project}`, ps.stylePreset)
+      .then((md) => { if (!cancelled) setActiveDesignBrief(md ?? ""); })
+      .catch(() => { if (!cancelled) setActiveDesignBrief(""); });
+    return () => { cancelled = true; };
+  }, [ps.stylePreset, settings.project]);
 
   useEffect(() => {
     const selectedTheme = ps.stylePreset;
@@ -589,8 +621,22 @@ export function ScreensPanel() {
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {/* Generation context toolbar */}
-        {(ctxApis.length > 0 || ctxComponents.length > 0) && (
+        {(ctxApis.length > 0 || ctxComponents.length > 0 || (!!ps.stylePreset && !!activeDesignBrief)) && (
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Active design language — auto-applied as the brief, removable */}
+            {ps.stylePreset && activeDesignBrief && !ctxSelectedBrief && (
+              <Button
+                variant={ps.applyDesignBrief ? "secondary" : "outline"}
+                size="sm"
+                className="h-6 text-[11px] gap-1 px-2"
+                onClick={() => setPs({ applyDesignBrief: !ps.applyDesignBrief })}
+                title={ps.applyDesignBrief ? "Design language applied — click to remove from generation" : "Design language removed — click to re-apply"}
+              >
+                <Palette size={10} />
+                {ps.stylePreset}
+                {ps.applyDesignBrief && <span className="ml-0.5 text-muted-foreground">×</span>}
+              </Button>
+            )}
             {/* Design Brief */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -601,13 +647,13 @@ export function ScreensPanel() {
                     <span
                       className="ml-0.5 text-muted-foreground hover:text-foreground"
                       onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); setCtxSelectedBrief(null); setActiveBriefName(""); }}
+                      onClick={(e) => { e.stopPropagation(); setGenContext(settings.project, { brief: null }); }}
                     >×</span>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-72">
-                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => { const b = allBriefs.find((bb) => bb.name === v) ?? null; setCtxSelectedBrief(b); setActiveBriefName(b?.name ?? ""); }}>
+                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => { const b = allBriefs.find((bb) => bb.name === v) ?? null; setGenContext(settings.project, { brief: b }); }}>
                   <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Built-in</DropdownMenuLabel>
                   {DESIGN_BRIEF_TEMPLATES.map((brief) => (
                     <DropdownMenuRadioItem key={brief.name} value={brief.name} className="flex-col items-start gap-0.5 py-2">
@@ -652,7 +698,7 @@ export function ScreensPanel() {
                     <DropdownMenuCheckboxItem
                       key={api.id}
                       checked={ctxSelectedApiIds.includes(api.id)}
-                      onCheckedChange={(c) => setCtxSelectedApiIds((prev) => c ? [...prev, api.id] : prev.filter((x) => x !== api.id))}
+                      onCheckedChange={(c) => setGenContext(settings.project, { apiIds: c ? [...ctxSelectedApiIds, api.id] : ctxSelectedApiIds.filter((x) => x !== api.id) })}
                       className="text-xs"
                     >
                       <span className={["mr-1 text-[10px] font-bold px-1 py-0.5 rounded", api.method === "GET" ? "bg-green-500/10 text-green-600" : "bg-blue-500/10 text-blue-600"].join(" ")}>{api.method}</span>
@@ -677,7 +723,7 @@ export function ScreensPanel() {
                     <DropdownMenuCheckboxItem
                       key={comp.id}
                       checked={ctxSelectedComponentIds.includes(comp.id)}
-                      onCheckedChange={(c) => setCtxSelectedComponentIds((prev) => c ? [...prev, comp.id] : prev.filter((x) => x !== comp.id))}
+                      onCheckedChange={(c) => setGenContext(settings.project, { componentIds: c ? [...ctxSelectedComponentIds, comp.id] : ctxSelectedComponentIds.filter((x) => x !== comp.id) })}
                       className="text-xs"
                     >
                       {comp.name}
@@ -792,9 +838,12 @@ export function ScreensPanel() {
                       <Play size={12} />
                     </Button>
                   )}
-                  {initialPreviewSrc && (
-                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={initialPreviewSrc}>
-                      {initialPreviewSrc.replace(/^http:\/\/localhost:\d+/, "")}
+                  {(livePreviewPath ?? (initialPreviewSrc ? new URL(initialPreviewSrc).pathname : null)) && (
+                    <span
+                      className="text-xs text-muted-foreground font-mono truncate max-w-[200px]"
+                      title={livePreviewPath ?? new URL(initialPreviewSrc!).pathname}
+                    >
+                      {livePreviewPath ?? new URL(initialPreviewSrc!).pathname}
                     </span>
                   )}
                   <div className="flex-1" />
@@ -843,7 +892,7 @@ export function ScreensPanel() {
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <div className="h-full flex items-center border-b border-border bg-card px-2">
-                <Tabs value={screensCodeTab} onValueChange={(v) => setScreensCodeTab(v as "editor" | "ports")}>
+                <Tabs value={screensCodeTab} onValueChange={(v) => setPs({ screensCodeTab: v as "editor" | "ports" })}>
                   <TabsList variant="line" className="h-7">
                     <TabsTrigger value="editor" className="text-[11px] gap-1">Editor</TabsTrigger>
                     <TabsTrigger value="ports" className="text-[11px] gap-1 flex items-center gap-1">
@@ -890,6 +939,7 @@ export function ScreensPanel() {
                       projectDir={`projects/${settings.project}`}
                       ports={screenPorts}
                       onPortsChange={setScreenPorts}
+                      hotspots={hotspots}
                     />
                   )}
                 </div>

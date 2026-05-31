@@ -256,8 +256,12 @@ pub async fn bonsai_start_server(
     // Avoids holding tokio::sync::Mutex across .await (blocks other commands).
     // See: https://tokio.rs/tokio/topics/tracing — "Don't hold locks across awaits"
 
-    // Find available port
-    let port = find_available_port(config.port, MAX_PORT_OFFSET)
+    // Find available port — TcpListener::bind is synchronous; use spawn_blocking to avoid
+    // stalling the async runtime during the bind loop.
+    let base_port = config.port;
+    let port = tokio::task::spawn_blocking(move || find_available_port(base_port, MAX_PORT_OFFSET))
+        .await
+        .map_err(|e| bonsai_error(format!("Port search task failed: {}", e)))?
         .ok_or_else(|| bonsai_error("No available port in range 8000-8005"))?;
 
     // Validate install path (prevents path traversal and gives actionable error)
@@ -487,24 +491,20 @@ pub async fn bonsai_schedule_stop(
         // config guard dropped here — no longer holding std Mutex
     };
 
-    // Check if a timer already exists — clone out, drop lock, then spawn.
-    let has_timer = {
-        let guard = state.bonsai_process.lock().await;
-        guard.as_ref().map_or(true, |s| s.stop_timer.is_some())
-    };
-    if has_timer {
-        return Ok(());
+    // Single lock acquisition: check, spawn, and store atomically to prevent two concurrent
+    // calls both passing the has_timer check and orphaning a timer task.
+    // tokio::spawn is synchronous (returns immediately), so it's safe inside the lock.
+    let mut bonsai_guard = state.bonsai_process.lock().await;
+    match bonsai_guard.as_ref() {
+        None => return Ok(()), // no server running — nothing to schedule
+        Some(server) if server.stop_timer.is_some() => return Ok(()), // timer already set
+        _ => {}
     }
-
-    // Spawn the timer without holding the lock.
     let app_handle = app.clone();
     let stop_handle = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(timeout_secs)).await;
         let _ = app_handle.emit("bonsai:stop-timeout", ());
     });
-
-    // Briefly re-lock to store the handle.
-    let mut bonsai_guard = state.bonsai_process.lock().await;
     if let Some(ref mut server) = *bonsai_guard {
         server.stop_timer = Some(stop_handle);
     }

@@ -24,7 +24,7 @@ export type SectionName = typeof SECTION_NAMES[number];
 export const SECTION_LABELS: Record<SectionName, string> = {
   screens: "Screens",
   components: "Components",
-  themes: "Themes",
+  themes: "Design",
   workflows: "Workflows",
   apis: "APIs",
 };

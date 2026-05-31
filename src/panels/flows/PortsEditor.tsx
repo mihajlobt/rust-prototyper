@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Navigation, Database, Circle, MousePointerClick, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateScreenPorts, type NavPort } from "@/lib/navigation";
+import { updateScreenPorts, type NavPort, type Hotspot } from "@/lib/navigation";
 import { notify } from "@/hooks/useToast";
 import { getErrorMessage } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
@@ -12,17 +12,20 @@ interface PortsEditorProps {
   projectDir: string;
   ports: NavPort[];
   onPortsChange: (ports: NavPort[]) => void;
+  hotspots?: Hotspot[];
   onSelectElement?: () => void;
   isSelectingElement?: boolean;
 }
 
 function PortRow({
   port,
+  hasHotspot,
   onRename,
   onDelete,
   onTypeChange,
 }: {
   port: NavPort;
+  hasHotspot: boolean;
   onRename: (name: string) => void;
   onDelete: () => void;
   onTypeChange: (type: "navigation" | "data") => void;
@@ -81,6 +84,13 @@ function PortRow({
         </button>
       )}
 
+      {/* Hotspot indicator — port has a visual overlay pinned to a DOM element */}
+      {hasHotspot && (
+        <span title="This port has a hotspot overlay pinned to a screen element">
+          <MousePointerClick size={11} className="shrink-0 text-cyan-400" />
+        </span>
+      )}
+
       {/* Type toggle */}
       <button
         className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -101,11 +111,13 @@ function PortRow({
   );
 }
 
-export function PortsEditor({ screenId, projectDir, ports, onPortsChange, onSelectElement, isSelectingElement }: PortsEditorProps) {
+export function PortsEditor({ screenId, projectDir, ports, onPortsChange, hotspots, onSelectElement, isSelectingElement }: PortsEditorProps) {
   const [localPorts, setLocalPorts] = useState<NavPort[]>(ports);
   const [isSaving, setIsSaving] = useState(false);
   const [inputsOpen, setInputsOpen] = useState(true);
   const [outputsOpen, setOutputsOpen] = useState(true);
+
+  const hotspotPortIds = new Set((hotspots ?? []).map((h) => h.portId));
 
   useEffect(() => { setLocalPorts(ports); }, [ports]);
 
@@ -211,6 +223,7 @@ export function PortsEditor({ screenId, projectDir, ports, onPortsChange, onSele
               <PortRow
                 key={port.id}
                 port={port}
+                hasHotspot={hotspotPortIds.has(port.id)}
                 onRename={(name) => updatePort(port.id, { name })}
                 onDelete={() => deletePort(port.id)}
                 onTypeChange={(type) => updatePort(port.id, { type })}
@@ -236,6 +249,7 @@ export function PortsEditor({ screenId, projectDir, ports, onPortsChange, onSele
               <PortRow
                 key={port.id}
                 port={port}
+                hasHotspot={hotspotPortIds.has(port.id)}
                 onRename={(name) => updatePort(port.id, { name })}
                 onDelete={() => deletePort(port.id)}
                 onTypeChange={(type) => updatePort(port.id, { type })}

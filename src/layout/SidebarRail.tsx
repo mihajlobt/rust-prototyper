@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,25 @@ export function SidebarRail() {
 
   const base = `projects/${settings.project}`;
   const generatedDir = getGeneratedDirPath(base);
+
+  // Sync the sidebar tree when assets are created/changed outside the sidebar
+  // (e.g. ThemesPanel "Save as", ComponentsPanel save-to-runner). Panels dispatch
+  // `prototyper:tree-changed` with the affected section; invalidate that query so
+  // ProjectExplorer's headless-tree rebuilds.
+  useEffect(() => {
+    const onTreeChanged = (event: Event) => {
+      const section = (event as CustomEvent<{ section?: SectionName }>).detail?.section;
+      if (section) {
+        queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      } else {
+        for (const name of SECTION_NAMES) {
+          queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, name) });
+        }
+      }
+    };
+    window.addEventListener("prototyper:tree-changed", onTreeChanged);
+    return () => window.removeEventListener("prototyper:tree-changed", onTreeChanged);
+  }, [settings.project]);
 
   // --- Navigation ---
   const handleSetDefaultTheme = (name: string) => {

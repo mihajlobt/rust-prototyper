@@ -53,7 +53,17 @@ export function RunnerPanel() {
   const xtermRef = useRef<XTerminalHandle>(null);
   const logLinesRef = useRef<Array<{ line: string; source: string }>>([]);
   const [, setLogTick] = useState(0);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  // File-tree expansion persists per-project. Backed by a string[] in projectSettingsStore;
+  // exposed here as a Set with a functional setter for ergonomic call sites.
+  const expandedDirs = useMemo(() => new Set(ps.runnerExpandedDirs), [ps.runnerExpandedDirs]);
+  const setExpandedDirs = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      const prev = new Set(useProjectSettingsStore.getState().ps.runnerExpandedDirs);
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      setPs({ runnerExpandedDirs: [...next] });
+    },
+    [setPs]
+  );
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileParentDir, setNewFileParentDir] = useState<string>(generatedDir);
@@ -78,6 +88,13 @@ export function RunnerPanel() {
   }, [generatedDir]);
 
   const fileTreeRefreshKey = useUIStore((s) => s.fileTreeRefreshKey);
+
+  // Bump the shared refresh key after a file mutation. This re-runs loadFiles (top level)
+  // AND reloads every expanded AsyncDirChildren — so nested changes show immediately,
+  // without depending on the FS watcher (which debounces 500ms and can fail to start).
+  const refreshFiles = useCallback(() => {
+    useUIStore.setState((s) => ({ fileTreeRefreshKey: s.fileTreeRefreshKey + 1 }));
+  }, []);
 
   useEffect(() => { loadFiles(); }, [loadFiles, fileTreeRefreshKey]);
 
@@ -251,14 +268,20 @@ export function RunnerPanel() {
   // ── File operations ─────────────────────────────────────────────────────
 
   const toggleDir = (path: string) => {
-    setExpandedDirs((prev) => { const next = new Set(prev); if (next.has(path)) next.delete(path); else { next.add(path); loadFiles(); } return next; });
+    const willExpand = !expandedDirs.has(path);
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      return next;
+    });
+    if (willExpand) loadFiles();
   };
 
   const handleDeleteFile = async (path: string) => {
     if (!(await confirm(`Delete ${path.split("/").pop()}?`))) return;
     await deleteFile(path);
     if (openTabs.includes(path)) closeTab(path);
-    loadFiles();
+    refreshFiles();
   };
 
   const handleCreateFile = async () => {
@@ -266,7 +289,7 @@ export function RunnerPanel() {
     const path = `${newFileParentDir}/${newFileName.trim()}`;
     await writeFile(path, "");
     setNewFileName(""); setShowNewFile(false); setNewFileParentDir(generatedDir);
-    await loadFiles();
+    refreshFiles();
     openTab(path);
   };
 
@@ -274,8 +297,8 @@ export function RunnerPanel() {
     if (!(await confirm(`Delete folder ${path.split("/").pop()}?`))) return;
     await deleteDir(path);
     for (const tab of openTabs.filter((t) => t.startsWith(path))) closeTab(tab);
-    expandedDirs.delete(path);
-    loadFiles();
+    setExpandedDirs((prev) => { const next = new Set(prev); next.delete(path); return next; });
+    refreshFiles();
   };
 
   const handleDeleteEntry = async (path: string, isDir: boolean) => { if (isDir) await handleDeleteDir(path); else await handleDeleteFile(path); };
@@ -293,7 +316,7 @@ export function RunnerPanel() {
         setTabContents((prev) => { const next = { ...prev }; if (next[renameTarget.path] !== undefined) { next[newPath] = next[renameTarget.path]; delete next[renameTarget.path]; } return next; });
         setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
       }
-      loadFiles();
+      refreshFiles();
     } catch (e) { notify.error("Rename failed", getErrorMessage(e)); }
     setRenameTarget(null);
   };
@@ -301,7 +324,7 @@ export function RunnerPanel() {
   const startNewFolder = (parentPath: string) => { setNewFolderTarget(parentPath); setNewFolderName(""); };
   const handleCreateFolder = async () => {
     if (!newFolderTarget || !newFolderName.trim()) return;
-    try { await createDir(`${newFolderTarget}/${newFolderName.trim()}`); expandedDirs.add(newFolderTarget); loadFiles(); } catch (e) { notify.error("Create folder failed", getErrorMessage(e)); }
+    try { await createDir(`${newFolderTarget}/${newFolderName.trim()}`); setExpandedDirs((prev) => { const next = new Set(prev); next.add(newFolderTarget); return next; }); refreshFiles(); } catch (e) { notify.error("Create folder failed", getErrorMessage(e)); }
     setNewFolderTarget(null);
   };
 
@@ -378,7 +401,7 @@ export function RunnerPanel() {
                       <p className="text-[10px] opacity-60">Files from your generated project will appear here</p>
                     </div>
                   )}
-                <FileTree entries={files} selectedFile={activeTabPath} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={openTab} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={(p) => { setNewFileParentDir(p); setNewFileName(""); setShowNewFile(true); }} onNewFolder={startNewFolder} onCollapse={(p) => { expandedDirs.delete(p); setExpandedDirs(new Set(expandedDirs)); }} onReveal={revealInExplorer} depth={0} />
+                <FileTree entries={files} selectedFile={activeTabPath} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={openTab} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={(p) => { setNewFileParentDir(p); setNewFileName(""); setShowNewFile(true); }} onNewFolder={startNewFolder} onCollapse={(p) => setExpandedDirs((prev) => { const next = new Set(prev); next.delete(p); return next; })} onReveal={revealInExplorer} depth={0} />
               </div>
             </ScrollArea>
           </Allotment.Pane>

@@ -233,8 +233,20 @@ export async function createHotspotWithLink(
   targetScreenId: string
 ): Promise<Hotspot> {
   const nav = await loadNavigation(projectDir);
-  const screen = nav.screens.find((s) => s.id === screenId);
-  if (!screen) throw new Error(`Screen ${screenId} not found`);
+
+  // Auto-register screen if absent — happens for projects predating navigation.json
+  // or when navigation.json was missing/corrupted.
+  let screen = nav.screens.find((s) => s.id === screenId);
+  if (!screen) {
+    screen = {
+      id: screenId,
+      path: `/${screenId}`,
+      title: screenId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      ports: getDefaultPorts(screenId),
+    };
+    nav.screens.push(screen);
+    if (!nav.defaultScreen) nav.defaultScreen = screenId;
+  }
   screen.ports ??= [];
 
   const hotspot: Hotspot = {
@@ -261,11 +273,13 @@ export async function createHotspotWithLink(
 
   nav.hotspots.push(hotspot);
 
-  // Add the nav link inline (avoids a second read-modify-write that would overwrite the hotspot)
+  // Use canonical link ID format (same as addNavLink) so FlowsView deduplication works —
+  // a hotspot link and a manually-drawn FlowsView edge for the same connection share one ID.
   const targetPortId = `${targetScreenId}:default-in`;
+  const linkId = `${screenId}:${portId}->${targetScreenId}:${targetPortId}`;
   if (!nav.links.find((l) => l.fromPort === portId)) {
     nav.links.push({
-      id: `link-${Date.now()}`,
+      id: linkId,
       from: screenId,
       fromPort: portId,
       to: targetScreenId,
@@ -414,17 +428,19 @@ function PreviewShell({ children }: { children: React.ReactNode }) {
       return `  { selector: ${JSON.stringify(h.selector)}, path: ${JSON.stringify(targetPath)} }`;
     });
 
+  // Links array is defined INSIDE the effect so React Fast Refresh re-runs the effect
+  // after HMR (since the function body changes), avoiding a stale-closure where the old
+  // handler references a previous HOTSPOT_LINKS constant after a connection is deleted.
   const hotspotNavigator = hotspotLinks.length > 0 ? `
-const HOTSPOT_LINKS: Array<{ selector: string; path: string }> = [
-${hotspotLinks.join(",\n")},
-]
-
 function HotspotNavigator() {
   const navigate = useNavigate()
   useEffect(() => {
+    const links: Array<{ selector: string; path: string }> = [
+${hotspotLinks.join(",\n")},
+    ]
     function handler(e: MouseEvent) {
       const target = e.target as Element
-      for (const link of HOTSPOT_LINKS) {
+      for (const link of links) {
         try {
           if (target.closest(link.selector)) { navigate(link.path); return }
         } catch { /* ignore invalid selectors */ }
@@ -439,7 +455,7 @@ function HotspotNavigator() {
 
   const content = `// Auto-generated — edit navigation in the Flows panel, not here.
 import React, { useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 ${pageImports}
 ${componentImports}
 ${themeImport}
@@ -447,6 +463,10 @@ ${themeImport}
 ${previewShell}
 ${hotspotNavigator ? "\n" + hotspotNavigator : ""}
 export function AppRouter() {
+  const location = useLocation()
+  useEffect(() => {
+    window.parent.postMessage({ type: '__route-change', path: location.pathname }, '*')
+  }, [location.pathname])
   return (
     <>
       ${hotspotLinks.length > 0 ? "<HotspotNavigator />" : ""}

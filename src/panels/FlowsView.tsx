@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { FlowsActionsContext, useFlowsActions, type FlowsActions } from "@/panels/flows/FlowsContext";
 import {
   ReactFlow,
@@ -27,7 +27,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Separator } from "@/components/ui/separator";
-import { loadNavigation, saveNavigation, addNavLink, removeNavLink, syncGeneratedRouter, getDefaultPorts, type Navigation, type NavPort } from "@/lib/navigation";
+import { loadNavigation, saveNavigation, addNavLink, removeNavLink, syncGeneratedRouter, getDefaultPorts, type Navigation, type NavPort, type NavScreen } from "@/lib/navigation";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -49,6 +49,7 @@ type ScreenNode = Node<ScreenNodeData, "screen">;
 
 function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
   const actions = useFlowsActions();
+
   const borderColor = data.isDefault
     ? "var(--primary)"
     : selected
@@ -61,82 +62,125 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
   const getPortColor = (port: NavPort) =>
     port.type === "data" ? "var(--status-done)" : "var(--primary)";
 
-  const renderHandles = (ports: NavPort[], type: "target" | "source") => {
-    if (ports.length === 0) return null;
-    const isInput = type === "target";
-    const showLabels = ports.length > 1;
-    return ports.map((port, index) => {
-      const topPct = ports.length === 1
-        ? 50
-        : ((index + 1) / (ports.length + 1)) * 100;
-      const isDefault = port.id.endsWith(":default-in") || port.id.endsWith(":default-out");
-      return (
-        <div
-          key={port.id}
-          className="absolute"
-          style={{ top: `${topPct}%`, [isInput ? "left" : "right"]: 0, transform: "translateY(-50%)" }}
-        >
-          <Handle
-            type={type}
-            id={port.id}
-            position={isInput ? Position.Left : Position.Right}
-            style={{
-              position: "relative",
-              top: "unset",
-              left: "unset",
-              right: "unset",
-              transform: "none",
-              width: ports.length === 1 ? 10 : 8,
-              height: ports.length === 1 ? 10 : 8,
-              borderColor: getPortColor(port),
-              flexShrink: 0,
-            }}
-          />
-          {showLabels && !isDefault && (
-            <span
-              className="absolute text-[7px] text-muted-foreground/70 whitespace-nowrap leading-none pointer-events-none"
-              style={{
-                top: "50%",
-                transform: "translateY(-50%)",
-                [isInput ? "left" : "right"]: 12,
-                maxWidth: 52,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {port.name}
-            </span>
-          )}
-        </div>
-      );
-    });
-  };
+  const isDefaultPort = (port: NavPort) =>
+    port.id.endsWith(":default-in") || port.id.endsWith(":default-out");
+
+  // Show inline port rows when there are named ports or more than one port on either side.
+  // Default single-in/single-out nodes use centered handles with no rows.
+  const showPortRows =
+    data.ports.some((p) => !isDefaultPort(p)) ||
+    inputPorts.length > 1 ||
+    outputPorts.length > 1;
+
+  const maxRows = Math.max(inputPorts.length, outputPorts.length);
+
+  // Handle style for port-row handles — absolute inside their relative row div,
+  // straddling the card edge (centered on the boundary at ±4px = half of 8px dot).
+  const edgeHandleStyle = (port: NavPort, side: "left" | "right"): React.CSSProperties => ({
+    position: "absolute",
+    [side]: -4,
+    top: "50%",
+    transform: "translateY(-50%)",
+    width: 8,
+    height: 8,
+    borderColor: getPortColor(port),
+    background: "var(--card)",
+  });
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
           className="bg-card rounded-lg shadow-md cursor-pointer select-none"
-          style={{ width: 160, minHeight: Math.max(64, (Math.max(inputPorts.length, outputPorts.length)) * 16 + 32), border: `1.5px solid ${borderColor}` }}
+          style={{ width: 180, border: `1.5px solid ${borderColor}` }}
         >
-          {renderHandles(inputPorts, "target")}
-          {renderHandles(outputPorts, "source")}
+          {/* Centered handles for default single-port nodes — no port row section */}
+          {!showPortRows &&
+            inputPorts.map((p) => (
+              <Handle
+                key={p.id}
+                type="target"
+                id={p.id}
+                position={Position.Left}
+                style={{ borderColor: getPortColor(p), background: "var(--card)" }}
+              />
+            ))}
+          {!showPortRows &&
+            outputPorts.map((p) => (
+              <Handle
+                key={p.id}
+                type="source"
+                id={p.id}
+                position={Position.Right}
+                style={{ borderColor: getPortColor(p), background: "var(--card)" }}
+              />
+            ))}
 
+          {/* Header */}
           <div className="px-3 pt-1.5 pb-2">
             <div
               className="mb-1.5 h-0.5 rounded-full"
               style={{ background: data.isDefault ? "var(--primary)" : "var(--muted-foreground)", opacity: 0.5 }}
             />
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 min-w-0">
               <Layout size={11} className="shrink-0 text-muted-foreground" />
-              <span className="text-[11px] font-semibold truncate leading-tight flex-1">{data.label}</span>
-              {data.isDefault && <Star size={9} className="shrink-0 text-primary fill-primary" />}
+              <span className="text-[11px] font-semibold truncate leading-tight flex-1 min-w-0">
+                {data.label}
+              </span>
+              {data.isDefault && (
+                <Star size={9} className="shrink-0 text-primary fill-primary ml-0.5" />
+              )}
             </div>
             <Separator className="my-1 opacity-30" />
             <div className="text-[9px] text-muted-foreground">
               {data.isDefault ? "Entry screen" : "Screen"}
             </div>
           </div>
+
+          {/* Port rows — one row per max(inputs, outputs), handles at card edges */}
+          {showPortRows && (
+            <div className="border-t border-border/30 pb-0.5">
+              {Array.from({ length: maxRows }, (_, i) => {
+                const inPort = inputPorts[i];
+                const outPort = outputPorts[i];
+                return (
+                  <div key={i} className="relative flex items-center h-5 px-2">
+                    {inPort && (
+                      <>
+                        <Handle
+                          type="target"
+                          id={inPort.id}
+                          position={Position.Left}
+                          style={edgeHandleStyle(inPort, "left")}
+                        />
+                        {!isDefaultPort(inPort) && (
+                          <span className="text-[8px] text-foreground/60 truncate max-w-[64px] pl-1">
+                            {inPort.name}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    <div className="flex-1" />
+                    {outPort && (
+                      <>
+                        {!isDefaultPort(outPort) && (
+                          <span className="text-[8px] text-foreground/60 truncate max-w-[64px] pr-1 text-right">
+                            {outPort.name}
+                          </span>
+                        )}
+                        <Handle
+                          type="source"
+                          id={outPort.id}
+                          position={Position.Right}
+                          style={edgeHandleStyle(outPort, "right")}
+                        />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -179,6 +223,7 @@ function buildNodes(screenIds: string[], nav: Navigation, existingNodes: ScreenN
     return {
       id,
       type: "screen" as const,
+      deletable: false,
       position: positionById.get(id) ?? saved ?? { x: (i % COLS) * H_GAP, y: Math.floor(i / COLS) * V_GAP },
       data: {
         label: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -275,7 +320,12 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
           notify.error("Failed to remove navigation link", getErrorMessage(e));
         }
       }
-      try { await syncGeneratedRouter(projectDir); } catch (e) { notify.error("Failed to sync router", getErrorMessage(e)); }
+      try {
+        await syncGeneratedRouter(projectDir);
+        window.dispatchEvent(new Event("navigation-changed"));
+      } catch (e) {
+        notify.error("Failed to sync router", getErrorMessage(e));
+      }
     },
     [projectDir]
   );
@@ -291,12 +341,21 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
     async (_: React.MouseEvent, node: ScreenNode) => {
       try {
         const nav = await loadNavigation(projectDir);
-        const screen = nav.screens.find((s) => s.id === node.id);
-        if (screen) {
-          screen.x = Math.round(node.position.x);
-          screen.y = Math.round(node.position.y);
-          await saveNavigation(projectDir, nav);
+        let screen: NavScreen | undefined = nav.screens.find((s) => s.id === node.id);
+        if (!screen) {
+          // Auto-register screen if absent (pre-navigation.json projects or first drag)
+          screen = {
+            id: node.id,
+            path: `/${node.id}`,
+            title: node.id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            ports: getDefaultPorts(node.id),
+          };
+          nav.screens.push(screen);
+          if (!nav.defaultScreen) nav.defaultScreen = node.id;
         }
+        screen.x = Math.round(node.position.x);
+        screen.y = Math.round(node.position.y);
+        await saveNavigation(projectDir, nav);
       } catch { /* ignore persistence errors */ }
     },
     [projectDir]

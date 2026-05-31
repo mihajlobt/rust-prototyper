@@ -307,7 +307,7 @@ export function APIsPanel() {
 
   const [apis, setApis] = useState<SavedApi[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [sidebarTab, setSidebarTab] = useState<"collection" | "keys">("collection");
+  const sidebarTab = ps.apisSidebarTab;
   const [showTemplates, setShowTemplates] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
@@ -664,7 +664,7 @@ export function APIsPanel() {
                 variant={sidebarTab === "keys" ? "secondary" : "ghost"}
                 size="icon"
                 className="h-7 w-7"
-                onClick={() => setSidebarTab(sidebarTab === "collection" ? "keys" : "collection")}
+                onClick={() => setPs({ apisSidebarTab: sidebarTab === "collection" ? "keys" : "collection" })}
                 title="Toggle Key Vault"
               >
                 <Key size={13} />

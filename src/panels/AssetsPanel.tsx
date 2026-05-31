@@ -39,8 +39,8 @@ export function AssetsPanel() {
   const setPs = useProjectSettingsStore((s) => s.setPs);
   const { ref: allotmentRef, onDragEnd, defaultSizes } = useAllotmentLayout("assets", 2, [true, ps.assetsShowLog]);
   const [prompt, setPrompt] = useState("");
-  const [selectedPreset, setSelectedPreset] = useState(0);
-  const [steps, setSteps] = useState(4);
+  const selectedPreset = ps.assetsPreset;
+  const steps = ps.assetsSteps;
   const [seed, setSeed] = useState(0);
   const [previewIndex, setPreviewIndex] = useState<number | undefined>(undefined);
   const xtermRef = useRef<XTerminalHandle>(null);
@@ -238,7 +238,7 @@ export function AssetsPanel() {
                       key={presetItem.label}
                       variant={selectedPreset === i ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setSelectedPreset(i)}
+                      onClick={() => setPs({ assetsPreset: i })}
                       className="text-[10px] font-mono h-6 px-1.5"
                       disabled={!isRunning}
                     >
@@ -252,7 +252,7 @@ export function AssetsPanel() {
                   <span className="shrink-0">steps</span>
                   <Slider
                     value={[steps]}
-                    onValueChange={([value]) => setSteps(value)}
+                    onValueChange={([value]) => setPs({ assetsSteps: value })}
                     min={1}
                     max={20}
                     step={1}

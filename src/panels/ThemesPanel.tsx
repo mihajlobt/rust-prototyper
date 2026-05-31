@@ -17,7 +17,6 @@ import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { saveItemMeta } from "@/lib/item-meta";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
-import { renderThemeCss, renderDesignMd, renderTokensJson } from "@/lib/design/render";
 import { designLanguageSpecSchema } from "@/lib/design/spec";
 import { useAppStore } from "@/stores/appStore";
 import { DESIGN_BRIEF_TEMPLATES, type DesignBriefTemplate } from "@/lib/prompts";
@@ -57,6 +56,7 @@ export function ThemesPanel() {
   const [designJson, setDesignJson] = useState("");
 
   const [codeTab, setCodeTab] = useState<"css" | "tokens" | "guidelines">("css");
+  const [designPreviewing, setDesignPreviewing] = useState(false);
   const [archetypeName, setArchetypeName] = useState("");
   const chatPath = `projects/${settings.project}/themes/${selectedThemeDir || "main"}/chat.json`;
   const generationMode = ps.themesGenerationMode;
@@ -238,25 +238,6 @@ export function ThemesPanel() {
     setInput("");
   }, [input, sendMessage, setInput]);
 
-  const handleReRender = useCallback(() => {
-    let spec: import("@/lib/design/spec").DesignLanguageSpec;
-    try {
-      spec = JSON.parse(designJson);
-    } catch (e) {
-      notify.error("Invalid design.json", getErrorMessage(e));
-      return;
-    }
-    const renderedCss = renderThemeCss(spec);
-    const renderedMd = renderDesignMd(spec);
-    setCss(renderedCss);
-    setDesignMd(renderedMd);
-    setPreviewKey((k) => k + 1);
-    const base = `projects/${settings.project}/themes/${themeDir}`;
-    writeFile(`${base}/tokens.json`, renderTokensJson(spec))
-      .then(() => toast.success("Re-rendered from JSON", { description: "CSS and design updated" }))
-      .catch((e) => notify.error("Failed to save tokens", getErrorMessage(e)));
-  }, [designJson, settings.project, themeDir]);
-
   const deviceWidth = {
     desktop: "100%",
     tablet: "768px",
@@ -408,13 +389,16 @@ export function ThemesPanel() {
               {themesShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
-                  messages={messages.map((m) => ({
-                    role: m.role,
-                    content: m.content,
-                    ...(m.images?.length ? { images: m.images } : {}),
-                    ...(m.thinking ? { thinking: m.thinking } : {}),
-                    ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
-                  }))}
+                  messages={[
+                    { role: "system", content: systemPrompt },
+                    ...messages.map((m) => ({
+                      role: m.role,
+                      content: m.content,
+                      ...(m.images?.length ? { images: m.images } : {}),
+                      ...(m.thinking ? { thinking: m.thinking } : {}),
+                      ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+                    })),
+                  ]}
                   host={getHostForProvider(settings.provider, settings.host)}
                   provider={settings.provider}
                 />
@@ -532,37 +516,25 @@ body { margin: 0; font-family: sans-serif; }
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}>
                 <FileCode size={12} className="mr-1.5" />
-                {themesCodeOpen && (
-                  <>
-                    <div className="w-px h-4 bg-border mx-1" />
-                    <button
-                      className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                      onClick={(e) => { e.stopPropagation(); setCodeTab("css"); }}
-                    >
-                      CSS
-                    </button>
-                    <button
-                      className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                      onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); }}
-                    >
-                      Tokens
-                    </button>
-                    <button
-                      className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                      onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); }}
-                    >
-                      Design
-                    </button>
-                    {codeTab === "tokens" && designJson && (
-                      <button
-                        className="ml-1 px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                        onClick={(e) => { e.stopPropagation(); handleReRender(); }}
-                      >
-                        Re-render
-                      </button>
-                    )}
-                  </>
-                )}
+                <div className="w-px h-4 bg-border mx-1" />
+                <button
+                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                  onClick={(e) => { e.stopPropagation(); setCodeTab("css"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}
+                >
+                  CSS
+                </button>
+                <button
+                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                  onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}
+                >
+                  Tokens
+                </button>
+                <button
+                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                  onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}
+                  >
+                  Design
+                </button>
                 <div className="flex-1" />
                 {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </PaneHeader>
@@ -574,31 +546,12 @@ body { margin: 0; font-family: sans-serif; }
                   designJson={designJson}
                   designMd={designMd}
                   activeTab={codeTab}
-                  onChangeTab={setCodeTab}
                   onChangeCss={setCss}
                   onChangeJson={setDesignJson}
                   onChangeMd={setDesignMd}
-                  onBlurCss={() => {
-                    const base = `projects/${settings.project}/themes/${themeDir}`;
-                    Promise.all([
-                      writeFile(`${base}/theme.css`, css),
-                      writeFile(`${generatedDir}/src/styles/preview-theme.css`, css),
-                    ]).then(() => toast.success("CSS saved")).catch((e) => notify.error("Failed to save CSS", getErrorMessage(e)));
-                  }}
-                  onBlurJson={() => {
-                    const base = `projects/${settings.project}/themes/${themeDir}`;
-                    writeFile(`${base}/design.json`, designJson)
-                      .then(() => toast.success("Tokens saved"))
-                      .catch((e) => notify.error("Failed to save tokens", getErrorMessage(e)));
-                  }}
-                  onBlurMd={() => {
-                    const base = `projects/${settings.project}/themes/${themeDir}`;
-                    writeFile(`${base}/DESIGN.md`, designMd)
-                      .then(() => toast.success("Design doc saved"))
-                      .catch((e) => notify.error("Failed to save design doc", getErrorMessage(e)));
-                  }}
-                  onReRender={handleReRender}
                   hasDesignJson={!!designJson}
+                  designPreviewing={designPreviewing}
+                  onToggleDesignPreview={() => setDesignPreviewing((p) => !p)}
                 />
               )}
             </Allotment.Pane>

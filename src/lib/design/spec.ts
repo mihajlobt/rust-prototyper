@@ -192,36 +192,3 @@ export type DesignLanguageSpec = z.infer<typeof designLanguageSpecSchema>;
 
 /** Spec format version, written into design.json for forward-compat. */
 export const DESIGN_SPEC_VERSION = 1;
-
-// ─── Parse helpers (moved from generate.ts) ───────────────────────────────────
-
-type ParseResult =
-  | { success: true; data: DesignLanguageSpec }
-  | { success: false; error: string };
-
-/** Strip a single leading/trailing markdown code fence if present. */
-export function stripJsonFences(raw: string): string {
-  const trimmed = raw.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
-  return (fenced ? fenced[1] : trimmed).trim();
-}
-
-/**
- * Parse + validate a raw model response into a DesignLanguageSpec.
- * Pure and unit-testable — no IO.
- */
-export function parseDesignSpec(raw: string): ParseResult {
-  let json: unknown;
-  try {
-    json = JSON.parse(stripJsonFences(raw));
-  } catch (e) {
-    return { success: false, error: `Response was not valid JSON: ${(e as Error).message}` };
-  }
-  const result = designLanguageSpecSchema.safeParse(json);
-  if (result.success) return { success: true, data: result.data };
-  const issues = result.error.issues
-    .slice(0, 20)
-    .map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`)
-    .join("\n");
-  return { success: false, error: issues };
-}

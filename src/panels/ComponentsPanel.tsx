@@ -42,10 +42,12 @@ import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { syncGeneratedRouter } from "@/lib/navigation";
+import { loadDesignBrief } from "@/lib/design/persist";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
+import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
 import { MessageList, ChatInput } from "@/components/chat";
 
 export function ComponentsPanel() {
@@ -72,11 +74,15 @@ export function ComponentsPanel() {
 
   const [code, setCode] = useState("");
 
-  // Generation context state — APIs and Design Brief selectors
+  // Generation context state — APIs and Design Brief selectors. The loaded list
+  // is local; the user's selections live in uiStore (session, keyed by project).
   interface CtxApi { id: string; name: string; method: string; url: string; proxyPath: string }
   const [ctxApis, setCtxApis] = useState<CtxApi[]>([]);
-  const [ctxSelectedApiIds, setCtxSelectedApiIds] = useState<string[]>([]);
-  const [ctxSelectedBrief, setCtxSelectedBrief] = useState<DesignBriefTemplate | null>(null);
+  const genContext = useUIStore((s) => s.componentsGenContext[settings.project] ?? EMPTY_GEN_CONTEXT);
+  const setGenContext = useUIStore((s) => s.setComponentsGenContext);
+  const ctxSelectedApiIds = genContext.apiIds;
+  const ctxSelectedBrief = genContext.brief;
+  const [activeDesignBrief, setActiveDesignBrief] = useState<string>("");
 
   const componentsShowInspector = ps.componentsShowInspector;
   const componentsDevice = ps.componentsDevice;
@@ -96,7 +102,6 @@ export function ComponentsPanel() {
     },
     [runnerUrl, selectedComponent, componentsDarkPreview]
   );
-  console.log("[ComponentsPanel] active preview:", initialPreviewSrc, { runnerUrl, selectedComponent });
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3, [true, true, componentsCodeOpen]);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3, [true, true, componentsShowInspector]);
@@ -113,16 +118,15 @@ export function ComponentsPanel() {
     : getComponentNewPrompt(settings.iconLibrary, ps.shadcnMode, settings.prompts["prompt.components.new"] || undefined) + designTokensSection;
   const componentPath = componentId ? `projects/${settings.project}/generated/src/components/${componentId}/component.tsx` : undefined;
   const systemContent = defaultSystem
-    + buildDesignBriefSection(ctxSelectedBrief?.content ?? "")
+    + buildDesignBriefSection(ctxSelectedBrief?.content ?? (ps.applyDesignBrief ? activeDesignBrief : ""))
     + buildApiContextSection(selectedApis, [])
     + (componentPath ? outputFilePathSection(componentPath) : "");
 
-  // Reset guards and context selections whenever the active project changes
+  // Reset scaffold guards when the active project changes.
+  // (Context selections live in uiStore keyed by project, so they reset implicitly.)
   useEffect(() => {
     scaffoldAttemptedRef.current = false;
     stoppedManuallyRef.current = false;
-    setCtxSelectedApiIds([]);
-    setCtxSelectedBrief(null);
   }, [settings.project]);
 
   // ─── Ensure dev server is running ──────────────────────────────────────────
@@ -315,10 +319,21 @@ export function ComponentsPanel() {
     onCodeOutput: (code) => applyCode(code),
   });
 
-  // Clear the brief ref whenever ctxSelectedBrief is cleared from any source
+  // Keep useChat's brief-name ref in sync with the selected brief — covers both
+  // clearing and restoration of the selection after a panel remount.
   useEffect(() => {
-    if (!ctxSelectedBrief) setActiveBriefName("");
+    setActiveBriefName(ctxSelectedBrief?.name ?? "");
   }, [ctxSelectedBrief, setActiveBriefName]);
+
+  // Load the active design language's DESIGN.md brief when the selected design changes
+  useEffect(() => {
+    if (!selectedTheme) { setActiveDesignBrief(""); return; }
+    let cancelled = false;
+    loadDesignBrief(`projects/${settings.project}`, selectedTheme)
+      .then((md) => { if (!cancelled) setActiveDesignBrief(md ?? ""); })
+      .catch(() => { if (!cancelled) setActiveDesignBrief(""); });
+    return () => { cancelled = true; };
+  }, [selectedTheme, settings.project]);
 
   const applyCode = useCallback(async (extracted: string) => {
     setCode(extracted);
@@ -428,8 +443,22 @@ export function ComponentsPanel() {
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {/* Generation context toolbar */}
-        {(ctxApis.length > 0 || ctxSelectedBrief) && (
+        {(ctxApis.length > 0 || ctxSelectedBrief || (!!selectedTheme && !!activeDesignBrief)) && (
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Active design language — auto-applied as the brief, removable */}
+            {selectedTheme && activeDesignBrief && !ctxSelectedBrief && (
+              <Button
+                variant={ps.applyDesignBrief ? "secondary" : "outline"}
+                size="sm"
+                className="h-6 text-[11px] gap-1 px-2"
+                onClick={() => setPs({ applyDesignBrief: !ps.applyDesignBrief })}
+                title={ps.applyDesignBrief ? "Design language applied — click to remove from generation" : "Design language removed — click to re-apply"}
+              >
+                <Palette size={10} />
+                {selectedTheme}
+                {ps.applyDesignBrief && <span className="ml-0.5 text-muted-foreground">×</span>}
+              </Button>
+            )}
             {/* Design Brief — always available */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -440,13 +469,13 @@ export function ComponentsPanel() {
                     <span
                       className="ml-0.5 text-muted-foreground hover:text-foreground"
                       onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); setCtxSelectedBrief(null); setActiveBriefName(""); }}
+                      onClick={(e) => { e.stopPropagation(); setGenContext(settings.project, { brief: null }); }}
                     >×</span>
                   )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-72">
-                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => { const b = allBriefs.find((bb) => bb.name === v) ?? null; setCtxSelectedBrief(b); setActiveBriefName(b?.name ?? ""); }}>
+                <DropdownMenuRadioGroup value={ctxSelectedBrief?.name ?? ""} onValueChange={(v) => { const b = allBriefs.find((bb) => bb.name === v) ?? null; setGenContext(settings.project, { brief: b }); }}>
                   <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Built-in</DropdownMenuLabel>
                   {DESIGN_BRIEF_TEMPLATES.map((brief) => (
                     <DropdownMenuRadioItem key={brief.name} value={brief.name} className="flex-col items-start gap-0.5 py-2">
@@ -490,7 +519,7 @@ export function ComponentsPanel() {
                   <DropdownMenuCheckboxItem
                     key={api.id}
                     checked={ctxSelectedApiIds.includes(api.id)}
-                    onCheckedChange={(c) => setCtxSelectedApiIds((prev) => c ? [...prev, api.id] : prev.filter((x) => x !== api.id))}
+                    onCheckedChange={(c) => setGenContext(settings.project, { apiIds: c ? [...ctxSelectedApiIds, api.id] : ctxSelectedApiIds.filter((x) => x !== api.id) })}
                     className="text-xs"
                   >
                     <span className={["mr-1 text-[10px] font-bold px-1 py-0.5 rounded", api.method === "GET" ? "bg-green-500/10 text-green-600" : "bg-blue-500/10 text-blue-600"].join(" ")}>{api.method}</span>

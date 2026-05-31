@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { HttpResponse } from "@/lib/ipc";
+import type { DesignBriefTemplate } from "@/lib/prompts";
 
 // Ephemeral UI state — not persisted, resets on app restart.
 // Per-project panel state (device, zoom, active item, etc.) lives in projectSettingsStore.
@@ -11,6 +12,17 @@ export interface ApiHistoryEntry {
   status: number;
   duration?: number;
 }
+
+/** Generation-context selections for the Screens/Components prompt toolbars.
+ * Session-only and keyed by project so they survive panel remounts but reset
+ * naturally when switching projects or restarting the app. */
+export interface PanelGenContext {
+  apiIds: string[];
+  componentIds: string[];
+  brief: DesignBriefTemplate | null;
+}
+
+export const EMPTY_GEN_CONTEXT: PanelGenContext = { apiIds: [], componentIds: [], brief: null };
 
 interface UIState {
   // APIs panel — session-only (response, history, form helpers)
@@ -27,9 +39,15 @@ interface UIState {
 
   // Workflows panel
   workflowsShowPanel: boolean;
+
+  // Generation-context selections, keyed by projectId
+  screensGenContext: Record<string, PanelGenContext>;
+  componentsGenContext: Record<string, PanelGenContext>;
+  setScreensGenContext: (projectId: string, patch: Partial<PanelGenContext>) => void;
+  setComponentsGenContext: (projectId: string, patch: Partial<PanelGenContext>) => void;
 }
 
-export const useUIStore = create<UIState>()(() => ({
+export const useUIStore = create<UIState>()((set) => ({
   apisResponse: null,
   apisHistory: [],
   apisEnvVars: {},
@@ -41,4 +59,21 @@ export const useUIStore = create<UIState>()(() => ({
   fileTreeRefreshKey: 0,
 
   workflowsShowPanel: false,
+
+  screensGenContext: {},
+  componentsGenContext: {},
+  setScreensGenContext: (projectId, patch) =>
+    set((s) => ({
+      screensGenContext: {
+        ...s.screensGenContext,
+        [projectId]: { ...(s.screensGenContext[projectId] ?? EMPTY_GEN_CONTEXT), ...patch },
+      },
+    })),
+  setComponentsGenContext: (projectId, patch) =>
+    set((s) => ({
+      componentsGenContext: {
+        ...s.componentsGenContext,
+        [projectId]: { ...(s.componentsGenContext[projectId] ?? EMPTY_GEN_CONTEXT), ...patch },
+      },
+    })),
 }));

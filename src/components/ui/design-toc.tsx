@@ -74,10 +74,10 @@ const TocNode = memo(function TocNode({ heading, depth }: { heading: TocHeading;
 
   return (
     <li>
-      <div className="flex items-center gap-0.5 py-0.5 group">
+      <div className="flex items-center gap-0.5 py-0.5 group overflow-hidden">
         {hasChildren && (
           <button
-            className="p-0.5 -ml-4 text-muted-foreground hover:text-foreground shrink-0"
+            className="p-0.5 text-muted-foreground hover:text-foreground shrink-0"
             onClick={() => setExpanded(!expanded)}
           >
             <ChevronRight

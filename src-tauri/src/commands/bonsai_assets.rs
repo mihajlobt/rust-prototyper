@@ -160,8 +160,11 @@ async fn generate_image_inner(
         }
     };
 
-    if png_bytes.len() < 1024 {
-        return Err(bonsai_error("Generated image is too small, possibly an error response"));
+    // Validate PNG magic bytes — size check alone misses short JSON error responses
+    const PNG_MAGIC: &[u8] = &[137, 80, 78, 71, 13, 10, 26, 10];
+    if png_bytes.len() < PNG_MAGIC.len() || &png_bytes[..PNG_MAGIC.len()] != PNG_MAGIC {
+        let preview = String::from_utf8_lossy(&png_bytes[..png_bytes.len().min(200)]);
+        return Err(bonsai_error(format!("Response is not a valid PNG image: {}", preview)));
     }
 
     let timestamp = std::time::SystemTime::now()

@@ -90,7 +90,9 @@ export function ThemeCodeTabs({
                 </button>
               </div>
               <div className="h-full min-h-0">
-                <Allotment>
+                <Allotment onVisibleChange={(index, visible) => {
+                  if (index === 0) setShowOutline(visible);
+                }}>
                   <Allotment.Pane visible={showOutline} minSize={120} preferredSize={180} snap>
                     <DesignToc markdown={designMd} />
                   </Allotment.Pane>
