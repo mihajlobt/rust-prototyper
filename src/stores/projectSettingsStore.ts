@@ -39,6 +39,9 @@ export interface ProjectSettings {
   componentsDarkPreview: boolean;
   componentsShowInspector: boolean;
   componentsCodeOpen: boolean;
+  /** Theme applied to the live component preview only — independent of the
+   *  generation design language (stylePreset). */
+  componentsPreviewTheme: string;
 
   // Themes panel
   themesDevice: "desktop" | "tablet" | "mobile";
@@ -117,6 +120,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   componentsDarkPreview: false,
   componentsShowInspector: false,
   componentsCodeOpen: false,
+  componentsPreviewTheme: "",
 
   themesDevice: "desktop",
   themesDarkPreview: false,

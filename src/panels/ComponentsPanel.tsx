@@ -89,8 +89,9 @@ export function ComponentsPanel() {
   const componentsDarkPreview = ps.componentsDarkPreview;
   const componentsCodeOpen = ps.componentsCodeOpen;
   const [themes, setThemes] = useState<FileEntry[]>([]);
-  const selectedTheme = ps.stylePreset;
-  const [themeCss, setThemeCss] = useState("");
+  const selectedTheme = ps.stylePreset;       // generation design language — drives DESIGN.md + design tokens
+  const [themeCss, setThemeCss] = useState("");             // theme.css for the generation design language
+  const [previewThemeCss, setPreviewThemeCss] = useState(""); // theme.css for the live preview only
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
@@ -171,15 +172,17 @@ export function ComponentsPanel() {
     return () => { cancelled = true; };
   }, [settings.project, runnerStatus, generatedDir, startRunner, ps.runnerPort, settings.iconLibrary]);
 
-  // ─── Write theme CSS when it changes ───────────────────────────────────────
+  // ─── Write preview theme CSS to the preview project when it changes ───────
+  // Uses the preview-only theme (componentsPreviewTheme), not the generation
+  // design language (stylePreset).
 
   useEffect(() => {
-    if (!themeCss || runnerStatus !== "running") return;
+    if (!previewThemeCss || runnerStatus !== "running") return;
 
-    writeFile(`${generatedDir}/src/styles/preview-theme.css`, themeCss).catch((e) => {
-      notify.error("Failed to write theme CSS", getErrorMessage(e));
+    writeFile(`${generatedDir}/src/styles/preview-theme.css`, previewThemeCss).catch((e) => {
+      notify.error("Failed to write preview theme CSS", getErrorMessage(e));
     });
-  }, [themeCss, runnerStatus, generatedDir]);
+  }, [previewThemeCss, runnerStatus, generatedDir]);
 
   // ─── Navigate iframe to component's preview route ────────────────────────────
   // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
@@ -236,6 +239,25 @@ export function ComponentsPanel() {
     })();
     return () => { cancelled = true; };
   }, [settings.project]);
+
+  // Load preview theme CSS — drives the live preview only, independent of the
+  // generation design language (stylePreset).
+  useEffect(() => {
+    if (!ps.componentsPreviewTheme) { setPreviewThemeCss(""); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const css = await readFile(`projects/${settings.project}/themes/${ps.componentsPreviewTheme}/theme.css`);
+        if (!cancelled) setPreviewThemeCss(css);
+      } catch (e) {
+        if (!cancelled) {
+          setPreviewThemeCss("");
+          if (!isNotFoundError(e)) notify.error("Failed to load preview theme", getErrorMessage(e));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ps.componentsPreviewTheme, settings.project]);
 
   useEffect(() => {
     if (!selectedTheme) {
@@ -443,21 +465,30 @@ export function ComponentsPanel() {
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {/* Generation context toolbar */}
-        {(ctxApis.length > 0 || ctxSelectedBrief || (!!selectedTheme && !!activeDesignBrief)) && (
+        {(ctxApis.length > 0 || ctxSelectedBrief || themes.length > 0) && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Active design language — auto-applied as the brief, removable */}
-            {selectedTheme && activeDesignBrief && !ctxSelectedBrief && (
-              <Button
-                variant={ps.applyDesignBrief ? "secondary" : "outline"}
-                size="sm"
-                className="h-6 text-[11px] gap-1 px-2"
-                onClick={() => setPs({ applyDesignBrief: !ps.applyDesignBrief })}
-                title={ps.applyDesignBrief ? "Design language applied — click to remove from generation" : "Design language removed — click to re-apply"}
-              >
-                <Palette size={10} />
-                {selectedTheme}
-                {ps.applyDesignBrief && <span className="ml-0.5 text-muted-foreground">×</span>}
-              </Button>
+            {/* Design language — the theme injected into generation. The preview
+                theme is chosen separately in the preview toolbar. */}
+            {themes.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant={selectedTheme ? "secondary" : "outline"} size="sm" className="h-6 text-[11px] gap-1 px-2">
+                    <Palette size={10} />
+                    {selectedTheme || "Design"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuRadioGroup
+                    value={selectedTheme}
+                    onValueChange={(v) => setPs({ stylePreset: v, applyDesignBrief: true })}
+                  >
+                    <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+                    {themes.map((t) => (
+                      <DropdownMenuRadioItem key={t.name} value={t.name} className="text-xs">{t.name}</DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {/* Design Brief — always available */}
             <DropdownMenu>
@@ -668,7 +699,7 @@ export function ComponentsPanel() {
                     </span>
                   )}
                   <div className="flex-1" />
-                  <Select value={selectedTheme} onValueChange={(v) => setPs({ stylePreset: v })}>
+                   <Select value={ps.componentsPreviewTheme} onValueChange={(v) => setPs({ componentsPreviewTheme: v })}>
                     <SelectTrigger className="h-6 text-xs w-[90px]">
                       <SelectValue placeholder="Theme…" />
                     </SelectTrigger>
