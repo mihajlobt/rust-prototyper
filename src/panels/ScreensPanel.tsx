@@ -13,7 +13,6 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -970,22 +969,30 @@ export function ScreensPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader>
-                <Tabs value={screensCodeTab} onValueChange={(v) => setPs({ screensCodeTab: v as "editor" | "ports" })}>
-                  <TabsList variant="line" className="h-7">
-                    <TabsTrigger value="editor" className="text-[11px] gap-1">Editor</TabsTrigger>
-                    <TabsTrigger value="ports" className="text-[11px] gap-1 flex items-center gap-1">
-                      <MousePointerClick size={10} />
-                      Ports
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+              <PaneHeader onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
+                <MousePointerClick size={12} className="mr-1.5" />
+                <div className="w-px h-4 bg-border mx-1" />
+                <button
+                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", screensCodeTab === "editor" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                  onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "editor" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}
+                >
+                  Editor
+                </button>
+                <button
+                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "ports" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                  onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "ports" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}
+                >
+                  <MousePointerClick size={10} />
+                  Ports
+                </button>
+                <div className="flex-1" />
                 {screensCodeTab === "ports" && (
                   <Button
                     variant={selectingElementForPort ? "secondary" : "ghost"}
                     size="sm"
-                    className="h-6 text-[10px] gap-1 ml-1"
-                    onClick={() => {
+                    className="h-6 text-[10px] gap-1 mr-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (selectingElementForPort) {
                         setSelectingElementForPort(null);
                         previewIframeRef.current?.contentWindow?.postMessage({ type: "disable-link-mode" }, "*");
@@ -1001,10 +1008,7 @@ export function ScreensPanel() {
                     {selectingElementForPort ? "Selecting…" : "Select Element"}
                   </Button>
                 )}
-                <div className="flex-1" />
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
-                  {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                </Button>
+                {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={screensCodeOpen} preferredSize={252} minSize={100} snap>

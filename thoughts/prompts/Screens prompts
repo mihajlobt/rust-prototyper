@@ -1,0 +1,34 @@
+## Here are concise screen prompts for a repo explorer app. Copy these into the Screens panel chat:
+
+----------
+
+### Repo Dashboard
+
+Build a repo explorer dashboard: top bar with search input and "New Repo" button. Main area: grid of repo cards showing name, description (truncated to 2 lines), language badge, star count, and last updated time. Sort tabs: Recent, Stars, Name. Each card links to the repo detail page.
+
+### Repo Detail
+
+Build a repo detail page: sticky header with repo name, visibility badge, star/fork/watch buttons. Tabs: Code, Issues, Pull Requests. Below tabs: file tree sidebar (collapsible folders and file icons), main area showing README.md content with headings, code blocks, and links. Clone URL copy button in header.
+
+### File Viewer
+
+Build a code file viewer: top bar shows breadcrumb path (owner/repo/main/src/App.tsx) with copy path button. Main area: line-numbered code view with syntax-colored text (use spans with color classes for keywords, strings, comments). Bottom bar: file size and language indicator.
+
+### Commits Timeline
+
+Build a commit history page: list of commit entries, each showing avatar, commit message, sha hash (shortened, monospace), author name, and relative time. Left sidebar with branch selector dropdown. Pagination at bottom. Each entry links to commit detail.
+
+### Issues List
+
+Build an issues list page: filter bar with status tabs (Open, Closed), label dropdown, sort by (Newest, Oldest, Most commented). List of issue cards showing title, issue number, labels as colored pills, comments count, and assignee avatar. "New Issue" button top right.
+
+### Pull Requests
+
+Build a pull requests page: same layout as issues. PR cards show title, PR number, status badge (Open/Merged/Draft), source→target branch label, comments count, assignee. Filter by open/closed/merged. "New Pull Request" button.
+
+----------
+
+### Tips:
+- Generate them in order — start with Dashboard, then Detail, etc.
+- After generating Dashboard, the navigation section will include routes to other pages, which helps the AI understand cross-linking.
+- Use a Design Brief like "Minimal & Clean" for GitHub's aesthetic, or "Neo-Brutalism" for something bolder.
