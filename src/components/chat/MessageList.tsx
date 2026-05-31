@@ -161,11 +161,11 @@ interface MessageListProps {
   onResolvePermission?: (requestId: number, decision: ToolPermissionDecision, toolName: string) => void
 }
 
-export function MessageList({
+const MessageListFn = ({
   messages, isStreaming, thinkingContent,
   onApplyCode, onRegenerate, onDeleteFrom,
   pendingPermissions, onResolvePermission,
-}: MessageListProps) {
+}: MessageListProps) => {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -218,6 +218,17 @@ export function MessageList({
     </div>
   )
 }
+
+export const MessageList = memo(MessageListFn, (prev, next) =>
+  prev.messages === next.messages &&
+  prev.isStreaming === next.isStreaming &&
+  prev.thinkingContent === next.thinkingContent &&
+  prev.pendingPermissions === next.pendingPermissions &&
+  prev.onApplyCode === next.onApplyCode &&
+  prev.onRegenerate === next.onRegenerate &&
+  prev.onDeleteFrom === next.onDeleteFrom &&
+  prev.onResolvePermission === next.onResolvePermission
+)
 
 interface MessageBubbleProps {
   message: ChatMessage

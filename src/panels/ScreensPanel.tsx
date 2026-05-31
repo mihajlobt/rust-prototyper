@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { writeFile, createDir, readFile, readDir, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import type { FileEntry } from "@/lib/ipc";
+import type { ToolPermissionDecision } from "@/lib/ipc";
 import { useQueryClient } from "@tanstack/react-query";
 import { projectKeys } from "@/lib/queryKeys";
 import { useAppStore } from "@/stores/appStore";
@@ -384,6 +385,25 @@ export function ScreensPanel() {
     setActiveBriefName(ctxSelectedBrief?.name ?? "");
   }, [ctxSelectedBrief, setActiveBriefName]);
 
+  const handleApplyCode = useCallback((content: string) => {
+    const c = extractCode(content);
+    if (c) applyScreenCode(c);
+  }, [applyScreenCode]);
+
+  const handleResolvePermission = useCallback((requestId: number, decision: ToolPermissionDecision, toolName: string) => {
+    useChatStore.getState().resolveToolPermission(
+      screenId ? `screen-${screenId}` : "screen-none",
+      requestId,
+      decision
+    );
+    if (decision === "always_allowed" && toolName) {
+      const current = useAppStore.getState().settings.toolAllowlist;
+      if (!current.includes(toolName)) {
+        useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] });
+      }
+    }
+  }, [screenId]);
+
   // Load the active design language's DESIGN.md brief when the selected design changes
   useEffect(() => {
     if (!ps.stylePreset) { setActiveDesignBrief(""); return; }
@@ -659,23 +679,10 @@ export function ScreensPanel() {
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
         pendingPermissions={pendingPermissions}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) applyScreenCode(c); }}
+        onApplyCode={handleApplyCode}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
-        onResolvePermission={(requestId, decision, toolName) => {
-          useChatStore.getState().resolveToolPermission(
-            screenId ? `screen-${screenId}` : "screen-none",
-            requestId,
-            decision
-          )
-          // When Always Allow, also persist to settings allowlist
-          if (decision === "always_allowed" && toolName) {
-            const current = settings.toolAllowlist
-            if (!current.includes(toolName)) {
-              useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
-            }
-          }
-        }}
+        onResolvePermission={handleResolvePermission}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {/* Generation context toolbar */}

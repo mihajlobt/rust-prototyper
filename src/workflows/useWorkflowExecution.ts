@@ -113,6 +113,7 @@ export function useWorkflowExecution({
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
   const abortRef = useRef(false);
   const pauseRef = useRef(false);
+  const rafIdRef = useRef(0);
 
   const runWorkflow = async () => {
     setRunning(true);
@@ -180,12 +181,39 @@ export function useWorkflowExecution({
       }).filter(Boolean).join("\n\n");
     };
 
-    const updateStatus = (id: string, patch: Partial<WorkflowNodeData>) =>
-      setNodes((prev) => prev.map((n) => n.id === id ? { ...n, data: { ...n.data, ...patch } } : n));
+    // rAF-batched updateStatus: coalesces multiple streaming-chunk updates per frame
+    // into a single setNodes call, preventing React re-renders on every token.
+    const pendingPatches = new Map<string, Partial<WorkflowNodeData>>();
+    const flushPatches = () => {
+      if (pendingPatches.size === 0) return;
+      // Don't apply stale patches after stop/abort — stopWorkflow resets nodes directly
+      if (abortRef.current) { pendingPatches.clear(); return; }
+      const patches = new Map(pendingPatches);
+      pendingPatches.clear();
+      setNodes((prev) => prev.map((n) => {
+        const patch = patches.get(n.id);
+        return patch ? { ...n, data: { ...n.data, ...patch } } : n;
+      }));
+    };
+    const scheduleFlush = () => {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(flushPatches);
+    };
+    const updateStatus = (id: string, patch: Partial<WorkflowNodeData>) => {
+      const existing = pendingPatches.get(id);
+      pendingPatches.set(id, existing ? { ...existing, ...patch } : patch);
+      scheduleFlush();
+    };
+    // Flush any remaining patches synchronously (needed before reads that depend on state)
+    const flushNow = () => {
+      cancelAnimationFrame(rafIdRef.current);
+      flushPatches();
+    };
 
     const execNode = async (nodeId: string) => {
       if (abortRef.current) return;
-      const node = currentNodes.find((n) => n.id === nodeId);
+      flushNow();
+      const node = getNodes().find((n) => n.id === nodeId);
       if (!node) return;
       const d = node.data;
       updateStatus(nodeId, { status: "running", output: undefined });
@@ -207,7 +235,10 @@ export function useWorkflowExecution({
             const channel = new Channel<CompletionEvent>();
             let acc = "";
             channel.onmessage = (msg) => {
-              if (msg.event === "Chunk") { acc += msg.data.text; updateStatus(nodeId, { output: acc }); }
+              if (msg.event === "Chunk") {
+                acc += msg.data.text;
+                if (!abortRef.current) updateStatus(nodeId, { output: acc });
+              }
               if (msg.event === "Done") { resolve(acc); }
               if (msg.event === "Error") { reject(new Error(msg.data.message)); }
             };
@@ -482,9 +513,13 @@ export function useWorkflowExecution({
 
     const findBranch = (startId: string): string[] => {
       const branch = [startId]; const vis = new Set([startId]);
+      // Snapshot node types once — nodeType never changes during execution
+      const nodeTypeMap = new Map<string, string>();
+      flushNow();
+      for (const n of getNodes()) nodeTypeMap.set(n.id, n.data.nodeType);
       const walk = (id: string) => {
         for (const nx of adj.get(id)!) {
-          if (!vis.has(nx) && currentNodes.find((n) => n.id === nx)?.data?.nodeType !== "composition") {
+          if (!vis.has(nx) && nodeTypeMap.get(nx) !== "composition") {
             vis.add(nx); branch.push(nx); walk(nx);
           }
         }
@@ -504,23 +539,27 @@ export function useWorkflowExecution({
     for (const nodeId of execOrder) {
       if (abortRef.current) break;
       // Resume: skip nodes that are already done from a prior run
-      const existingNode = currentNodes.find((n) => n.id === nodeId);
+      flushNow();
+      const existingNode = getNodes().find((n) => n.id === nodeId);
       if (existingNode?.data.status === "done") { done.add(nodeId); continue; }
       if (pauseRef.current) {
         // Mark this node and remaining idle nodes as paused
         updateStatus(nodeId, { status: existingNode?.data.status === "running" ? "paused" : "paused" });
         for (const remainingId of execOrder) {
           if (!done.has(remainingId) && remainingId !== nodeId) {
-            const remNode = currentNodes.find((n) => n.id === remainingId);
+            flushNow();
+            const remNode = getNodes().find((n) => n.id === remainingId);
             if (remNode?.data.status === "idle" || !remNode?.data.status) {
               updateStatus(remainingId, { status: "paused" });
             }
           }
         }
+        flushNow();
         setPaused(true);
         return;
       }
-      const nd = currentNodes.find((n) => n.id === nodeId);
+      flushNow();
+      const nd = getNodes().find((n) => n.id === nodeId);
       if (!nd || done.has(nodeId)) continue;
       const nType = nd.data.nodeType;
       if (nType === "composition") {
@@ -545,10 +584,11 @@ export function useWorkflowExecution({
       }
     }
 
+    flushNow();
     const finalNodes = getNodes();
     const errorCount = finalNodes.filter((n) => n.data.status === "error").length;
     const doneCount = finalNodes.filter((n) => n.data.status === "done").length;
-    setRunSummary({ total: currentNodes.length, done: doneCount, errors: errorCount, elapsed: Date.now() - startTime });
+    setRunSummary({ total: finalNodes.length, done: doneCount, errors: errorCount, elapsed: Date.now() - startTime });
     setRunning(false);
   };
 
@@ -569,6 +609,7 @@ export function useWorkflowExecution({
   const stopWorkflow = () => {
     abortRef.current = true;
     pauseRef.current = false;
+    cancelAnimationFrame(rafIdRef.current);
     setRunning(false);
     setPaused(false);
     setNodes((prev) => prev.map((n) =>

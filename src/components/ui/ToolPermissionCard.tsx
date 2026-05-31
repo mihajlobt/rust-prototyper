@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Shield, Check, X, ShieldCheck } from "lucide-react"
-import { useCallback } from "react"
+import { useCallback, memo } from "react"
 import { resolveToolPermission, type ToolPermissionDecision } from "@/lib/ipc"
 export type { ToolPermissionDecision };
 
@@ -15,7 +15,7 @@ export interface ToolPermissionCardProps {
   onResolve?: (decision: ToolPermissionDecision) => void
 }
 
-export function ToolPermissionCard({ requestId, tool, args, onResolve }: ToolPermissionCardProps) {
+export const ToolPermissionCard = memo(function ToolPermissionCard({ requestId, tool, args, onResolve }: ToolPermissionCardProps) {
   const handleDecision = useCallback(async (decision: ToolPermissionDecision) => {
     await resolveToolPermission(requestId, decision)
     onResolve?.(decision)
@@ -86,4 +86,9 @@ export function ToolPermissionCard({ requestId, tool, args, onResolve }: ToolPer
       </div>
     </div>
   )
-}
+}, (prev, next) =>
+  prev.requestId === next.requestId &&
+  prev.tool === next.tool &&
+  prev.args === next.args &&
+  prev.onResolve === next.onResolve
+)

@@ -20,6 +20,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { writeFile, createDir, readDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import type { ToolPermissionDecision } from "@/lib/ipc";
 import { saveItemMeta } from "@/lib/item-meta";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
@@ -378,6 +379,24 @@ export function ComponentsPanel() {
     }
   }, [settings.project, selectedComponent, queryClient, generatedDir, setPs]);
 
+  const handleApplyCode = useCallback((content: string) => {
+    const c = extractCode(content);
+    if (c) applyCode(c);
+  }, [applyCode]);
+
+  const handleResolvePermission = useCallback((requestId: number, decision: ToolPermissionDecision, toolName: string) => {
+    useChatStore.getState().resolveToolPermission(
+      componentId ? `component-${componentId}` : "component-none",
+      requestId,
+      decision
+    );
+    if (decision === "always_allowed" && toolName) {
+      const current = useAppStore.getState().settings.toolAllowlist;
+      if (!current.includes(toolName)) {
+        useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] });
+      }
+    }
+  }, [componentId]);
 
   const deviceWidth = {
     desktop: "100%",
@@ -446,22 +465,10 @@ export function ComponentsPanel() {
         isStreaming={isStreaming}
         thinkingContent={thinkingContent}
         pendingPermissions={pendingPermissions}
-        onApplyCode={(content) => { const c = extractCode(content); if (c) applyCode(c); }}
+        onApplyCode={handleApplyCode}
         onRegenerate={regenerate}
         onDeleteFrom={deleteFrom}
-        onResolvePermission={(requestId, decision, toolName) => {
-          useChatStore.getState().resolveToolPermission(
-            componentId ? `component-${componentId}` : "component-none",
-            requestId,
-            decision
-          )
-          if (decision === "always_allowed" && toolName) {
-            const current = settings.toolAllowlist
-            if (!current.includes(toolName)) {
-              useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
-            }
-          }
-        }}
+        onResolvePermission={handleResolvePermission}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {/* Generation context toolbar */}

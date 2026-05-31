@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { writeFile, readFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
+import { writeFile, readFile, createDir, getHostForProvider, getErrorMessage, type ToolPermissionDecision } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { saveItemMeta } from "@/lib/item-meta";
@@ -152,6 +152,29 @@ export function ThemesPanel() {
     void saveItemMeta(`projects/${settings.project}`, "themes", selectedThemeDir || "main", prompt)
       .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
   }, [persistTheme, setPs, settings.project, selectedThemeDir]);
+
+  const handleApplyCode = useCallback((content: string) => {
+    const stripped = content.replace(/<thinking[\s\S]*?<\/think>/g, "").trim();
+    const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    if (cleaned) {
+      setCss(cleaned);
+      setPreviewKey((k) => k + 1);
+    }
+  }, []);
+
+  const handleResolvePermission = useCallback((requestId: number, decision: ToolPermissionDecision, toolName: string) => {
+    useChatStore.getState().resolveToolPermission(
+      `theme-${themeDir}`,
+      requestId,
+      decision
+    );
+    if (decision === "always_allowed" && toolName) {
+      const current = useAppStore.getState().settings.toolAllowlist;
+      if (!current.includes(toolName)) {
+        useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] });
+      }
+    }
+  }, [themeDir]);
 
   // ─── Dynamic chat configuration based on generation mode ───────────────────────
 
@@ -333,29 +356,10 @@ export function ThemesPanel() {
                   isStreaming={isStreaming}
                   thinkingContent={thinkingContent}
                   pendingPermissions={pendingPermissions}
-                  onApplyCode={(content) => {
-                    const stripped = content.replace(/<thinking[\s\S]*?<\/think>/g, "").trim();
-                    const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
-                    if (cleaned) {
-                      setCss(cleaned);
-                      setPreviewKey((k) => k + 1);
-                    }
-                  }}
+                  onApplyCode={handleApplyCode}
                   onRegenerate={regenerate}
                   onDeleteFrom={deleteFrom}
-                  onResolvePermission={(requestId, decision, toolName) => {
-                    useChatStore.getState().resolveToolPermission(
-                      `theme-${themeDir}`,
-                      requestId,
-                      decision
-                    )
-                    if (decision === "always_allowed" && toolName) {
-                      const current = settings.toolAllowlist
-                      if (!current.includes(toolName)) {
-                        useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
-                      }
-                    }
-                  }}
+                  onResolvePermission={handleResolvePermission}
                   input={input}
                   onChangeInput={setInput}
                   onSend={handleSend}
