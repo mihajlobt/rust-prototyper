@@ -33,7 +33,7 @@ export function AssetGrid({ assets, selectedIndex, onSelect, onDelete, assetUrl,
 
   if (viewMode === "grid") {
     return (
-      <div className="grid grid-cols-2 gap-2 px-3 pb-3">
+      <div className="grid gap-2 px-3 pb-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
         {assets.map((asset, index) => (
           <AssetCardGrid
             key={asset.file_name}
