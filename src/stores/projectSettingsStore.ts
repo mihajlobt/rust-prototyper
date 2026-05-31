@@ -14,6 +14,9 @@ export interface ProjectSettings {
 
   // Project configuration
   stylePreset: string;
+  /** When true, the active design language's DESIGN.md is auto-injected as the brief
+   *  for screen/component generation. Toggled off to remove it. */
+  applyDesignBrief: boolean;
   directories: {
     themes: string;
     components: string;
@@ -26,6 +29,7 @@ export interface ProjectSettings {
   screensShowInspector: boolean;
   screensDarkPreview: boolean;
   screensCodeOpen: boolean;
+  screensCodeTab: "editor" | "ports";
 
   // Components panel
   componentsDevice: "desktop" | "tablet" | "mobile";
@@ -40,6 +44,7 @@ export interface ProjectSettings {
   themesCodeOpen: boolean;
   themesFramework: "shadcn" | "daisy" | "bootstrap" | "generic";
   themesDarkLightSupport: boolean;
+  themesGenerationMode: "css" | "design";
 
   // Runner panel
   runnerDevice: "desktop" | "tablet" | "mobile";
@@ -49,6 +54,7 @@ export interface ProjectSettings {
   runnerActiveTab: "terminal" | "logs" | "network";
   runnerEditorTabs: string[];
   runnerEditorActiveTabPath: string | null;
+  runnerExpandedDirs: string[];
 
   // APIs panel — persistent editor state
   apisName: string;
@@ -66,6 +72,7 @@ export interface ProjectSettings {
   apisAuthClientSecret: string;
   apisProxyPath: string;
   apisShowInspector: boolean;
+  apisSidebarTab: "collection" | "keys";
 
   // Component preview
   shadcnMode: boolean;
@@ -75,6 +82,8 @@ export interface ProjectSettings {
   assetsViewMode: "list" | "grid";
   assetsShowLog: boolean;
   assetsSortOrder: "newest" | "oldest" | "largest" | "smallest" | "name";
+  assetsSteps: number;
+  assetsPreset: number;
 }
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
@@ -86,6 +95,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   activeApi: null,
 
   stylePreset: "",
+  applyDesignBrief: true,
   directories: {
     themes: "src/styles/themes",
     components: "src/components",
@@ -97,6 +107,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   screensShowInspector: false,
   screensDarkPreview: false,
   screensCodeOpen: false,
+  screensCodeTab: "editor",
 
   componentsDevice: "desktop",
   componentsDarkPreview: false,
@@ -109,6 +120,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   themesCodeOpen: false,
   themesFramework: "shadcn",
   themesDarkLightSupport: true,
+  themesGenerationMode: "design",
 
   runnerDevice: "desktop",
   runnerZoom: 1,
@@ -117,6 +129,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerActiveTab: "terminal",
   runnerEditorTabs: [],
   runnerEditorActiveTabPath: null,
+  runnerExpandedDirs: [],
 
   apisName: "",
   apisMethod: "GET",
@@ -133,6 +146,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   apisAuthClientSecret: "",
   apisProxyPath: "",
   apisShowInspector: false,
+  apisSidebarTab: "collection",
 
   shadcnMode: true,
   runnerPort: 5174,
@@ -140,6 +154,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   assetsViewMode: "list",
   assetsShowLog: true,
   assetsSortOrder: "newest",
+  assetsSteps: 4,
+  assetsPreset: 0,
 };
 
 // ─── Store handle cache — one open handle per project ─────────────────────────
@@ -206,6 +222,10 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
       if (key in loaded) {
         (loaded as unknown as Record<string, unknown>)[key] = value;
       }
+    }
+    // Coerce legacy "both" generation mode to "design"
+    if ((loaded as unknown as Record<string, unknown>).themesGenerationMode === "both") {
+      (loaded as unknown as Record<string, unknown>).themesGenerationMode = "design";
     }
     set({ projectId, ps: loaded, loaded: true });
   },

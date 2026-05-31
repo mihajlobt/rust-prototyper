@@ -169,3 +169,54 @@ export function getUiThemeSuffix(uiTheme: string): string {
   if (!uiTheme || uiTheme === "auto") return "";
   return UI_THEME_SUFFIXES[uiTheme] ?? "";
 }
+
+// ─── Design language (full design system) generation ─────────────────────────────
+
+/**
+ * System prompt for generating a complete design language as structured files.
+ * The model is given tools (write_file) and writes a design.json spec. The frontend
+ * validates the output and renders theme.css + DESIGN.md from it.
+ *
+ * @param framework   shadcn | daisyui | bootstrap | generic — informs component conventions
+ * @param darkLight   when false, the dark palette should mirror light (no dark mode)
+ * @param schemaJson  JSON Schema (string) the design.json SHOULD match — used as reference
+ */
+export function getDesignLanguageSystemPrompt(framework: string, darkLight: boolean, schemaJson: string): string {
+  return `You are a senior design systems architect. Produce a COMPLETE, internally-consistent design language — the kind shipped by Material 3, IBM Carbon, or Shopify Polaris — covering color, typography, spacing, radii, shadows, borders, motion, component conventions, iconography, layout/grid, voice & tone, content style, and anti-patterns.
+
+TOOL USAGE — REQUIRED:
+You MUST write ALL THREE files using write_file:
+1. design.json — structured JSON spec matching the schema below
+2. theme.css — CSS custom properties (:root and .dark blocks)
+3. DESIGN.md — human-readable design guidelines
+
+WORKFLOW:
+1. Write all three files using write_file.
+2. After writing, validate each file:
+   - design.json: valid JSON, all required keys from the schema are present, no trailing commas
+   - theme.css: all CSS variables are defined, no syntax errors, both :root and .dark blocks present
+   - DESIGN.md: follows the heading structure implied by the schema facets
+3. If you find any issues, rewrite the affected files until all three pass validation.
+
+COHERENCE — the whole point:
+Every facet must reinforce the same intent. The voice, the color temperature, the type choices, the motion, and the component conventions must all express one philosophy. A "calm editorial" language and a "high-energy arcade" language must look and read completely differently across ALL facets.
+
+COLOR:
+- Use oklch() for every color value: oklch(lightness chroma hue). Never hex/rgb.
+- Provide BOTH a light and a dark palette for all semantic tokens.${darkLight ? "" : " (Dark mode is disabled — make the dark palette identical to light.)"}
+- Ensure WCAG-legible foreground/background pairs.
+
+TYPOGRAPHY:
+- Choose real font families. For any non-system font, include its full Google Fonts @import URL in googleFontImport (e.g. https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap). Use null for system fonts.
+- Provide a complete type scale, weights, line-heights, and letter-spacing.
+
+MOTION: easings MUST be cubic-bezier() strings; durations in ms.
+ICONOGRAPHY: pick a library appropriate to the aesthetic (target framework default is ${framework}).
+COMPONENTS: give concrete do/don't rules per component (Button, Card, Input, and others relevant to the language).
+CONTENT: include real good-vs-bad microcopy examples.
+
+TARGET FRAMEWORK: ${framework} — align component conventions and token naming with it.
+
+JSON SCHEMA REFERENCE (design.json should match this structure):
+${schemaJson}`;
+}

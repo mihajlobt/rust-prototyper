@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Smartphone, Tablet, Monitor, Save, FolderUp, FileCode, Sun, Moon, Trash2, RefreshCw } from "lucide-react";
+import { ChevronUp, ChevronDown, Save, FolderUp, FileCode, Trash2, RefreshCw, Download } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,19 +12,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { writeFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
+import { writeFile, readFile, createDir, getHostForProvider, getErrorMessage } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { saveItemMeta } from "@/lib/item-meta";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
+import { renderThemeCss, renderDesignMd, renderTokensJson } from "@/lib/design/render";
+import { designLanguageSpecSchema } from "@/lib/design/spec";
 import { useAppStore } from "@/stores/appStore";
+import { DESIGN_BRIEF_TEMPLATES, type DesignBriefTemplate } from "@/lib/prompts";
+import { getDesignLanguageSystemPrompt } from "@/lib/prompts/themes";
+import { ThemeChatPanel } from "@/panels/ThemeChatPanel";
+import { ThemePreviewToolbar } from "@/panels/ThemePreviewToolbar";
+import { ThemeFrameworkPills } from "@/panels/ThemeFrameworkPills";
+import { ThemeCodeTabs } from "@/panels/ThemeCodeTabs";
 import { useChat } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
-import { MessageList, ChatInput } from "@/components/chat";
+
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
-import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { getThemeSystemPrompt, outputFilePathSection } from "@/lib/prompts";
 import { getParentCss } from "@/lib/preview";
 import { PromptInspector } from "@/components/PromptInspector";
@@ -45,10 +53,26 @@ export function ThemesPanel() {
   const [previewKey, setPreviewKey] = useState(0);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
+  const [designMd, setDesignMd] = useState("");
+  const [designJson, setDesignJson] = useState("");
+
+  const [codeTab, setCodeTab] = useState<"css" | "tokens" | "guidelines">("css");
+  const [archetypeName, setArchetypeName] = useState("");
   const chatPath = `projects/${settings.project}/themes/${selectedThemeDir || "main"}/chat.json`;
+  const generationMode = ps.themesGenerationMode;
+
+  const allSeeds: DesignBriefTemplate[] = [...DESIGN_BRIEF_TEMPLATES, ...settings.styles.map((s) => ({ name: s.name, description: "", palette: [] as string[], content: s.value }))];
+  const selectedSeed = allSeeds.find((s) => s.name === archetypeName) ?? null;
+
+  const cssActive = generationMode === "css";
+  const designActive = generationMode === "design";
+
+  const toggleCss = () => setPs({ themesGenerationMode: "css" });
+  const toggleDesign = () => setPs({ themesGenerationMode: "design" });
 
   const themeDir = selectedThemeDir || "main";
   const themeOutputPath = `projects/${settings.project}/themes/${themeDir}/theme.css`;
+  const designOutputPath = `projects/${settings.project}/themes/${themeDir}/design.json`;
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
 
   const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
@@ -58,8 +82,7 @@ export function ThemesPanel() {
       await createDir(base);
       await writeFile(`${base}/theme.css`, content);
       await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
-      // Also write to generated/ so HMR picks up the theme in the preview
-      writeFile(`${generatedDir}/src/styles/preview-theme.css`, content).catch(() => {});
+      await writeFile(`${generatedDir}/src/styles/preview-theme.css`, content);
       queryClient.invalidateQueries({ queryKey: projectKeys.themeCss(settings.project, dir) });
     } catch (e) {
       notify.error("Failed to save theme", getErrorMessage(e));
@@ -82,6 +105,19 @@ export function ThemesPanel() {
     }
   }, [css, settings.project, ps.directories.themes, themeDir]);
 
+  const handleExportTokens = useCallback(async () => {
+    if (!selectedThemeDir) { notify.error("No theme selected"); return; }
+    try {
+      const tokensPath = `projects/${settings.project}/themes/${selectedThemeDir}/tokens.json`;
+      const raw = await readFile(tokensPath);
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const path = await save({ defaultPath: `${selectedThemeDir}.tokens.json`, filters: [{ name: "JSON", extensions: ["json"] }] });
+      if (path) { await writeFile(path, raw); notify.success("Exported tokens", path); }
+    } catch (e) {
+      notify.error("Export failed", getErrorMessage(e));
+    }
+  }, [selectedThemeDir, settings.project]);
+
   const applyGeneratedCss = useCallback((content: string) => {
     setCss(content);
     setPreviewKey((k) => k + 1);
@@ -95,6 +131,25 @@ export function ThemesPanel() {
       .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
   }, [persistTheme, setPs, settings.project, selectedThemeDir]);
 
+  // ─── Dynamic chat configuration based on generation mode ───────────────────────
+
+  const cssSystemPrompt = useMemo(() =>
+    getThemeSystemPrompt(
+      themesFramework,
+      settings.prompts["prompt.themes.base"] || undefined,
+      settings.prompts[`prompt.themes.${themesFramework}`] || undefined,
+    ) + (themesDarkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : "") + outputFilePathSection(themeOutputPath),
+  [themesFramework, themesDarkLightSupport, themeOutputPath, settings.prompts]);
+
+  const designSystemPrompt = useMemo(() => {
+    const schemaJson = JSON.stringify(z.toJSONSchema(designLanguageSpecSchema), null, 2);
+    return getDesignLanguageSystemPrompt(themesFramework, themesDarkLightSupport, schemaJson)
+      + outputFilePathSection(designOutputPath);
+  }, [themesFramework, themesDarkLightSupport, designOutputPath]);
+
+  const systemPrompt = designActive ? designSystemPrompt : cssSystemPrompt;
+  const outputPath = designActive ? designOutputPath : themeOutputPath;
+
   const {
     messages, isStreaming, thinkingContent, input, setInput, sendMessage,
     stopGeneration, regenerate, clearChat, deleteFrom, attachments, addAttachment, removeAttachment,
@@ -105,23 +160,36 @@ export function ThemesPanel() {
   } = useChat({
     entityId: `theme-${themeDir}`,
     chatPath,
-    systemPrompt: getThemeSystemPrompt(
-      themesFramework,
-      settings.prompts["prompt.themes.base"] || undefined,
-      settings.prompts[`prompt.themes.${themesFramework}`] || undefined,
-    ) + (themesDarkLightSupport ? "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." : "") + outputFilePathSection(themeOutputPath),
-    outputPath: themeOutputPath,
+    systemPrompt,
+    outputPath,
     onOutput: (content) => {
-      // Fallback: model responded with plain text instead of using write_file.
-      // Extract the CSS block (handles a comment before the fence).
-      const fenceMatch = content.match(/```(?:css)?\s*([\s\S]*?)(?:```|$)/i);
-      const extracted = fenceMatch ? fenceMatch[1].trim() : content.trim();
-      applyGeneratedCss(extracted);
+      if (cssActive) {
+        const fenceMatch = content.match(/```(?:css)?\s*([\s\S]*?)(?:```|$)/i);
+        const extracted = fenceMatch ? fenceMatch[1].trim() : content.trim();
+        applyGeneratedCss(extracted);
+      }
     },
-    onCodeOutput: (content) => {
-      // Primary path: model used write_file to output the CSS (as instructed).
-      // content is already stripped of fences by useChat's stripFences().
-      applyGeneratedCss(content);
+    onToolWrite: (path, content) => {
+      if (!designActive) {
+        applyGeneratedCss(content);
+        return;
+      }
+      const fileName = path.split("/").pop();
+      if (fileName === "design.json") {
+        setDesignJson(content);
+        setCodeTab("tokens");
+        setPreviewKey((k) => k + 1);
+        window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
+        toast.success("Design language generated");
+      } else if (fileName === "theme.css") {
+        setCss(content);
+        setPreviewKey((k) => k + 1);
+        writeFile(`${generatedDir}/src/styles/preview-theme.css`, content).catch((e) =>
+          notify.error("Failed to update preview CSS", getErrorMessage(e))
+        );
+      } else if (fileName === "DESIGN.md") {
+        setDesignMd(content);
+      }
     },
   });
 
@@ -139,6 +207,21 @@ export function ThemesPanel() {
     }
   }, [loadedCss]);
 
+  // Load design.json and DESIGN.md from disk when theme changes
+  useEffect(() => {
+    let cancelled = false;
+    const base = `projects/${settings.project}/themes/${selectedThemeDir || "main"}`;
+    Promise.all([
+      readFile(`${base}/design.json`).catch(() => null),
+      readFile(`${base}/DESIGN.md`).catch(() => null),
+    ]).then(([jsonRaw, mdRaw]) => {
+      if (cancelled) return;
+      setDesignJson(jsonRaw ?? "");
+      setDesignMd(mdRaw ?? "");
+    });
+    return () => { cancelled = true; };
+  }, [settings.project, selectedThemeDir]);
+
   const handleSaveConfirm = async () => {
     if (!saveDialogName.trim()) return;
     const slug = saveDialogName.trim().toLowerCase().replace(/\s+/g, "-");
@@ -149,6 +232,31 @@ export function ThemesPanel() {
     window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
   };
 
+  const handleSend = useCallback(() => {
+    if (!input.trim()) return;
+    sendMessage();
+    setInput("");
+  }, [input, sendMessage, setInput]);
+
+  const handleReRender = useCallback(() => {
+    let spec: import("@/lib/design/spec").DesignLanguageSpec;
+    try {
+      spec = JSON.parse(designJson);
+    } catch (e) {
+      notify.error("Invalid design.json", getErrorMessage(e));
+      return;
+    }
+    const renderedCss = renderThemeCss(spec);
+    const renderedMd = renderDesignMd(spec);
+    setCss(renderedCss);
+    setDesignMd(renderedMd);
+    setPreviewKey((k) => k + 1);
+    const base = `projects/${settings.project}/themes/${themeDir}`;
+    writeFile(`${base}/tokens.json`, renderTokensJson(spec))
+      .then(() => toast.success("Re-rendered from JSON", { description: "CSS and design updated" }))
+      .catch((e) => notify.error("Failed to save tokens", getErrorMessage(e)));
+  }, [designJson, settings.project, themeDir]);
+
   const deviceWidth = {
     desktop: "100%",
     tablet: "768px",
@@ -156,96 +264,6 @@ export function ThemesPanel() {
   };
 
   const parentCss = getParentCss();
-
-  const chatPane = (
-    <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        thinkingContent={thinkingContent}
-        pendingPermissions={pendingPermissions}
-        onApplyCode={(content) => {
-          const stripped = content.replace(/ thinking[\s\S]*?<\/think>/g, "").trim();
-          const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
-          if (cleaned) setCss(cleaned);
-        }}
-        onRegenerate={regenerate}
-        onDeleteFrom={deleteFrom}
-        onResolvePermission={(requestId, decision, toolName) => {
-          useChatStore.getState().resolveToolPermission(
-            `theme-${themeDir}`,
-            requestId,
-            decision
-          )
-          if (decision === "always_allowed" && toolName) {
-            const current = settings.toolAllowlist
-            if (!current.includes(toolName)) {
-              useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
-            }
-          }
-        }}
-      />
-      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-        <ChatInput
-          value={input}
-          onChange={setInput}
-          onSend={sendMessage}
-          disabled={isStreaming}
-          attachments={attachments}
-          onAddAttachment={addAttachment}
-          onRemoveAttachment={removeAttachment}
-          mentions={mentions}
-          onAddMention={addMention}
-          onRemoveMention={removeMention}
-          projectPath={`projects/${settings.project}`}
-          placeholder="Describe the theme you want…"
-          thinkEnabled={thinkEnabled}
-          onToggleThink={toggleThink}
-          thinkLevel={thinkLevel}
-          onSetThinkLevel={setThinkLevel}
-          isGptOssFamily={isGptOssFamily}
-          canThink={canThink}
-          canVision={canVision}
-          toolsEnabled={toolsEnabled}
-          onToggleTools={toggleTools}
-          canTools={canTools}
-          onStop={stopGeneration}
-        />
-      </div>
-    </div>
-  );
-
-  const frameworkPills = (
-    <>
-      {(["shadcn", "daisy", "bootstrap", "generic"] as const).map((f) => (
-        <button
-          key={f}
-          onClick={() => setPs({ themesFramework: f })}
-          className={[
-            "px-1.5 py-0.5 rounded text-[10px] border transition-colors",
-            themesFramework === f
-              ? "bg-primary text-primary-foreground border-primary"
-              : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
-          ].join(" ")}
-        >
-          {f === "bootstrap" ? "BS" : f === "generic" ? "Gen" : f === "shadcn" ? "shadcn" : "Daisy"}
-        </button>
-      ))}
-      <div className="w-px h-3.5 bg-border mx-0.5" />
-      <button
-        onClick={() => setPs({ themesDarkLightSupport: !themesDarkLightSupport })}
-        className={[
-          "flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors",
-          themesDarkLightSupport
-            ? "bg-primary text-primary-foreground border-primary"
-            : "border-border hover:bg-muted text-muted-foreground hover:text-foreground",
-        ].join(" ")}
-        title="Generate dark + light mode variants"
-      >
-        <Sun size={9} /><Moon size={9} />
-      </button>
-    </>
-  );
 
   return (
     <div className="h-full flex flex-col">
@@ -257,12 +275,16 @@ export function ThemesPanel() {
                 <div className="panel-toolbar h-10 px-3 gap-2">
                   <span className="text-sm font-medium">{selectedThemeDir ?? "Theme"}</span>
                   <div className="flex-1" />
-                  {frameworkPills}
+                  <ThemeFrameworkPills
+                    themesFramework={themesFramework}
+                    themesDarkLightSupport={themesDarkLightSupport}
+                    onSetFramework={(f) => setPs({ themesFramework: f })}
+                    onToggleDarkLight={() => setPs({ themesDarkLightSupport: !themesDarkLightSupport })}
+                  />
                   <Button
                     variant="ghost" size="icon" className="h-6 w-6"
                     onClick={async () => {
                       if (selectedThemeDir && selectedThemeDir !== "main") {
-                        // Update existing theme directly
                         try {
                           await persistTheme(css, "", selectedThemeDir);
                           toast.success(
@@ -274,7 +296,6 @@ export function ThemesPanel() {
                         }
                         window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
                       } else {
-                        // New theme - open save dialog
                         setSaveDialogName("");
                         setShowSaveDialog(true);
                       }
@@ -293,6 +314,14 @@ export function ThemesPanel() {
                     <FolderUp size={12} />
                   </Button>
                   <Button
+                    variant="ghost" size="icon" className="h-6 w-6"
+                    onClick={handleExportTokens}
+                    disabled={!selectedThemeDir}
+                    title="Export DTCG tokens.json"
+                  >
+                    <Download size={12} />
+                  </Button>
+                  <Button
                     variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive"
                     onClick={async () => {
                       const { confirm } = await import("@tauri-apps/plugin-dialog");
@@ -304,7 +333,69 @@ export function ThemesPanel() {
                     <Trash2 size={12} />
                   </Button>
                 </div>
-                {chatPane}
+                <ThemeChatPanel
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  thinkingContent={thinkingContent}
+                  pendingPermissions={pendingPermissions}
+                  onApplyCode={(content) => {
+                    const stripped = content.replace(/<thinking[\s\S]*?<\/think>/g, "").trim();
+                    const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
+                    if (cleaned) {
+                      setCss(cleaned);
+                      setPreviewKey((k) => k + 1);
+                    }
+                  }}
+                  onRegenerate={regenerate}
+                  onDeleteFrom={deleteFrom}
+                  onResolvePermission={(requestId, decision, toolName) => {
+                    useChatStore.getState().resolveToolPermission(
+                      `theme-${themeDir}`,
+                      requestId,
+                      decision
+                    )
+                    if (decision === "always_allowed" && toolName) {
+                      const current = settings.toolAllowlist
+                      if (!current.includes(toolName)) {
+                        useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] })
+                      }
+                    }
+                  }}
+                  input={input}
+                  onChangeInput={setInput}
+                  onSend={handleSend}
+                  attachments={attachments}
+                  onAddAttachment={addAttachment}
+                  onRemoveAttachment={removeAttachment}
+                  mentions={mentions}
+                  onAddMention={addMention}
+                  onRemoveMention={removeMention}
+                  projectPath={`projects/${settings.project}`}
+                  placeholder={
+                    designActive
+                      ? "Describe a design language (structured spec + CSS will be generated)…"
+                      : "Describe the theme you want…"
+                  }
+                  thinkEnabled={thinkEnabled}
+                  onToggleThink={toggleThink}
+                  thinkLevel={thinkLevel}
+                  onSetThinkLevel={setThinkLevel}
+                  isGptOssFamily={isGptOssFamily}
+                  canThink={canThink}
+                  canVision={canVision}
+                  toolsEnabled={toolsEnabled}
+                  onToggleTools={toggleTools}
+                  canTools={canTools}
+                  onStopChat={stopGeneration}
+                  cssActive={cssActive}
+                  designActive={designActive}
+                  onToggleCss={toggleCss}
+                  onToggleDesign={toggleDesign}
+                  archetypeName={archetypeName}
+                  onSetArchetypeName={setArchetypeName}
+                  allSeeds={allSeeds}
+                  selectedSeed={selectedSeed}
+                />
               </div>
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
@@ -336,46 +427,12 @@ export function ThemesPanel() {
           <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setPs({ themesCodeOpen: v })}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
-                <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
-                  <span className="text-sm font-medium">Preview</span>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant={themesDevice === "mobile" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setPs({ themesDevice: "mobile" })}
-                    >
-                      <Smartphone size={12} />
-                    </Button>
-                    <Button
-                      variant={themesDevice === "tablet" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setPs({ themesDevice: "tablet" })}
-                    >
-                      <Tablet size={12} />
-                    </Button>
-                    <Button
-                      variant={themesDevice === "desktop" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setPs({ themesDevice: "desktop" })}
-                    >
-                      <Monitor size={12} />
-                    </Button>
-                  </div>
-                  <div className="w-px h-4 bg-border mx-1" />
-                  <Button
-                    variant={themesDarkPreview ? "secondary" : "ghost"}
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setPs({ themesDarkPreview: !themesDarkPreview })}
-                    title={themesDarkPreview ? "Light preview" : "Dark preview"}
-                  >
-                    {themesDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
-                  </Button>
-                </div>
+                <ThemePreviewToolbar
+                  themesDevice={themesDevice}
+                  themesDarkPreview={themesDarkPreview}
+                  onSetDevice={(d) => setPs({ themesDevice: d })}
+                  onToggleDarkPreview={() => setPs({ themesDarkPreview: !themesDarkPreview })}
+                />
                 <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
                   {css ? (
                     <div
@@ -475,16 +532,74 @@ body { margin: 0; font-family: sans-serif; }
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}>
                 <FileCode size={12} className="mr-1.5" />
-                <span className="text-xs font-medium">CSS Output</span>
+                {themesCodeOpen && (
+                  <>
+                    <div className="w-px h-4 bg-border mx-1" />
+                    <button
+                      className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                      onClick={(e) => { e.stopPropagation(); setCodeTab("css"); }}
+                    >
+                      CSS
+                    </button>
+                    <button
+                      className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                      onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); }}
+                    >
+                      Tokens
+                    </button>
+                    <button
+                      className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
+                      onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); }}
+                    >
+                      Design
+                    </button>
+                    {codeTab === "tokens" && designJson && (
+                      <button
+                        className="ml-1 px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        onClick={(e) => { e.stopPropagation(); handleReRender(); }}
+                      >
+                        Re-render
+                      </button>
+                    )}
+                  </>
+                )}
                 <div className="flex-1" />
                 {themesCodeOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </PaneHeader>
             </Allotment.Pane>
             <Allotment.Pane visible={themesCodeOpen} preferredSize={252} minSize={100} snap>
               {themesCodeOpen && (
-                <div className="h-full overflow-hidden">
-                  <CodeMirrorEditor value={css} onChange={setCss} mode="css" />
-                </div>
+                <ThemeCodeTabs
+                  css={css}
+                  designJson={designJson}
+                  designMd={designMd}
+                  activeTab={codeTab}
+                  onChangeTab={setCodeTab}
+                  onChangeCss={setCss}
+                  onChangeJson={setDesignJson}
+                  onChangeMd={setDesignMd}
+                  onBlurCss={() => {
+                    const base = `projects/${settings.project}/themes/${themeDir}`;
+                    Promise.all([
+                      writeFile(`${base}/theme.css`, css),
+                      writeFile(`${generatedDir}/src/styles/preview-theme.css`, css),
+                    ]).then(() => toast.success("CSS saved")).catch((e) => notify.error("Failed to save CSS", getErrorMessage(e)));
+                  }}
+                  onBlurJson={() => {
+                    const base = `projects/${settings.project}/themes/${themeDir}`;
+                    writeFile(`${base}/design.json`, designJson)
+                      .then(() => toast.success("Tokens saved"))
+                      .catch((e) => notify.error("Failed to save tokens", getErrorMessage(e)));
+                  }}
+                  onBlurMd={() => {
+                    const base = `projects/${settings.project}/themes/${themeDir}`;
+                    writeFile(`${base}/DESIGN.md`, designMd)
+                      .then(() => toast.success("Design doc saved"))
+                      .catch((e) => notify.error("Failed to save design doc", getErrorMessage(e)));
+                  }}
+                  onReRender={handleReRender}
+                  hasDesignJson={!!designJson}
+                />
               )}
             </Allotment.Pane>
           </Allotment>

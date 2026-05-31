@@ -125,6 +125,8 @@ interface UseChatOptions {
   onOutput?: (content: string) => void
   /** Called when write_file succeeds for the primary output file. Content is raw code, no fences. */
   onCodeOutput?: (content: string) => void
+  /** Called for EVERY successful write_file / edit_file (path + content). Use for multi-file updates. */
+  onToolWrite?: (path: string, content: string) => void
 }
 
 // ─── Factory: createStreamHandler ──────────────────────────────────────────
@@ -144,6 +146,7 @@ interface StreamHandlerParams {
   activeRequestIdRef: MutableRefObject<number | null>
   onOutputRef: MutableRefObject<((content: string) => void) | undefined>
   onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
+  onToolWriteRef: MutableRefObject<((path: string, content: string) => void) | undefined>
   outputPath: string | undefined
   pendingToolResultsRef: MutableRefObject<PendingToolResult[]>
   setToolResultTick: React.Dispatch<React.SetStateAction<number>>
@@ -152,7 +155,7 @@ interface StreamHandlerParams {
 function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
-    onOutputRef, onCodeOutputRef, outputPath, pendingToolResultsRef, setToolResultTick,
+    onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath, pendingToolResultsRef, setToolResultTick,
   } = params
 
   let contentAccumulated = ""
@@ -194,7 +197,6 @@ function createStreamHandler(params: StreamHandlerParams) {
     if ((stopRef as MutableRefObject<boolean>).current) return
     if (msg.event === "Chunk") {
       if (msg.data.thinking) {
-        console.log("[think-chunk] got thinking chunk len=%d preview=%s", msg.data.thinking.length, msg.data.thinking.slice(0, 80))
         thinkingAccumulated += msg.data.thinking
         if (rafThinkingId === null) {
           rafThinkingId = requestAnimationFrame(() => {
@@ -213,7 +215,6 @@ function createStreamHandler(params: StreamHandlerParams) {
         })
       }
     } else if (msg.event === "ToolCall") {
-      console.log("[think-toolcall] tool=%s thinkingAccumulated.len=%d", msg.data.tool, thinkingAccumulated.length)
       useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       // Flush accumulated thinking/text as a chunk at tool boundary
       useChatStore.getState().addStreamChunk(entityId, {
@@ -262,6 +263,11 @@ function createStreamHandler(params: StreamHandlerParams) {
         if (content && outputPath && path === outputPath) {
           onCodeOutputRef.current?.(stripFences(content))
         }
+        // Fire onToolWrite for ALL successful write_file / edit_file calls so
+        // consumers that manage multiple files (e.g. ThemesPanel) can react.
+        if (content && path) {
+          onToolWriteRef.current?.(path, stripFences(content))
+        }
       }
       pendingToolResultsRef.current.push({ tool, success, output, path, content })
       setToolResultTick((tick) => tick + 1)
@@ -289,7 +295,7 @@ function createStreamHandler(params: StreamHandlerParams) {
 
 // ─── useChat hook ──────────────────────────────────────────────────────────
 
-export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite }: UseChatOptions) {
   // Destructure individual settings fields instead of selecting the full
   // settings object. Zustand's shallow equality means each selector re-renders
   // only when its specific value changes. The full `settings` object was
@@ -310,6 +316,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
   const onCodeOutputRef = useRef(onCodeOutput) as MutableRefObject<typeof onCodeOutput>
   useEffect(() => { onCodeOutputRef.current = onCodeOutput }, [onCodeOutput])
+  const onToolWriteRef = useRef(onToolWrite) as MutableRefObject<typeof onToolWrite>
+  useEffect(() => { onToolWriteRef.current = onToolWrite }, [onToolWrite])
 
   // Shared stop flag — set to true to abort the current stream mid-flight
   const stopRef = useRef(false) as RefObject<boolean>
@@ -336,7 +344,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     } else {
       setThinkEnabled(false)
     }
-    console.log("[think-auto] modelId=%s caps.thinking=%s → thinkEnabled=%s", modelId, caps.thinking, caps.thinking)
   // modelId re-runs on model switch (handles switching between two thinking-capable models).
   // caps.thinking re-runs when capabilities load after a switch (handles caps arriving after modelId change).
   // https://docs.ollama.com/capabilities/thinking
@@ -462,15 +469,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
-    console.log("[think-send] model=%s thinkEnabled=%s caps.thinking=%s isGptOss=%s → think=%s outputPath=%s",
-      modelId, thinkEnabled, caps.thinking, isGptOssFamily, useThinking, effectiveOutputPath ?? "(none)")
 
     ;(stopRef as MutableRefObject<boolean>).current = false
 
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, updatedMessages,
-      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, outputPath,
+      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       pendingToolResultsRef, setToolResultTick,
     })
     channel.onmessage = onMessage
@@ -558,15 +563,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
-    console.log("[think-regen] model=%s thinkEnabled=%s caps.thinking=%s isGptOss=%s → think=%s outputPath=%s",
-      modelId, thinkEnabled, caps.thinking, isGptOssFamily, useThinking, effectiveOutputPath ?? "(none)")
 
     ;(stopRef as MutableRefObject<boolean>).current = false
 
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, updatedMessages,
-      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, outputPath,
+      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       pendingToolResultsRef, setToolResultTick,
     })
     channel.onmessage = onMessage

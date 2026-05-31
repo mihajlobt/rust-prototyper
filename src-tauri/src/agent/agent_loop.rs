@@ -16,7 +16,7 @@ use super::{executor::{execute_tool, ToolExecutionResult}, tools::build_tools};
 
 const MAX_ITERATIONS: u8 = 20;
 const MAX_WRITES: u8 = 10;
-const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 5000;
+const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 15000;
 
 fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     let parts: Vec<&str> = output_path.splitn(3, '/').collect();
