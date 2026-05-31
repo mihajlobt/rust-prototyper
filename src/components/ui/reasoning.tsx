@@ -4,7 +4,6 @@ import React, {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react"
 import { Markdown } from "./markdown"
@@ -125,28 +124,7 @@ function ReasoningContent({
   markdown = false,
   ...props
 }: ReasoningContentProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
-  const innerRef = useRef<HTMLDivElement>(null)
   const { isOpen } = useReasoningContext()
-
-  useEffect(() => {
-    if (!contentRef.current || !innerRef.current) return
-
-    const update = () => {
-      if (contentRef.current && innerRef.current) {
-        contentRef.current.style.maxHeight = isOpen
-          ? `${innerRef.current.scrollHeight}px`
-          : "0px"
-      }
-    }
-
-    update()
-
-    const observer = new ResizeObserver(update)
-    observer.observe(innerRef.current)
-
-    return () => observer.disconnect()
-  }, [isOpen])
 
   const content = markdown ? (
     <Markdown>{children as string}</Markdown>
@@ -156,16 +134,14 @@ function ReasoningContent({
 
   return (
     <div
-      ref={contentRef}
       className={cn(
-        "overflow-hidden transition-[max-height] duration-150 ease-out",
+        "overflow-x-auto",
+        isOpen ? "overflow-y-auto" : "overflow-y-hidden max-h-0",
         className
       )}
-      style={{ maxHeight: "0px" }}
       {...props}
     >
       <div
-        ref={innerRef}
         className={cn(
           "text-muted-foreground prose prose-sm dark:prose-invert",
           contentClassName

@@ -180,7 +180,7 @@ export function MessageList({
   return (
     <div className="relative flex-1 min-h-0">
       <ChatContainerRoot className="h-full">
-        <ChatContainerContent className="gap-3 p-3">
+        <ChatContainerContent className="gap-4 p-3">
           {messages.map((msg, i) => (
             <MessageBubble
               key={`${msg.role}-${i}`}
@@ -372,7 +372,7 @@ const MessageBubble = memo(function MessageBubble({
   return (
     <Message>
       <MessageAvatar src="" alt="AI" fallback="AI" />
-      <div className="flex flex-col gap-1 max-w-[85%]">
+      <div className="flex flex-col gap-2 max-w-[85%]">
         {isEmpty ? (
           <Loader variant="typing" size="sm" />
         ) : (

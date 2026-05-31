@@ -758,7 +758,7 @@ export function ComponentsPanel() {
                     </Button>
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
+                <div className="flex-1 overflow-auto px-0 py-4 bg-muted/30 flex justify-center">
                   <div
                     className="h-full bg-background shadow-lg border border-border overflow-hidden"
                     style={{ width: deviceWidth[componentsDevice] }}
