@@ -201,7 +201,7 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
   const useGenericBlocks = customContent === null
 
   return (
-    <div className={cn("border-border mt-3 overflow-hidden rounded-lg border", className)}>
+    <div className={cn("border-border overflow-hidden rounded-lg border", className)}>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <Button
