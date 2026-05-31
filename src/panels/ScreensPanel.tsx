@@ -77,6 +77,7 @@ export function ScreensPanel() {
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("screens-code", 3, [true, true, screensCodeOpen]);
   const [code, setCode] = useState("");
   const [themeCss, setThemeCss] = useState("");
+  const [previewThemeCss, setPreviewThemeCss] = useState("");
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const screensCodeTab = ps.screensCodeTab;
   const [selectingElementForPort, setSelectingElementForPort] = useState<{ portId: string; direction: "output" } | null>(null);
@@ -432,14 +433,32 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [ps.stylePreset, settings.project]);
 
-  // ─── Write selected theme CSS to the preview project when it changes ─────────
-  // Restyles the live screen preview to match the picked design language.
+  // Load the preview theme CSS — drives the live preview only, independent of the
+  // generation design language (ps.stylePreset).
   useEffect(() => {
-    if (!themeCss || runnerStatus !== "running") return;
-    writeFile(`${generatedDir}/src/styles/preview-theme.css`, themeCss).catch((e) => {
-      notify.error("Failed to write theme CSS", getErrorMessage(e));
+    if (!ps.screensPreviewTheme) { setPreviewThemeCss(""); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const css = await readFile(`projects/${settings.project}/themes/${ps.screensPreviewTheme}/theme.css`);
+        if (!cancelled) setPreviewThemeCss(css);
+      } catch (e) {
+        if (!cancelled) {
+          setPreviewThemeCss("");
+          if (!isNotFoundError(e)) notify.error("Failed to load preview theme", getErrorMessage(e));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ps.screensPreviewTheme, settings.project]);
+
+  // ─── Write the preview theme CSS to the preview project when it changes ──────
+  useEffect(() => {
+    if (!previewThemeCss || runnerStatus !== "running") return;
+    writeFile(`${generatedDir}/src/styles/preview-theme.css`, previewThemeCss).catch((e) => {
+      notify.error("Failed to write preview theme CSS", getErrorMessage(e));
     });
-  }, [themeCss, runnerStatus, generatedDir]);
+  }, [previewThemeCss, runnerStatus, generatedDir]);
 
   // Load API list and component list for generation context toolbar
   useEffect(() => {
@@ -656,21 +675,30 @@ export function ScreensPanel() {
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {/* Generation context toolbar */}
-        {(ctxApis.length > 0 || ctxComponents.length > 0 || (!!ps.stylePreset && !!activeDesignBrief)) && (
+        {(ctxApis.length > 0 || ctxComponents.length > 0 || themes.length > 0) && (
           <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Active design language — auto-applied as the brief, removable */}
-            {ps.stylePreset && activeDesignBrief && !ctxSelectedBrief && (
-              <Button
-                variant={ps.applyDesignBrief ? "secondary" : "outline"}
-                size="sm"
-                className="h-6 text-[11px] gap-1 px-2"
-                onClick={() => setPs({ applyDesignBrief: !ps.applyDesignBrief })}
-                title={ps.applyDesignBrief ? "Design language applied — click to remove from generation" : "Design language removed — click to re-apply"}
-              >
-                <Palette size={10} />
-                {ps.stylePreset}
-                {ps.applyDesignBrief && <span className="ml-0.5 text-muted-foreground">×</span>}
-              </Button>
+            {/* Design language — the theme injected into generation. The preview
+                theme is chosen separately in the preview toolbar. */}
+            {themes.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant={ps.stylePreset ? "secondary" : "outline"} size="sm" className="h-6 text-[11px] gap-1 px-2">
+                    <Palette size={10} />
+                    {ps.stylePreset || "Design"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuRadioGroup
+                    value={ps.stylePreset}
+                    onValueChange={(v) => setPs({ stylePreset: v, applyDesignBrief: true })}
+                  >
+                    <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+                    {themes.map((t) => (
+                      <DropdownMenuRadioItem key={t.name} value={t.name} className="text-xs">{t.name}</DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {/* Design Brief */}
             <DropdownMenu>
@@ -882,7 +910,7 @@ export function ScreensPanel() {
                     </span>
                   )}
                   <div className="flex-1" />
-                  <Select value={ps.stylePreset} onValueChange={(v) => setPs({ stylePreset: v })}>
+                  <Select value={ps.screensPreviewTheme} onValueChange={(v) => setPs({ screensPreviewTheme: v })}>
                     <SelectTrigger className="h-6 text-xs w-[90px]">
                       <SelectValue placeholder="Theme…" />
                     </SelectTrigger>

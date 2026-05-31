@@ -30,6 +30,9 @@ export interface ProjectSettings {
   screensDarkPreview: boolean;
   screensCodeOpen: boolean;
   screensCodeTab: "editor" | "ports";
+  /** Theme applied to the live screen preview only — independent of the
+   *  generation design language (stylePreset). */
+  screensPreviewTheme: string;
 
   // Components panel
   componentsDevice: "desktop" | "tablet" | "mobile";
@@ -108,6 +111,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   screensDarkPreview: false,
   screensCodeOpen: false,
   screensCodeTab: "editor",
+  screensPreviewTheme: "",
 
   componentsDevice: "desktop",
   componentsDarkPreview: false,
