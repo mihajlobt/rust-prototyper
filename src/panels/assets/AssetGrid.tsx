@@ -217,14 +217,15 @@ function AssetCardGrid({
             <Trash2 size={12} />
           </button>
           {/* Metadata overlay at bottom of thumbnail */}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent px-2 pt-6 pb-1.5">
-            <div className="text-xs leading-snug text-white/90 truncate">
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/80 to-black/0 px-2 pt-5 pb-2">
+            <div className="text-xs leading-snug text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
               {asset.prompt ?? asset.file_name}
             </div>
-            <div className="flex items-center gap-x-1.5 text-[10px] font-mono text-white/60 mt-0.5">
-              <span>{asset.file_name}</span>
-              <span className="text-white/30">|</span>
-              <span>{(asset.file_size / 1024).toFixed(0)}KB</span>
+            <div className="text-[10px] font-mono text-white/70 mt-1">
+              {asset.file_name}
+            </div>
+            <div className="text-[10px] font-mono text-white/40">
+              {(asset.file_size / 1024).toFixed(0)}KB
             </div>
           </div>
         </div>
