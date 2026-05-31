@@ -6,6 +6,41 @@ import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "./code-block"
 
+// ─── Color detection for inline swatches ────────────────────────────────────
+// Matches: #RGB, #RRGGBB, #RRGGBBAA, oklch(...), rgb(...), rgba(...),
+// hsl(...), hsla(...), and CSS named colors in prose context.
+// See: https://www.w3.org/TR/css-color-4/
+
+const NAMED_COLORS = new Set([
+  "red","blue","green","yellow","orange","purple","pink","brown","black","white",
+  "gray","grey","cyan","magenta","lime","navy","teal","maroon","olive","silver",
+  "gold","coral","violet","indigo","crimson","turquoise","salmon","plum","khaki",
+  "tan","azure","ivory","beige","wheat","lavender","mint","skyblue","tomato",
+  "orangered","hotpink","darkred","darkblue","darkgreen","darkorange",
+])
+
+const COLOR_RE = /(#[0-9a-fA-F]{3,8}\b)|(oklch\([^)]+\))|(rgba?\([^)]+\))|(hsla?\([^)]+\))/g
+
+function parseColorValue(text: string): string | null {
+  const trimmed = text.trim()
+  // Inline code: `#ff0000`, `oklch(0.5 0.2 30)`
+  const match = trimmed.match(COLOR_RE)
+  if (match) return match[0]
+  // Named colors (lowercase)
+  if (NAMED_COLORS.has(trimmed.toLowerCase())) return trimmed.toLowerCase()
+  return null
+}
+
+function ColorSwatch({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block size-3 rounded border border-border align-middle mx-0.5 shrink-0"
+      style={{ backgroundColor: color }}
+      title={color}
+    />
+  )
+}
+
 export type MarkdownProps = {
   children: string
   id?: string
@@ -46,13 +81,16 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   },
   // Only inline code reaches this renderer — block code is fully handled by pre
   code: function CodeComponent({ children, className }) {
+    const text = String(children ?? "")
+    const color = parseColorValue(text)
     return (
       <span
         className={cn(
-          "bg-primary-foreground rounded-sm px-1 font-mono text-sm",
+          "bg-primary-foreground rounded-sm px-1 font-mono text-sm inline-flex items-center gap-0.5",
           className
         )}
       >
+        {color && <ColorSwatch color={color} />}
         {children}
       </span>
     )
@@ -83,10 +121,15 @@ function MarkdownComponent({
   id,
   className,
   isStreaming,
-  components = INITIAL_COMPONENTS,
+  components: customComponents,
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
+  // Merge default renderers (pre/code for fenced blocks) with caller overrides
+  const components = useMemo(
+    () => ({ ...INITIAL_COMPONENTS, ...customComponents }),
+    [customComponents],
+  )
   // During streaming, skip marked.lexer block-split — it breaks on unclosed fences.
   // A single ReactMarkdown pass handles partial markdown safely.
   const blocks = useMemo(
