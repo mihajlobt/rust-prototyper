@@ -216,8 +216,8 @@ function AssetCardGrid({
           >
             <Trash2 size={12} />
           </button>
-          {/* Metadata overlay at bottom of thumbnail */}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/80 to-black/0 px-2 pt-5 pb-2">
+          {/* Metadata overlay at bottom of thumbnail — hover only */}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/80 to-black/0 px-2 pt-5 pb-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="text-xs leading-snug text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
               {asset.prompt ?? asset.file_name}
             </div>
