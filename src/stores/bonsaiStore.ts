@@ -4,6 +4,7 @@ import {
   bonsaiStopServer,
   bonsaiServerStatus,
   bonsaiGenerateImage,
+  bonsaiCancelGeneration,
   bonsaiListAssets,
   bonsaiDeleteAsset,
   bonsaiGetServerConfig,
@@ -43,6 +44,7 @@ interface BonsaiActions {
     seed?: number;
     backend?: string;
   }) => Promise<BonsaiGenerateResult | null>;
+  cancelGeneration: () => Promise<void>;
   listAssets: (projectId: string) => Promise<void>;
   deleteAsset: (projectId: string, fileName: string) => Promise<void>;
   scheduleStop: () => Promise<void>;
@@ -139,6 +141,15 @@ export const useBonsaiStore = create<BonsaiStore>()((set, get) => ({
     } catch (e) {
       set({ error: getErrorMessage(e), generating: false });
       return null;
+    }
+  },
+
+  cancelGeneration: async () => {
+    try {
+      await bonsaiCancelGeneration();
+      set({ generating: false });
+    } catch (e) {
+      set({ error: getErrorMessage(e) });
     }
   },
 

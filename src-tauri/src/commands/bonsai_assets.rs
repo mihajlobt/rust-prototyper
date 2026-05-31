@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tauri::{AppHandle, State};
+use tokio_util::sync::CancellationToken;
 
 use crate::{resolve_path, AppError, AppState};
 use super::bonsai::{bonsai_error, BonsaiServerConfig};
@@ -39,6 +40,7 @@ pub struct BonsaiAssetMeta {
 /// Generate an image via the Bonsai server. The 300s timeout is intentional —
 /// image generation with model loading can take several minutes. The async
 /// reqwest call won't block other Tauri commands since Tokio handles concurrent tasks.
+/// Supports cancellation via `bonsai_cancel_generation` which signals the CancellationToken.
 #[tauri::command]
 pub async fn bonsai_generate_image(
     app: AppHandle,
@@ -64,6 +66,40 @@ pub async fn bonsai_generate_image(
         return Err(bonsai_error("Invalid project ID"));
     }
 
+    // Set up cancellation token — only one generation at a time
+    let cancel_token = CancellationToken::new();
+    {
+        let mut token_guard = state.bonsai_generation_token.lock().unwrap();
+        if token_guard.is_some() {
+            return Err(bonsai_error("An image generation is already in progress"));
+        }
+        *token_guard = Some(cancel_token.clone());
+    }
+
+    let result = generate_image_inner(&app, &state, &cancel_token, project_id, prompt, width, height, steps, seed, backend, port).await;
+
+    // Always clean up the cancellation token, even on error
+    {
+        let mut token_guard = state.bonsai_generation_token.lock().unwrap();
+        *token_guard = None;
+    }
+
+    result
+}
+
+async fn generate_image_inner(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    cancel_token: &CancellationToken,
+    project_id: String,
+    prompt: String,
+    width: Option<u32>,
+    height: Option<u32>,
+    steps: Option<u32>,
+    seed: Option<u64>,
+    backend: Option<String>,
+    port: u16,
+) -> Result<BonsaiGenerateResult, AppError> {
     let image_width = width.unwrap_or(512);
     let image_height = height.unwrap_or(512);
     let image_steps = steps.unwrap_or(4);
@@ -86,20 +122,28 @@ pub async fn bonsai_generate_image(
     }
 
     // Use resolve_path for secure path construction
-    let assets_dir = resolve_path(&app, &format!("projects/{}/assets", project_id))?;
+    let assets_dir = resolve_path(app, &format!("projects/{}/assets", project_id))?;
     tokio::fs::create_dir_all(&assets_dir)
         .await
         .map_err(|e| bonsai_error(format!("Failed to create assets dir: {}", e)))?;
 
     let url = format!("http://127.0.0.1:{}/generate", port);
-    let response = state
+    let request = state
         .http_client
         .post(&url)
         .json(&body)
         .timeout(Duration::from_secs(300))
-        .send()
-        .await
-        .map_err(|e| bonsai_error(format!("Generation request failed: {}", e)))?;
+        .send();
+
+    // Race the HTTP request against cancellation — dropping the connection aborts the server-side work
+    let response = tokio::select! {
+        result = request => {
+            result.map_err(|e| bonsai_error(format!("Generation request failed: {}", e)))?
+        }
+        _ = cancel_token.cancelled() => {
+            return Err(bonsai_error("Image generation was cancelled"));
+        }
+    };
 
     if !response.status().is_success() {
         let status_code = response.status();
@@ -107,10 +151,14 @@ pub async fn bonsai_generate_image(
         return Err(bonsai_error(format!("Generation failed ({}): {}", status_code, error_body)));
     }
 
-    let png_bytes = response
-        .bytes()
-        .await
-        .map_err(|e| bonsai_error(format!("Failed to read image data: {}", e)))?;
+    let png_bytes = tokio::select! {
+        result = response.bytes() => {
+            result.map_err(|e| bonsai_error(format!("Failed to read image data: {}", e)))?
+        }
+        _ = cancel_token.cancelled() => {
+            return Err(bonsai_error("Image generation was cancelled"));
+        }
+    };
 
     if png_bytes.len() < 1024 {
         return Err(bonsai_error("Generated image is too small, possibly an error response"));
@@ -151,6 +199,17 @@ pub async fn bonsai_generate_image(
         height: image_height,
         seed: seed_value,
     })
+}
+
+/// Cancel an in-flight image generation by signalling its CancellationToken.
+/// The HTTP connection is dropped, which aborts server-side work for that request.
+#[tauri::command]
+pub async fn bonsai_cancel_generation(state: State<'_, AppState>) -> Result<(), AppError> {
+    let mut token_guard = state.bonsai_generation_token.lock().unwrap();
+    if let Some(token) = token_guard.take() {
+        token.cancel();
+    }
+    Ok(())
 }
 
 #[tauri::command]

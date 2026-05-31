@@ -73,6 +73,10 @@ export async function bonsaiGenerateImage(params: {
   });
 }
 
+export async function bonsaiCancelGeneration(): Promise<void> {
+  return invoke("bonsai_cancel_generation");
+}
+
 export async function bonsaiListAssets(projectId: string): Promise<AssetInfo[]> {
   return invoke("bonsai_list_assets", { projectId });
 }

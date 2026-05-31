@@ -22,6 +22,9 @@ pub struct AppState {
     pub bonsai_process: tokio::sync::Mutex<Option<BonsaiServer>>,
     pub bonsai_port: AtomicU16,
     pub bonsai_config: Mutex<BonsaiServerConfig>,
+    /// Cancellation token for the in-flight Bonsai image generation request.
+    /// `Some(token)` means a generation is running; cancelling it drops the HTTP connection.
+    pub bonsai_generation_token: Mutex<Option<CancellationToken>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -119,6 +122,7 @@ pub fn run() {
             bonsai_process: tokio::sync::Mutex::new(None),
             bonsai_port: AtomicU16::new(0),
             bonsai_config: Mutex::new(BonsaiServerConfig::default()),
+            bonsai_generation_token: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             commands::process::bun_dev,
@@ -157,6 +161,7 @@ pub fn run() {
             commands::bonsai::bonsai_stop_server,
             commands::bonsai::bonsai_server_status,
             commands::bonsai_assets::bonsai_generate_image,
+            commands::bonsai_assets::bonsai_cancel_generation,
             commands::bonsai_assets::bonsai_list_assets,
             commands::bonsai_assets::bonsai_delete_asset,
             commands::bonsai_assets::bonsai_get_server_config,

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal, Dice3 } from "lucide-react";
+import { Image, Power, PowerOff, Loader2, RefreshCw, AlertCircle, Clock, X, Terminal, LayoutList, LayoutGrid, SendHorizonal, Dice3, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
@@ -210,18 +210,24 @@ export function AssetsPanel() {
                       }
                     }}
                   />
-                  <Button
-                    className="self-stretch min-h-[56px] w-12 rounded-sm bg-gradient-to-b from-primary to-primary/80"
-                    onClick={handleGenerate}
-                    disabled={!isRunning || bonsai.generating || !prompt.trim()}
-                    title="Generate (Ctrl+Enter)"
-                  >
-                    {bonsai.generating ? (
-                      <Loader2 size={18} className="animate-spin" />
-                    ) : (
+                  {bonsai.generating ? (
+                    <Button
+                      className="self-stretch min-h-[56px] w-12 rounded-sm bg-gradient-to-b from-destructive to-destructive/80"
+                      onClick={() => bonsai.cancelGeneration()}
+                      title="Stop generation"
+                    >
+                      <Square size={18} fill="currentColor" />
+                    </Button>
+                  ) : (
+                    <Button
+                      className="self-stretch min-h-[56px] w-12 rounded-sm bg-gradient-to-b from-primary to-primary/80"
+                      onClick={handleGenerate}
+                      disabled={!isRunning || !prompt.trim()}
+                      title="Generate (Ctrl+Enter)"
+                    >
                       <SendHorizonal size={18} />
-                    )}
-                  </Button>
+                    </Button>
+                  )}
                 </div>
 
                 {/* Size presets row */}
