@@ -189,6 +189,28 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
     }
   })()
 
+  // Validate and parse a string as JSON; returns null if it is not valid JSON.
+  const safeJsonParse = (s: string): unknown | null => {
+    try { return JSON.parse(s) as unknown; } catch { return null; }
+  }
+
+  const tryPrettyJson = (value: string): string => {
+    const parsed = safeJsonParse(value)
+    return parsed !== null ? JSON.stringify(parsed, null, 2) : value
+  }
+
+  // Format a generic output object for display. Unwraps a single-key string
+  // value (e.g. { result: "..." }) and attempts JSON pretty-print on it.
+  const formatOutput = (obj: Record<string, unknown>): string => {
+    const keys = Object.keys(obj)
+    // If output is a single-key wrapper with a string value, unwrap and try JSON parse
+    if (keys.length === 1 && typeof obj[keys[0]] === "string") {
+      return tryPrettyJson(obj[keys[0]] as string)
+    }
+    // Otherwise pretty-print the whole object
+    return JSON.stringify(obj, null, 2)
+  }
+
   const formatValue = (value: unknown): string => {
     if (value === null || value === undefined) return String(value)
     if (typeof value === "string") return value
@@ -244,9 +266,9 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
             {useGenericBlocks && output && (
               <div>
                 <h4 className="text-muted-foreground mb-2 text-sm font-medium">Output</h4>
-                <ScrollArea className="max-h-60 overflow-hidden">
+                <ScrollArea className="max-h-96 overflow-hidden">
                   <div className="bg-background rounded border p-2 font-mono text-sm">
-                    <pre className="whitespace-pre-wrap">{formatValue(output)}</pre>
+                    <pre className="whitespace-pre-wrap">{formatOutput(output)}</pre>
                   </div>
                 </ScrollArea>
               </div>
