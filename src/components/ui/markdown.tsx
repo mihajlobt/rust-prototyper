@@ -111,7 +111,7 @@ const MemoizedMarkdownBlock = memo(
       </ReactMarkdown>
     )
   },
-  (prev, next) => prev.content === next.content
+  (prev, next) => prev.content === next.content && prev.components === next.components
 )
 
 MemoizedMarkdownBlock.displayName = "MemoizedMarkdownBlock"

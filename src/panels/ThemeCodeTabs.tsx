@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Children, isValidElement, useMemo, useState } from "react";
 import { Eye, Pencil, List } from "lucide-react";
 import { Allotment } from "allotment";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
@@ -14,6 +14,10 @@ interface ThemeCodeTabsProps {
   onChangeCss: (value: string) => void;
   onChangeJson: (value: string) => void;
   onChangeMd: (value: string) => void;
+  /** Persist the edited file to disk when its editor loses focus. */
+  onBlurCss?: () => void;
+  onBlurJson?: () => void;
+  onBlurMd?: () => void;
   hasDesignJson: boolean;
   designPreviewing: boolean;
   onToggleDesignPreview: () => void;
@@ -27,6 +31,9 @@ export function ThemeCodeTabs({
   onChangeCss,
   onChangeJson,
   onChangeMd,
+  onBlurCss,
+  onBlurJson,
+  onBlurMd,
   hasDesignJson,
   designPreviewing,
   onToggleDesignPreview,
@@ -51,11 +58,11 @@ export function ThemeCodeTabs({
   return (
     <div className="h-full overflow-hidden">
       {activeTab === "css" && (
-        <CodeMirrorEditor value={css} onChange={onChangeCss} mode="css" />
+        <CodeMirrorEditor value={css} onChange={onChangeCss} onBlur={onBlurCss} mode="css" />
       )}
       {activeTab === "tokens" && (
         hasDesignJson ? (
-          <CodeMirrorEditor value={designJson} onChange={onChangeJson} mode="json" />
+          <CodeMirrorEditor value={designJson} onChange={onChangeJson} onBlur={onBlurJson} mode="json" />
         ) : (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground px-4 text-center">
             No design tokens yet. Switch to Design mode and generate a theme to create a structured spec.
@@ -114,7 +121,7 @@ export function ThemeCodeTabs({
               >
                 <Eye size={11} /> Preview
               </button>
-              <CodeMirrorEditor value={designMd} onChange={onChangeMd} mode="markdown" />
+              <CodeMirrorEditor value={designMd} onChange={onChangeMd} onBlur={onBlurMd} mode="markdown" />
             </div>
           )
         ) : (
@@ -127,8 +134,13 @@ export function ThemeCodeTabs({
   );
 }
 
+// Recurse through inline markup (e.g. `## **Bold** title`) so the derived heading id
+// matches design-toc's slug, which is computed from the raw markdown heading text.
 function extractTextContent(children: React.ReactNode): string {
-  if (typeof children === "string") return children;
-  if (Array.isArray(children)) return children.map((c) => (typeof c === "string" ? c : "")).join("");
-  return String(children ?? "");
+  if (typeof children === "string" || typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(extractTextContent).join("");
+  if (isValidElement<{ children?: React.ReactNode }>(children)) {
+    return Children.toArray(children.props.children).map(extractTextContent).join("");
+  }
+  return "";
 }

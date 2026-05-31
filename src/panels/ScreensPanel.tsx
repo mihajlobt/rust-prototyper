@@ -14,7 +14,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { writeFile, createDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { writeFile, createDir, readFile, readDir, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import type { FileEntry } from "@/lib/ipc";
 import { useQueryClient } from "@tanstack/react-query";
 import { projectKeys } from "@/lib/queryKeys";
 import { useAppStore } from "@/stores/appStore";
@@ -69,6 +77,7 @@ export function ScreensPanel() {
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("screens-code", 3, [true, true, screensCodeOpen]);
   const [code, setCode] = useState("");
   const [themeCss, setThemeCss] = useState("");
+  const [themes, setThemes] = useState<FileEntry[]>([]);
   const screensCodeTab = ps.screensCodeTab;
   const [selectingElementForPort, setSelectingElementForPort] = useState<{ portId: string; direction: "output" } | null>(null);
   const [hotspotPending, setHotspotPending] = useState<{ selector: string; rect: { x: number; y: number; w: number; h: number }; portId: string } | null>(null);
@@ -385,6 +394,23 @@ export function ScreensPanel() {
     return () => { cancelled = true; };
   }, [ps.stylePreset, settings.project]);
 
+  // Load the list of available themes (design languages) for the picker
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const entries = await readDir(`projects/${settings.project}/themes`);
+        if (!cancelled) setThemes(entries.filter((e) => e.is_dir));
+      } catch (e) {
+        if (!cancelled) {
+          setThemes([]);
+          if (!isNotFoundError(e)) notify.error("Failed to load themes", getErrorMessage(e));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settings.project]);
+
   useEffect(() => {
     const selectedTheme = ps.stylePreset;
     if (!selectedTheme) {
@@ -405,6 +431,15 @@ export function ScreensPanel() {
     })();
     return () => { cancelled = true; };
   }, [ps.stylePreset, settings.project]);
+
+  // ─── Write selected theme CSS to the preview project when it changes ─────────
+  // Restyles the live screen preview to match the picked design language.
+  useEffect(() => {
+    if (!themeCss || runnerStatus !== "running") return;
+    writeFile(`${generatedDir}/src/styles/preview-theme.css`, themeCss).catch((e) => {
+      notify.error("Failed to write theme CSS", getErrorMessage(e));
+    });
+  }, [themeCss, runnerStatus, generatedDir]);
 
   // Load API list and component list for generation context toolbar
   useEffect(() => {
@@ -847,6 +882,17 @@ export function ScreensPanel() {
                     </span>
                   )}
                   <div className="flex-1" />
+                  <Select value={ps.stylePreset} onValueChange={(v) => setPs({ stylePreset: v })}>
+                    <SelectTrigger className="h-6 text-xs w-[90px]">
+                      <SelectValue placeholder="Theme…" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" side="bottom">
+                      {themes.map((t) => (
+                        <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="w-px h-4 bg-border" />
                   <Button
                     variant={screensDarkPreview ? "secondary" : "ghost"}
                     size="icon" className="h-7 w-7"

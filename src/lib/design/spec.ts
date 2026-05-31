@@ -1,14 +1,14 @@
 /**
  * DesignLanguageSpec — the structured source of truth for a generated design language.
  *
- * A single spec is persisted as `design.json` inside a theme folder; `theme.css`,
- * `DESIGN.md`, and a W3C-DTCG `tokens.json` are all rendered from it deterministically
- * (see render.ts), so the visual tokens and the written guidelines can never drift apart.
+ * A single spec is persisted as `design.json` inside a theme folder, alongside the
+ * `theme.css` and `DESIGN.md` the model writes directly during design-language
+ * generation, so the visual tokens and the written guidelines stay together.
  *
  * The token facets (color/typography/spacing/radii/shadows/borders/motion) map to the
  * W3C Design Tokens Format Module 2025.10 types (color, dimension, fontFamily, fontWeight,
  * duration, cubicBezier, shadow). The guideline facets (components/iconography/layout/
- * voice/content/antiPatterns) render to the DESIGN.md brief.
+ * voice/content/antiPatterns) describe the DESIGN.md brief.
  * Spec backbone: https://www.designtokens.org/tr/drafts/format/
  */
 

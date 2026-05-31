@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Save, FolderUp, FileCode, Trash2, RefreshCw, Download } from "lucide-react";
+import { ChevronUp, ChevronDown, Save, FolderUp, FileCode, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,16 @@ export function ThemesPanel() {
   const designOutputPath = `projects/${settings.project}/themes/${themeDir}/design.json`;
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
 
+  // Latest editor values mirrored into refs (latest-ref pattern) so the stable
+  // on-blur autosave handlers below persist fresh content without re-subscribing
+  // the CodeMirror editor on every keystroke.
+  const cssRef = useRef(css);
+  const designJsonRef = useRef(designJson);
+  const designMdRef = useRef(designMd);
+  cssRef.current = css;
+  designJsonRef.current = designJson;
+  designMdRef.current = designMd;
+
   const persistTheme = useCallback(async (content: string, p: string, dirOverride?: string) => {
     try {
       const dir = dirOverride || selectedThemeDir || "main";
@@ -105,18 +115,30 @@ export function ThemesPanel() {
     }
   }, [css, settings.project, ps.directories.themes, themeDir]);
 
-  const handleExportTokens = useCallback(async () => {
-    if (!selectedThemeDir) { notify.error("No theme selected"); return; }
-    try {
-      const tokensPath = `projects/${settings.project}/themes/${selectedThemeDir}/tokens.json`;
-      const raw = await readFile(tokensPath);
-      const { save } = await import("@tauri-apps/plugin-dialog");
-      const path = await save({ defaultPath: `${selectedThemeDir}.tokens.json`, filters: [{ name: "JSON", extensions: ["json"] }] });
-      if (path) { await writeFile(path, raw); notify.success("Exported tokens", path); }
-    } catch (e) {
-      notify.error("Export failed", getErrorMessage(e));
-    }
-  }, [selectedThemeDir, settings.project]);
+  // Persist a file edited directly in the Design code panel (CSS / Tokens / Design
+  // tabs) back to its file when the editor loses focus. theme.css is mirrored to
+  // generated/ so the preview updates; prompt.json + library meta stay owned by the
+  // explicit Save action.
+  const persistThemeFile = useCallback(
+    async (fileName: "theme.css" | "design.json" | "DESIGN.md", content: string) => {
+      try {
+        const base = `projects/${settings.project}/themes/${themeDir}`;
+        await createDir(base);
+        await writeFile(`${base}/${fileName}`, content);
+        if (fileName === "theme.css") {
+          await writeFile(`${generatedDir}/src/styles/preview-theme.css`, content);
+          queryClient.invalidateQueries({ queryKey: projectKeys.themeCss(settings.project, themeDir) });
+        }
+      } catch (e) {
+        notify.error(`Failed to save ${fileName}`, getErrorMessage(e));
+      }
+    },
+    [settings.project, themeDir, generatedDir],
+  );
+
+  const handleBlurCss = useCallback(() => persistThemeFile("theme.css", cssRef.current), [persistThemeFile]);
+  const handleBlurJson = useCallback(() => persistThemeFile("design.json", designJsonRef.current), [persistThemeFile]);
+  const handleBlurMd = useCallback(() => persistThemeFile("DESIGN.md", designMdRef.current), [persistThemeFile]);
 
   const applyGeneratedCss = useCallback((content: string) => {
     setCss(content);
@@ -293,14 +315,6 @@ export function ThemesPanel() {
                     title="Save to Runner project"
                   >
                     <FolderUp size={12} />
-                  </Button>
-                  <Button
-                    variant="ghost" size="icon" className="h-6 w-6"
-                    onClick={handleExportTokens}
-                    disabled={!selectedThemeDir}
-                    title="Export DTCG tokens.json"
-                  >
-                    <Download size={12} />
                   </Button>
                   <Button
                     variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive"
@@ -549,6 +563,9 @@ body { margin: 0; font-family: sans-serif; }
                   onChangeCss={setCss}
                   onChangeJson={setDesignJson}
                   onChangeMd={setDesignMd}
+                  onBlurCss={handleBlurCss}
+                  onBlurJson={handleBlurJson}
+                  onBlurMd={handleBlurMd}
                   hasDesignJson={!!designJson}
                   designPreviewing={designPreviewing}
                   onToggleDesignPreview={() => setDesignPreviewing((p) => !p)}
