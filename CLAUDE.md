@@ -24,10 +24,10 @@ All Rust logic lives in `src-tauri/src/lib.rs`. Frontend IPC uses `@tauri-apps/a
 
 ```
 src/
-  panels/          # 7 panels: Screens, Components, Themes, APIs, Runner, Library + Workflows
+  panels/          # 8 panels: Screens, Components, Themes, APIs, Runner, Library, Assets + Workflows
   workflows/       # WorkflowsView.tsx — graph execution engine
   layout/          # Header.tsx, SidebarRail.tsx
-  hooks/           # useSettings.ts (Tauri Store), useStreamingCompletion.ts
+  hooks/           # useSettings.ts, useStreamingCompletion.ts, useBonsai.ts
   lib/ipc.ts       # All invoke() wrappers — single source of truth for Rust↔TS calls
   modals/          # Export, ProjectManager, Save, AddLibrary, PromptConfig, ComponentExport
   components/ui/   # shadcn/ui primitives
@@ -47,6 +47,7 @@ Commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permiss
 | File System | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `reveal_in_explorer` |
 | HTTP | `http_request` |
 | AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| Bonsai | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export | `export_project`, `export_component` |
 | Workflows | `save_workflow`, `load_workflow`, `list_workflows` |
 
@@ -70,7 +71,9 @@ await generateCompletionStream(model, messages, host, apiKey, channel);
 
 - **Settings**: `tauri-plugin-store` → `settings.json` in app data dir
 - **Project files**: File system via `invoke('read_file'/'write_file')` under `projects/{projectId}/`
+- **Assets**: Generated images + sidecar `.json` metadata in `projects/{projectId}/assets/`
 - **Workflows**: `save_workflow`/`load_workflow` Rust commands
+- **Bonsai config**: `tauri-plugin-store` → `bonsai_config.json` in app data dir
 - No `localStorage` except one-time migration of legacy keys on first launch
 
 ## Styling

@@ -82,6 +82,12 @@ src/
     RunnerFileTree.tsx     # Runner's file browser
     RunnerDialogs.tsx      # Runner dialog components
     LibraryPanel.tsx       # Searchable component/theme/screen/api library
+    AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
+    assets/
+      AssetGrid.tsx          # List/grid gallery with context menu
+      AssetPreviewLightbox.tsx  # Custom lightbox (replaces broken library)
+      BonsaiConfigPopover.tsx   # Server config popover
+    AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
   workflows/
     WorkflowsView.tsx      # Visual node-based execution canvas
     useWorkflowExecution.ts
@@ -120,10 +126,12 @@ src/
     useModelCapabilities.ts     # Model capability detection
     useAllotmentLayout.ts       # Pane size persistence
     useToast.ts                  # Toast notification hook
+    useBonsai.ts                 # Bonsai server + asset gallery lifecycle
   stores/
     appStore.ts                  # Global app settings (Zustand)
     chatStore.ts                 # Chat state (Zustand)
     projectSettingsStore.ts      # Per-project settings (Zustand)
+    bonsaiStore.ts               # Bonsai server state + asset gallery (Zustand)
     uiStore.ts                   # UI state (Zustand)
   lib/
     ipc.ts                  # All invoke() wrappers — single source of truth for Rust↔TS calls
@@ -157,7 +165,7 @@ src-tauri/
   Cargo.toml                 # Rust dependencies
 ```
 
-## Views (8 Panels)
+## Views (9 Panels)
 
 | View | ID | Panel Component | Description |
 |------|----|-----------------|-------------|
@@ -169,8 +177,9 @@ src-tauri/
 | APIs | `apis` | `APIsPanel` | HTTP request/response testing |
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
 | Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, APIs |
+| Assets | `assets` | `AssetsPanel` | AI image generation (Bonsai), asset gallery |
 
-## Rust Commands (32 total)
+## Rust Commands (43 total)
 
 All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permissions (e.g., `shell:default`, `fs:default`) must be declared in `capabilities/default.json` — missing either causes silent failure.
 
@@ -180,6 +189,7 @@ All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin per
 | File System (9) | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
 | HTTP (1) | `http_request` |
 | AI (7) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| Bonsai (11) | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export (2) | `export_project`, `export_component` |
 | Workflows (3) | `save_workflow`, `load_workflow`, `list_workflows` |
 
@@ -218,6 +228,8 @@ await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, 
 |------|-----------|----------|
 | App settings | `tauri-plugin-store` | `settings.json` in app data dir |
 | Project files | File system IPC (`read_file`/`write_file`) | `projects/{projectId}/` under app data |
+| Assets | File system + sidecar JSON | `projects/{projectId}/assets/` |
+| Bonsai config | `tauri-plugin-store` | `bonsai_config.json` in app data dir |
 | Workflows | `save_workflow`/`load_workflow` Rust commands | Per-project workflow directory |
 | Model presets | `save_model_presets`/`load_model_presets` | App data dir |
 | Pane sizes | `useAllotmentLayout` hook | Tauri Store |
