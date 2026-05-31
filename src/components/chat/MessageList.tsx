@@ -322,7 +322,7 @@ const MessageBubble = memo(function MessageBubble({
       // Stored chunks are finalized — never streaming
       if (chunk.thinking) {
         elements.push(
-          <Reasoning key={`think-${i}`} isStreaming={false}>
+          <Reasoning key={`think-${i}`} isStreaming={false} className="mt-3">
             <ReasoningTrigger className="text-xs text-muted-foreground">Thinking</ReasoningTrigger>
             <ReasoningContent markdown className="text-xs">{chunk.thinking}</ReasoningContent>
           </Reasoning>
@@ -358,7 +358,7 @@ const MessageBubble = memo(function MessageBubble({
     // This is the "current" segment that is actively streaming
     if (isStreaming && streamingThinking.length > 0) {
       elements.push(
-        <Reasoning key="think-live" isStreaming={true}>
+        <Reasoning key="think-live" isStreaming={true} className="mt-3">
           <ReasoningTrigger className="text-xs text-muted-foreground">Thinking</ReasoningTrigger>
           <ReasoningContent markdown className="text-xs">{streamingThinking}</ReasoningContent>
         </Reasoning>
@@ -381,7 +381,7 @@ const MessageBubble = memo(function MessageBubble({
               <>
                 {hasThinking && (
                   <>
-                    <Reasoning isStreaming={isStreaming}>
+                    <Reasoning isStreaming={isStreaming} className="mt-3">
                       <ReasoningTrigger className="text-xs text-muted-foreground">Thinking</ReasoningTrigger>
                       <ReasoningContent markdown={!isStreaming} className="text-xs">{thinkingText}</ReasoningContent>
                     </Reasoning>
