@@ -1,19 +1,18 @@
+import { Eye, Pencil } from "lucide-react";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
+import { Markdown } from "@/components/ui/markdown";
 
 interface ThemeCodeTabsProps {
   css: string;
   designJson: string;
   designMd: string;
   activeTab: "css" | "tokens" | "guidelines";
-  onChangeTab: (tab: "css" | "tokens" | "guidelines") => void;
   onChangeCss: (value: string) => void;
   onChangeJson: (value: string) => void;
   onChangeMd: (value: string) => void;
-  onBlurCss: () => void;
-  onBlurJson: () => void;
-  onBlurMd: () => void;
-  onReRender: () => void;
   hasDesignJson: boolean;
+  designPreviewing: boolean;
+  onToggleDesignPreview: () => void;
 }
 
 export function ThemeCodeTabs({
@@ -24,23 +23,18 @@ export function ThemeCodeTabs({
   onChangeCss,
   onChangeJson,
   onChangeMd,
-  onBlurCss,
-  onBlurJson,
-  onBlurMd,
   hasDesignJson,
+  designPreviewing,
+  onToggleDesignPreview,
 }: ThemeCodeTabsProps) {
-  const handleJsonChange = (value: string) => {
-    onChangeJson(value);
-  };
-
   return (
     <div className="h-full overflow-hidden">
       {activeTab === "css" && (
-        <CodeMirrorEditor value={css} onChange={onChangeCss} onBlur={onBlurCss} mode="css" />
+        <CodeMirrorEditor value={css} onChange={onChangeCss} mode="css" />
       )}
       {activeTab === "tokens" && (
         hasDesignJson ? (
-          <CodeMirrorEditor value={designJson} onChange={handleJsonChange} onBlur={onBlurJson} mode="json" />
+          <CodeMirrorEditor value={designJson} onChange={onChangeJson} mode="json" />
         ) : (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground px-4 text-center">
             No design tokens yet. Switch to Design mode and generate a theme to create a structured spec.
@@ -49,7 +43,27 @@ export function ThemeCodeTabs({
       )}
       {activeTab === "guidelines" && (
         designMd ? (
-          <CodeMirrorEditor value={designMd} onChange={onChangeMd} onBlur={onBlurMd} mode="markdown" />
+          <div className="h-full relative">
+            <button
+              className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 text-[10px]
+                font-medium rounded bg-background/80 backdrop-blur border border-border shadow-sm
+                text-muted-foreground hover:text-foreground transition-colors"
+              onClick={onToggleDesignPreview}
+            >
+              {designPreviewing ? (
+                <><Pencil size={11} /> Edit</>
+              ) : (
+                <><Eye size={11} /> Preview</>
+              )}
+            </button>
+            {designPreviewing ? (
+              <div className="h-full overflow-auto p-4 prose prose-sm dark:prose-invert max-w-none text-sm">
+                <Markdown>{designMd}</Markdown>
+              </div>
+            ) : (
+              <CodeMirrorEditor value={designMd} onChange={onChangeMd} mode="markdown" />
+            )}
+          </div>
         ) : (
           <div className="h-full flex items-center justify-center text-xs text-muted-foreground px-4 text-center">
             No design document yet. Switch to Design mode and generate a theme to create DESIGN.md.

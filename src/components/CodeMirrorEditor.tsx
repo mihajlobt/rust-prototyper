@@ -29,6 +29,7 @@ import {
   xcodeDark, xcodeLight,
 } from "@uiw/codemirror-themes-all";
 import type { Extension } from "@codemirror/state";
+import { color } from "@uiw/codemirror-extensions-color";
 import { useSettings } from "@/hooks/useSettings";
 
 // ─── Language detection ────────────────────────────────────────────────────
@@ -163,6 +164,9 @@ export function CodeMirrorEditor({
     const result: Extension[] = [];
     const lang = MODE_TO_EXT[resolvedMode];
     if (lang) result.push(lang);
+    // Color swatches + picker for CSS, JSON (tokens), etc.
+    // Invisible overhead for non-color-aware languages — safe to include always.
+    result.push(color);
     if (lineWrapping) result.push(EditorView.lineWrapping);
     if (onBlur) result.push(EditorView.domEventHandlers({ blur: () => { onBlur(); } }));
     return result;

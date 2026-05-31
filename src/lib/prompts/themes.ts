@@ -203,8 +203,26 @@ Every facet must reinforce the same intent. The voice, the color temperature, th
 
 COLOR:
 - Use oklch() for every color value: oklch(lightness chroma hue). Never hex/rgb.
-- Provide BOTH a light and a dark palette for all semantic tokens.${darkLight ? "" : " (Dark mode is disabled — make the dark palette identical to light.)"}
+- Provide BOTH a light and a dark palette for all semantic tokens below.${darkLight ? "" : " (Dark mode is disabled — make the dark palette identical to light.)"}
 - Ensure WCAG-legible foreground/background pairs.
+
+CSS VARIABLE NAMES — in theme.css, define these EXACT tokens in :root and .dark blocks.
+Each surface token pairs with its -foreground counterpart. The -foreground token controls the text/icon color that sits on that surface.
+
+  --background          / --foreground          — App background and default text color
+  --card                / --card-foreground      — Elevated surfaces (cards, panels) and their content
+  --popover             / --popover-foreground   — Floating surfaces (popovers, dropdowns) and their content
+  --primary             / --primary-foreground   — Brand surface and text (buttons, badges, active states)
+  --secondary           / --secondary-foreground — Supporting actions and lower-emphasis surfaces
+  --muted               / --muted-foreground     — Subtle surfaces and helper/placeholder text
+  --accent              / --accent-foreground    — Interactive hover/focus states and their text
+  --destructive         / --destructive-foreground — Destructive actions and error states
+  --border                                       — Default borders and separators
+  --input                                       — Form control borders
+  --ring                                        — Focus rings and outlines
+  --radius                                      — Base corner radius (rem value, e.g. 0.625rem)
+
+NEVER prefix token names with --color-. The --color- prefix is for Tailwind's @theme inline alias layer only, not for CSS variable definitions in :root/.dark.
 
 TYPOGRAPHY:
 - Choose real font families. For any non-system font, include its full Google Fonts @import URL in googleFontImport (e.g. https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap). Use null for system fonts.
