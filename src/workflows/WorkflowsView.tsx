@@ -26,7 +26,7 @@ function WorkflowCanvas() {
   const [lassoMode, setLassoMode] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
 
-  const { ref: outputRef, onDragEnd: outputOnDragEnd, defaultSizes: outputDefault } = useAllotmentLayout("workflows-output", 2, [true, outputPanelOpen]);
+  const { ref: outputRef, onDragEnd: outputOnDragEnd, defaultSizes: outputDefault } = useAllotmentLayout("workflows-output", 2);
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow<WorkflowNodeType, Edge>();
 
   const flowContainerRef = useRef<HTMLDivElement>(null);

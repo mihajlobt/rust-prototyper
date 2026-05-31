@@ -37,7 +37,7 @@ export function AssetsPanel() {
   const bonsai = useBonsai();
   const ps = useProjectSettingsStore((s) => s.ps);
   const setPs = useProjectSettingsStore((s) => s.setPs);
-  const { ref: allotmentRef, onDragEnd, defaultSizes } = useAllotmentLayout("assets", 2, [true, ps.assetsShowLog]);
+  const { ref: allotmentRef, onDragEnd, defaultSizes } = useAllotmentLayout("assets", 2);
   const [prompt, setPrompt] = useState("");
   const selectedPreset = ps.assetsPreset;
   const steps = ps.assetsSteps;
