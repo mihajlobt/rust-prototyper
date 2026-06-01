@@ -82,7 +82,12 @@ pub struct AskUserArgs {
     pub question: String,
     /// Type of answer: "text" for open-ended input, "choice" for picking from a list, "confirm" for Yes/No.
     pub question_type: AskUserQuestionTypeArg,
-    /// Required when question_type is "choice". List of options the user can select from (2–6 items).
+    /// Required when question_type is "choice". List of options the user can
+    /// select from (2–6 items). Each entry MUST be a plain string — the UI
+    /// renders one button per string. Do NOT nest objects, do NOT use a
+    /// linked-list `{ "description": "...", "item": {...} }` shape, do NOT
+    /// include keys other than the string itself. Example:
+    /// `["Coinbase-style — bold colors, easy buy/sell", "TradingView-style — dense charts"]`.
     pub choices: Option<Vec<String>>,
 }
 

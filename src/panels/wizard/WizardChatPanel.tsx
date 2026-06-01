@@ -110,8 +110,10 @@ export function WizardChatPanel({
         onResolvePermission={onResolvePermission}
       />
 
-      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-        {pendingAskUser && (
+      {/* AskUserCard in its own shrink-0 row so the answer area is never clipped
+          by sharing a container with ChatInput. MessageList flex-1 adjusts above. */}
+      {pendingAskUser && (
+        <div className="border-t border-border px-3 py-2.5 shrink-0">
           <AskUserCard
             requestId={pendingAskUser.requestId}
             question={pendingAskUser.question}
@@ -119,7 +121,10 @@ export function WizardChatPanel({
             choices={pendingAskUser.choices}
             onResolve={onResolveAskUser}
           />
-        )}
+        </div>
+      )}
+
+      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0">
         <ChatInput
           value={input}
           onChange={onChangeInput}

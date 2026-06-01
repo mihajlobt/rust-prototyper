@@ -299,9 +299,40 @@ async fn request_ask_user(
         _ => AskUserQuestionType::Text,
     };
 
-    let choices = args.get("choices")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>());
+    // Tolerant choice extractor: accept plain strings, or objects with
+    // `description`/`label`/`text` fields, or nested linked-list forms like
+    // `{ "description": "…", "item": { "description": "…", "item": … } }`
+    // that some models emit. Always flatten to a Vec<String>.
+    let choices = args.get("choices").and_then(|v| v.as_array()).map(|arr| {
+        fn flatten_choice(v: &serde_json::Value, out: &mut Vec<String>) {
+            match v {
+                serde_json::Value::String(s) => out.push(s.clone()),
+                serde_json::Value::Object(map) => {
+                    // Prefer the most descriptive text field available
+                    let text = map
+                        .get("description")
+                        .or_else(|| map.get("label"))
+                        .or_else(|| map.get("text"))
+                        .or_else(|| map.get("value"))
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string);
+                    if let Some(t) = text {
+                        out.push(t);
+                    }
+                    // Recurse into the linked-list `item` field if present
+                    if let Some(next) = map.get("item") {
+                        flatten_choice(next, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        for v in arr {
+            flatten_choice(v, &mut out);
+        }
+        out
+    });
 
     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
 
@@ -324,11 +355,11 @@ async fn request_ask_user(
         }
         _ = cancel_token.cancelled() => {
             state.pending_ask_user.lock().unwrap().remove(&request_id);
-            "Cancelled".to_string()
+            "Cancelled (ask_user cancelled)".to_string()
         }
-        _ = tokio::time::sleep(std::time::Duration::from_secs(600)) => {
+        _ = tokio::time::sleep(std::time::Duration::from_secs(180)) => {
             state.pending_ask_user.lock().unwrap().remove(&request_id);
-            "No response (timed out)".to_string()
+            "No response (ask_user timed out after 3 minutes)".to_string()
         }
     }
 }

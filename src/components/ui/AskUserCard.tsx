@@ -73,21 +73,51 @@ export const AskUserCard = memo(function AskUserCard({
           </div>
         )}
 
-        {questionType === "choice" && choices && (
-          <div className="flex flex-wrap gap-2">
-            {choices.map((choice) => (
-              <Button
-                key={choice}
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs border-blue-300 text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950"
+        {questionType === "choice" && (
+          <>
+            {choices && choices.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {choices.map((choice) => (
+                  <Button
+                    key={choice}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs border-blue-300 text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950"
+                    disabled={submitting}
+                    onClick={() => void submit(choice)}
+                  >
+                    {choice}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {/* Always show a freeform fallback so the user can always answer,
+                even if the model emitted malformed choices. */}
+            <div className={choices && choices.length > 0 ? "mt-2 flex gap-2" : "flex gap-2"}>
+              <Textarea
+                value={textAnswer}
+                onChange={(e) => setTextAnswer(e.target.value)}
+                placeholder={choices && choices.length > 0 ? "Or type your own answer…" : "Your answer…"}
+                className="min-h-[44px] resize-none text-sm"
                 disabled={submitting}
-                onClick={() => void submit(choice)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    void submit(textAnswer)
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                className="self-end h-7 gap-1 text-xs"
+                onClick={() => void submit(textAnswer)}
+                disabled={submitting || !textAnswer.trim()}
               >
-                {choice}
+                <Send className="h-3.5 w-3.5" />
+                Send
               </Button>
-            ))}
-          </div>
+            </div>
+          </>
         )}
 
         {questionType === "confirm" && (
