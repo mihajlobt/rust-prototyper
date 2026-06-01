@@ -1,19 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
 import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
-import { XTerminal, type XTerminalHandle } from "@/components/XTerminal";
+import type { XTerminalHandle } from "@/components/XTerminal";
 import {
-  Play, Square, Wrench, Package, PackagePlus, RotateCw,
-  Minus, Plus, Smartphone, Tablet, Monitor, Moon, Sun,
-  Terminal, ScrollText, Globe, Plus as PlusIcon,
-  ChevronDown, ChevronUp, Save, FolderPlus, Loader2, X,
-  FileCode, FolderOpen,
+  Play, Square, Wrench, Package, PackagePlus, Loader2,
+  Plus as PlusIcon, FolderPlus, FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import {
   readDir, readFile, writeFile, createDir, deleteFile,
   deleteDir, renameFile, revealInExplorer,
@@ -21,8 +15,7 @@ import {
   isNotFoundError, getErrorMessage,
   type FileEntry,
 } from "@/lib/ipc";
-import { showContextMenu, createFileTreeActions, createTabActions } from "@/lib/context-menu";
-import { Input } from "@/components/ui/input";
+import { showContextMenu, createFileTreeActions } from "@/lib/context-menu";
 import { useAppStore } from "@/stores/appStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -37,6 +30,9 @@ import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import { useDevServerStore } from "@/lib/dev-server-manager";
 import { FileTree } from "@/panels/RunnerFileTree";
 import { RenameDialog, NewFolderDialog, NewFileDialog } from "@/panels/RunnerDialogs";
+import { RunnerEditor } from "@/panels/runner/RunnerEditor";
+import { RunnerPreview } from "@/panels/runner/RunnerPreview";
+import { RunnerTerminal } from "@/panels/runner/RunnerTerminal";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
@@ -151,8 +147,6 @@ export function RunnerPanel() {
     });
     return () => { unlistenPromise.then((fn) => fn()); };
   }, [devUrl]);
-
-  // ── Tab management ──────────────────────────────────────────────────────
 
   // ── Tab management ──────────────────────────────────────────────────────
 
@@ -348,8 +342,6 @@ export function RunnerPanel() {
   const zoomOut   = () => setProjectSettings({ runnerZoom: Math.max(ps.runnerZoom - 0.1, 0.3) });
   const zoomReset = () => setProjectSettings({ runnerZoom: 1 });
 
-  const deviceWidth = { desktop: "100%", tablet: "768px", mobile: "375px" } as const;
-
   return (
     <div className="h-full flex flex-col">
       <div className="panel-toolbar h-9 px-2 gap-1 bg-card">
@@ -414,196 +406,56 @@ export function RunnerPanel() {
                   <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault}>
                     {/* Editor with tabs */}
                     <Allotment.Pane minSize={200}>
-                      <div className="h-full flex flex-col">
-                        {/* Tab bar */}
-                        {openTabs.length > 0 && (
-                          <div className="flex items-stretch border-b border-border bg-card shrink-0" style={{ height: 32 }}>
-                            <div className="flex items-stretch overflow-x-auto flex-1 min-w-0">
-                            {openTabs.map((path) => {
-                              const name = path.split("/").pop() ?? path;
-                              const isActive = path === activeTabPath;
-                              const isDirty = dirtyTabs.has(path);
-                              const isLast = openTabs.indexOf(path) === openTabs.length - 1;
-                              return (
-                                <button
-                                  key={path}
-                                  onClick={() => openTab(path)}
-                                  onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
-                                  onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    showContextMenu(
-                                      createTabActions({
-                                        onSave: handleSaveFile,
-                                        onClose: () => closeTab(path),
-                                        onCloseOthers: () => closeOtherTabs(path),
-                                        onCloseToRight: () => closeTabsToRight(path),
-                                        onCloseAll: closeAllTabs,
-                                        onReveal: () => revealInExplorer(path),
-                                        onRename: () => startRename(path),
-                                        onCopyPath: () => navigator.clipboard.writeText(path),
-                                        onDelete: () => handleDeleteFile(path),
-                                        canCloseOthers: openTabs.length > 1,
-                                        canCloseToRight: !isLast,
-                                      }),
-                                      e.clientX,
-                                      e.clientY
-                                    );
-                                  }}
-                                  className={["flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors", isActive ? "bg-background text-foreground border-b-2 border-b-primary -mb-px" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                                >
-                                  {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                                  <span className="truncate">{name}</span>
-                                  <X size={10} className="shrink-0 opacity-50 hover:opacity-100" onClick={(e) => closeTab(path, e)} />
-                                </button>
-                              );
-                            })}
-                            </div>
-                            {activeTabPath && (
-                              <TooltipProvider delayDuration={400}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 my-auto mx-1 shrink-0" onClick={handleSaveFile}><Save size={11} /></Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Save (Ctrl+S)</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                          </div>
-                        )}
-                        {/* Editor body */}
-                        {activeTabPath ? (
-                          <div className="flex-1 overflow-hidden">
-                            <CodeMirrorEditor
-                              value={tabContents[activeTabPath] ?? ""}
-                              onChange={handleContentChange}
-                              onBlur={handleEditorBlur}
-                              filename={activeTabPath}
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-                            <FileCode size={28} className="opacity-25" />
-                            <div className="text-sm font-medium">No file selected</div>
-                            <p className="text-xs opacity-60">Select a file from the tree to edit</p>
-                          </div>
-                        )}
-                      </div>
+                      <RunnerEditor
+                        openTabs={openTabs}
+                        activeTabPath={activeTabPath}
+                        tabContents={tabContents}
+                        dirtyTabs={dirtyTabs}
+                        openTab={openTab}
+                        closeTab={closeTab}
+                        closeOtherTabs={closeOtherTabs}
+                        closeTabsToRight={closeTabsToRight}
+                        closeAllTabs={closeAllTabs}
+                        handleSaveFile={handleSaveFile}
+                        handleContentChange={handleContentChange}
+                        handleEditorBlur={handleEditorBlur}
+                        startRename={startRename}
+                        handleDeleteFile={handleDeleteFile}
+                        revealInExplorer={revealInExplorer}
+                      />
                     </Allotment.Pane>
 
                     {/* Preview */}
                     <Allotment.Pane minSize={300}>
-                      <div className="h-full flex flex-col">
-                        <div className="panel-toolbar h-7 px-2 gap-1 bg-card">
-                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={handleRefreshPreview} title="Refresh"><RotateCw size={11} /></Button>
-                          <span className="text-[10px] text-muted-foreground shrink-0">Preview:</span>
-                          {devUrl ? (
-                            <span className="text-xs text-muted-foreground font-mono truncate max-w-[180px]" title={devUrl}>
-                              {devUrl.replace(/\/$/, "").replace(/^http:\/\/localhost:\d+/, "") || "/"}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground font-mono">—</span>
-                          )}
-                          <div className="flex items-center gap-0.5 ml-auto shrink-0">
-                            <Button variant={ps.runnerDevice === "mobile"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "mobile"  })} title="Mobile" ><Smartphone size={11} /></Button>
-                            <Button variant={ps.runnerDevice === "tablet"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "tablet"  })} title="Tablet" ><Tablet     size={11} /></Button>
-                            <Button variant={ps.runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "desktop" })} title="Desktop"><Monitor    size={11} /></Button>
-                          </div>
-                          <div className="w-px h-3 bg-border shrink-0" />
-                          <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setProjectSettings({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
-                          <div className="w-px h-3 bg-border shrink-0" />
-                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomOut}><Minus size={11} /></Button>
-                          <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none shrink-0" onClick={zoomReset}>{Math.round(ps.runnerZoom * 100)}%</button>
-<Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomIn}><Plus size={11} /></Button>
-                        </div>
-                        <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
-                          {devUrl ? (
-                            <div className="h-full bg-background shadow-lg border border-border overflow-hidden" style={{ width: deviceWidth[ps.runnerDevice], transform: `scale(${ps.runnerZoom})`, transformOrigin: "top center" }}>
-                              <iframe ref={iframeRef} src={devUrl ? devUrl.replace(/\/$/, "") : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center text-muted-foreground text-sm">
-                              <div className="text-center">
-                                <Play size={32} className="mx-auto mb-3 opacity-30" />
-                                <p>Click Run to start the dev server</p>
-                                <p className="text-xs opacity-50 mt-1">Preview will appear here</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      <RunnerPreview
+                        devUrl={devUrl}
+                        runnerDark={runnerDark}
+                        runnerDevice={ps.runnerDevice}
+                        runnerZoom={ps.runnerZoom}
+                        iframeRef={iframeRef}
+                        setProjectSettings={setProjectSettings}
+                        handleRefreshPreview={handleRefreshPreview}
+                        zoomIn={zoomIn}
+                        zoomOut={zoomOut}
+                        zoomReset={zoomReset}
+                      />
                     </Allotment.Pane>
                   </Allotment>
                 </Allotment.Pane>
 
-                {/* Terminal header */}
-                <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-                  <div className="h-full flex items-center border-b border-border bg-card px-2">
-                    <Tabs value={ps.runnerActiveTab} onValueChange={(v) => setProjectSettings({ runnerActiveTab: v as "terminal" | "logs" | "network" })}>
-                      <TabsList variant="line" className="h-7">
-                        <TabsTrigger value="terminal" className="text-[11px] gap-1"><Terminal size={10} />Terminal</TabsTrigger>
-                        <TabsTrigger value="logs"     className="text-[11px] gap-1"><ScrollText size={10} />Logs</TabsTrigger>
-                        <TabsTrigger value="network"  className="text-[11px] gap-1"><Globe size={10} />Network</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                    <div className="flex-1" />
-                    <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!ps.runnerTerminalOpen) setProjectSettings({ runnerTerminalOpen: true }); }}><Terminal size={10} />Shell</Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setProjectSettings({ runnerTerminalOpen: !ps.runnerTerminalOpen })}>{ps.runnerTerminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}</Button>
-                  </div>
-                </Allotment.Pane>
-
-                {/* Terminal content */}
-                <Allotment.Pane visible={ps.runnerTerminalOpen} preferredSize={152} minSize={100}>
-                  <div className="h-full flex flex-col">
-                    {showShellInput && (
-                      <div className="flex gap-1 px-2 py-1 border-b border-border bg-card shrink-0">
-                        <span className="text-xs text-muted-foreground self-center">$</span>
-                        <Input value={shellCommand} onChange={(e) => setShellCommand(e.target.value)} placeholder="Enter shell command..." className="h-6 text-xs" onKeyDown={(e) => { if (e.key === "Enter") handleNewShell(); if (e.key === "Escape") setShowShellInput(false); }} autoFocus />
-                      </div>
-                    )}
-                    <div className="flex-1 overflow-hidden">
-                      <XTerminal ref={xtermRef} className={ps.runnerActiveTab === "terminal" ? "" : "hidden"} />
-                      {ps.runnerActiveTab === "logs" && (
-                        <ScrollArea className="h-full overflow-hidden bg-black font-mono text-xs"><div className="p-2 space-y-0.5">
-                          {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).map((item, i) => (
-                            <div key={i} className={["break-all whitespace-pre-wrap", item.line.toLowerCase().includes("error") ? "text-red-400" : item.line.toLowerCase().includes("warning") ? "text-yellow-400" : "text-green-400"].join(" ")}>{item.line}</div>
-                          ))}
-                          {logLinesRef.current.filter((item) => /error|warning|hmr|hot|build|ready/i.test(item.line)).length === 0 && (
-                            <div className="flex flex-col items-center justify-center py-8 gap-2 text-green-400/40">
-                              <Terminal size={20} />
-                              <p className="text-xs font-medium">No log events yet</p>
-                            </div>
-                          )}
-                        </div></ScrollArea>
-                      )}
-                      {ps.runnerActiveTab === "network" && (
-                        <ScrollArea className="h-full overflow-hidden bg-black font-mono text-xs"><div className="p-2 space-y-1">
-                          {(() => {
-                            const requests = logLinesRef.current.map((item) => {
-                              const match = item.line.match(/(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
-                              if (match) return { method: match[1], path: match[2], status: parseInt(match[3]) };
-                              const hmr = item.line.match(/hmr update\s+(\S+)/i);
-                              if (hmr) return { method: "HMR", path: hmr[1], status: 0 };
-                              return null;
-                            }).filter(Boolean) as Array<{ method: string; path: string; status: number }>;
-                            if (requests.length === 0) return (
-                              <div className="flex flex-col items-center justify-center py-8 gap-2 text-green-400/40">
-                                <Globe size={20} />
-                                <p className="text-xs font-medium">No network requests yet</p>
-                              </div>
-                            );
-                            return requests.map((req, i) => (
-                              <div key={i} className="flex items-center gap-2">
-                                <span className={["font-bold px-1 py-0.5 rounded", req.status >= 200 && req.status < 300 ? "bg-green-500/20 text-green-400" : req.status >= 400 ? "bg-red-500/20 text-red-400" : req.method === "HMR" ? "bg-blue-500/20 text-blue-400" : "bg-muted text-muted-foreground"].join(" ")}>{req.method}</span>
-                                <span className="truncate flex-1 text-green-400">{req.path}</span>
-                                {req.status > 0 && <span className="text-green-400 opacity-50">{req.status}</span>}
-                              </div>
-                            ));
-                          })()}
-                        </div></ScrollArea>
-                      )}
-                    </div>
-                  </div>
-                </Allotment.Pane>
+                {/* Terminal: header pane + content pane as a fragment */}
+                <RunnerTerminal
+                  xtermRef={xtermRef}
+                  runnerActiveTab={ps.runnerActiveTab}
+                  runnerTerminalOpen={ps.runnerTerminalOpen}
+                  showShellInput={showShellInput}
+                  shellCommand={shellCommand}
+                  logLinesRef={logLinesRef}
+                  setShowShellInput={setShowShellInput}
+                  setShellCommand={setShellCommand}
+                  setProjectSettings={setProjectSettings}
+                  handleNewShell={handleNewShell}
+                />
               </Allotment>
             </div>
           </Allotment.Pane>

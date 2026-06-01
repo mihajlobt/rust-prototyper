@@ -22,6 +22,22 @@ AI-powered UI prototyping desktop app. Built with Tauri v2 (Rust backend) + Reac
 | Runtime | Bun | any recent |
 | Backend | Rust (edition 2021) | — |
 | AI | Ollama (`ollama-rs`) + OpenAI + Claude via `reqwest` | `0.3` |
+| Forms | react-hook-form + zod + `@hookform/resolvers` | — |
+| Validation | zod | — |
+| Markdown | react-markdown + remark-gfm + remark-breaks + marked | — |
+| Charts | recharts | — |
+| Tree | `@headless-tree/react` | — |
+| Command palette | cmdk | — |
+| Drawer | vaul | — |
+| Toasts | sonner | — |
+| Syntax highlight | shiki | — |
+| Auto-scroll chat | `use-stick-to-bottom` | — |
+| OTP / Date / Carousel | `input-otp`, `react-day-picker`, `embla-carousel-react` | — |
+| Token count | `js-tiktoken` | — |
+| YAML | `js-yaml` | — |
+| Unit tests | vitest + jsdom | — |
+| E2E tests | WebdriverIO + Playwright + axe-core | — |
+| Tauri driver | `@crabnebula/tauri-driver` | — |
 
 <details>
 <summary>Key Tauri plugins (Rust)</summary>
@@ -75,8 +91,7 @@ src/
     ScreensPanel.tsx       # Chat + AI generation + device preview
     ComponentsPanel.tsx   # Prompt → component code + preview
     ThemesPanel.tsx        # Prompt → CSS theme + preview
-    FlowsPanel.tsx         # Flow routing view (renders FlowsView)
-    FlowsView.tsx          # Flow canvas logic
+    FlowsView.tsx          # Flow canvas logic (embedded in ScreensPanel)
     APIsPanel.tsx          # HTTP request/response testing
     RunnerPanel.tsx        # File tree, terminal, live preview
     RunnerFileTree.tsx     # Runner's file browser
@@ -87,7 +102,10 @@ src/
       AssetGrid.tsx          # List/grid gallery with context menu
       AssetPreviewLightbox.tsx  # Custom lightbox (replaces broken library)
       BonsaiConfigPopover.tsx   # Server config popover
-    AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
+    screens/                 # 4 sub-components split out from ScreensPanel
+    flows/                   # 3 sub-components for the embedded flow canvas
+    library/                 # 2 sub-components for the library browser
+    theme-preview/           # 8 theme preview widgets (ColorSwatchGrid, MotionDemos, etc.)
   workflows/
     WorkflowsView.tsx      # Visual node-based execution canvas
     useWorkflowExecution.ts
@@ -109,7 +127,7 @@ src/
     SaveComponentModal.tsx      # Save generated component
   components/
     chat/                   # ChatInput, MessageList, MentionPicker, etc.
-    ui/                     # 36 shadcn/ui primitives + domain-specific UI components
+    ui/                     # ~50 shadcn primitives + 20 domain components (70 total)
     CodeMirrorEditor.tsx    # CM6 editor wrapper
     PromptInspector.tsx     # Assembled prompt / JSON / cURL viewer
     ModelPicker.tsx         # Provider + model selector
@@ -120,13 +138,16 @@ src/
     ErrorBoundary.tsx
     PreviewErrorBoundary.tsx
   hooks/
-    useSettings.ts              # Tauri Store persistence
-    useChat.ts                   # Chat session management
+    useSettings.ts              # Tauri Store persistence (thin re-export)
+    useChat.ts                   # Chat session management + streaming
     useProjectFiles.ts          # Project file operations + query keys
     useModelCapabilities.ts     # Model capability detection
     useAllotmentLayout.ts       # Pane size persistence
     useToast.ts                  # Toast notification hook
     useBonsai.ts                 # Bonsai server + asset gallery lifecycle
+    useScreenCode.ts             # Screen code save/load
+    useHotspotTracking.ts        # Hotspot tracking
+    use-mobile.ts                # Mobile breakpoint detection
   stores/
     appStore.ts                  # Global app settings (Zustand)
     chatStore.ts                 # Chat state (Zustand)
@@ -139,13 +160,34 @@ src/
     navigation.ts           # Screen navigation helpers
     queryClient.ts          # React Query client
     queryKeys.ts            # Query key factory
+    stream-channel.ts       # Tauri Channel → AsyncIterable bridge for streaming
+    bonsai.ts                # Bonsai types + helpers
+    models.ts                # Model utilities (capability detection helpers)
+    context-menu.ts          # Context menu helpers
+    scaffold.ts              # Scaffolding core (213 lines)
+    scaffold-shadcn.ts       # shadcn scaffold logic (800 lines)
+    scaffold-notifications.ts # Scaffold toast helpers
+    prompts.ts               # Prompt registry
+    prompts/
+      screens.ts             # Screen-generation prompt templates
+      components.ts          # Component prompt templates
+      themes.ts              # Theme prompt templates
+      workflows.ts           # Workflow prompt templates
+      shared.ts              # Shared prompt utilities
+    preview.tsx              # Preview rendering (Babel JSX transform)
+    utils.ts                 # cn() class-merger helper
+    item-meta.ts             # Item metadata helpers
+    dev-server-manager.ts    # Dev server lifecycle (port, kill, restart)
+    design/
+      spec.ts                # DesignLanguageSpec zod schema
+      persist.ts             # Design spec persistence
   types/
     chat.ts                 # Shared chat types
   styles/
     globals.css             # Tailwind v4 @theme inline block + CSS custom properties
 src-tauri/
   src/
-    lib.rs                   # App setup, plugins, generate_handler![] (32 commands)
+    lib.rs                   # App setup, plugins, generate_handler![] (43 commands)
     main.rs                  # Thin passthrough to lib.rs
     commands/
       process.rs             # Bun/shell spawning, kill
@@ -157,27 +199,45 @@ src-tauri/
       export.rs              # Project/component export
       workflows.rs           # Workflow persistence
       mod.rs
-    agent/                   # AI agent module
-    sandbox/                 # Linux sandbox (landlock/seccomp)
-    bin/                     # Binary utilities
+    agent/                   # AI agent module (loop, executor, tools)
+    sandbox/                 # Linux sandbox (landlock + seccomp + bwrap)
+    bin/ + scripts/          # Test binaries: test_agent (Rust harness), test_cursor_chat (TUI smoke test)
   capabilities/default.json  # Tauri plugin permissions
   tauri.conf.json            # Window config (1400×900), CSP, devUrl (port 1420)
   Cargo.toml                 # Rust dependencies
 ```
 
-## Views (9 Panels)
+## Views (8 Panels)
 
 | View | ID | Panel Component | Description |
 |------|----|-----------------|-------------|
-| Screens | `screens` | `ScreensPanel` | Chat + AI generation + device preview |
+| Screens | `screens` | `ScreensPanel` | Chat + AI generation + device preview (embeds `FlowsView`) |
 | Components | `components` | `ComponentsPanel` | Prompt → component code + live preview |
 | Themes | `themes` | `ThemesPanel` | Prompt → CSS theme generation |
-| Flows | `flows` | `FlowsPanel` → `FlowsView` | Visual flow routing between screens |
 | Workflows | `workflows` | `WorkflowsView` | Node-based execution canvas (React Flow) |
 | APIs | `apis` | `APIsPanel` | HTTP request/response testing |
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
 | Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, APIs |
 | Assets | `assets` | `AssetsPanel` | AI image generation (Bonsai), asset gallery |
+
+### Workflow Node System
+
+The Workflows view uses a 7-category node type system (defined in `nodeTypes.tsx`),
+each with its own hue on the node's accent bar:
+
+| Category | Token | Typical use |
+|----------|-------|-------------|
+| IO | `--node-io` (emerald 162°) | File read/write, HTTP fetch |
+| Analysis | `--node-analysis` (gold 70°) | Inspect, summarize |
+| Planning | `--node-planning` (violet 304°) | Decompose, plan |
+| Generation | `--node-generation` (blue 264°) | Code, content, image |
+| Composition | `--node-composition` (emerald 162°) | Stitch outputs together |
+| Utility | `--node-utility` (rose 16°) | Glue, transforms |
+| Custom | `--node-custom` (neutral) | User-defined |
+
+Run state is communicated separately via `--status-running` (blue), `--status-done`
+(emerald), `--status-error` (red), `--status-paused` (gold) on the node border. See
+[DESIGN.md](DESIGN.md) for the full token system.
 
 ## Rust Commands (43 total)
 
@@ -239,7 +299,7 @@ await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, 
 ## Styling
 
 - **Tailwind CSS v4** with `@tailwindcss/vite` plugin and `@theme inline` block in `globals.css`
-- **shadcn/ui** components in `src/components/ui/` (36 primitives, including domain-specific ones like `code-block`, `chat-container`, `message`, `file-upload`, `tool`, `ToolPermissionCard`)
+- **shadcn/ui** components in `src/components/ui/` — ~50 shadcn primitives + 20 domain components (70 total), including `code-block`, `chat-container`, `message`, `file-upload`, `tool`, `ToolPermissionCard`
 - **Custom CSS properties** for theming: `--primary`, `--ring`, `--sidebar-primary` (toggled from `appStore`)
 - **Dark mode**: class-based (`document.documentElement.classList.toggle("dark", ...)`)
 - **Accent color**: dynamically set via CSS custom properties from settings
@@ -254,6 +314,27 @@ await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, 
 | `Ctrl+Shift+Z` | Redo | WorkflowsView |
 
 Shortcuts use `window.addEventListener('keydown', ...)` in `useEffect`.
+
+## Test Architecture
+
+Three test layers live under `src/__tests__/`:
+
+| Layer | Tooling | Purpose |
+|-------|---------|---------|
+| `unit/` | Vitest + jsdom | Pure logic, hooks, store slices |
+| `e2e/` | WebdriverIO + Playwright | Cross-panel flows, accessibility (axe-core) |
+| `tauri/` | `@crabnebula/tauri-driver` | End-to-end against the real Tauri app |
+
+```bash
+bun test                  # vitest unit
+bun test:tauri            # wdio run src/__tests__/tauri/wdio.conf.ts
+bun run e2e               # playwright + wdio e2e
+```
+
+Helper utilities: `src/__tests__/e2e/helpers/render.ts`.
+
+Rust test binaries: `test_agent` (harness in `src-tauri/src/bin/test_agent.rs`),
+`test_cursor_chat` (TUI smoke test in `scripts/test_cursor_chat.rs`).
 
 ## Package Manager Rules
 

@@ -1,19 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Allotment } from "allotment";
 import {
-  Send, Plus, Trash2, Save, Copy, Key, RefreshCw, Database, X, Plug, Globe, Terminal,
+  Plus, Trash2, RefreshCw, Database, Key, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
@@ -21,283 +12,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  httpRequest, readFile, writeFile, createDir, getErrorMessage,
-} from "@/lib/ipc";
-import { getGeneratedViteConfig } from "@/lib/scaffold-shadcn";
+import { httpRequest, getErrorMessage, createDir, writeFile } from "@/lib/ipc";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
-import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useUIStore, type ApiHistoryEntry } from "@/stores/uiStore";
 import { notify } from "@/hooks/useToast";
 import YAML from "js-yaml";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import {
+  loadApis, saveApis, loadApiKeys, saveApiKeys, loadEnvVars, saveEnvVars,
+  generateId, parseCurl, jsonToTsInterface, buildInterfaceName, syncToProject, buildServiceFile,
+} from "./apis/utils";
+import { API_TEMPLATES } from "./apis/templates";
+import { ApiKeysSection } from "./apis/ApiKeysSection";
+import { RequestForm } from "./apis/RequestForm";
+import { ResponseViewer } from "./apis/ResponseViewer";
+import type { ApiKey, SavedApi } from "./apis/types";
 
-interface SavedApi {
-  id: string;
-  name: string;
-  method: string;
-  url: string;
-  headersText: string;
-  body: string;
-  authType: "none" | "bearer" | "apikey" | "basic" | "oauth2";
-  authToken: string;
-  authHeaderName: string;
-  authUsername: string;
-  authPassword: string;
-  authTokenUrl: string;
-  authClientId: string;
-  authClientSecret: string;
-  proxyPath: string;
-  history: ApiHistoryEntry[];
-}
-
-export interface ApiKey {
-  id: string;
-  name: string;
-  value: string;
-  description: string;
-}
-
-// ─── Pre-configured API Templates ────────────────────────────────────────────
-
-const API_TEMPLATES: Array<Omit<SavedApi, "id" | "history"> & { description: string }> = [
-  {
-    name: "OpenWeatherMap — Current Weather",
-    method: "GET",
-    url: "https://api.openweathermap.org/data/2.5/weather?lat=51.51&lon=-0.13&units=metric&appid={{OPENWEATHERMAP_KEY}}",
-    headersText: "{}",
-    body: "",
-    authType: "none",
-    authToken: "", authHeaderName: "X-API-Key", authUsername: "", authPassword: "",
-    authTokenUrl: "", authClientId: "", authClientSecret: "",
-    proxyPath: "/api/weather",
-    description: "Real-time weather (London). Free key at openweathermap.org → add OPENWEATHERMAP_KEY to Keys",
-  },
-  {
-    name: "OpenWeatherMap — Forecast",
-    method: "GET",
-    url: "https://api.openweathermap.org/data/2.5/forecast?lat=51.51&lon=-0.13&cnt=8&units=metric&appid={{OPENWEATHERMAP_KEY}}",
-    headersText: "{}",
-    body: "",
-    authType: "none",
-    authToken: "", authHeaderName: "X-API-Key", authUsername: "", authPassword: "",
-    authTokenUrl: "", authClientId: "", authClientSecret: "",
-    proxyPath: "/api/weather",
-    description: "5-day / 3-hour forecast (London). Same key as current weather.",
-  },
-  {
-    name: "GitHub — Search Repos",
-    method: "GET",
-    url: "https://api.github.com/search/repositories?q=react&sort=stars",
-    headersText: JSON.stringify({ "User-Agent": "Prototyper", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, null, 2),
-    body: "",
-    authType: "none",
-    authToken: "", authHeaderName: "X-API-Key", authUsername: "", authPassword: "",
-    authTokenUrl: "", authClientId: "", authClientSecret: "",
-    proxyPath: "/api/github",
-    description: "Search public repositories. No API key needed.",
-  },
-  {
-    name: "GitHub — User Profile",
-    method: "GET",
-    url: "https://api.github.com/users/octocat",
-    headersText: JSON.stringify({ "User-Agent": "Prototyper", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, null, 2),
-    body: "",
-    authType: "none",
-    authToken: "", authHeaderName: "X-API-Key", authUsername: "", authPassword: "",
-    authTokenUrl: "", authClientId: "", authClientSecret: "",
-    proxyPath: "/api/github",
-    description: "Fetch any GitHub user profile. No key needed.",
-  },
-  {
-    name: "JSONPlaceholder — Posts",
-    method: "GET",
-    url: "https://jsonplaceholder.typicode.com/posts",
-    headersText: "{}",
-    body: "",
-    authType: "none",
-    authToken: "", authHeaderName: "X-API-Key", authUsername: "", authPassword: "",
-    authTokenUrl: "", authClientId: "", authClientSecret: "",
-    proxyPath: "/api/fake",
-    description: "Fake REST API for prototyping. Always works, no key needed.",
-  },
-  {
-    name: "JSONPlaceholder — Users",
-    method: "GET",
-    url: "https://jsonplaceholder.typicode.com/users",
-    headersText: "{}",
-    body: "",
-    authType: "none",
-    authToken: "", authHeaderName: "X-API-Key", authUsername: "", authPassword: "",
-    authTokenUrl: "", authClientId: "", authClientSecret: "",
-    proxyPath: "/api/fake",
-    description: "Fake users list with name, email, address fields.",
-  },
-];
-
-// ─── Storage helpers ──────────────────────────────────────────────────────────
-
-function getApisPath(project: string) { return `projects/${project}/apis/apis.json`; }
-function getEnvPath(project: string) { return `projects/${project}/apis/env.json`; }
-function getKeysPath(project: string) { return `projects/${project}/apis/keys.json`; }
-
-async function loadEnvVars(project: string): Promise<Record<string, string>> {
-  try { return JSON.parse(await readFile(getEnvPath(project))); } catch { return {}; }
-}
-async function saveEnvVars(project: string, envVars: Record<string, string>) {
-  try {
-    const p = getEnvPath(project);
-    await createDir(p.replace("/env.json", ""));
-    await writeFile(p, JSON.stringify(envVars, null, 2));
-  } catch (e) { notify.error("Failed to save env vars", getErrorMessage(e)); }
-}
-async function loadApis(project: string): Promise<SavedApi[]> {
-  try { return JSON.parse(await readFile(getApisPath(project))); } catch { return []; }
-}
-async function saveApis(project: string, apis: SavedApi[]) {
-  try {
-    const p = getApisPath(project);
-    await createDir(p.replace("/apis.json", ""));
-    await writeFile(p, JSON.stringify(apis, null, 2));
-  } catch (e) { notify.error("Failed to save APIs", getErrorMessage(e)); }
-}
-async function loadApiKeys(project: string): Promise<ApiKey[]> {
-  try { return JSON.parse(await readFile(getKeysPath(project))); } catch { return []; }
-}
-async function saveApiKeys(project: string, keys: ApiKey[]) {
-  try {
-    const p = getKeysPath(project);
-    await createDir(p.replace("/keys.json", ""));
-    await writeFile(p, JSON.stringify(keys, null, 2));
-  } catch (e) { notify.error("Failed to save API keys", getErrorMessage(e)); }
-}
-
-function generateId() { return `api_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`; }
-
-function parseCurl(input: string): Partial<SavedApi> | null {
-  const normalized = input.replace(/\\\n/g, " ").replace(/\n/g, " ").trim();
-  const methodMatch = normalized.match(/curl\s+(?:-X\s+|--request\s+)(\w+)\s+['"]?(https?:\/\/[^\s'"]+)['"]?/i)
-    || normalized.match(/curl\s+['"]?(https?:\/\/[^\s'"]+)['"]?/i);
-  if (!methodMatch) return null;
-  const url = methodMatch[2] || methodMatch[1];
-  const method = methodMatch[1] && /^https?:\/\//i.test(methodMatch[1]) ? "GET" : (methodMatch[1] || "GET").toUpperCase();
-  const headers: Record<string, string> = {};
-  for (const m of normalized.matchAll(/(?:-H|--header)\s+['"]([^'"]+?)['"]/g)) {
-    const idx = m[1].indexOf(":");
-    if (idx > 0) headers[m[1].slice(0, idx).trim()] = m[1].slice(idx + 1).trim();
-  }
-  const bodyMatch = normalized.match(/(?:-d|--data|--data-raw)\s+['"]([\s\S]*?)['"]\s*(?:-H|-X|curl|$)/i)
-    || normalized.match(/(?:-d|--data|--data-raw)\s+['"]([\s\S]*?)['"]\s*$/i);
-  return { url, method, headersText: JSON.stringify(headers, null, 2), body: bodyMatch ? bodyMatch[1] : "" };
-}
-
-// ─── TypeScript type inference from JSON ──────────────────────────────────────
-
-function jsonToTsInterface(name: string, json: unknown): string {
-  const INDENT = "  ";
-  function inferType(val: unknown, depth = 0): string {
-    if (val === null) return "null";
-    if (Array.isArray(val)) {
-      if (val.length === 0) return "unknown[]";
-      return `Array<${inferType(val[0], depth)}>`;
-    }
-    if (typeof val === "object") {
-      const pad = INDENT.repeat(depth + 1);
-      const closePad = INDENT.repeat(depth);
-      const lines = Object.entries(val as Record<string, unknown>).map(
-        ([k, v]) => `${pad}${/[^a-zA-Z0-9_$]/.test(k) ? `"${k}"` : k}: ${inferType(v, depth + 1)};`
-      );
-      return `{\n${lines.join("\n")}\n${closePad}}`;
-    }
-    return typeof val;
-  }
-  try {
-    const body = inferType(json);
-    // interface syntax only works for object bodies — arrays and primitives need type alias
-    if (Array.isArray(json) || typeof json !== "object" || json === null) {
-      return `export type ${name} = ${body}`;
-    }
-    return `export interface ${name} ${body}`;
-  } catch {
-    return `// Could not infer type from response`;
-  }
-}
-
-function buildInterfaceName(apiName: string): string {
-  return apiName.replace(/[^a-zA-Z0-9]+(.)?/g, (_, c) => (c ? c.toUpperCase() : "")).replace(/^./, (c) => c.toUpperCase()) + "Response";
-}
-
-// ─── Sync API keys + proxy to the generated project ──────────────────────────
-
-async function syncToProject(project: string, keys: ApiKey[], apis: SavedApi[]) {
-  const generatedDir = `projects/${project}/generated`;
-  try {
-    await createDir(generatedDir);
-
-    // .env.local
-    const envLines = keys
-      .filter((k) => k.name.trim() && k.value.trim())
-      .map((k) => `VITE_${k.name.toUpperCase().replace(/\W+/g, "_")}=${k.value.replace(/[\r\n]/g, "")}`);
-    await writeFile(`${generatedDir}/.env.local`, envLines.join("\n") + (envLines.length ? "\n" : ""));
-
-    // proxy.config.json + vite.config.ts
-    // Values store origin+pathname (e.g. "https://api.openweathermap.org/data/2.5/weather")
-    // so the vite proxy can rewrite the path correctly.
-    const proxy: Record<string, string> = {};
-    for (const api of apis) {
-      if (api.proxyPath?.trim() && api.url?.trim()) {
-        try {
-          const parsed = new URL(api.url);
-          const fullPath = parsed.origin + parsed.pathname;
-          // Reject values that would break TS string interpolation in vite.config.ts
-          if (!fullPath.includes('"') && !fullPath.includes('\\')) {
-            proxy[api.proxyPath] = fullPath;
-          }
-        } catch { /* skip invalid URL */ }
-      }
-    }
-    await writeFile(`${generatedDir}/proxy.config.json`, JSON.stringify(proxy, null, 2));
-    await writeFile(`${generatedDir}/vite.config.ts`, getGeneratedViteConfig(proxy));
-
-    notify.success("Synced to project", `.env.local and vite.config.ts updated`);
-  } catch (e) {
-    notify.error("Sync failed", getErrorMessage(e));
-  }
-}
-
-// ─── Generate service file ────────────────────────────────────────────────────
-
-function buildServiceFile(api: SavedApi, tsInterface: string, interfaceName: string): string {
-  const slug = api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const hookName =
-    "use" +
-    api.name.replace(/[^a-zA-Z0-9]+(.)?/g, (_, c) => (c ? c.toUpperCase() : "")).replace(/^./, (c) => c.toUpperCase());
-  const base = api.url;
-  const queryKey = slug.replace(/-/g, "_");
-
-  return `import { useQuery } from '@tanstack/react-query'
-
-${tsInterface}
-
-export function ${hookName}(params?: Record<string, string>) {
-  const search = params ? '?' + new URLSearchParams(params).toString() : ''
-  return useQuery({
-    queryKey: ['${queryKey}', params],
-    queryFn: async (): Promise<${interfaceName}> => {
-      const res = await fetch(\`${base}\${search}\`)
-      if (!res.ok) throw new Error(\`API error: \${res.status}\`)
-      return res.json()
-    },
-    staleTime: 1000 * 60, // 1 minute
-  })
-}
-`;
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
+// Re-export public types for any external consumers
+export type { ApiKey, SavedApi } from "./apis/types";
+export { API_TEMPLATES } from "./apis/templates";
 
 export function APIsPanel() {
   const { settings } = useAppStore();
@@ -314,30 +49,10 @@ export function APIsPanel() {
   const [newKeyDesc, setNewKeyDesc] = useState("");
   const [generatingService, setGeneratingService] = useState(false);
 
-  // Persistent editor state
-  const name = ps.apisName;
-  const method = ps.apisMethod;
-  const url = ps.apisUrl;
-  const headersText = ps.apisHeadersText;
-  const body = ps.apisBody;
-  const authType = ps.apisAuthType;
-  const authToken = ps.apisAuthToken;
-  const authHeaderName = ps.apisAuthHeaderName;
-  const authUsername = ps.apisAuthUsername;
-  const authPassword = ps.apisAuthPassword;
-  const authTokenUrl = ps.apisAuthTokenUrl;
-  const authClientId = ps.apisAuthClientId;
-  const authClientSecret = ps.apisAuthClientSecret;
-  const proxyPath = ps.apisProxyPath ?? "";
-
-  // Ephemeral state
+  // Ephemeral response/history state
   const response = useUIStore((s) => s.apisResponse);
   const history = useUIStore((s) => s.apisHistory);
   const envVars = useUIStore((s) => s.apisEnvVars);
-  const newEnvKey = useUIStore((s) => s.apisNewEnvKey);
-  const newEnvValue = useUIStore((s) => s.apisNewEnvValue);
-  const curlPaste = useUIStore((s) => s.apisCurlPaste);
-  const openapiPaste = useUIStore((s) => s.apisOpenapiPaste);
   const setUI = useUIStore.setState;
 
   const [oauthCode, setOauthCode] = useState("");
@@ -380,7 +95,7 @@ export function APIsPanel() {
   }, [openApi, setProjectSettings, setUI]);
 
   function resolveEnvVars(text: string): string {
-    return text.replace(/\{\{(\w+)\}\}/g, (_, key) => envVars[key] ?? `{{${key}}}`);
+    return text.replace(/\{\{(\w+)\}\}/g, (_, key) => useUIStore.getState().apisEnvVars[key] ?? `{{${key}}}`);
   }
 
   const createApi = () => {
@@ -406,7 +121,24 @@ export function APIsPanel() {
     setApis((prev) =>
       prev.map((a) =>
         a.id === selectedApiId
-          ? { ...a, name: name || a.name, method, url, headersText, body, authType, authToken, authHeaderName, authUsername, authPassword, authTokenUrl, authClientId, authClientSecret, proxyPath, history }
+          ? {
+              ...a,
+              name: ps.apisName || a.name,
+              method: ps.apisMethod,
+              url: ps.apisUrl,
+              headersText: ps.apisHeadersText,
+              body: ps.apisBody,
+              authType: ps.apisAuthType,
+              authToken: ps.apisAuthToken,
+              authHeaderName: ps.apisAuthHeaderName,
+              authUsername: ps.apisAuthUsername,
+              authPassword: ps.apisAuthPassword,
+              authTokenUrl: ps.apisAuthTokenUrl,
+              authClientId: ps.apisAuthClientId,
+              authClientSecret: ps.apisAuthClientSecret,
+              proxyPath: ps.apisProxyPath,
+              history,
+            }
           : a
       )
     );
@@ -426,6 +158,7 @@ export function APIsPanel() {
   };
 
   const applyCurl = () => {
+    const curlPaste = useUIStore.getState().apisCurlPaste;
     if (!curlPaste.trim()) return;
     const parsed = parseCurl(curlPaste);
     if (parsed) {
@@ -440,6 +173,7 @@ export function APIsPanel() {
   };
 
   const applyOpenapi = () => {
+    const openapiPaste = useUIStore.getState().apisOpenapiPaste;
     if (!openapiPaste.trim()) return;
     try {
       const spec = YAML.load(openapiPaste) as Record<string, unknown>;
@@ -475,13 +209,13 @@ export function APIsPanel() {
   }
 
   const startOAuth2 = async () => {
-    if (!authTokenUrl || !authClientId) return;
+    if (!ps.apisAuthTokenUrl || !ps.apisAuthClientId) return;
     const verifier = generateCodeVerifier();
     const challenge = await generateCodeChallenge(verifier);
     const redirectUri = "http://localhost:8080/callback";
-    const authorizeUrl = new URL(authTokenUrl.replace("/token", "/authorize"));
+    const authorizeUrl = new URL(ps.apisAuthTokenUrl.replace("/token", "/authorize"));
     authorizeUrl.searchParams.set("response_type", "code");
-    authorizeUrl.searchParams.set("client_id", authClientId);
+    authorizeUrl.searchParams.set("client_id", ps.apisAuthClientId);
     authorizeUrl.searchParams.set("redirect_uri", redirectUri);
     authorizeUrl.searchParams.set("code_challenge", challenge);
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
@@ -492,15 +226,15 @@ export function APIsPanel() {
   };
 
   const exchangeOAuth2Code = async () => {
-    if (!oauthCode.trim() || !authTokenUrl || !authClientId) return;
+    if (!oauthCode.trim() || !ps.apisAuthTokenUrl || !ps.apisAuthClientId) return;
     setOauthLoading(true);
     try {
       const tokenBody = new URLSearchParams({
         grant_type: "authorization_code", code: oauthCode.trim(),
-        redirect_uri: "http://localhost:8080/callback", client_id: authClientId,
-        client_secret: authClientSecret,
+        redirect_uri: "http://localhost:8080/callback", client_id: ps.apisAuthClientId,
+        client_secret: ps.apisAuthClientSecret,
       }).toString();
-      const res = await httpRequest("POST", authTokenUrl, { "Content-Type": "application/x-www-form-urlencoded" }, tokenBody);
+      const res = await httpRequest("POST", ps.apisAuthTokenUrl, { "Content-Type": "application/x-www-form-urlencoded" }, tokenBody);
       const token = (JSON.parse(res.body) as Record<string, string>).access_token || "";
       if (token) setProjectSettings({ apisAuthToken: token });
       setShowOauthDialog(false);
@@ -513,23 +247,23 @@ export function APIsPanel() {
   };
 
   const send = async () => {
-    if (!url.trim()) return;
+    if (!ps.apisUrl.trim()) return;
     setLoading(true);
     const start = Date.now();
     try {
-      const resolvedUrl = resolveEnvVars(url);
-      const resolvedBody = body ? resolveEnvVars(body) : undefined;
+      const resolvedUrl = resolveEnvVars(ps.apisUrl);
+      const resolvedBody = ps.apisBody ? resolveEnvVars(ps.apisBody) : undefined;
       const headers: Record<string, string> = {};
       try {
-        for (const [k, v] of Object.entries(JSON.parse(headersText) as Record<string, string>))
+        for (const [k, v] of Object.entries(JSON.parse(ps.apisHeadersText) as Record<string, string>))
           headers[k] = resolveEnvVars(v);
       } catch { /* ignore */ }
-      if (authType === "bearer" && authToken) headers["Authorization"] = `Bearer ${authToken}`;
-      else if (authType === "apikey" && authToken) headers[authHeaderName || "X-API-Key"] = authToken;
-      else if (authType === "basic" && authUsername) headers["Authorization"] = `Basic ${btoa(`${authUsername}:${authPassword}`)}`;
-      else if (authType === "oauth2" && authToken) headers["Authorization"] = `Bearer ${authToken}`;
-      const res = await httpRequest(method, resolvedUrl, headers, resolvedBody);
-      const entry: ApiHistoryEntry = { timestamp: Date.now(), method, url, status: res.status, duration: Date.now() - start };
+      if (ps.apisAuthType === "bearer" && ps.apisAuthToken) headers["Authorization"] = `Bearer ${ps.apisAuthToken}`;
+      else if (ps.apisAuthType === "apikey" && ps.apisAuthToken) headers[ps.apisAuthHeaderName || "X-API-Key"] = ps.apisAuthToken;
+      else if (ps.apisAuthType === "basic" && ps.apisAuthUsername) headers["Authorization"] = `Basic ${btoa(`${ps.apisAuthUsername}:${ps.apisAuthPassword}`)}`;
+      else if (ps.apisAuthType === "oauth2" && ps.apisAuthToken) headers["Authorization"] = `Bearer ${ps.apisAuthToken}`;
+      const res = await httpRequest(ps.apisMethod, resolvedUrl, headers, resolvedBody);
+      const entry: ApiHistoryEntry = { timestamp: Date.now(), method: ps.apisMethod, url: ps.apisUrl, status: res.status, duration: Date.now() - start };
       const nextHistory = [entry, ...history].slice(0, 50);
       setUI({ apisResponse: res, apisHistory: nextHistory });
       if (selectedApiId) setApis((prev) => prev.map((a) => (a.id === selectedApiId ? { ...a, history: nextHistory } : a)));
@@ -546,19 +280,36 @@ export function APIsPanel() {
     if (!selectedApiId) return;
     setGeneratingService(true);
     try {
-      let tsInterface = `export type ${buildInterfaceName(name)} = unknown`;
+      let tsInterface = `export type ${buildInterfaceName(ps.apisName)} = unknown`;
       if (response?.body) {
         try {
           const parsed = JSON.parse(response.body) as unknown;
-          tsInterface = jsonToTsInterface(buildInterfaceName(name), parsed);
+          tsInterface = jsonToTsInterface(buildInterfaceName(ps.apisName), parsed);
         } catch { /* keep fallback */ }
       }
       const serviceContent = buildServiceFile(
-        { id: selectedApiId, name, method, url, headersText, body, authType, authToken, authHeaderName, authUsername, authPassword, authTokenUrl, authClientId, authClientSecret, proxyPath, history },
+        {
+          id: selectedApiId,
+          name: ps.apisName,
+          method: ps.apisMethod,
+          url: ps.apisUrl,
+          headersText: ps.apisHeadersText,
+          body: ps.apisBody,
+          authType: ps.apisAuthType,
+          authToken: ps.apisAuthToken,
+          authHeaderName: ps.apisAuthHeaderName,
+          authUsername: ps.apisAuthUsername,
+          authPassword: ps.apisAuthPassword,
+          authTokenUrl: ps.apisAuthTokenUrl,
+          authClientId: ps.apisAuthClientId,
+          authClientSecret: ps.apisAuthClientSecret,
+          proxyPath: ps.apisProxyPath,
+          history,
+        },
         tsInterface,
-        buildInterfaceName(name),
+        buildInterfaceName(ps.apisName),
       );
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const slug = ps.apisName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const servicePath = `projects/${settings.project}/generated/src/services/${slug}.ts`;
       await createDir(`projects/${settings.project}/generated/src/services`);
       await writeFile(servicePath, serviceContent);
@@ -599,7 +350,7 @@ export function APIsPanel() {
     if (!response?.body) return "";
     try {
       const parsed = JSON.parse(response.body) as unknown;
-      return jsonToTsInterface(buildInterfaceName(name || "Response"), parsed);
+      return jsonToTsInterface(buildInterfaceName(ps.apisName || "Response"), parsed);
     } catch {
       return `// Response is not valid JSON — cannot infer TypeScript types`;
     }
@@ -711,92 +462,19 @@ export function APIsPanel() {
 
             {/* Key Vault */}
             {sidebarTab === "keys" && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <ScrollArea className="flex-1 overflow-hidden">
-                  <div className="p-3 space-y-3">
-                    {apiKeys.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground text-center">
-                        <Key size={20} className="opacity-30" />
-                        <p className="text-xs font-medium">No API keys yet</p>
-                        <p className="text-[10px] opacity-60 leading-relaxed">Add keys here to sync them as VITE_* env vars to your generated project</p>
-                      </div>
-                    )}
-                    {apiKeys.map((k) => (
-                      <div key={k.id} className="space-y-1">
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">VITE_</span>
-                          <Input
-                            value={k.name}
-                            onChange={(e) => updateApiKey(k.id, "name", e.target.value.toUpperCase().replace(/\W+/g, "_"))}
-                            className="h-6 text-xs font-mono flex-1 uppercase"
-                            placeholder="KEY_NAME"
-                          />
-                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => deleteApiKey(k.id)}>
-                            <X size={10} className="text-red-500" />
-                          </Button>
-                        </div>
-                        <Input
-                          type="password"
-                          value={k.value}
-                          onChange={(e) => updateApiKey(k.id, "value", e.target.value)}
-                          className="h-6 text-xs"
-                          placeholder="Key value"
-                        />
-                        {k.description && (
-                          <p className="text-[10px] text-muted-foreground">{k.description}</p>
-                        )}
-                      </div>
-                    ))}
-
-                    {/* Add new key */}
-                    <div className="border-t border-border pt-3 space-y-1.5">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] font-mono text-muted-foreground">VITE_</span>
-                        <Input
-                          value={newKeyName}
-                          onChange={(e) => setNewKeyName(e.target.value.toUpperCase().replace(/\W+/g, "_"))}
-                          className="h-6 text-xs font-mono flex-1 uppercase"
-                          placeholder="KEY_NAME"
-                          onKeyDown={(e) => { if (e.key === "Enter") addApiKey(); }}
-                        />
-                      </div>
-                      <Input
-                        type="password"
-                        value={newKeyValue}
-                        onChange={(e) => setNewKeyValue(e.target.value)}
-                        className="h-6 text-xs"
-                        placeholder="Key value"
-                        onKeyDown={(e) => { if (e.key === "Enter") addApiKey(); }}
-                      />
-                      <Input
-                        value={newKeyDesc}
-                        onChange={(e) => setNewKeyDesc(e.target.value)}
-                        className="h-6 text-xs text-muted-foreground"
-                        placeholder="Description (optional)"
-                      />
-                      <Button size="sm" className="h-7 w-full text-xs gap-1" onClick={addApiKey} disabled={!newKeyName.trim()}>
-                        <Plus size={12} />
-                        Add Key
-                      </Button>
-                    </div>
-
-                    {/* Proxy mappings preview */}
-                    {Object.keys(proxyMappings).length > 0 && (
-                      <div className="border-t border-border pt-3 space-y-1.5">
-                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Proxy Mappings</p>
-                        {Object.entries(proxyMappings).map(([prefix, target]) => (
-                          <div key={prefix} className="text-[10px] font-mono text-muted-foreground">
-                            <span className="text-foreground">{prefix}</span>
-                            <span className="mx-1">→</span>
-                            <span className="truncate">{target}</span>
-                          </div>
-                        ))}
-                        <p className="text-[10px] text-muted-foreground">Derived from APIs with Proxy Path set. Click Sync to write to vite.config.ts</p>
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </div>
+              <ApiKeysSection
+                apiKeys={apiKeys}
+                proxyMappings={proxyMappings}
+                newKeyName={newKeyName}
+                newKeyValue={newKeyValue}
+                newKeyDesc={newKeyDesc}
+                setNewKeyName={setNewKeyName}
+                setNewKeyValue={setNewKeyValue}
+                setNewKeyDesc={setNewKeyDesc}
+                onAddKey={addApiKey}
+                onUpdateKey={updateApiKey}
+                onDeleteKey={deleteApiKey}
+              />
             )}
           </div>
         </Allotment.Pane>
@@ -805,302 +483,26 @@ export function APIsPanel() {
         <Allotment.Pane>
           <Allotment>
 
-            {/* Request pane */}
             <Allotment.Pane minSize={320}>
-              <div className="h-full flex flex-col bg-card">
-                <div className="panel-toolbar h-10 px-3 gap-2">
-                  <span className="text-sm font-medium">Request</span>
-                  <div className="flex-1" />
-                  {selectedApiId && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={generateService}
-                      disabled={generatingService}
-                      title="Generate a typed TanStack Query service file in src/services/"
-                    >
-                      <Plug size={11} />
-                      {generatingService ? "Generating…" : "Service"}
-                    </Button>
-                  )}
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={saveCurrent}>
-                    <Save size={12} />
-                    Save
-                  </Button>
-                </div>
-
-                <ScrollArea className="flex-1 overflow-hidden">
-                  <div className="p-3 space-y-3">
-                    <Input
-                      placeholder="API Name"
-                      value={name}
-                      onChange={(e) => setProjectSettings({ apisName: e.target.value })}
-                      className="h-8 text-sm"
-                    />
-
-                    <div className="flex gap-2">
-                      <Select value={method} onValueChange={(v) => setProjectSettings({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
-                        <SelectTrigger className="w-[100px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent position="popper" side="bottom">
-                          {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder="https://api.example.com/endpoint"
-                        value={url}
-                        onChange={(e) => setProjectSettings({ apisUrl: e.target.value })}
-                      />
-                      <Button onClick={send} disabled={loading}>
-                        <Send size={14} />
-                      </Button>
-                    </div>
-
-                    {/* Proxy Path */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                        <Plug size={11} />
-                        Proxy Path
-                        <span className="text-[10px] normal-case font-normal text-muted-foreground/60">(routes /path/* → API host in dev)</span>
-                      </label>
-                      <Input
-                        placeholder="/api/weather"
-                        value={proxyPath}
-                        onChange={(e) => setProjectSettings({ apisProxyPath: e.target.value })}
-                        className="h-7 text-xs font-mono"
-                      />
-                    </div>
-
-                    {/* cURL Paste */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Paste cURL</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={curlPaste}
-                          onChange={(e) => setUI({ apisCurlPaste: e.target.value })}
-                          placeholder="curl -X GET https://api.example.com"
-                          className="h-7 text-xs"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={applyCurl}>Parse</Button>
-                      </div>
-                    </div>
-
-                    {/* OpenAPI Import */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Import OpenAPI (YAML/JSON)</label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={openapiPaste}
-                          onChange={(e) => setUI({ apisOpenapiPaste: e.target.value })}
-                          placeholder="Paste OpenAPI spec..."
-                          className="h-7 text-xs"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={applyOpenapi}>Import</Button>
-                      </div>
-                    </div>
-
-                    {/* Auth */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Authentication</label>
-                      <div className="flex gap-2 flex-wrap">
-                        <Select value={authType} onValueChange={(v) => setProjectSettings({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}>
-                          <SelectTrigger className="w-[120px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper" side="bottom">
-                            <SelectItem value="none">None</SelectItem>
-                            <SelectItem value="bearer">Bearer</SelectItem>
-                            <SelectItem value="apikey">API Key</SelectItem>
-                            <SelectItem value="basic">Basic</SelectItem>
-                            <SelectItem value="oauth2">OAuth2</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {authType === "bearer" && (
-                          <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
-                        )}
-                        {authType === "apikey" && (
-                          <>
-                            <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setProjectSettings({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
-                            <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
-                          </>
-                        )}
-                        {authType === "oauth2" && (
-                          <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
-                        )}
-                      </div>
-                      {authType === "basic" && (
-                        <div className="flex gap-2">
-                          <Input placeholder="Username" value={authUsername} onChange={(e) => setProjectSettings({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
-                          <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setProjectSettings({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
-                        </div>
-                      )}
-                      {authType === "oauth2" && (
-                        <div className="space-y-2">
-                          <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setProjectSettings({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
-                          <div className="flex gap-2">
-                            <Input placeholder="Client ID" value={authClientId} onChange={(e) => setProjectSettings({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
-                            <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setProjectSettings({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
-                          </div>
-                          <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>Authorize</Button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Headers */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Headers (JSON)</label>
-                      <div className="h-32 border rounded overflow-hidden">
-                        <CodeMirrorEditor value={headersText} onChange={(v) => setProjectSettings({ apisHeadersText: v })} mode="json" />
-                      </div>
-                    </div>
-
-                    {/* Body */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Body</label>
-                      <Textarea
-                        value={body}
-                        onChange={(e) => setProjectSettings({ apisBody: e.target.value })}
-                        placeholder="Request body... (use {{VAR_NAME}} for env vars)"
-                        className="min-h-[120px] text-sm font-mono"
-                      />
-                    </div>
-
-                    {/* Env Vars */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Environment Variables
-                        <span className="ml-1 text-[10px] font-normal text-muted-foreground/60">use {"{{KEY}}"} in URLs/body</span>
-                      </label>
-                      {Object.entries(envVars).map(([key, value]) => (
-                        <div key={key} className="flex items-center gap-2">
-                          <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded w-28 truncate">{key}</span>
-                          <Input value={value} onChange={(e) => setUI({ apisEnvVars: { ...envVars, [key]: e.target.value } })} className="h-7 text-xs flex-1" />
-                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
-                            const next = { ...envVars }; delete next[key]; setUI({ apisEnvVars: next });
-                          }}><Trash2 size={10} /></Button>
-                        </div>
-                      ))}
-                      <div className="flex gap-2">
-                        <Input placeholder="Key (e.g. BASE_URL)" value={newEnvKey} onChange={(e) => setUI({ apisNewEnvKey: e.target.value })} className="h-7 text-xs" />
-                        <Input placeholder="Value" value={newEnvValue} onChange={(e) => setUI({ apisNewEnvValue: e.target.value })} className="h-7 text-xs flex-1" />
-                        <Button size="sm" className="h-7" onClick={() => {
-                          if (!newEnvKey.trim()) return;
-                          setUI({ apisEnvVars: { ...envVars, [newEnvKey.trim()]: newEnvValue }, apisNewEnvKey: "", apisNewEnvValue: "" });
-                        }} disabled={!newEnvKey.trim()}><Plus size={14} /></Button>
-                      </div>
-                    </div>
-                  </div>
-                </ScrollArea>
-              </div>
+              <RequestForm
+                selectedApiId={selectedApiId}
+                loading={loading}
+                generatingService={generatingService}
+                onSend={send}
+                onSave={saveCurrent}
+                onGenerateService={generateService}
+                onApplyCurl={applyCurl}
+                onApplyOpenapi={applyOpenapi}
+                onStartOAuth2={startOAuth2}
+              />
             </Allotment.Pane>
 
-            {/* Response pane */}
             <Allotment.Pane minSize={320}>
-              <div className="h-full flex flex-col bg-card">
-                <div className="panel-toolbar h-10 px-3 gap-2">
-                  <span className="text-sm font-medium">Response</span>
-                  {response && (
-                    <span className={[
-                      "text-xs px-1.5 py-0.5 rounded font-medium",
-                      response.status >= 200 && response.status < 300 ? "bg-green-500/10 text-green-600"
-                        : response.status >= 400 ? "bg-red-500/10 text-red-600"
-                        : "bg-muted text-muted-foreground",
-                    ].join(" ")}>{response.status}</span>
-                  )}
-                  <div className="flex-1" />
-                  {response && (
-                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs"
-                      onClick={() => navigator.clipboard.writeText(response.body)}>
-                      <Copy size={12} />Copy
-                    </Button>
-                  )}
-                </div>
-
-                <Tabs defaultValue="body" className="flex-1 flex flex-col overflow-hidden">
-                  <TabsList variant="line" className="h-7">
-                    <TabsTrigger value="body" className="text-[11px]">Body</TabsTrigger>
-                    <TabsTrigger value="schema" className="text-[11px]">TypeScript</TabsTrigger>
-                    <TabsTrigger value="headers" className="text-[11px]">Headers</TabsTrigger>
-                    <TabsTrigger value="history" className="text-[11px]">History</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="body" className="flex-1 overflow-hidden mt-0">
-                    {response ? (
-                      <CodeMirrorEditor
-                        value={(() => { try { return JSON.stringify(JSON.parse(response.body), null, 2); } catch { return response.body; } })()}
-                        mode={(() => { try { JSON.parse(response.body); return "json"; } catch { return "yaml"; } })()}
-                        readOnly
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                        Send a request to see the response
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="schema" className="flex-1 overflow-hidden mt-0">
-                    {response ? (
-                      <div className="relative h-full">
-                        <Button
-                          variant="ghost" size="sm"
-                          className="absolute top-1 right-1 z-10 gap-1 text-xs"
-                          onClick={() => navigator.clipboard.writeText(schemaContent)}
-                        >
-                          <Copy size={12} />Copy
-                        </Button>
-                        <CodeMirrorEditor value={schemaContent} mode="javascript" readOnly />
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                        Send a request to infer TypeScript types
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="headers" className="flex-1 overflow-hidden mt-0">
-                    {response ? (
-                      <CodeMirrorEditor value={JSON.stringify(response.headers, null, 2)} mode="json" readOnly />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-                        <Terminal size={24} className="opacity-25" />
-                        <p className="text-sm font-medium">No response yet</p>
-                        <p className="text-xs opacity-60">Send a request to see the response</p>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="history" className="flex-1 mt-0">
-                    <ScrollArea className="h-full overflow-hidden">
-                      <div className="p-3">
-                        {history.length > 0 ? (
-                          <div className="space-y-1">
-                            {history.map((h, i) => (
-                              <div key={i} className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors">
-                                <span className={[
-                                  "font-bold px-1 py-0.5 rounded",
-                                  h.status >= 200 && h.status < 300 ? "bg-green-500/10 text-green-600"
-                                    : h.status >= 400 ? "bg-red-500/10 text-red-600"
-                                    : "bg-muted text-muted-foreground",
-                                ].join(" ")}>{h.status}</span>
-                                <span className="font-medium w-12">{h.method}</span>
-                                <span className="flex-1 truncate text-muted-foreground">{h.url}</span>
-                                <span className="text-muted-foreground shrink-0">{h.duration}ms · {new Date(h.timestamp).toLocaleTimeString()}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center text-muted-foreground text-sm">No request history</div>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-                </Tabs>
-              </div>
+              <ResponseViewer
+                response={response}
+                history={history}
+                schemaContent={schemaContent}
+              />
             </Allotment.Pane>
 
           </Allotment>
@@ -1135,4 +537,3 @@ export function APIsPanel() {
     </div>
   );
 }
-

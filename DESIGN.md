@@ -51,7 +51,7 @@ Dark is the default. AMOLED is dark with true-black backgrounds for OLED display
 
 `--primary` is **near-monochrome by default** (a near-white in dark mode). A user-chosen
 accent hue (Tweaks) shifts `--primary` and `--ring` only — it never colors structural
-chrome. Curated options, never a free picker:
+chrome. Recommended hues (user can set any color string today; curated picker UI planned):
 
 `blue 259° · violet 280° · teal 180° · amber 70° · emerald 155° · rose 15°`
 
@@ -111,7 +111,9 @@ System fallback: `ui-sans-serif, system-ui, -apple-system, sans-serif`.
 ## Spacing
 
 4px base unit. Density is user-adjustable (`--pad-y` / `--pad-x` / `--row-h`):
-`compact · comfortable (default) · spacious`.
+`compact · comfortable (default) · spacious`. These tokens are part of the design
+language the app **produces** (see `src/lib/design/spec.ts`); the shell UI itself does
+not currently expose a density toggle to the user.
 
 `2 · 4 · 6 · 8 · 12 · 16 · 20 · 28` — small steps dominate; this is a dense tool. Panels
 use 8–12px padding, view headers 14–20px, canvases breathe with generous virtual space.
@@ -162,7 +164,8 @@ discrete objects on the dotted canvas. Resizable pane gutters (`.sash`) are 1px,
 | pulse | `1.1s` — running status dot |
 | thinking | `1.2s` staggered — three-dot node activity |
 
-Easing: `ease-out` for entrances, linear for indeterminate (shimmer, edge flow, blink).
+Easing: `ease-in-out` for entrances (code uses this in 19+ places — `loader.tsx`,
+`thinking-dot` in `globals.css`), linear for indeterminate (shimmer, edge flow, blink).
 
 **Conventions:** animate to communicate work (a node firing, tokens streaming, an edge
 pulsing), never to ornament. Dragging is transform-only at 60fps (no React on the hot

@@ -7,4 +7,3 @@ pub mod ai_ollama;
 pub mod export;
 pub mod workflows;
 pub mod bonsai;
-pub mod bonsai_assets;

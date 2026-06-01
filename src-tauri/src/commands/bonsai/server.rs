@@ -1,47 +1,25 @@
+//! Bonsai server lifecycle commands: start, stop, status, schedule/cancel stop.
+//!
+//! Lock-ordering invariant: `bonsai_config` (std::sync::Mutex) must always be
+//! acquired before `bonsai_process` (tokio::sync::Mutex), or the two locks must
+//! never be held simultaneously. See the `BonsaiServer` doc in `mod.rs`.
+//!
+//! The health-check loop intentionally runs while the process lock is briefly
+//! held (between `take()`/`set()`), but only performs non-blocking HTTP
+//! requests — see https://tokio.rs/tokio/topics/tracing "Don't hold locks
+//! across awaits" for the rationale.
+
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::{AppError, AppState};
-
-// Re-export types from bonsai_assets so consumers can import from one path
-pub use super::bonsai_assets::{BonsaiGenerateResult, AssetInfo};
-
-const DEFAULT_PORT: u16 = 8000;
-const MAX_PORT_OFFSET: u16 = 5;
-const HEALTH_CHECK_TIMEOUT_SECS: u64 = 120;
-const GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 10;
-
-/// Lock ordering: always acquire `bonsai_config` (std::sync::Mutex) before
-/// `bonsai_process` (tokio::sync::Mutex), or never hold both simultaneously.
-/// Never acquire in the reverse order to avoid deadlock.
-pub struct BonsaiServer {
-    pub child: tokio::process::Child,
-    pub pid: u32,
-    pub port: u16,
-    pub started_at: Instant,
-    pub stop_timer: Option<tokio::task::JoinHandle<()>>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct BonsaiServerConfig {
-    pub install_path: String,
-    pub port: u16,
-    pub variant: String,
-    pub auto_stop_timeout_secs: u64,
-}
-
-impl Default for BonsaiServerConfig {
-    fn default() -> Self {
-        Self {
-            install_path: String::new(),
-            port: DEFAULT_PORT,
-            variant: "ternary".to_string(),
-            auto_stop_timeout_secs: 60,
-        }
-    }
-}
+use super::{
+    bonsai_error, BonsaiServer, HEALTH_CHECK_TIMEOUT_SECS, MAX_PORT_OFFSET,
+};
+use super::paths::{default_install_path, find_transformer_dir, validate_install_path};
+use super::process::{kill_port_sync, kill_process_group};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BonsaiServerInfo {
@@ -61,11 +39,10 @@ pub struct BonsaiServerStatus {
     pub default_family: String,
 }
 
-pub(crate) fn bonsai_error(msg: impl Into<String>) -> AppError {
-    AppError::Bonsai(msg.into())
-}
-
-async fn check_server_health(http_client: &reqwest::Client, port: u16) -> Result<BonsaiServerStatus, AppError> {
+async fn check_server_health(
+    http_client: &reqwest::Client,
+    port: u16,
+) -> Result<BonsaiServerStatus, AppError> {
     let url = format!("http://127.0.0.1:{}/backends", port);
     let response = http_client
         .get(&url)
@@ -104,90 +81,6 @@ fn find_available_port(base: u16, max_offset: u16) -> Option<u16> {
         }
     }
     None
-}
-
-/// Find the transformer-gemlite-* subdirectory within a model directory.
-/// Returns the first match (e.g. transformer-gemlite-int2 for ternary, transformer-gemlite-int1 for binary).
-fn find_transformer_dir(model_dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    if let Ok(entries) = std::fs::read_dir(model_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if name_str.starts_with("transformer-gemlite-") && entry.path().is_dir() {
-                return Some(entry.path());
-            }
-        }
-    }
-    None
-}
-
-/// Validate and resolve the install path, preventing path traversal attacks.
-/// Returns the resolved absolute path or an error.
-fn validate_install_path(raw: &str) -> Result<std::path::PathBuf, AppError> {
-    let path = std::path::Path::new(raw);
-    // Reject empty paths (caller should handle default)
-    if raw.is_empty() {
-        return Err(bonsai_error("Install path cannot be empty"));
-    }
-    // Reject paths with traversal components
-    if raw.contains("..") {
-        return Err(bonsai_error("Install path must not contain '..'"));
-    }
-    // Must be an absolute path
-    if !path.is_absolute() {
-        return Err(bonsai_error("Install path must be absolute"));
-    }
-    // Expand ~ to home directory
-    let expanded = if raw.starts_with("~/") {
-        let home = dirs_home_dir().ok_or_else(|| bonsai_error("Cannot determine home directory"))?;
-        home.join(&raw[2..])
-    } else {
-        path.to_path_buf()
-    };
-    // Verify the resolved path exists as a directory
-    if !expanded.is_dir() {
-        return Err(bonsai_error(format!(
-            "Install path does not exist: {}. Make sure Bonsai Image Demo is cloned and set up.",
-            expanded.display()
-        )));
-    }
-    Ok(expanded)
-}
-
-fn dirs_home_dir() -> Option<std::path::PathBuf> {
-    #[cfg(unix)]
-    {
-        std::env::var("HOME").ok().map(std::path::PathBuf::from)
-            .or_else(|| dirs::home_dir())
-    }
-    #[cfg(windows)]
-    {
-        std::env::var("USERPROFILE").ok().map(std::path::PathBuf::from)
-            .or_else(|| dirs::home_dir())
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        dirs::home_dir()
-    }
-}
-
-fn default_install_path() -> Result<std::path::PathBuf, AppError> {
-    let home = dirs_home_dir().ok_or_else(|| bonsai_error("Cannot determine home directory"))?;
-    // Try the exact GitHub repo name first (case-sensitive on Linux), then lowercase fallback
-    let candidates = [
-        home.join("Bonsai-Image-Demo"),
-        home.join("Bonsai-image-demo"),
-        home.join("bonsai-image-demo"),
-    ];
-    for candidate in &candidates {
-        if candidate.is_dir() {
-            return Ok(candidate.clone());
-        }
-    }
-    Err(bonsai_error(format!(
-        "Bonsai Image Demo not found. Tried: {}. Clone it from GitHub and run setup, or configure the install path in Settings → Assets.",
-        candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
-    )))
 }
 
 /// Start the Bonsai server. Holds the `bonsai_process` lock throughout to prevent
@@ -439,7 +332,7 @@ pub async fn bonsai_stop_server(
         // Also try async kill on the tracked child as a fallback
         let _ = server.child.kill().await;
 
-        let deadline = Instant::now() + Duration::from_secs(GRACEFUL_SHUTDOWN_TIMEOUT_SECS);
+        let deadline = Instant::now() + Duration::from_secs(super::GRACEFUL_SHUTDOWN_TIMEOUT_SECS);
         loop {
             match server.child.try_wait() {
                 Ok(Some(_)) => break,
@@ -520,90 +413,4 @@ pub async fn bonsai_cancel_stop(state: State<'_, AppState>) -> Result<(), AppErr
         }
     }
     Ok(())
-}
-
-/// Kill a process group by sending SIGTERM, waiting briefly, then SIGKILL.
-/// The uvicorn process is started in its own process group (PGID = PID),
-/// so killing the group also kills Python/CUDA worker children.
-/// Async — uses tokio::time::sleep, never blocks the runtime.
-#[cfg(unix)]
-async fn kill_process_group(pid: u32) {
-    // Send SIGTERM to the process group (negative PID = process group)
-    let pgid = format!("-{}", pid);
-    let _ = tokio::process::Command::new("kill")
-        .arg(&pgid)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await;
-
-    // Give group 2 seconds to clean up GPU memory gracefully
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    // If still alive, SIGKILL the whole group
-    let _ = tokio::process::Command::new("kill")
-        .args(["-9", &pgid])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await;
-}
-
-#[cfg(windows)]
-async fn kill_process_group(pid: u32) {
-    // On Windows, taskkill /T kills the process tree
-    let _ = tokio::process::Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await;
-}
-
-/// Cross-platform port killing — synchronous, must be called via `tokio::task::spawn_blocking`
-/// to avoid blocking the async runtime.
-fn kill_port_sync(port: u16) {
-    #[cfg(unix)]
-    {
-        let output = std::process::Command::new("lsof")
-            .args(["-t", &format!("-i:{}", port), "-s", "TCP:LISTEN"])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output();
-
-        if let Ok(out) = output {
-            let pids = String::from_utf8_lossy(&out.stdout);
-            for pid in pids.lines() {
-                let pid = pid.trim();
-                if pid.is_empty() { continue; }
-                let _ = std::process::Command::new("kill")
-                    .args(["-9", pid])
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .output();
-            }
-        }
-    }
-    #[cfg(windows)]
-    {
-        let output = std::process::Command::new("cmd")
-            .args(["/C", &format!("netstat -ano | findstr :{}", port)])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output();
-
-        if let Ok(out) = output {
-            let text = String::from_utf8_lossy(&out.stdout);
-            for line in text.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if let Some(pid) = parts.last() {
-                    let _ = std::process::Command::new("taskkill")
-                        .args(["/PID", pid, "/F"])
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .output();
-                }
-            }
-        }
-    }
 }

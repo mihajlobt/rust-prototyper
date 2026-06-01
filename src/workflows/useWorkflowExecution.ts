@@ -1,30 +1,14 @@
-// Workflow execution engine — extracted from WorkflowsView for file size management.
+// Workflow execution orchestrator.
+// Owns run/pause/resume/stop state, builds the DAG, batches status updates,
+// and drives the main loop that calls runNode. The node-type dispatch and
+// pure helpers live in ./execution/* so this file stays focused on flow.
 
 import { useState, useRef } from "react";
 import type { Edge } from "@xyflow/react";
-import {
-  WORKFLOW_REQUIREMENTS_PROMPT_BASE,
-  WORKFLOW_ARCHITECT_PROMPT_BASE,
-  WORKFLOW_STRUCTURE_PROMPT_BASE,
-  WORKFLOW_STYLE_PROMPT_BASE,
-  WORKFLOW_INTERACTION_PROMPT_BASE,
-  WORKFLOW_REFERENCE_PROMPT_BASE,
-  WORKFLOW_VALIDATE_PROMPT_BASE,
-  WORKFLOW_TRANSFORM_PROMPT_BASE,
-  WORKFLOW_SUMMARIZE_PROMPT_BASE,
-  WORKFLOW_CONDITION_PROMPT_BASE,
-  WORKFLOW_LOOP_FIX_PROMPT_BASE,
-} from "@/lib/prompts";
-import {
-  generateCompletionStream, getApiKeyForProvider, getHostForProvider,
-  httpRequest, runShellCommandCapture,
-  readFile, writeFile, createDir, bunDev,
-  getErrorMessage,
-  type CompletionEvent, type Message, type Provider,
-} from "@/lib/ipc";
-import { Channel } from "@tauri-apps/api/core";
-import { notify } from "@/hooks/useToast";
-import type { WorkflowNodeData, WorkflowNodeType } from "@/workflows/nodeTypes";
+import type { WorkflowNodeType } from "@/workflows/nodeTypes";
+import { computeDag, findBranch } from "@/workflows/execution/dag";
+import { createBatchedStatus } from "@/workflows/execution/batchStatus";
+import { runNode, type RunNodeContext } from "@/workflows/execution/runNode";
 
 export interface RunSummary {
   total: number;
@@ -55,51 +39,6 @@ interface UseWorkflowExecutionParams {
   getNodes: () => WorkflowNodeType[];
   getEdges: () => Edge[];
   setNodes: React.Dispatch<React.SetStateAction<WorkflowNodeType[]>>;
-}
-
-function stripCodeFences(input: string): string {
-  const match = input.match(/```(?:\w+)?\n?([\s\S]*?)```/);
-  return match ? match[1].trim() : input.trim();
-}
-
-function traverseJsonPath(obj: unknown, path: string): unknown {
-  const parts = path.split(".");
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    if (typeof current === "object" && !Array.isArray(current)) {
-      current = (current as Record<string, unknown>)[part];
-    } else if (Array.isArray(current)) {
-      const index = Number(part);
-      current = current[index];
-    } else {
-      return undefined;
-    }
-  }
-  return current;
-}
-
-function computeDiff(before: string, after: string): string {
-  const beforeLines = before.split("\n");
-  const afterLines = after.split("\n");
-  const result: string[] = ["--- base", "+++ output"];
-  let beforeIdx = 0;
-  let afterIdx = 0;
-
-  while (beforeIdx < beforeLines.length || afterIdx < afterLines.length) {
-    if (beforeIdx >= beforeLines.length) {
-      result.push(`+ ${afterLines[afterIdx++]}`);
-    } else if (afterIdx >= afterLines.length) {
-      result.push(`- ${beforeLines[beforeIdx++]}`);
-    } else if (beforeLines[beforeIdx] === afterLines[afterIdx]) {
-      result.push(`  ${beforeLines[beforeIdx++]}`);
-      afterIdx++;
-    } else {
-      result.push(`- ${beforeLines[beforeIdx++]}`);
-      result.push(`+ ${afterLines[afterIdx++]}`);
-    }
-  }
-  return result.join("\n");
 }
 
 export function useWorkflowExecution({
@@ -137,24 +76,7 @@ export function useWorkflowExecution({
     const currentEdges = getEdges();
 
     const workflowMemory = new Map<string, string>();
-
-    const adj  = new Map<string, string[]>();
-    const radj = new Map<string, string[]>();
-    for (const n of currentNodes) { adj.set(n.id, []); radj.set(n.id, []); }
-    for (const e of currentEdges) { adj.get(e.source)!.push(e.target); radj.get(e.target)!.push(e.source); }
-
-    const inDeg = new Map<string, number>();
-    for (const n of currentNodes) inDeg.set(n.id, 0);
-    for (const e of currentEdges) inDeg.set(e.target, inDeg.get(e.target)! + 1);
-    const queue = [...inDeg.entries()].filter(([,deg]) => deg === 0).map(([id]) => id);
-    const order: string[] = [];
-    while (queue.length) {
-      const id = queue.shift()!; order.push(id);
-      for (const nx of adj.get(id)!) { inDeg.set(nx, inDeg.get(nx)! - 1); if (inDeg.get(nx) === 0) queue.push(nx); }
-    }
-    const execOrder = order.length === currentNodes.length ? order : currentNodes.map((n) => n.id);
-    const compDeps = new Map<string, Set<string>>();
-    for (const n of currentNodes) if (n.data.nodeType === "composition") compDeps.set(n.id, new Set(radj.get(n.id)!));
+    const { adj, radj, execOrder, compDeps } = computeDag(currentNodes, currentEdges);
 
     const nodeOutputMap = new Map<string, string>();
     // Rebuild output map from done/paused nodes (for resume)
@@ -181,357 +103,25 @@ export function useWorkflowExecution({
       }).filter(Boolean).join("\n\n");
     };
 
-    // rAF-batched updateStatus: coalesces multiple streaming-chunk updates per frame
-    // into a single setNodes call, preventing React re-renders on every token.
-    const pendingPatches = new Map<string, Partial<WorkflowNodeData>>();
-    const flushPatches = () => {
-      if (pendingPatches.size === 0) return;
-      // Don't apply stale patches after stop/abort — stopWorkflow resets nodes directly
-      if (abortRef.current) { pendingPatches.clear(); return; }
-      const patches = new Map(pendingPatches);
-      pendingPatches.clear();
-      setNodes((prev) => prev.map((n) => {
-        const patch = patches.get(n.id);
-        return patch ? { ...n, data: { ...n.data, ...patch } } : n;
-      }));
-    };
-    const scheduleFlush = () => {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = requestAnimationFrame(flushPatches);
-    };
-    const updateStatus = (id: string, patch: Partial<WorkflowNodeData>) => {
-      const existing = pendingPatches.get(id);
-      pendingPatches.set(id, existing ? { ...existing, ...patch } : patch);
-      scheduleFlush();
-    };
-    // Flush any remaining patches synchronously (needed before reads that depend on state)
-    const flushNow = () => {
-      cancelAnimationFrame(rafIdRef.current);
-      flushPatches();
+    // rAF-batched status — coalesces streaming-chunk updates per frame.
+    const { updateStatus, flushNow } = createBatchedStatus({ setNodes, abortRef, rafIdRef });
+
+    const runCtx: RunNodeContext = {
+      abortRef, getNodes, getPrevOut, settings, generatedPath,
+      updateStatus, flushNow, nodeOutputMap, workflowMemory, currentEdges,
     };
 
-    const execNode = async (nodeId: string) => {
-      if (abortRef.current) return;
-      flushNow();
-      const node = getNodes().find((n) => n.id === nodeId);
-      if (!node) return;
-      const d = node.data;
-      updateStatus(nodeId, { status: "running", output: undefined });
-      const prevOut = d.nodeType === "composition" ? "" : getPrevOut(nodeId);
-
-      try {
-        let output = "";
-        const promptBase = d.prompt || d.label;
-        const model = settings.modelId;
-        const host = getHostForProvider(settings.provider as Provider, settings.host);
-        const apiKey = getApiKeyForProvider(settings.provider as Provider, settings.apiKeys);
-        const customPrompts = settings.prompts;
-
-        const streamAI = async (sysprompt: string, userMsg: string): Promise<string> => {
-          // Since commit 906be08, generateCompletionStream returns immediately with a
-          // request_id (Rust side uses tokio::spawn). We must await the "Done" Channel
-          // event instead of the invoke promise to collect the full response.
-          return new Promise((resolve, reject) => {
-            const channel = new Channel<CompletionEvent>();
-            let acc = "";
-            channel.onmessage = (msg) => {
-              if (msg.event === "Chunk") {
-                acc += msg.data.text;
-                if (!abortRef.current) updateStatus(nodeId, { output: acc });
-              }
-              if (msg.event === "Done") { resolve(acc); }
-              if (msg.event === "Error") { reject(new Error(msg.data.message)); }
-            };
-            generateCompletionStream(
-              model,
-              [{ role: "system", content: sysprompt }, { role: "user", content: userMsg }] satisfies Message[],
-              host, apiKey, channel, undefined, undefined, settings.provider as Provider,
-            ).catch(reject);
-          });
-        };
-
-        const resolveSystem = (globalKey: string, base: string): string =>
-          d.systemPrompt || customPrompts[globalKey] || base;
-
-        const ai = (globalKey: string, base: string, userMsg: string) =>
-          streamAI(resolveSystem(globalKey, base), userMsg);
-
-        const isCustomType = d.nodeType === "custom" || d.nodeType.startsWith("custom_");
-
-        if (isCustomType) {
-          output = await streamAI(d.systemPrompt || d.prompt || "Process the input.", prevOut || promptBase);
-        } else switch (d.nodeType) {
-
-          case "input":    output = promptBase; break;
-          case "output":   output = prevOut; break;
-          case "writefile": {
-            const wfPath = d.path?.startsWith("projects/") ? d.path : `${generatedPath}/${d.path || "output.txt"}`;
-            const wfDir = wfPath.substring(0, wfPath.lastIndexOf("/"));
-            try { await createDir(wfDir); } catch { /* dir may exist */ }
-            const wfContent = d.mode === "append" ? (await readFile(wfPath).catch(() => "") + "\n" + prevOut) : prevOut;
-            await writeFile(wfPath, wfContent);
-            output = `Wrote to ${d.path || "output.txt"}`;
-            break;
-          }
-
-          case "requirements": output = await ai("workflow-requirements-system", WORKFLOW_REQUIREMENTS_PROMPT_BASE, prevOut || promptBase); break;
-          case "architect":    output = await ai("workflow-architect-system",    WORKFLOW_ARCHITECT_PROMPT_BASE,    prevOut || promptBase); break;
-          case "structure":    output = await ai("workflow-structure-system",    WORKFLOW_STRUCTURE_PROMPT_BASE,    prevOut || promptBase); break;
-          case "style":        output = await ai("workflow-style-system",        WORKFLOW_STYLE_PROMPT_BASE,        prevOut || promptBase); break;
-          case "interaction":  output = await ai("workflow-interaction-system",  WORKFLOW_INTERACTION_PROMPT_BASE,  prevOut || promptBase); break;
-          case "reference":    output = await ai("workflow-reference-system",    WORKFLOW_REFERENCE_PROMPT_BASE,    prevOut || promptBase); break;
-          case "transform":    output = await ai("workflow-transform-system",    WORKFLOW_TRANSFORM_PROMPT_BASE,    `Instruction: ${promptBase}\n\nContent: ${prevOut}`); break;
-
-          case "validate": {
-            const tscOut = await runShellCommandCapture(generatedPath, "bun tsc --noEmit").catch((e: unknown) => `tsc failed: ${String(e)}`);
-            const tscClean = tscOut.trim().length === 0;
-            if (tscClean) {
-              const aiReview = prevOut.length > 0
-                ? await ai("workflow-validate-system", WORKFLOW_VALIDATE_PROMPT_BASE, prevOut)
-                : "";
-              // Main output includes content so old edges without sourceHandle still get the actual code.
-              // Branch outputs for explicit pass/fail routing via sourceHandle-aware edges.
-              output = aiReview ? `✅ tsc: no errors\n\n${aiReview}` : (prevOut || "✅ tsc: no errors");
-              nodeOutputMap.set(`${nodeId}:pass`, prevOut);
-              nodeOutputMap.set(`${nodeId}:fail`, "");
-              updateStatus(nodeId, { passOutput: prevOut, failOutput: "" });
-            } else {
-              output = `❌ tsc errors:\n${tscOut}\n\nCODE:\n${prevOut}`;
-              const failContent = `ERRORS:\n${tscOut}\n\nCODE:\n${prevOut}`;
-              nodeOutputMap.set(`${nodeId}:pass`, "");
-              nodeOutputMap.set(`${nodeId}:fail`, failContent);
-              updateStatus(nodeId, { passOutput: "", failOutput: failContent });
-            }
-            break;
-          }
-
-          case "bash": {
-            output = await runShellCommandCapture(generatedPath, d.command || "echo hello").catch((e: unknown) => `bash error: ${String(e)}`);
-            if (!output.trim()) output = `(no output)`;
-            break;
-          }
-          case "fetch": {
-            let headers: Record<string, string> = {};
-            try { headers = JSON.parse(d.headers || "{}"); } catch { /* invalid JSON headers */ }
-            const method = d.method || "GET";
-            const bodyMethods = new Set(["POST", "PUT", "PATCH"]);
-            const body = d.body || (bodyMethods.has(method) ? prevOut : undefined) || undefined;
-            const res = await httpRequest(method, d.url || "https://api.github.com", headers, body);
-            output = res.body;
-            break;
-          }
-          case "fileop": {
-            const filePath = d.path?.startsWith("projects/") ? d.path : `${generatedPath}/${d.path || "test.txt"}`;
-            if ((d.operation || "read") === "read") {
-              output = await readFile(filePath);
-            } else {
-              const content = d.content || prevOut;
-              await writeFile(filePath, content);
-              output = content;
-            }
-            break;
-          }
-          case "auth": {
-            const authHeaders: Record<string, string> = {};
-            if (d.authScheme === "apikey") authHeaders[d.authHeaderName || "X-API-Key"] = d.authToken || "";
-            else if (d.authScheme === "basic") authHeaders["Authorization"] = `Basic ${btoa(d.authToken || "")}`;
-            else authHeaders["Authorization"] = `Bearer ${d.authToken || ""}`;
-            output = JSON.stringify(authHeaders);
-            break;
-          }
-          case "parallel":    output = `Forked into ${currentEdges.filter((e) => e.source === nodeId).length} branches`; break;
-          case "composition": output = currentEdges.filter((e) => e.target === nodeId).map((e) => {
-            if (e.sourceHandle) return nodeOutputMap.get(`${e.source}:${e.sourceHandle}`) ?? nodeOutputMap.get(e.source) ?? "";
-            return nodeOutputMap.get(e.source) ?? "";
-          }).filter(Boolean).join("\n\n") || "No inputs"; break;
-          case "preview":     output = prevOut || "Nothing to preview"; break;
-          case "designSystem": {
-            try {
-              const css = await readFile(`projects/${settings.project}/themes/${d.prompt || "default"}/theme.css`);
-              output = `${prevOut ? prevOut + "\n\n" : ""}/* Applied theme: ${d.prompt} */\n${css}`;
-            } catch { output = `Theme not found. ${prevOut || ""}`; }
-            break;
-          }
-          case "bun": {
-            if (d.command === "dev") { await bunDev(generatedPath, 5173); output = "Started bun dev"; }
-            else {
-              output = await runShellCommandCapture(generatedPath, `bun ${d.command || "build"}`).catch((e: unknown) => `bun error: ${String(e)}`);
-              if (!output.trim()) output = `bun ${d.command || "build"} completed`;
-            }
-            break;
-          }
-          case "runner": {
-            const rPort = Number(d.port) || 5173;
-            await bunDev(generatedPath, rPort);
-            output = `Dev server running on :${rPort}`;
-            break;
-          }
-
-
-          case "summarize": {
-            const focus = d.prompt ? ` Focus on: ${d.prompt}` : "";
-            output = await streamAI(
-              resolveSystem("workflow-summarize-system", WORKFLOW_SUMMARIZE_PROMPT_BASE),
-              `${focus}\n\n${prevOut}`,
-            );
-            break;
-          }
-
-          case "codeextract": {
-            output = stripCodeFences(prevOut);
-            break;
-          }
-
-          case "diff": {
-            const before = d.baseContent || "";
-            output = computeDiff(before, prevOut);
-            break;
-          }
-
-          case "jsonextract": {
-            const code = stripCodeFences(prevOut);
-            try {
-              const parsed = JSON.parse(code) as unknown;
-              const extracted = d.jsonPath ? traverseJsonPath(parsed, d.jsonPath) : parsed;
-              output = typeof extracted === "string" ? extracted : JSON.stringify(extracted, null, 2);
-            } catch {
-              output = `⚠️ JSON parse failed. Input must be valid JSON.\n\n${prevOut.slice(0, 500)}`;
-            }
-            break;
-          }
-
-          case "linter": {
-            const target = d.lintTarget ?? "both";
-            const parts: string[] = [];
-            if (target === "tsc" || target === "both") {
-              const tscResult = await runShellCommandCapture(generatedPath, "bun tsc --noEmit").catch((e: unknown) => `tsc error: ${String(e)}`);
-              parts.push(`## TypeScript\n${tscResult.trim() || "✅ No errors"}`);
-            }
-            if (target === "eslint" || target === "both") {
-              const eslintResult = await runShellCommandCapture(generatedPath, "bunx eslint . --max-warnings=-1").catch((e: unknown) => `eslint error: ${String(e)}`);
-              const trimmed = eslintResult.trim();
-              parts.push(`## ESLint\n${trimmed || "✅ No errors"}`);
-            }
-            output = parts.join("\n\n");
-            break;
-          }
-
-          case "condition": {
-            const mode = d.conditionMode ?? "expression";
-            let passed = false;
-            if (mode === "expression") {
-              try {
-                // Safe-ish: runs in browser JS context; expression gets `input` as the previous output
-                const fn = new Function("input", `return !!(${d.expression || "true"});`);
-                passed = Boolean(fn(prevOut));
-              } catch (err) {
-                throw new Error(`Condition expression error: ${String(err)}`, { cause: err });
-              }
-            } else {
-              const judgeInput = `Condition: ${d.judgePrompt || "Is this valid?"}\nInput: ${prevOut}`;
-              const verdict = await streamAI(
-                resolveSystem("workflow-condition-system", WORKFLOW_CONDITION_PROMPT_BASE),
-                judgeInput,
-              );
-              passed = verdict.trim().toUpperCase().startsWith("YES");
-            }
-            output = passed ? prevOut : `❌ Condition failed\n\n${prevOut.slice(0, 500)}`;
-            nodeOutputMap.set(`${nodeId}:pass`, passed ? prevOut : "");
-            nodeOutputMap.set(`${nodeId}:fail`, passed ? "" : prevOut);
-            updateStatus(nodeId, { passOutput: passed ? prevOut : "", failOutput: passed ? "" : prevOut });
-            break;
-          }
-
-          case "loopuntil": {
-            const maxIter = d.maxIterations ?? 3;
-            const valCmd = d.validationCommand || "bun tsc --noEmit";
-            // If input is from validate's fail branch it arrives as "ERRORS:\n...\nCODE:\n..."
-            // Extract just the code section; otherwise use prevOut as-is.
-            const codeMatch = prevOut.match(/^ERRORS:[\s\S]*?\nCODE:\n([\s\S]*)$/);
-            let code = codeMatch ? codeMatch[1].trim() : prevOut;
-            for (let iter = 0; iter < maxIter; iter++) {
-              const valOut = await runShellCommandCapture(generatedPath, valCmd).catch((e: unknown) => String(e));
-              if (valOut.trim().length === 0) {
-                updateStatus(nodeId, { output: `✅ Passed after ${iter === 0 ? "first" : `${iter + 1}`} iteration(s)` });
-                output = code;
-                break;
-              }
-              updateStatus(nodeId, { output: `Iteration ${iter + 1}/${maxIter} — fixing errors…\n\n${valOut.slice(0, 300)}` });
-              const fixSys = resolveSystem("workflow-loop-fix-system", WORKFLOW_LOOP_FIX_PROMPT_BASE);
-              code = await streamAI(fixSys, `ERRORS:\n${valOut}\n\nCODE:\n${code}`);
-              if (iter === maxIter - 1) {
-                output = code;
-              }
-            }
-            if (!output) output = code;
-            break;
-          }
-
-          case "gitop": {
-            const gitCmd = d.gitCommand || "status";
-            const commitMsg = d.commitMessage?.trim() || prevOut.slice(0, 200);
-            let capturedOutput = "";
-            if (gitCmd === "status") {
-              capturedOutput = await runShellCommandCapture(generatedPath, "git status").catch((e: unknown) => String(e));
-            } else if (gitCmd === "add") {
-              capturedOutput = await runShellCommandCapture(generatedPath, "git add .").catch((e: unknown) => String(e));
-            } else if (gitCmd === "commit") {
-              capturedOutput = await runShellCommandCapture(generatedPath, `git commit -m "${commitMsg.replace(/"/g, '\\"')}"`).catch((e: unknown) => String(e));
-            } else if (gitCmd === "add-commit") {
-              const addOut = await runShellCommandCapture(generatedPath, "git add .").catch((e: unknown) => String(e));
-              const commitOut = await runShellCommandCapture(generatedPath, `git commit -m "${commitMsg.replace(/"/g, '\\"')}"`).catch((e: unknown) => String(e));
-              capturedOutput = `add:\n${addOut}\n\ncommit:\n${commitOut}`;
-            }
-            output = capturedOutput.trim() || "Done";
-            break;
-          }
-
-          case "memorystore": {
-            const key = d.memoryKey || "default";
-            workflowMemory.set(key, prevOut);
-            output = prevOut;
-            break;
-          }
-
-          case "memoryload": {
-            const key = d.memoryKey || "default";
-            output = workflowMemory.get(key) ?? `⚠️ No value found for key: "${key}"`;
-            break;
-          }
-
-          default: output = prevOut || `${d.label} passed through`;
-        }
-
-        nodeOutputMap.set(nodeId, output);
-        updateStatus(nodeId, { status: "done", output });
-      } catch (e) {
-        const msg = getErrorMessage(e);
-        updateStatus(nodeId, { status: "error", output: msg });
-        notify.error(`Workflow node "${d.label}" failed`, msg);
-      }
-    };
-
-    const findBranch = (startId: string): string[] => {
-      const branch = [startId]; const vis = new Set([startId]);
-      // Snapshot node types once — nodeType never changes during execution
-      const nodeTypeMap = new Map<string, string>();
-      flushNow();
-      for (const n of getNodes()) nodeTypeMap.set(n.id, n.data.nodeType);
-      const walk = (id: string) => {
-        for (const nx of adj.get(id)!) {
-          if (!vis.has(nx) && nodeTypeMap.get(nx) !== "composition") {
-            vis.add(nx); branch.push(nx); walk(nx);
-          }
-        }
-      };
-      walk(startId); return branch;
-    };
+    // Snapshot node types once — nodeType never changes during execution
+    const nodeTypeMap = new Map<string, string>();
+    flushNow();
+    for (const n of getNodes()) nodeTypeMap.set(n.id, n.data.nodeType);
 
     const done = new Set<string>();
     const checkComp = async () => {
       for (const [cid, deps] of compDeps) {
         if (!done.has(cid) && [...deps].every((dep) => done.has(dep))) {
-          await execNode(cid); done.add(cid);
+          await runNode(cid, runCtx);
+          done.add(cid);
         }
       }
     };
@@ -567,20 +157,26 @@ export function useWorkflowExecution({
         if (!deps.every((dep) => done.has(dep))) continue;
       }
       if (nType === "parallel") {
-        await execNode(nodeId); done.add(nodeId);
+        await runNode(nodeId, runCtx);
+        done.add(nodeId);
         await Promise.all(adj.get(nodeId)!.map(async (childId) => {
-          for (const bid of findBranch(childId)) {
-            if (!done.has(bid)) { await execNode(bid); done.add(bid); }
+          for (const bid of findBranch(childId, adj, nodeTypeMap)) {
+            if (!done.has(bid)) { await runNode(bid, runCtx); done.add(bid); }
           }
         }));
         await checkComp();
       } else {
-        await execNode(nodeId); done.add(nodeId); await checkComp();
+        await runNode(nodeId, runCtx);
+        done.add(nodeId);
+        await checkComp();
       }
     }
+    // Cleanup pass: run any composition that became eligible after the main loop
+    // (e.g. one that all branches eventually reached).
     for (const [cid, deps] of compDeps) {
       if (!done.has(cid) && [...deps].some((dep) => done.has(dep))) {
-        await execNode(cid); done.add(cid);
+        await runNode(cid, runCtx);
+        done.add(cid);
       }
     }
 

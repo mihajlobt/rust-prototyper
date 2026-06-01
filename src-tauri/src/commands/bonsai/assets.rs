@@ -1,10 +1,17 @@
+//! Bonsai asset I/O: image generation, cancellation, listing, deletion, and
+//! persistent server-config read/write.
+//!
+//! Moved from the top-level `commands::bonsai_assets` module. Public API
+//! surface is preserved: every `#[tauri::command]` is now reachable at
+//! `commands::bonsai::assets::*` and must be registered accordingly in `lib.rs`.
+
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tauri::{AppHandle, State};
 use tokio_util::sync::CancellationToken;
 
 use crate::{resolve_path, AppError, AppState};
-use super::bonsai::{bonsai_error, BonsaiServerConfig};
+use super::{bonsai_error, BonsaiServerConfig};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BonsaiGenerateResult {
