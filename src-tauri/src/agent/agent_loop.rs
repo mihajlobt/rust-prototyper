@@ -10,7 +10,7 @@ use ollama_rs::generation::parameters::ThinkType;
 use tauri::{ipc::Channel, Manager};
 use tokio_util::codec::Decoder;
 use tokio_util::sync::CancellationToken;
-use crate::commands::ai::{ToolPermissionDecision, ToolPermissionMode};
+use crate::commands::ai::{ToolPermissionDecision, ToolPermissionMode, AskUserQuestionType};
 use crate::{AppError, CompletionEvent};
 use super::{executor::{execute_tool, ToolExecutionResult}, tools::build_tools};
 
@@ -278,6 +278,61 @@ async fn request_permission(
     decision
 }
 
+/// Send an ask_user event to the frontend and block until the user submits an answer.
+async fn request_ask_user(
+    args: &serde_json::Value,
+    channel: &Channel<CompletionEvent>,
+    cancel_token: &CancellationToken,
+    app_handle: &tauri::AppHandle,
+) -> String {
+    let state = app_handle.state::<crate::AppState>();
+    let request_id = state.next_permission_id.fetch_add(1, Ordering::SeqCst);
+
+    let question = args.get("question")
+        .and_then(|v| v.as_str())
+        .unwrap_or("What would you like?")
+        .to_string();
+
+    let question_type = match args.get("question_type").and_then(|v| v.as_str()) {
+        Some("choice") => AskUserQuestionType::Choice,
+        Some("confirm") => AskUserQuestionType::Confirm,
+        _ => AskUserQuestionType::Text,
+    };
+
+    let choices = args.get("choices")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>());
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+
+    {
+        let mut pending = state.pending_ask_user.lock().unwrap();
+        pending.insert(request_id, tx);
+    }
+
+    let _ = channel.send(CompletionEvent::AskUser {
+        request_id,
+        question,
+        question_type,
+        choices,
+    });
+
+    tokio::select! {
+        result = rx => {
+            state.pending_ask_user.lock().unwrap().remove(&request_id);
+            result.unwrap_or_else(|_| "No response provided".to_string())
+        }
+        _ = cancel_token.cancelled() => {
+            state.pending_ask_user.lock().unwrap().remove(&request_id);
+            "Cancelled".to_string()
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(600)) => {
+            state.pending_ask_user.lock().unwrap().remove(&request_id);
+            "No response (timed out)".to_string()
+        }
+    }
+}
+
 pub struct AgentLoopParams<'a> {
     pub http_client: &'a reqwest::Client,
     pub host: &'a str,
@@ -296,10 +351,13 @@ pub struct AgentLoopParams<'a> {
     pub tool_allowlist: HashSet<String>,
     /// Override for MAX_ITERATIONS. None or 0 falls back to the compiled default.
     pub max_tool_calls: Option<u8>,
+    /// If non-empty, only tools whose names are in this set are offered to the model.
+    /// Empty = all tools available (default).
+    pub tool_filter: HashSet<String>,
 }
 
 pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
-    let AgentLoopParams { http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls } = params;
+    let AgentLoopParams { http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter } = params;
     let max_iterations = max_tool_calls.filter(|&n| n > 0).unwrap_or(MAX_ITERATIONS);
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
@@ -317,7 +375,12 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
             }
         }
     }
-    let tools = build_tools();
+    let all_tools = build_tools();
+    let tools: Vec<_> = if tool_filter.is_empty() {
+        all_tools
+    } else {
+        all_tools.into_iter().filter(|t| tool_filter.contains(&t.function.name)).collect()
+    };
     let tools_json = serde_json::to_value(&tools).expect("tools serialization should never fail");
 
     let mut iteration: u8 = 0;
@@ -382,6 +445,18 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                         return (idx, ToolExecutionResult {
                             success: false,
                             output,
+                            written_path: None,
+                            written_content: None,
+                        });
+                    }
+
+                    // ask_user is handled here — no permission gate, no execute_tool call.
+                    // It emits AskUser event and blocks until the user submits an answer.
+                    if name == "ask_user" {
+                        let answer = request_ask_user(&arg, &channel, &cancel_token, &app_handle).await;
+                        return (idx, ToolExecutionResult {
+                            success: true,
+                            output: answer,
                             written_path: None,
                             written_content: None,
                         });

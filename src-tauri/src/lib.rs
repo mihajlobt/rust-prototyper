@@ -17,7 +17,9 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     /// Maps permission request_id -> pending oneshot sender.
     pub pending_permissions: Mutex<HashMap<u64, commands::ai::PendingToolPermission>>,
-    /// Monotonically increasing counter for permission IDs.
+    /// Maps ask_user request_id -> pending oneshot sender for the user's answer string.
+    pub pending_ask_user: Mutex<HashMap<u64, tokio::sync::oneshot::Sender<String>>>,
+    /// Monotonically increasing counter for permission IDs and ask_user request IDs.
     pub next_permission_id: AtomicU64,
     pub bonsai_process: tokio::sync::Mutex<Option<BonsaiServer>>,
     pub bonsai_port: AtomicU16,
@@ -118,6 +120,7 @@ pub fn run() {
             cancellation_tokens: Mutex::new(HashMap::new()),
             http_client,
             pending_permissions: Mutex::new(HashMap::new()),
+            pending_ask_user: Mutex::new(HashMap::new()),
             next_permission_id: AtomicU64::new(1),
             bonsai_process: tokio::sync::Mutex::new(None),
             bonsai_port: AtomicU16::new(0),
@@ -149,6 +152,7 @@ pub fn run() {
             commands::ai::generate_completion_stream,
             commands::ai::stop_generation_stream,
             commands::ai::resolve_tool_permission,
+            commands::ai::resolve_ask_user,
             commands::ai_ollama::list_ollama_models,
             commands::ai_ollama::save_model_presets,
             commands::ai_ollama::load_model_presets,
@@ -157,17 +161,17 @@ pub fn run() {
             commands::workflows::save_workflow,
             commands::workflows::load_workflow,
             commands::workflows::list_workflows,
-            commands::bonsai::bonsai_start_server,
-            commands::bonsai::bonsai_stop_server,
-            commands::bonsai::bonsai_server_status,
-            commands::bonsai_assets::bonsai_generate_image,
-            commands::bonsai_assets::bonsai_cancel_generation,
-            commands::bonsai_assets::bonsai_list_assets,
-            commands::bonsai_assets::bonsai_delete_asset,
-            commands::bonsai_assets::bonsai_get_server_config,
-            commands::bonsai_assets::bonsai_save_server_config,
-            commands::bonsai::bonsai_schedule_stop,
-            commands::bonsai::bonsai_cancel_stop,
+            commands::bonsai::server::bonsai_start_server,
+            commands::bonsai::server::bonsai_stop_server,
+            commands::bonsai::server::bonsai_server_status,
+            commands::bonsai::assets::bonsai_generate_image,
+            commands::bonsai::assets::bonsai_cancel_generation,
+            commands::bonsai::assets::bonsai_list_assets,
+            commands::bonsai::assets::bonsai_delete_asset,
+            commands::bonsai::assets::bonsai_get_server_config,
+            commands::bonsai::assets::bonsai_save_server_config,
+            commands::bonsai::server::bonsai_schedule_stop,
+            commands::bonsai::server::bonsai_cancel_stop,
         ])
         .setup(|_app| Ok(()))
         .on_window_event(|window, event| {

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::commands::ai::ToolPermissionMode;
-use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs};
+use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs, RegisterScreenArgs, SetActiveThemeArgs, ValidateDesignJsonArgs};
 
 enum ToolError {
     InvalidArguments(String),
@@ -53,6 +53,9 @@ pub async fn execute_tool(
         "run_build" => execute_run_build(args, project_dir, skip_policy).await,
         "glob" => execute_glob(args, app_data_dir, skip_policy).await,
         "grep" => execute_grep(args, app_data_dir, skip_policy).await,
+        "register_screen" => execute_register_screen(args, app_data_dir, output_path).await,
+        "set_active_theme" => execute_set_active_theme(args, app_data_dir, output_path).await,
+        "validate_design_json" => execute_validate_design_json(args, app_data_dir).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
@@ -870,6 +873,285 @@ fn extract_exit_code(raw: &str) -> (&str, Option<i32>) {
         }
     }
     (raw, None)
+}
+
+/// Derive the project directory (projects/{id}/) from the output_path.
+/// output_path format: "projects/{id}/generated/src/pages/foo.tsx"
+fn project_dir_from_output_path(app_data_dir: &Path, output_path: &str) -> PathBuf {
+    let parts: Vec<&str> = output_path.splitn(3, '/').collect();
+    if parts.len() >= 2 {
+        app_data_dir.join(parts[0]).join(parts[1])
+    } else {
+        app_data_dir.to_path_buf()
+    }
+}
+
+async fn execute_register_screen(
+    args: &serde_json::Value,
+    app_data_dir: &Path,
+    output_path: &str,
+) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<RegisterScreenArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("register_screen: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    let proj_dir = project_dir_from_output_path(app_data_dir, output_path);
+    let nav_path = proj_dir.join("navigation.json");
+
+    // Load or create navigation.json
+    let mut nav: serde_json::Value = if nav_path.exists() {
+        match tokio::fs::read_to_string(&nav_path).await {
+            Ok(raw) => serde_json::from_str(&raw).unwrap_or_else(|_| {
+                serde_json::json!({ "defaultScreen": "", "screens": [], "hotspots": [] })
+            }),
+            Err(_) => serde_json::json!({ "defaultScreen": "", "screens": [], "hotspots": [] }),
+        }
+    } else {
+        serde_json::json!({ "defaultScreen": "", "screens": [], "hotspots": [] })
+    };
+
+    // Ensure required fields exist
+    if nav.get("screens").is_none() { nav["screens"] = serde_json::json!([]); }
+    if nav.get("hotspots").is_none() { nav["hotspots"] = serde_json::json!([]); }
+    if nav.get("defaultScreen").is_none() { nav["defaultScreen"] = serde_json::json!(""); }
+
+    // Upsert screen entry — merge with existing to preserve x/y/layout fields
+    let screens = match nav["screens"].as_array_mut() {
+        Some(s) => s,
+        None => return ToolExecutionResult {
+            success: false,
+            output: "register_screen: navigation.json has invalid 'screens' field (not an array)".to_string(),
+            written_path: None,
+            written_content: None,
+        },
+    };
+    let existing_pos = screens.iter().position(|s| {
+        s.get("id").and_then(|v| v.as_str()) == Some(parsed.screen_id.as_str())
+    });
+    if let Some(pos) = existing_pos {
+        // Merge: update only the fields we know about, preserve everything else (x, y, layout, etc.)
+        if let Some(entry) = screens[pos].as_object_mut() {
+            entry.insert("id".to_string(), serde_json::json!(parsed.screen_id));
+            entry.insert("path".to_string(), serde_json::json!(parsed.path));
+            entry.insert("title".to_string(), serde_json::json!(parsed.title));
+        }
+    } else {
+        screens.push(serde_json::json!({
+            "id": parsed.screen_id,
+            "path": parsed.path,
+            "title": parsed.title,
+        }));
+    }
+
+    // Set default screen if none is set or explicitly requested
+    let default_screen = nav["defaultScreen"].as_str().unwrap_or("").to_string();
+    let is_default = parsed.is_default.unwrap_or(false);
+    if default_screen.is_empty() || is_default {
+        nav["defaultScreen"] = serde_json::json!(parsed.screen_id);
+    }
+
+    // Write back
+    let serialized = match serde_json::to_string_pretty(&nav) {
+        Ok(s) => s,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("register_screen: failed to serialize navigation.json: {e}"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if let Some(parent) = nav_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    match tokio::fs::write(&nav_path, &serialized).await {
+        Ok(()) => ToolExecutionResult {
+            success: true,
+            output: format!("Screen '{}' registered at path '{}'. navigation.json updated.", parsed.screen_id, parsed.path),
+            written_path: Some(nav_path),
+            written_content: Some(serialized),
+        },
+        Err(e) => ToolExecutionResult {
+            success: false,
+            output: format!("register_screen: {}", ToolError::FileSystem(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    }
+}
+
+async fn execute_set_active_theme(
+    args: &serde_json::Value,
+    app_data_dir: &Path,
+    output_path: &str,
+) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<SetActiveThemeArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("set_active_theme: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    // The projectSettingsStore persists to tauri-plugin-store file `project-{id}.json`
+    // located in app_data_dir — NOT inside the project folder.
+    // File: {app_data_dir}/project-{id}.json  (tauri-plugin-store format = plain JSON)
+    let project_id = output_path.splitn(3, '/').nth(1).unwrap_or("");
+    let settings_path = app_data_dir.join(format!("project-{}.json", project_id));
+
+    // Load existing store or start with empty object — preserve all other keys
+    let mut project_settings: serde_json::Value = if settings_path.exists() {
+        match tokio::fs::read_to_string(&settings_path).await {
+            Ok(raw) => serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({})),
+            Err(_) => serde_json::json!({}),
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    project_settings["stylePreset"] = serde_json::json!(parsed.theme_slug);
+
+    let serialized = match serde_json::to_string_pretty(&project_settings) {
+        Ok(s) => s,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("set_active_theme: failed to serialize settings: {e}"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if let Some(parent) = settings_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    match tokio::fs::write(&settings_path, &serialized).await {
+        Ok(()) => ToolExecutionResult {
+            success: true,
+            output: format!("Active theme set to '{}'. Design tokens from this theme will be used in subsequent screen generation.", parsed.theme_slug),
+            written_path: Some(settings_path),
+            written_content: Some(serialized),
+        },
+        Err(e) => ToolExecutionResult {
+            success: false,
+            output: format!("set_active_theme: {}", ToolError::FileSystem(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    }
+}
+
+// Required top-level keys for DesignLanguageSpec (from src/lib/design/spec.ts:166-189)
+const REQUIRED_DESIGN_KEYS: &[&str] = &[
+    "meta", "color", "typography", "spacing", "radii", "shadows",
+    "borders", "motion", "components", "iconography", "layout",
+    "voice", "content", "antiPatterns",
+];
+// Required color token keys for light/dark palettes (18 tokens from spec.ts)
+const REQUIRED_COLOR_TOKENS: &[&str] = &[
+    "background", "foreground", "card", "cardForeground", "popover", "popoverForeground",
+    "primary", "primaryForeground", "secondary", "secondaryForeground",
+    "muted", "mutedForeground", "accent", "accentForeground",
+    "destructive", "destructiveForeground", "border", "input", "ring",
+];
+
+async fn execute_validate_design_json(
+    args: &serde_json::Value,
+    app_data_dir: &Path,
+) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<ValidateDesignJsonArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("validate_design_json: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if parsed.path.contains("..") {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("validate_design_json: {}", ToolError::Security("path traversal not allowed".into())),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let target = if parsed.path.starts_with("projects/") {
+        app_data_dir.join(&parsed.path)
+    } else {
+        app_data_dir.join(&parsed.path)
+    };
+
+    let raw = match tokio::fs::read_to_string(&target).await {
+        Ok(s) => s,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("validate_design_json: cannot read file: {e}"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    let value: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("validate_design_json: invalid JSON: {e}"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    let mut errors: Vec<String> = Vec::new();
+
+    // Check required top-level keys
+    for key in REQUIRED_DESIGN_KEYS {
+        if value.get(key).is_none() {
+            errors.push(format!("Missing required top-level key: '{key}'"));
+        }
+    }
+
+    // Check color token keys for light and dark palettes
+    if let Some(color) = value.get("color") {
+        for palette in &["light", "dark"] {
+            if let Some(palette_obj) = color.get(palette) {
+                for token in REQUIRED_COLOR_TOKENS {
+                    if palette_obj.get(token).is_none() {
+                        errors.push(format!("Missing color token '{}' in color.{}", token, palette));
+                    }
+                }
+            } else {
+                errors.push(format!("Missing color.{palette} palette"));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        ToolExecutionResult {
+            success: true,
+            output: "design.json is valid — all required keys present.".to_string(),
+            written_path: None,
+            written_content: None,
+        }
+    } else {
+        ToolExecutionResult {
+            success: false,
+            output: format!("design.json validation failed:\n{}", errors.join("\n")),
+            written_path: None,
+            written_content: None,
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]

@@ -63,6 +63,56 @@ pub struct GrepArgs {
     pub path: Option<String>,
 }
 
+/// question_type field for AskUserArgs — typed enum so schemars generates an enum constraint.
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AskUserQuestionTypeArg {
+    Text,
+    Choice,
+    Confirm,
+}
+
+/// Args struct is used only for JSON Schema generation via make_schema;
+/// actual field access happens through serde_json in request_ask_user.
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct AskUserArgs {
+    /// The question to ask the user. Be specific and actionable — avoid vague questions.
+    pub question: String,
+    /// Type of answer: "text" for open-ended input, "choice" for picking from a list, "confirm" for Yes/No.
+    pub question_type: AskUserQuestionTypeArg,
+    /// Required when question_type is "choice". List of options the user can select from (2–6 items).
+    pub choices: Option<Vec<String>>,
+}
+
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct RegisterScreenArgs {
+    /// Kebab-case screen ID matching the page filename without extension (e.g. "dashboard" for pages/dashboard.tsx).
+    pub screen_id: String,
+    /// Human-readable screen title (e.g. "Dashboard").
+    pub title: String,
+    /// URL path for this screen (e.g. "/dashboard").
+    pub path: String,
+    /// If true, this screen is the app entry point (default route). Defaults to false.
+    pub is_default: Option<bool>,
+}
+
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct SetActiveThemeArgs {
+    /// The theme directory name under the project's themes/ folder (e.g. "wizard" for themes/wizard/).
+    pub theme_slug: String,
+}
+
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct ValidateDesignJsonArgs {
+    /// Path to the design.json file relative to the app data root (e.g. "projects/abc/themes/wizard/design.json").
+    pub path: String,
+}
+
 fn make_schema<T: JsonSchema>() -> schemars::Schema {
     let mut settings = SchemaSettings::draft07();
     settings.inline_subschemas = true;
@@ -141,6 +191,38 @@ pub fn build_tools() -> Vec<ToolInfo> {
                 name: "bash".to_string(),
                 description: "Run a shell command in the sandboxed project root (30s timeout, bwrap+landlock isolated). Use for ls/find/grep/cat to inspect the filesystem. Sandbox blocks network access and privilege escalation. Prefer specialized tools: run_tsc, run_lint, run_build, read_file.".to_string(),
                 parameters: make_schema::<BashArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "ask_user".to_string(),
+                description: "Pause and ask the user a question before proceeding. Use for: clarifying requirements, confirming design direction, getting approval on a plan, or gathering preferences not yet specified. Only ask when the answer meaningfully changes what you build — do not ask trivial questions. Present choices when there are clear discrete options; use text for open-ended input; use confirm for simple yes/no approvals.".to_string(),
+                parameters: make_schema::<AskUserArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "register_screen".to_string(),
+                description: "Register a screen in the project's navigation.json after writing its page file. Call immediately after each write_file that creates a new page. Required for the screen to appear in the Flows panel and router.".to_string(),
+                parameters: make_schema::<RegisterScreenArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "set_active_theme".to_string(),
+                description: "Set the project's active design theme to a generated theme directory. Call after writing design.json and theme.css to make the generated design tokens available for subsequent screen generation.".to_string(),
+                parameters: make_schema::<SetActiveThemeArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "validate_design_json".to_string(),
+                description: "Validate a design.json file against the DesignLanguageSpec schema. Returns a list of validation errors — empty output means valid. Call after writing design.json and fix all errors before proceeding.".to_string(),
+                parameters: make_schema::<ValidateDesignJsonArgs>(),
             },
         },
     ]

@@ -183,11 +183,14 @@ export function getApiKeyForProvider(provider: Provider, apiKeys: Record<string,
   }
 }
 
+export type AskUserQuestionType = "text" | "choice" | "confirm";
+
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
   | { event: "ToolPermission"; data: { request_id: number; tool: string; args: Record<string, unknown> } }
   | { event: "ToolResult"; data: { tool: string; success: boolean; output: string; path?: string; content?: string } }
+  | { event: "AskUser"; data: { request_id: number; question: string; question_type: AskUserQuestionType; choices?: string[] } }
   | { event: "Done"; data: { done_reason?: string } | null }
   | { event: "Error"; data: { message: string } };
 
@@ -200,6 +203,12 @@ export async function resolveToolPermission(
   decision: ToolPermissionDecision
 ): Promise<void> {
   return invoke("resolve_tool_permission", { permissionId: requestId, decision });
+}
+
+/** Resolve a pending ask_user request. Called when the user submits
+ *  their answer to the AI's question in the Wizard panel. */
+export async function resolveAskUser(requestId: number, answer: string): Promise<void> {
+  return invoke("resolve_ask_user", { requestId, answer });
 }
 
 /** Non-streaming completion — returns full response at once */
@@ -249,6 +258,7 @@ export async function generateCompletionStream(
   toolAllowlist?: string[],
   modelFamily?: string,
   maxToolCalls?: number,
+  toolFilter?: string[],
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -264,6 +274,7 @@ export async function generateCompletionStream(
       toolAllowlist: toolAllowlist ?? [],
       modelFamily: modelFamily ?? null,
       maxToolCalls: maxToolCalls ?? null,
+      toolFilter: toolFilter ?? [],
     },
     onEvent,
   });

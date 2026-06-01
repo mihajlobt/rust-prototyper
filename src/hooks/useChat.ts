@@ -1,97 +1,4 @@
 import { useEffect, useRef, useState, useCallback, type MutableRefObject, type RefObject } from "react"
-
-interface PendingToolResult {
-  tool: string
-  success: boolean
-  output: string
-  path: string | undefined
-  content: string | undefined
-}
-
-function stripFences(content: string): string {
-  return content
-    .replace(/^```[\w]*\r?\n?/, "")
-    .replace(/\r?\n?```\s*$/, "")
-    .trim()
-}
-
-/** Build API messages for the completion request.
- *  For Ollama provider, includes tool_calls in assistant messages and
- *  tool role messages with tool_name after them, per the Ollama API format:
- *  https://github.com/ollama/ollama/blob/main/docs/api.md
- *  "Chat request (With history, with tools)" */
-function buildApiMessages(
-  messages: ChatMessage[],
-  systemPrompt: string,
-  isOllama: boolean,
-): Message[] {
-  const system: Message = { role: "system", content: systemPrompt }
-  if (!isOllama) {
-    // Non-Ollama providers: simple flat mapping (no tool history support yet)
-    return [
-      system,
-      ...messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
-        ...(m.images?.length ? { images: m.images } : {}),
-      })),
-    ]
-  }
-
-  // Ollama: include tool_calls and tool role messages for multi-turn context
-  const result: Message[] = [system]
-  for (const m of messages) {
-    if (m.role === "assistant" && m.toolCalls?.length) {
-      // Assistant message with tool calls — serialize to Ollama API format.
-      result.push({
-        role: "assistant",
-        content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
-        tool_calls: m.toolCalls.map((tc) => ({
-          function: { name: tc.tool, arguments: tc.arguments },
-        })),
-      })
-      // Insert tool role messages after the assistant's tool_calls
-      for (const tc of m.toolCalls) {
-        if (tc.result !== undefined) {
-          result.push({
-            role: "tool",
-            content: tc.result,
-            tool_name: tc.tool,
-          })
-        }
-      }
-    } else {
-      result.push({
-        role: m.role,
-        content: m.content,
-        ...(m.thinking ? { thinking: m.thinking } : {}),
-        ...(m.images?.length ? { images: m.images } : {}),
-      })
-    }
-  }
-  return result
-}
-
-/** Resolves the think parameter to send to Ollama based on model capabilities and user toggle.
- *  - gpt-oss family: always sends a level (low/medium/high), can't fully disable
- *  - Other models: sends false to disable, true/level to enable, undefined if model doesn't support */
-export function resolveThinkParam(
-  caps: { thinking: boolean; thinkLevel?: "low" | "medium" | "high" },
-  isGptOssFamily: boolean,
-  thinkEnabled: boolean,
-  thinkLevel: "low" | "medium" | "high",
-): boolean | "low" | "medium" | "high" | undefined {
-  if (!caps.thinking) return undefined
-
-  if (isGptOssFamily) {
-    return thinkEnabled ? thinkLevel : "low"
-  }
-
-  return thinkEnabled ? (caps.thinkLevel ?? true) : undefined
-}
-
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -105,11 +12,17 @@ import {
   getErrorMessage,
   type CompletionEvent,
   type Provider,
-  type Message,
-  } from "@/lib/ipc"
+} from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
 import { useModelCapabilities } from "@/hooks/useModelCapabilities"
+import { resolveThinkParam } from "./chat/think"
+import { buildApiMessages, type PendingToolResult } from "./chat/messages"
+import { createStreamHandler } from "./chat/streamHandler"
+
+// Re-export for external consumers (ComponentsPanel, ScreensPanel).
+// The implementation lives in ./chat/think to keep this hook file small.
+export { resolveThinkParam }
 
 // Stable reference used as fallback when entity has no chat state yet.
 // Must be module-level so the reference is constant across renders —
@@ -127,175 +40,15 @@ interface UseChatOptions {
   onCodeOutput?: (content: string) => void
   /** Called for EVERY successful write_file / edit_file (path + content). Use for multi-file updates. */
   onToolWrite?: (path: string, content: string) => void
-}
-
-// ─── Factory: createStreamHandler ──────────────────────────────────────────
-//
-// Extracted to eliminate ~80 lines of duplicated channel.onmessage + finalize
-// logic between sendMessage and regenerate. Returns a bound handler that
-// closes over accumulated state. Also fixes the regenerate path's missing
-// rafThinkingId cancel (previously only finalize() in sendMessage cancelled
-// both raf IDs; the inline Done handler in regenerate only cancelled rafId).
-
-interface StreamHandlerParams {
-  entityId: string
-  chatPath: string
-  /** The updatedMessages array built by the caller (includes placeholder). */
-  updatedMessages: ChatMessage[]
-  stopRef: RefObject<boolean>
-  activeRequestIdRef: MutableRefObject<number | null>
-  onOutputRef: MutableRefObject<((content: string) => void) | undefined>
-  onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
-  onToolWriteRef: MutableRefObject<((path: string, content: string) => void) | undefined>
-  outputPath: string | undefined
-  pendingToolResultsRef: MutableRefObject<PendingToolResult[]>
-  setToolResultTick: React.Dispatch<React.SetStateAction<number>>
-}
-
-function createStreamHandler(params: StreamHandlerParams) {
-  const {
-    entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
-    onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath, pendingToolResultsRef, setToolResultTick,
-  } = params
-
-  let contentAccumulated = ""
-  let thinkingAccumulated = ""
-  let chunkIndex = 0
-  let toolWritten = false
-  let rafId: number | null = null
-  let rafThinkingId: number | null = null
-
-  const finalize = (content: string, thinking: string) => {
-    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-    if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
-    activeRequestIdRef.current = null
-    // Flush any queued tool results synchronously so the finalized message
-    // has pending=false and the correct path before we persist to disk.
-    // (The useEffect drainer fires post-paint, which may be after Done arrives.)
-    for (const result of pendingToolResultsRef.current.splice(0)) {
-      useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
-      useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
-    }
-    // Preserve toolCalls (now correctly flushed) in the finalized message
-    const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
-    const currentLast = msgs[msgs.length - 1]
-    const finalMessage: ChatMessage = {
-      role: "assistant",
-      content,
-      ...(thinking ? { thinking } : {}),
-      ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
-      ...(currentLast?.streamChunks?.length ? { streamChunks: currentLast.streamChunks } : {}),
-    }
-    const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
-    useChatStore.getState().setMessages(entityId, finalMessages)
-    useChatStore.getState().setStreaming(entityId, false)
-    useChatStore.getState().setStreamingThinking(entityId, "")
-    writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
-  }
-
-  const onMessage = (msg: CompletionEvent) => {
-    if ((stopRef as MutableRefObject<boolean>).current) return
-    if (msg.event === "Chunk") {
-      if (msg.data.thinking) {
-        thinkingAccumulated += msg.data.thinking
-        if (rafThinkingId === null) {
-          rafThinkingId = requestAnimationFrame(() => {
-            rafThinkingId = null
-            useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
-          })
-        }
-      }
-      if (msg.data.text) {
-        contentAccumulated += msg.data.text
-      }
-      if (rafId === null) {
-        rafId = requestAnimationFrame(() => {
-          rafId = null
-          useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
-        })
-      }
-    } else if (msg.event === "ToolCall") {
-      useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
-      // Flush accumulated thinking/text as a chunk at tool boundary
-      useChatStore.getState().addStreamChunk(entityId, {
-        index: chunkIndex++,
-        thinking: thinkingAccumulated,
-        text: contentAccumulated,
-      })
-      thinkingAccumulated = ""
-      contentAccumulated = ""
-      // Clear live accumulators so they don't duplicate the chunk we just stored
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-      if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
-      useChatStore.getState().setStreamingContent(entityId, "")
-      useChatStore.getState().setStreamingThinking(entityId, "")
-    } else if (msg.event === "ToolPermission") {
-      useChatStore.getState().attachToolPermission(entityId, {
-        requestId: msg.data.request_id,
-        tool: msg.data.tool,
-        args: msg.data.args,
-        pending: true,
-      })
-      useChatStore.getState().addStreamChunk(entityId, {
-        index: chunkIndex++,
-        thinking: thinkingAccumulated,
-        text: contentAccumulated,
-      })
-      thinkingAccumulated = ""
-      contentAccumulated = ""
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-      if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
-      useChatStore.getState().setStreamingContent(entityId, "")
-      useChatStore.getState().setStreamingThinking(entityId, "")
-    } else if (msg.event === "ToolResult") {
-      const { tool, success, output, path, content } = msg.data
-      if ((tool === "write_file" || tool === "edit_file") && success) {
-        if (tool === "write_file") {
-          toolWritten = true
-          // Clear any streaming text that was accumulating before this write
-          contentAccumulated = ""
-          useChatStore.getState().setStreamingContent(entityId, "")
-          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
-        }
-        // Fire onCodeOutput for write_file and edit_file when the path matches the
-        // designated primary output file. edit_file sends the full post-edit content
-        // in `content` (written_content from executor), so the preview stays in sync.
-        if (content && outputPath && path === outputPath) {
-          onCodeOutputRef.current?.(stripFences(content))
-        }
-        // Fire onToolWrite for ALL successful write_file / edit_file calls so
-        // consumers that manage multiple files (e.g. ThemesPanel) can react.
-        if (content && path) {
-          onToolWriteRef.current?.(path, stripFences(content))
-        }
-      }
-      pendingToolResultsRef.current.push({ tool, success, output, path, content })
-      setToolResultTick((tick) => tick + 1)
-    } else if (msg.event === "Done") {
-      const finalThinking = thinkingAccumulated
-      const finalContent = contentAccumulated
-      // Flush remaining accumulated thinking/text as final chunk
-      if (thinkingAccumulated || contentAccumulated) {
-        useChatStore.getState().addStreamChunk(entityId, {
-          index: chunkIndex++,
-          thinking: thinkingAccumulated,
-          text: contentAccumulated,
-        })
-      }
-      finalize(finalContent, finalThinking)
-      if (!toolWritten) onOutputRef.current?.(finalContent)
-    } else if (msg.event === "Error") {
-      finalize(`⚠ ${msg.data.message}`, "")
-      notify.error("Generation failed", msg.data.message)
-    }
-  }
-
-  return onMessage
+  /** If provided, only these tool names are offered to the model (overrides global all-tools default). */
+  panelToolFilter?: string[]
+  /** If provided, overrides global settings.maxToolCalls for this panel. */
+  panelMaxToolCalls?: number
 }
 
 // ─── useChat hook ──────────────────────────────────────────────────────────
 
-export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls }: UseChatOptions) {
   // Destructure individual settings fields instead of selecting the full
   // settings object. Zustand's shallow equality means each selector re-renders
   // only when its specific value changes. The full `settings` object was
@@ -489,7 +242,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         toolPermissionMode,
         toolAllowlist,
         caps.family,
-        maxToolCalls,
+        panelMaxToolCalls ?? maxToolCalls,
+        panelToolFilter,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -583,7 +337,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         toolPermissionMode,
         toolAllowlist,
         caps.family,
-        maxToolCalls,
+        panelMaxToolCalls ?? maxToolCalls,
+        panelToolFilter,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {

@@ -11,6 +11,7 @@ import { RunnerPanel } from "./panels/RunnerPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { AssetsPanel } from "./panels/AssetsPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
+import { WizardPanel } from "./panels/WizardPanel";
 import { useAppStore } from "./stores/appStore";
 import { useProjectSettingsStore } from "./stores/projectSettingsStore";
 import { Toaster } from "./components/ui/sonner";
@@ -73,6 +74,7 @@ export default function App() {
             </Allotment.Pane>
             <Allotment.Pane>
               <ErrorBoundary>
+                {ps.activeView === "wizard"     && <WizardPanel />}
                 {ps.activeView === "screens"    && <ScreensPanel />}
                 {ps.activeView === "components" && <ComponentsPanel />}
                 {ps.activeView === "themes"     && <ThemesPanel />}

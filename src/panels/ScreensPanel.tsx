@@ -1,8 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Download, Trash2, MousePointerClick, Code2, Route } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { readFile, writeFile, readDir, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import type { FileEntry } from "@/lib/ipc";
 import type { ToolPermissionDecision } from "@/lib/ipc";
@@ -18,8 +17,15 @@ import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { extractCode } from "@/lib/preview";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
+
+// Screens gets the full coding toolset. Wizard-specific tools (ask_user, register_screen,
+// set_active_theme, validate_design_json) are excluded because useChat has no handler for
+// ask_user — receiving it would block the backend for 600s.
+const SCREEN_TOOL_FILTER = [
+  "write_file", "edit_file", "read_file", "bash",
+  "run_tsc", "run_lint", "run_build", "glob", "grep",
+];
 import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
-import { MessageList, ChatInput } from "@/components/chat";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useDevServerStore } from "@/lib/dev-server-manager";
@@ -29,7 +35,8 @@ import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { loadDesignBrief } from "@/lib/design/persist";
 import { LinksEditor } from "@/panels/flows/LinksEditor";
 import { FlowsView } from "@/panels/FlowsView";
-import { ScreensContextToolbar } from "@/panels/screens/ScreensContextToolbar";
+import { ScreensChatPanel } from "@/panels/screens/ScreensChatPanel";
+import { ScreensCodeTabsHeader } from "@/panels/screens/ScreensCodeTabsHeader";
 import { ScreensIframePreview } from "@/panels/screens/ScreensIframePreview";
 import { ScreensPreviewToolbar } from "@/panels/screens/ScreensPreviewToolbar";
 import { useHotspotTracking } from "@/hooks/useHotspotTracking";
@@ -240,6 +247,8 @@ export function ScreensPanel() {
     },
     // Tool models: write_file fires with raw code (no fences) for the primary output file only.
     onCodeOutput: (code) => applyScreenCode(code),
+    panelToolFilter: SCREEN_TOOL_FILTER,
+    panelMaxToolCalls: settings.panelMaxToolCalls.screens,
   });
 
   // Keep useChat's brief-name ref in sync with the selected brief — covers both
@@ -394,74 +403,49 @@ export function ScreensPanel() {
     startRunner(generatedDir, ps.runnerPort).catch(() => {});
   };
 
-  const chatPane = (
-    <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        thinkingContent={thinkingContent}
-        pendingPermissions={pendingPermissions}
-        onApplyCode={handleApplyCode}
-        onRegenerate={regenerate}
-        onDeleteFrom={deleteFrom}
-        onResolvePermission={handleResolvePermission}
-      />
-      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-        <ScreensContextToolbar themes={themes} ctxApis={ctxApis} ctxComponents={ctxComponents} />
-
-        <ChatInput
-          value={input}
-          onChange={setInput}
-          onSend={sendMessage}
-          disabled={isStreaming}
-          attachments={attachments}
-          onAddAttachment={addAttachment}
-          onRemoveAttachment={removeAttachment}
-          mentions={mentions}
-          onAddMention={addMention}
-          onRemoveMention={removeMention}
-          projectPath={`projects/${settings.project}`}
-          placeholder="Describe your screen..."
-          thinkEnabled={thinkEnabled}
-          onToggleThink={toggleThink}
-          thinkLevel={thinkLevel}
-          onSetThinkLevel={setThinkLevel}
-          isGptOssFamily={isGptOssFamily}
-          canThink={canThink}
-          canVision={canVision}
-          toolsEnabled={toolsEnabled}
-          onToggleTools={toggleTools}
-          canTools={canTools}
-          onStop={stopGeneration}
-        />
-      </div>
-    </div>
-  );
-
   return (
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
           <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_paneIndex, v) => setProjectSettings({ screensShowInspector: v })}>
             <Allotment.Pane minSize={200}>
-              <div className="h-full flex flex-col bg-card">
-                <div className="panel-toolbar h-10 px-3 gap-2">
-                  <span className="text-sm font-medium">{screenId ?? "Chat"}</span>
-                  {messages.length > 0 && (
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                      {Math.ceil(messages.filter(m => m.role === "user").length)} turns
-                    </span>
-                  )}
-                  <div className="flex-1" />
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleExport} title="Export project">
-                    <Download size={12} />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={clearChat} title="Clear chat" disabled={messages.length === 0}>
-                    <Trash2 size={12} />
-                  </Button>
-                </div>
-                {chatPane}
-              </div>
+              <ScreensChatPanel
+                screenId={screenId}
+                messages={messages}
+                isStreaming={isStreaming}
+                thinkingContent={thinkingContent}
+                pendingPermissions={pendingPermissions}
+                onApplyCode={handleApplyCode}
+                onRegenerate={regenerate}
+                onDeleteFrom={deleteFrom}
+                onResolvePermission={handleResolvePermission}
+                onClearChat={clearChat}
+                onExport={handleExport}
+                input={input}
+                setInput={setInput}
+                onSend={sendMessage}
+                onStop={stopGeneration}
+                attachments={attachments}
+                onAddAttachment={addAttachment}
+                onRemoveAttachment={removeAttachment}
+                mentions={mentions}
+                onAddMention={addMention}
+                onRemoveMention={removeMention}
+                thinkEnabled={thinkEnabled}
+                onToggleThink={toggleThink}
+                thinkLevel={thinkLevel}
+                onSetThinkLevel={setThinkLevel}
+                isGptOssFamily={isGptOssFamily}
+                canThink={canThink}
+                canVision={canVision}
+                toolsEnabled={toolsEnabled}
+                onToggleTools={toggleTools}
+                canTools={canTools}
+                themes={themes}
+                ctxApis={ctxApis}
+                ctxComponents={ctxComponents}
+                projectPath={`projects/${settings.project}`}
+              />
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setProjectSettings({ screensShowInspector: !screensShowInspector })}>
@@ -534,21 +518,14 @@ export function ScreensPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setProjectSettings({ screensCodeOpen: !screensCodeOpen })}>
-
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "editor" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setProjectSettings({ screensCodeTab: "editor" }); if (!screensCodeOpen) setProjectSettings({ screensCodeOpen: true }); }}><Code2 size={10} />Editor</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "links" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setProjectSettings({ screensCodeTab: "links" }); if (!screensCodeOpen) setProjectSettings({ screensCodeOpen: true }); }}><MousePointerClick size={10} />Links</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "flow" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setProjectSettings({ screensCodeTab: "flow" }); if (!screensCodeOpen) setProjectSettings({ screensCodeOpen: true }); }}><Route size={10} />Flow</button>
-                <div className="flex-1" />
-                {screensCodeTab === "links" && (
-                  <button
-                    className={["mr-1 flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded transition-colors", isSelectingElement ? "text-primary" : "text-muted-foreground hover:text-foreground"].join(" ")}
-                    onClick={(e) => { e.stopPropagation(); if (isSelectingElement) { setIsSelectingElement(false); previewIframeRef.current?.contentWindow?.postMessage({ type: "disable-link-mode" }, "*"); } else { setIsSelectingElement(true); previewIframeRef.current?.contentWindow?.postMessage({ type: "enable-link-mode" }, "*"); } }}
-                    title="Pick an element in the preview to link"
-                  ><MousePointerClick size={10} />{isSelectingElement ? "Selecting…" : "Pick element"}</button>
-                )}
-                {screensCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </PaneHeader>
+              <ScreensCodeTabsHeader
+                screensCodeOpen={screensCodeOpen}
+                screensCodeTab={screensCodeTab}
+                isSelectingElement={isSelectingElement}
+                setIsSelectingElement={setIsSelectingElement}
+                previewIframeRef={previewIframeRef}
+                setProjectSettings={setProjectSettings}
+              />
             </Allotment.Pane>
             <Allotment.Pane visible={screensCodeOpen} preferredSize={252} minSize={100} snap>
               {screensCodeOpen && (

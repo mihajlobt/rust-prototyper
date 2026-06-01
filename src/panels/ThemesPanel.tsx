@@ -28,6 +28,8 @@ import { ThemeCodeTabs } from "@/panels/ThemeCodeTabs";
 import { useChat } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
 
+const DESIGN_TOOL_FILTER = ["write_file", "edit_file", "read_file", "bash", "glob", "grep"];
+
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
@@ -231,6 +233,8 @@ export function ThemesPanel() {
         setDesignMd(content);
       }
     },
+    panelToolFilter: DESIGN_TOOL_FILTER,
+    panelMaxToolCalls: settings.panelMaxToolCalls.themes,
   });
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("themes", 2);

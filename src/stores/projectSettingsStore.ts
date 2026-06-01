@@ -91,6 +91,11 @@ export interface ProjectSettings {
   assetsSortOrder: "newest" | "oldest" | "largest" | "smallest" | "name";
   assetsSteps: number;
   assetsPreset: number;
+
+  // Wizard panel
+  wizardDevice: "desktop" | "tablet" | "mobile";
+  wizardDarkPreview: boolean;
+  wizardShowInspector: boolean;
 }
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
@@ -166,6 +171,10 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   assetsSortOrder: "newest",
   assetsSteps: 4,
   assetsPreset: 0,
+
+  wizardDevice: "desktop",
+  wizardDarkPreview: false,
+  wizardShowInspector: false,
 };
 
 // ─── Store handle cache — one open handle per project ─────────────────────────

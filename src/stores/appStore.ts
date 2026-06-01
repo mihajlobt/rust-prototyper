@@ -44,6 +44,12 @@ export interface Settings {
   toolPermissionMode: ToolPermissionMode;
   toolAllowlist: string[];
   maxToolCalls: number;
+  panelMaxToolCalls: {
+    screens?: number;
+    components?: number;
+    themes?: number;
+    wizard?: number;
+  };
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -66,6 +72,7 @@ const DEFAULT_SETTINGS: Settings = {
   toolPermissionMode: "ask_every_time",
   toolAllowlist: [],
   maxToolCalls: 20,
+  panelMaxToolCalls: {},
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

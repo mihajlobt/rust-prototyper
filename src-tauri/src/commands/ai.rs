@@ -42,6 +42,7 @@ pub enum CompletionEvent {
     ToolCall { tool: String, args: serde_json::Value },
     ToolPermission { request_id: u64, tool: String, args: serde_json::Value },
     ToolResult { tool: String, success: bool, output: String, path: Option<String>, content: Option<String> },
+    AskUser { request_id: u64, question: String, question_type: AskUserQuestionType, choices: Option<Vec<String>> },
     Done { done_reason: Option<String> },
     Error { message: String },
 }
@@ -65,6 +66,15 @@ pub enum ToolPermissionMode {
     AutoAcceptReadOnly,
     /// Execute everything without prompting (for testing).
     AutoAcceptAll,
+}
+
+/// Question type for ask_user tool calls.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AskUserQuestionType {
+    Text,
+    Choice,
+    Confirm,
 }
 
 // ─── Request / response types ─────────────────────────────────────────────────
@@ -98,6 +108,10 @@ pub struct CompletionRequest {
     /// Defaults to MAX_ITERATIONS in agent_loop.rs when absent or zero.
     #[serde(default)]
     pub max_tool_calls: Option<u8>,
+    /// If non-empty, only tools whose names are in this list are offered to the model.
+    /// Empty = all tools available (default behavior).
+    #[serde(default)]
+    pub tool_filter: Vec<String>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -197,6 +211,7 @@ async fn generate_ollama_completion_stream(
     if let Some(path) = request.output_path.as_deref() {
         let json_messages = messages_to_ollama_json(&request.messages);
         let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
+        let tool_filter: std::collections::HashSet<String> = request.tool_filter.iter().cloned().collect();
         crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
             http_client,
             host: &request.host,
@@ -213,6 +228,7 @@ async fn generate_ollama_completion_stream(
             permission_mode: request.tool_permission_mode,
             tool_allowlist: allowlist,
             max_tool_calls: request.max_tool_calls,
+            tool_filter,
         }).await
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name
@@ -478,6 +494,24 @@ pub fn resolve_tool_permission(
         .ok_or_else(|| AppError::NotFound(format!("Permission request {permission_id} not found or already resolved")))?;
     drop(permissions);
     let _ = pending.sender.send(decision);
+    Ok(())
+}
+
+/// Resolve a pending ask_user request.
+/// Called by frontend when user submits their answer to the AI's question.
+#[tauri::command]
+pub fn resolve_ask_user(
+    request_id: u64,
+    answer: String,
+    app: AppHandle,
+) -> Result<(), AppError> {
+    let state = app.state::<crate::AppState>();
+    let mut pending = state.pending_ask_user.lock().unwrap();
+    let sender = pending
+        .remove(&request_id)
+        .ok_or_else(|| AppError::NotFound(format!("Ask-user request {request_id} not found or already resolved")))?;
+    drop(pending);
+    let _ = sender.send(answer);
     Ok(())
 }
 

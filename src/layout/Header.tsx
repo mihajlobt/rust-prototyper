@@ -8,6 +8,7 @@ import {
   Terminal,
   PanelLeft,
   Image,
+  Wand2,
 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SettingsModal } from "@/modals/SettingsModal";
@@ -18,6 +19,7 @@ import { ModelOptionsPopover } from "@/components/ModelOptionsPopover";
 import { Button } from "@/components/ui/button";
 
 const tabs = [
+  { id: "wizard", label: "Wizard", icon: Wand2 },
   { id: "screens", label: "Screens", icon: LayoutGrid },
   { id: "components", label: "Components", icon: Box },
   { id: "themes", label: "Design", icon: Palette },
