@@ -193,6 +193,10 @@ export function RunnerPanel() {
     setDirtyTabs(new Set());
   }, [setProjectSettings]);
 
+  const reorderTabs = useCallback((newOrder: string[]) => {
+    setProjectSettings({ runnerEditorTabs: newOrder });
+  }, [setProjectSettings]);
+
   const handleContentChange = useCallback((content: string) => {
     if (!activeTabPath) return;
     setTabContents((prev) => ({ ...prev, [activeTabPath]: content }));
@@ -422,6 +426,7 @@ export function RunnerPanel() {
                         startRename={startRename}
                         handleDeleteFile={handleDeleteFile}
                         revealInExplorer={revealInExplorer}
+                        reorderTabs={reorderTabs}
                       />
                     </Allotment.Pane>
 
