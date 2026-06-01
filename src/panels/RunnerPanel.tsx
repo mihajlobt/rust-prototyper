@@ -32,7 +32,7 @@ import { FileTree } from "@/panels/RunnerFileTree";
 import { RenameDialog, NewFolderDialog, NewFileDialog } from "@/panels/RunnerDialogs";
 import { RunnerEditor } from "@/panels/runner/RunnerEditor";
 import { RunnerPreview } from "@/panels/runner/RunnerPreview";
-import { RunnerTerminal } from "@/panels/runner/RunnerTerminal";
+import { RunnerTerminalHeader, RunnerTerminalContent } from "@/panels/runner/RunnerTerminal";
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
@@ -72,7 +72,7 @@ export function RunnerPanel() {
   const [newFolderName, setNewFolderName] = useState("");
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("runner", 2);
-  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3, [true, true, ps.runnerTerminalOpen]);
+  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -448,19 +448,33 @@ export function RunnerPanel() {
                   </Allotment>
                 </Allotment.Pane>
 
-                {/* Terminal: header pane + content pane as a fragment */}
-                <RunnerTerminal
-                  xtermRef={xtermRef}
-                  runnerActiveTab={ps.runnerActiveTab}
-                  runnerTerminalOpen={ps.runnerTerminalOpen}
-                  showShellInput={showShellInput}
-                  shellCommand={shellCommand}
-                  logLinesRef={logLinesRef}
-                  setShowShellInput={setShowShellInput}
-                  setShellCommand={setShellCommand}
-                  setProjectSettings={setProjectSettings}
-                  handleNewShell={handleNewShell}
-                />
+                {/* Terminal header — 28px locked pane, always visible.
+                    Allotment.Pane must be a direct JSX child (not inside a fragment
+                    from a sub-component) so Allotment correctly tracks visible changes. */}
+                <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+                  <RunnerTerminalHeader
+                    runnerActiveTab={ps.runnerActiveTab}
+                    runnerTerminalOpen={ps.runnerTerminalOpen}
+                    setShowShellInput={setShowShellInput}
+                    setProjectSettings={setProjectSettings}
+                  />
+                </Allotment.Pane>
+
+                {/* Terminal content — collapsible, same pattern as Components/Screens */}
+                <Allotment.Pane visible={ps.runnerTerminalOpen} preferredSize={200} minSize={100} snap>
+                  {ps.runnerTerminalOpen && (
+                    <RunnerTerminalContent
+                      xtermRef={xtermRef}
+                      runnerActiveTab={ps.runnerActiveTab}
+                      showShellInput={showShellInput}
+                      shellCommand={shellCommand}
+                      logLinesRef={logLinesRef}
+                      setShowShellInput={setShowShellInput}
+                      setShellCommand={setShellCommand}
+                      handleNewShell={handleNewShell}
+                    />
+                  )}
+                </Allotment.Pane>
               </Allotment>
             </div>
           </Allotment.Pane>
