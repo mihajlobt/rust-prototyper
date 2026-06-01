@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Save, FolderUp, FileCode, Trash2, RefreshCw } from "lucide-react";
+import { ChevronUp, ChevronDown, Save, FolderUp, Trash2, RefreshCw, Braces, Sliders, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -533,26 +533,9 @@ body { margin: 0; font-family: sans-serif; }
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}>
-                <FileCode size={12} className="mr-1.5" />
-                <div className="w-px h-4 bg-border mx-1" />
-                <button
-                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                  onClick={(e) => { e.stopPropagation(); setCodeTab("css"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}
-                >
-                  CSS
-                </button>
-                <button
-                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                  onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}
-                >
-                  Tokens
-                </button>
-                <button
-                  className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")}
-                  onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}
-                  >
-                  Design
-                </button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("css"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}><Braces size={10} />CSS</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}><Sliders size={10} />Tokens</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}><Palette size={10} />Design</button>
                 <div className="flex-1" />
                 {themesCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>

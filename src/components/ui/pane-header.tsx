@@ -11,7 +11,7 @@ export function PaneHeader({ onClick, className, children }: PaneHeaderProps) {
   return (
     <div
       className={cn(
-        "h-full border-b border-border flex items-center px-3 bg-card",
+        "h-full border-b border-border flex items-center pl-1.5 pr-3 bg-card",
         onClick && "cursor-pointer select-none hover:bg-muted transition-colors",
         className
       )}

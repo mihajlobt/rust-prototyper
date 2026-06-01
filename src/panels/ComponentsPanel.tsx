@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
-import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2, Loader2, AlertCircle, Blocks, Play, Square, Plug, Palette } from "lucide-react";
+import { Smartphone, Tablet, Monitor, Save, Download, FolderUp, ChevronUp, ChevronDown, Sun, Moon, Trash2, Loader2, AlertCircle, Blocks, Play, Square, Plug, Palette, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -778,7 +778,7 @@ export function ComponentsPanel() {
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setPs({ componentsCodeOpen: !componentsCodeOpen })}>
-                <span className="text-xs font-medium flex-1">Code</span>
+                <span className="text-xs font-medium flex-1 flex items-center gap-1"><Code2 size={11} />Code</span>
                 {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 import { Allotment } from "allotment";
-import { ChevronUp, ChevronDown, Download, Trash2, MousePointerClick } from "lucide-react";
+import { ChevronUp, ChevronDown, Download, Trash2, MousePointerClick, Code2, Route } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { readFile, writeFile, readDir, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
 import type { FileEntry } from "@/lib/ipc";
@@ -535,11 +535,10 @@ export function ScreensPanel() {
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
-                <MousePointerClick size={12} className="mr-1.5" />
-                <div className="w-px h-4 bg-border mx-1" />
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", screensCodeTab === "editor" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "editor" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}>Editor</button>
+
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "editor" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "editor" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}><Code2 size={10} />Editor</button>
                 <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "links" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "links" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}><MousePointerClick size={10} />Links</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors", screensCodeTab === "flow" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "flow" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}>Flow</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "flow" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "flow" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}><Route size={10} />Flow</button>
                 <div className="flex-1" />
                 {screensCodeTab === "links" && (
                   <button
