@@ -16,7 +16,7 @@ interface UseWorkflowPersistenceParams {
 
 export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: UseWorkflowPersistenceParams) {
   const { settings } = useAppStore();
-  const { ps: { activeWorkflow: initialWorkflow }, setPs } = useProjectSettingsStore();
+  const { ps: { activeWorkflow: initialWorkflow }, setProjectSettings } = useProjectSettingsStore();
   const { fitView } = useReactFlow<WorkflowNodeType, Edge>();
 
   const [workflowId, setWorkflowId] = useState("default");
@@ -65,7 +65,7 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
       setEdges(parsed.edges ?? []);
       setWorkflowId(cleanId);
       setShowWorkflowsPanel(false);
-      setPs({ activeWorkflow: cleanId });
+      setProjectSettings({ activeWorkflow: cleanId });
       fitView({ padding: 0.1 });
     } catch (e) {
       const msg = getErrorMessage(e);
@@ -74,7 +74,7 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
         notify.error("Failed to load workflow", msg);
       }
     }
-  }, [settings.project, setNodes, setEdges, setPs, fitView]);
+  }, [settings.project, setNodes, setEdges, setProjectSettings, fitView]);
 
   const autoLoadedRef = useRef(false);
   useEffect(() => {
@@ -91,7 +91,7 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
       const allNodes = nodes;
       const cleanNodes = allNodes.map((n) => ({ ...n, data: { ...n.data, status: "idle" as const, output: undefined } }));
       await saveWorkflow(settings.project, id, JSON.stringify({ nodes: cleanNodes, edges }, null, 2));
-      setPs({ activeWorkflow: id });
+      setProjectSettings({ activeWorkflow: id });
       await refreshSavedWorkflows();
     } catch (e) {
       const msg = getErrorMessage(e);
@@ -118,6 +118,6 @@ export function useWorkflowPersistence({ nodes, setNodes, edges, setEdges }: Use
     savedWorkflows, showWorkflowsPanel, setShowWorkflowsPanel,
     deleteConfirm, setDeleteConfirm, saveError,
     handleLoad, handleSave, handleDelete, refreshSavedWorkflows,
-    initialWorkflow, settings, setPs,
+    initialWorkflow, settings, setProjectSettings,
   };
 }

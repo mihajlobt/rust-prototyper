@@ -54,7 +54,7 @@ import { MessageList, ChatInput } from "@/components/chat";
 export function ComponentsPanel() {
   const { settings } = useAppStore();
   const { settings: globalSettings } = useSettings();
-  const { ps, setPs, openComponent: setSelectedComponent } = useProjectSettingsStore();
+  const { ps, setProjectSettings, openComponent: setSelectedComponent } = useProjectSettingsStore();
   const queryClient = useQueryClient();
 
   const allBriefs: DesignBriefTemplate[] = [
@@ -360,7 +360,7 @@ export function ComponentsPanel() {
 
   const applyCode = useCallback(async (extracted: string) => {
     setCode(extracted);
-    setPs({ componentsCodeOpen: true });
+    setProjectSettings({ componentsCodeOpen: true });
     if (!selectedComponent) return;
     const entityId = componentId ? `component-${componentId}` : "component-none";
     const msgs = useChatStore.getState().chats[entityId]?.messages ?? [];
@@ -377,7 +377,7 @@ export function ComponentsPanel() {
     } catch (e) {
       notify.error("Failed to apply generated code", getErrorMessage(e));
     }
-  }, [settings.project, selectedComponent, queryClient, generatedDir, setPs]);
+  }, [settings.project, selectedComponent, queryClient, generatedDir, setProjectSettings]);
 
   const handleApplyCode = useCallback((content: string) => {
     const c = extractCode(content);
@@ -487,7 +487,7 @@ export function ComponentsPanel() {
                 <DropdownMenuContent align="start" className="w-56">
                   <DropdownMenuRadioGroup
                     value={selectedTheme}
-                    onValueChange={(v) => setPs({ stylePreset: v, applyDesignBrief: true })}
+                    onValueChange={(v) => setProjectSettings({ stylePreset: v, applyDesignBrief: true })}
                   >
                     <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
                     {themes.map((t) => (
@@ -647,12 +647,12 @@ export function ComponentsPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_i, v) => setPs({ componentsShowInspector: v })}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_i, v) => setProjectSettings({ componentsShowInspector: v })}>
             <Allotment.Pane minSize={200}>
               {chatPane}
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ componentsShowInspector: !componentsShowInspector })}>
+              <PaneHeader onClick={() => setProjectSettings({ componentsShowInspector: !componentsShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {componentsShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
@@ -682,7 +682,7 @@ export function ComponentsPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setPs({ componentsCodeOpen: v })}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setProjectSettings({ componentsCodeOpen: v })}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
@@ -706,7 +706,7 @@ export function ComponentsPanel() {
                     </span>
                   )}
                   <div className="flex-1" />
-                   <Select value={ps.componentsPreviewTheme} onValueChange={(v) => setPs({ componentsPreviewTheme: v })}>
+                   <Select value={ps.componentsPreviewTheme} onValueChange={(v) => setProjectSettings({ componentsPreviewTheme: v })}>
                     <SelectTrigger className="h-6 text-xs w-[90px]">
                       <SelectValue placeholder="Theme…" />
                     </SelectTrigger>
@@ -721,7 +721,7 @@ export function ComponentsPanel() {
                     variant={componentsDarkPreview ? "secondary" : "ghost"}
                     size="icon" className="h-7 w-7"
                     onClick={() => {
-                      setPs({ componentsDarkPreview: !componentsDarkPreview });
+                      setProjectSettings({ componentsDarkPreview: !componentsDarkPreview });
                       // Also send postMessage to iframe for immediate dark mode toggle
                       previewIframeRef.current?.contentWindow?.postMessage(
                         { type: "set-dark", value: !componentsDarkPreview },
@@ -735,7 +735,7 @@ export function ComponentsPanel() {
                   <Button
                     variant={ps.shadcnMode ? "secondary" : "ghost"}
                     size="icon" className="h-7 w-7"
-                    onClick={() => setPs({ shadcnMode: !ps.shadcnMode })}
+                    onClick={() => setProjectSettings({ shadcnMode: !ps.shadcnMode })}
                     title="Use shadcn/ui components"
                   >
                     <Blocks size={12} />
@@ -745,21 +745,21 @@ export function ComponentsPanel() {
                     <Button
                       variant={componentsDevice === "mobile" ? "secondary" : "ghost"}
                       size="icon" className="h-7 w-7"
-                      onClick={() => setPs({ componentsDevice: "mobile" })}
+                      onClick={() => setProjectSettings({ componentsDevice: "mobile" })}
                     >
                       <Smartphone size={12} />
                     </Button>
                     <Button
                       variant={componentsDevice === "tablet" ? "secondary" : "ghost"}
                       size="icon" className="h-7 w-7"
-                      onClick={() => setPs({ componentsDevice: "tablet" })}
+                      onClick={() => setProjectSettings({ componentsDevice: "tablet" })}
                     >
                       <Tablet size={12} />
                     </Button>
                     <Button
                       variant={componentsDevice === "desktop" ? "secondary" : "ghost"}
                       size="icon" className="h-7 w-7"
-                      onClick={() => setPs({ componentsDevice: "desktop" })}
+                      onClick={() => setProjectSettings({ componentsDevice: "desktop" })}
                     >
                       <Monitor size={12} />
                     </Button>
@@ -777,7 +777,7 @@ export function ComponentsPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ componentsCodeOpen: !componentsCodeOpen })}>
+              <PaneHeader onClick={() => setProjectSettings({ componentsCodeOpen: !componentsCodeOpen })}>
                 <span className="text-xs font-medium flex-1 flex items-center gap-1"><Code2 size={11} />Code</span>
                 {componentsCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>

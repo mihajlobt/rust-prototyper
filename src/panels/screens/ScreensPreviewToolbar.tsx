@@ -24,7 +24,7 @@ export function ScreensPreviewToolbar({
   generatedDir,
 }: ScreensPreviewToolbarProps) {
   const { runnerStatus, runnerUrl, startRunner, stopRunner } = useDevServerStore();
-  const { ps, setPs } = useProjectSettingsStore();
+  const { ps, setProjectSettings } = useProjectSettingsStore();
 
   const currentPath = livePreviewPath
     ?? (initialPreviewSrc ? new URL(initialPreviewSrc).pathname : null);
@@ -55,7 +55,7 @@ export function ScreensPreviewToolbar({
         </span>
       )}
       <div className="flex-1" />
-      <Select value={ps.screensPreviewTheme} onValueChange={(v) => setPs({ screensPreviewTheme: v })}>
+      <Select value={ps.screensPreviewTheme} onValueChange={(v) => setProjectSettings({ screensPreviewTheme: v })}>
         <SelectTrigger className="h-6 text-xs w-[90px]">
           <SelectValue placeholder="Theme…" />
         </SelectTrigger>
@@ -70,7 +70,7 @@ export function ScreensPreviewToolbar({
         variant={ps.screensDarkPreview ? "secondary" : "ghost"}
         size="icon" className="h-7 w-7"
         onClick={() => {
-          setPs({ screensDarkPreview: !ps.screensDarkPreview });
+          setProjectSettings({ screensDarkPreview: !ps.screensDarkPreview });
           iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: !ps.screensDarkPreview }, "*");
         }}
         title={ps.screensDarkPreview ? "Light preview" : "Dark preview"}
@@ -80,18 +80,18 @@ export function ScreensPreviewToolbar({
       <div className="w-px h-4 bg-border" />
       <div className="flex items-center gap-1">
         <Button variant="ghost" size="icon" className="h-7 w-7 text-xs"
-          onClick={() => setPs({ screensZoom: Math.max(ps.screensZoom - 0.1, 0.5) })}>-</Button>
+          onClick={() => setProjectSettings({ screensZoom: Math.max(ps.screensZoom - 0.1, 0.5) })}>-</Button>
         <span className="text-xs text-muted-foreground w-8 text-center">{Math.round(ps.screensZoom * 100)}%</span>
         <Button variant="ghost" size="icon" className="h-7 w-7 text-xs"
-          onClick={() => setPs({ screensZoom: Math.min(ps.screensZoom + 0.1, 2) })}>+</Button>
+          onClick={() => setProjectSettings({ screensZoom: Math.min(ps.screensZoom + 0.1, 2) })}>+</Button>
       </div>
       <div className="flex items-center gap-1">
         <Button variant={ps.screensDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7"
-          onClick={() => setPs({ screensDevice: "mobile" })}><Smartphone size={12} /></Button>
+          onClick={() => setProjectSettings({ screensDevice: "mobile" })}><Smartphone size={12} /></Button>
         <Button variant={ps.screensDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7"
-          onClick={() => setPs({ screensDevice: "tablet" })}><Tablet size={12} /></Button>
+          onClick={() => setProjectSettings({ screensDevice: "tablet" })}><Tablet size={12} /></Button>
         <Button variant={ps.screensDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7"
-          onClick={() => setPs({ screensDevice: "desktop" })}><Monitor size={12} /></Button>
+          onClick={() => setProjectSettings({ screensDevice: "desktop" })}><Monitor size={12} /></Button>
       </div>
     </div>
   );

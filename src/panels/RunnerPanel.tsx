@@ -40,7 +40,7 @@ import { RenameDialog, NewFolderDialog, NewFileDialog } from "@/panels/RunnerDia
 
 export function RunnerPanel() {
   const { settings } = useAppStore();
-  const { ps, setPs } = useProjectSettingsStore();
+  const { ps, setProjectSettings } = useProjectSettingsStore();
   const generatedDir = `projects/${settings.project}/generated`;
   const devServerStore = useDevServerStore();
   const running = devServerStore.runnerStatus === "running" || devServerStore.runnerStatus === "starting";
@@ -60,9 +60,9 @@ export function RunnerPanel() {
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       const prev = new Set(useProjectSettingsStore.getState().ps.runnerExpandedDirs);
       const next = typeof updater === "function" ? updater(prev) : updater;
-      setPs({ runnerExpandedDirs: [...next] });
+      setProjectSettings({ runnerExpandedDirs: [...next] });
     },
-    [setPs]
+    [setProjectSettings]
   );
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
@@ -158,14 +158,14 @@ export function RunnerPanel() {
 
   const openTab = useCallback(async (path: string) => {
     const newTabs = openTabs.includes(path) ? openTabs : [...openTabs, path];
-    setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: path });
+    setProjectSettings({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: path });
     if (!tabContents[path]) {
       try {
         const content = await readFile(path);
         setTabContents((prev) => ({ ...prev, [path]: content }));
       } catch (e) { setTabContents((prev) => ({ ...prev, [path]: "" })); if (!isNotFoundError(e)) notify.error("Failed to load file", getErrorMessage(e)); }
     }
-  }, [openTabs, tabContents, setPs]);
+  }, [openTabs, tabContents, setProjectSettings]);
 
   const closeTab = useCallback((path: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -173,31 +173,31 @@ export function RunnerPanel() {
     const newActive = path === activeTabPath
       ? (newTabs[newTabs.length - 1] ?? null)
       : activeTabPath;
-    setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
+    setProjectSettings({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
     setTabContents((prev) => { const next = { ...prev }; delete next[path]; return next; });
     setDirtyTabs((prev) => { const next = new Set(prev); next.delete(path); return next; });
-  }, [openTabs, activeTabPath, setPs]);
+  }, [openTabs, activeTabPath, setProjectSettings]);
 
   const closeOtherTabs = useCallback((path: string) => {
-    setPs({ runnerEditorTabs: [path], runnerEditorActiveTabPath: path });
+    setProjectSettings({ runnerEditorTabs: [path], runnerEditorActiveTabPath: path });
     setTabContents((prev) => ({ [path]: prev[path] ?? "" }));
     setDirtyTabs((prev) => { const next = new Set<string>(); if (prev.has(path)) next.add(path); return next; });
-  }, [setPs]);
+  }, [setProjectSettings]);
 
   const closeTabsToRight = useCallback((path: string) => {
     const idx = openTabs.indexOf(path);
     const newTabs = openTabs.slice(0, idx + 1);
     const newActive = newTabs.includes(activeTabPath ?? "") ? activeTabPath : path;
-    setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
+    setProjectSettings({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
     setTabContents((prev) => Object.fromEntries(newTabs.map((p) => [p, prev[p] ?? ""])));
     setDirtyTabs((prev) => { const next = new Set<string>(); for (const p of newTabs) if (prev.has(p)) next.add(p); return next; });
-  }, [openTabs, activeTabPath, setPs]);
+  }, [openTabs, activeTabPath, setProjectSettings]);
 
   const closeAllTabs = useCallback(() => {
-    setPs({ runnerEditorTabs: [], runnerEditorActiveTabPath: null });
+    setProjectSettings({ runnerEditorTabs: [], runnerEditorActiveTabPath: null });
     setTabContents({});
     setDirtyTabs(new Set());
-  }, [setPs]);
+  }, [setProjectSettings]);
 
   const handleContentChange = useCallback((content: string) => {
     if (!activeTabPath) return;
@@ -314,7 +314,7 @@ export function RunnerPanel() {
         const newTabs = openTabs.map((p) => p === renameTarget.path ? newPath : p);
         const newActive = activeTabPath === renameTarget.path ? newPath : activeTabPath;
         setTabContents((prev) => { const next = { ...prev }; if (next[renameTarget.path] !== undefined) { next[newPath] = next[renameTarget.path]; delete next[renameTarget.path]; } return next; });
-        setPs({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
+        setProjectSettings({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: newActive });
       }
       refreshFiles();
     } catch (e) { notify.error("Rename failed", getErrorMessage(e)); }
@@ -344,9 +344,9 @@ export function RunnerPanel() {
     setShellCommand(""); setShowShellInput(false);
   };
 
-  const zoomIn    = () => setPs({ runnerZoom: Math.min(ps.runnerZoom + 0.1, 2) });
-  const zoomOut   = () => setPs({ runnerZoom: Math.max(ps.runnerZoom - 0.1, 0.3) });
-  const zoomReset = () => setPs({ runnerZoom: 1 });
+  const zoomIn    = () => setProjectSettings({ runnerZoom: Math.min(ps.runnerZoom + 0.1, 2) });
+  const zoomOut   = () => setProjectSettings({ runnerZoom: Math.max(ps.runnerZoom - 0.1, 0.3) });
+  const zoomReset = () => setProjectSettings({ runnerZoom: 1 });
 
   const deviceWidth = { desktop: "100%", tablet: "768px", mobile: "375px" } as const;
 
@@ -504,12 +504,12 @@ export function RunnerPanel() {
                             <span className="text-xs text-muted-foreground font-mono">—</span>
                           )}
                           <div className="flex items-center gap-0.5 ml-auto shrink-0">
-                            <Button variant={ps.runnerDevice === "mobile"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "mobile"  })} title="Mobile" ><Smartphone size={11} /></Button>
-                            <Button variant={ps.runnerDevice === "tablet"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "tablet"  })} title="Tablet" ><Tablet     size={11} /></Button>
-                            <Button variant={ps.runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setPs({ runnerDevice: "desktop" })} title="Desktop"><Monitor    size={11} /></Button>
+                            <Button variant={ps.runnerDevice === "mobile"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "mobile"  })} title="Mobile" ><Smartphone size={11} /></Button>
+                            <Button variant={ps.runnerDevice === "tablet"  ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "tablet"  })} title="Tablet" ><Tablet     size={11} /></Button>
+                            <Button variant={ps.runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "desktop" })} title="Desktop"><Monitor    size={11} /></Button>
                           </div>
                           <div className="w-px h-3 bg-border shrink-0" />
-                          <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setPs({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
+                          <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setProjectSettings({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
                           <div className="w-px h-3 bg-border shrink-0" />
                           <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomOut}><Minus size={11} /></Button>
                           <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none shrink-0" onClick={zoomReset}>{Math.round(ps.runnerZoom * 100)}%</button>
@@ -538,7 +538,7 @@ export function RunnerPanel() {
                 {/* Terminal header */}
                 <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
                   <div className="h-full flex items-center border-b border-border bg-card px-2">
-                    <Tabs value={ps.runnerActiveTab} onValueChange={(v) => setPs({ runnerActiveTab: v as "terminal" | "logs" | "network" })}>
+                    <Tabs value={ps.runnerActiveTab} onValueChange={(v) => setProjectSettings({ runnerActiveTab: v as "terminal" | "logs" | "network" })}>
                       <TabsList variant="line" className="h-7">
                         <TabsTrigger value="terminal" className="text-[11px] gap-1"><Terminal size={10} />Terminal</TabsTrigger>
                         <TabsTrigger value="logs"     className="text-[11px] gap-1"><ScrollText size={10} />Logs</TabsTrigger>
@@ -546,8 +546,8 @@ export function RunnerPanel() {
                       </TabsList>
                     </Tabs>
                     <div className="flex-1" />
-                    <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!ps.runnerTerminalOpen) setPs({ runnerTerminalOpen: true }); }}><Terminal size={10} />Shell</Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPs({ runnerTerminalOpen: !ps.runnerTerminalOpen })}>{ps.runnerTerminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}</Button>
+                    <Button variant="ghost" size="sm" className="gap-1 h-6 text-[10px] px-1.5" onClick={() => { setShowShellInput((v) => !v); if (!ps.runnerTerminalOpen) setProjectSettings({ runnerTerminalOpen: true }); }}><Terminal size={10} />Shell</Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setProjectSettings({ runnerTerminalOpen: !ps.runnerTerminalOpen })}>{ps.runnerTerminalOpen ? <ChevronDown size={10} /> : <ChevronUp size={10} />}</Button>
                   </div>
                 </Allotment.Pane>
 

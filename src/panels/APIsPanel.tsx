@@ -301,7 +301,7 @@ export function ${hookName}(params?: Record<string, string>) {
 
 export function APIsPanel() {
   const { settings } = useAppStore();
-  const { ps, setPs, openApi } = useProjectSettingsStore();
+  const { ps, setProjectSettings, openApi } = useProjectSettingsStore();
   const selectedApiId = ps.activeApi;
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("apis", 2);
 
@@ -360,7 +360,7 @@ export function APIsPanel() {
 
   const selectApi = useCallback((api: SavedApi) => {
     openApi(api.id);
-    setPs({
+    setProjectSettings({
       apisName: api.name,
       apisMethod: api.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
       apisUrl: api.url,
@@ -377,7 +377,7 @@ export function APIsPanel() {
       apisProxyPath: api.proxyPath || "",
     });
     setUI({ apisHistory: api.history || [], apisResponse: null, apisCurlPaste: "", apisOpenapiPaste: "" });
-  }, [openApi, setPs, setUI]);
+  }, [openApi, setProjectSettings, setUI]);
 
   function resolveEnvVars(text: string): string {
     return text.replace(/\{\{(\w+)\}\}/g, (_, key) => envVars[key] ?? `{{${key}}}`);
@@ -415,7 +415,7 @@ export function APIsPanel() {
   const deleteApi = (id: string) => {
     setApis((prev) => prev.filter((a) => a.id !== id));
     if (selectedApiId === id) {
-      setPs({
+      setProjectSettings({
         activeApi: null, apisName: "", apisMethod: "GET", apisUrl: "", apisHeadersText: "{}",
         apisBody: "", apisAuthType: "none", apisAuthToken: "", apisAuthHeaderName: "X-API-Key",
         apisAuthUsername: "", apisAuthPassword: "", apisAuthTokenUrl: "", apisAuthClientId: "",
@@ -429,7 +429,7 @@ export function APIsPanel() {
     if (!curlPaste.trim()) return;
     const parsed = parseCurl(curlPaste);
     if (parsed) {
-      setPs({
+      setProjectSettings({
         ...(parsed.method ? { apisMethod: parsed.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" } : {}),
         ...(parsed.url ? { apisUrl: parsed.url } : {}),
         ...(parsed.headersText ? { apisHeadersText: parsed.headersText } : {}),
@@ -502,7 +502,7 @@ export function APIsPanel() {
       }).toString();
       const res = await httpRequest("POST", authTokenUrl, { "Content-Type": "application/x-www-form-urlencoded" }, tokenBody);
       const token = (JSON.parse(res.body) as Record<string, string>).access_token || "";
-      if (token) setPs({ apisAuthToken: token });
+      if (token) setProjectSettings({ apisAuthToken: token });
       setShowOauthDialog(false);
       setOauthCode("");
     } catch (e) {
@@ -664,7 +664,7 @@ export function APIsPanel() {
                 variant={sidebarTab === "keys" ? "secondary" : "ghost"}
                 size="icon"
                 className="h-7 w-7"
-                onClick={() => setPs({ apisSidebarTab: sidebarTab === "collection" ? "keys" : "collection" })}
+                onClick={() => setProjectSettings({ apisSidebarTab: sidebarTab === "collection" ? "keys" : "collection" })}
                 title="Toggle Key Vault"
               >
                 <Key size={13} />
@@ -835,12 +835,12 @@ export function APIsPanel() {
                     <Input
                       placeholder="API Name"
                       value={name}
-                      onChange={(e) => setPs({ apisName: e.target.value })}
+                      onChange={(e) => setProjectSettings({ apisName: e.target.value })}
                       className="h-8 text-sm"
                     />
 
                     <div className="flex gap-2">
-                      <Select value={method} onValueChange={(v) => setPs({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
+                      <Select value={method} onValueChange={(v) => setProjectSettings({ apisMethod: v as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" })}>
                         <SelectTrigger className="w-[100px]">
                           <SelectValue />
                         </SelectTrigger>
@@ -853,7 +853,7 @@ export function APIsPanel() {
                       <Input
                         placeholder="https://api.example.com/endpoint"
                         value={url}
-                        onChange={(e) => setPs({ apisUrl: e.target.value })}
+                        onChange={(e) => setProjectSettings({ apisUrl: e.target.value })}
                       />
                       <Button onClick={send} disabled={loading}>
                         <Send size={14} />
@@ -870,7 +870,7 @@ export function APIsPanel() {
                       <Input
                         placeholder="/api/weather"
                         value={proxyPath}
-                        onChange={(e) => setPs({ apisProxyPath: e.target.value })}
+                        onChange={(e) => setProjectSettings({ apisProxyPath: e.target.value })}
                         className="h-7 text-xs font-mono"
                       />
                     </div>
@@ -907,7 +907,7 @@ export function APIsPanel() {
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted-foreground">Authentication</label>
                       <div className="flex gap-2 flex-wrap">
-                        <Select value={authType} onValueChange={(v) => setPs({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}>
+                        <Select value={authType} onValueChange={(v) => setProjectSettings({ apisAuthType: v as "none" | "bearer" | "apikey" | "basic" | "oauth2" })}>
                           <SelectTrigger className="w-[120px]">
                             <SelectValue />
                           </SelectTrigger>
@@ -920,32 +920,32 @@ export function APIsPanel() {
                           </SelectContent>
                         </Select>
                         {authType === "bearer" && (
-                          <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
+                          <Input type="password" placeholder="Bearer token" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
                         )}
                         {authType === "apikey" && (
                           <>
-                            <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setPs({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
-                            <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
+                            <Input placeholder="Header name" value={authHeaderName} onChange={(e) => setProjectSettings({ apisAuthHeaderName: e.target.value })} className="h-8 text-xs w-[140px]" />
+                            <Input type="password" placeholder="API Key" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
                           </>
                         )}
                         {authType === "oauth2" && (
-                          <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
+                          <Input type="password" placeholder="Access token" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs flex-1" />
                         )}
                       </div>
                       {authType === "basic" && (
                         <div className="flex gap-2">
-                          <Input placeholder="Username" value={authUsername} onChange={(e) => setPs({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
-                          <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setPs({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
+                          <Input placeholder="Username" value={authUsername} onChange={(e) => setProjectSettings({ apisAuthUsername: e.target.value })} className="h-8 text-xs" />
+                          <Input type="password" placeholder="Password" value={authPassword} onChange={(e) => setProjectSettings({ apisAuthPassword: e.target.value })} className="h-8 text-xs" />
                         </div>
                       )}
                       {authType === "oauth2" && (
                         <div className="space-y-2">
-                          <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setPs({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
+                          <Input placeholder="Token endpoint URL" value={authTokenUrl} onChange={(e) => setProjectSettings({ apisAuthTokenUrl: e.target.value })} className="h-8 text-xs" />
                           <div className="flex gap-2">
-                            <Input placeholder="Client ID" value={authClientId} onChange={(e) => setPs({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
-                            <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setPs({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
+                            <Input placeholder="Client ID" value={authClientId} onChange={(e) => setProjectSettings({ apisAuthClientId: e.target.value })} className="h-8 text-xs" />
+                            <Input type="password" placeholder="Client Secret" value={authClientSecret} onChange={(e) => setProjectSettings({ apisAuthClientSecret: e.target.value })} className="h-8 text-xs" />
                           </div>
-                          <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setPs({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
+                          <Input type="password" placeholder="Access token (auto-filled after auth)" value={authToken} onChange={(e) => setProjectSettings({ apisAuthToken: e.target.value })} className="h-8 text-xs" />
                           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={startOAuth2} disabled={!authTokenUrl || !authClientId}>Authorize</Button>
                         </div>
                       )}
@@ -955,7 +955,7 @@ export function APIsPanel() {
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">Headers (JSON)</label>
                       <div className="h-32 border rounded overflow-hidden">
-                        <CodeMirrorEditor value={headersText} onChange={(v) => setPs({ apisHeadersText: v })} mode="json" />
+                        <CodeMirrorEditor value={headersText} onChange={(v) => setProjectSettings({ apisHeadersText: v })} mode="json" />
                       </div>
                     </div>
 
@@ -964,7 +964,7 @@ export function APIsPanel() {
                       <label className="text-xs font-medium text-muted-foreground">Body</label>
                       <Textarea
                         value={body}
-                        onChange={(e) => setPs({ apisBody: e.target.value })}
+                        onChange={(e) => setProjectSettings({ apisBody: e.target.value })}
                         placeholder="Request body... (use {{VAR_NAME}} for env vars)"
                         className="min-h-[120px] text-sm font-mono"
                       />

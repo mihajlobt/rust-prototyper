@@ -20,7 +20,7 @@ import { useAllotmentLayout } from "./hooks/useAllotmentLayout";
 
 export default function App() {
   const { settings, loaded } = useAppStore();
-  const { ps, setPs, loaded: projectLoaded } = useProjectSettingsStore();
+  const { ps, setProjectSettings, loaded: projectLoaded } = useProjectSettingsStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("app", 2);
 
@@ -62,7 +62,7 @@ export default function App() {
       <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
         <Header
           activeView={ps.activeView}
-          onViewChange={(view) => setPs({ activeView: view })}
+          onViewChange={(view) => setProjectSettings({ activeView: view })}
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
         />

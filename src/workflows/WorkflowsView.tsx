@@ -174,7 +174,7 @@ function WorkflowCanvas() {
     savedWorkflows, showWorkflowsPanel, setShowWorkflowsPanel,
     deleteConfirm, setDeleteConfirm, saveError,
     handleLoad, handleSave, handleDelete, refreshSavedWorkflows,
-    settings, setPs,
+    settings, setProjectSettings,
   } = useWorkflowPersistence({ nodes, setNodes, edges, setEdges });
 
   // ── Execution engine (delegated to extracted hook) ───────────────────────
@@ -197,7 +197,7 @@ function WorkflowCanvas() {
     setNodes([{ id: "n1", type: "workflow", position: { x: 100, y: 100 }, data: { label: "Input", nodeType: "input", color: defaultColor("input"), desc: "Start of workflow", status: "idle" } }]);
     setEdges([]);
     setWorkflowId(`workflow-${Date.now()}`);
-    setPs({ activeWorkflow: null });
+    setProjectSettings({ activeWorkflow: null });
   };
 
   const handleLoadTemplate = (template: WorkflowTemplate) => {
@@ -206,7 +206,7 @@ function WorkflowCanvas() {
     setEdges(template.edges);
     setWorkflowId(template.id);
     setShowWorkflowsPanel(false);
-    setPs({ activeWorkflow: null });
+    setProjectSettings({ activeWorkflow: null });
   };
 
   // Pane context menu: capture both flow position (for node placement) and screen position (for anchor)

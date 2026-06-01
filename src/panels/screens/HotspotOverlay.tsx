@@ -71,7 +71,7 @@ export function HotspotOverlay({
                 {targetName && (
                   <button
                     className="flex items-center gap-1 text-foreground/80 hover:text-foreground transition-colors"
-                    onClick={() => useProjectSettingsStore.getState().setPs({ activeScreen: hotspot.targetScreenId })}
+                    onClick={() => useProjectSettingsStore.getState().setProjectSettings({ activeScreen: hotspot.targetScreenId })}
                     title="Go to target screen"
                   >
                     <ArrowRight size={9} className="text-cyan-400 shrink-0" />

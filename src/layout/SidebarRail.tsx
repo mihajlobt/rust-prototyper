@@ -26,7 +26,7 @@ import type { SectionName } from "@/components/ProjectExplorer";
 
 export function SidebarRail() {
   const { settings } = useAppStore();
-  const { setPs, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectSettingsStore();
+  const { setProjectSettings, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectSettingsStore();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -58,7 +58,7 @@ export function SidebarRail() {
 
   // --- Navigation ---
   const handleSetDefaultTheme = (name: string) => {
-    setPs({ stylePreset: name });
+    setProjectSettings({ stylePreset: name });
     notify.success("Default theme set", `"${name}" will be used for component and screen generation`);
   };
 

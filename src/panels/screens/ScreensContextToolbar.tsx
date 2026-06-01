@@ -23,7 +23,7 @@ interface ScreensContextToolbarProps {
 
 export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: ScreensContextToolbarProps) {
   const { settings } = useAppStore();
-  const { ps, setPs } = useProjectSettingsStore();
+  const { ps, setProjectSettings } = useProjectSettingsStore();
   const { settings: globalSettings } = useSettings();
   const genContext = useUIStore((s) => s.screensGenContext[settings.project] ?? EMPTY_GEN_CONTEXT);
   const setGenContext = useUIStore((s) => s.setScreensGenContext);
@@ -55,7 +55,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuRadioGroup value={ps.stylePreset} onValueChange={(v) => setPs({ stylePreset: v, applyDesignBrief: true })}>
+            <DropdownMenuRadioGroup value={ps.stylePreset} onValueChange={(v) => setProjectSettings({ stylePreset: v, applyDesignBrief: true })}>
               <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
               {themes.map((t) => (
                 <DropdownMenuRadioItem key={t.name} value={t.name} className="text-xs">{t.name}</DropdownMenuRadioItem>

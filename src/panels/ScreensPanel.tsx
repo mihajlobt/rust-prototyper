@@ -37,7 +37,7 @@ import { useScreenCode } from "@/hooks/useScreenCode";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
-  const { ps, setPs } = useProjectSettingsStore();
+  const { ps, setProjectSettings } = useProjectSettingsStore();
 
   const screenId = ps.activeScreen;
   const screensDevice = ps.screensDevice;
@@ -442,7 +442,7 @@ export function ScreensPanel() {
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_paneIndex, v) => setPs({ screensShowInspector: v })}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_paneIndex, v) => setProjectSettings({ screensShowInspector: v })}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
@@ -464,7 +464,7 @@ export function ScreensPanel() {
               </div>
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ screensShowInspector: !screensShowInspector })}>
+              <PaneHeader onClick={() => setProjectSettings({ screensShowInspector: !screensShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {screensShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
@@ -494,7 +494,7 @@ export function ScreensPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_paneIndex, v) => setPs({ screensCodeOpen: v })}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_paneIndex, v) => setProjectSettings({ screensCodeOpen: v })}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <ScreensPreviewToolbar
@@ -534,11 +534,11 @@ export function ScreensPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ screensCodeOpen: !screensCodeOpen })}>
+              <PaneHeader onClick={() => setProjectSettings({ screensCodeOpen: !screensCodeOpen })}>
 
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "editor" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "editor" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}><Code2 size={10} />Editor</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "links" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "links" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}><MousePointerClick size={10} />Links</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "flow" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setPs({ screensCodeTab: "flow" }); if (!screensCodeOpen) setPs({ screensCodeOpen: true }); }}><Route size={10} />Flow</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "editor" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setProjectSettings({ screensCodeTab: "editor" }); if (!screensCodeOpen) setProjectSettings({ screensCodeOpen: true }); }}><Code2 size={10} />Editor</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "links" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setProjectSettings({ screensCodeTab: "links" }); if (!screensCodeOpen) setProjectSettings({ screensCodeOpen: true }); }}><MousePointerClick size={10} />Links</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", screensCodeTab === "flow" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setProjectSettings({ screensCodeTab: "flow" }); if (!screensCodeOpen) setProjectSettings({ screensCodeOpen: true }); }}><Route size={10} />Flow</button>
                 <div className="flex-1" />
                 {screensCodeTab === "links" && (
                   <button

@@ -36,7 +36,7 @@ const SIZE_PRESETS = [
 export function AssetsPanel() {
   const bonsai = useBonsai();
   const ps = useProjectSettingsStore((s) => s.ps);
-  const setPs = useProjectSettingsStore((s) => s.setPs);
+  const setProjectSettings = useProjectSettingsStore((s) => s.setProjectSettings);
   const { ref: allotmentRef, onDragEnd, defaultSizes } = useAllotmentLayout("assets", 2);
   const [prompt, setPrompt] = useState("");
   const selectedPreset = ps.assetsPreset;
@@ -172,7 +172,7 @@ export function AssetsPanel() {
             <><Power size={14} className="mr-1" />Start</>
           )}
         </Button>
-        <Button variant={ps.assetsShowLog ? "secondary" : "ghost"} size="sm" onClick={() => setPs({ assetsShowLog: !ps.assetsShowLog })} title="Toggle server log">
+        <Button variant={ps.assetsShowLog ? "secondary" : "ghost"} size="sm" onClick={() => setProjectSettings({ assetsShowLog: !ps.assetsShowLog })} title="Toggle server log">
           <Terminal size={14} />
         </Button>
       </div>
@@ -190,7 +190,7 @@ export function AssetsPanel() {
 
       {/* Main content area with split: controls + log */}
       <div className="flex-1 overflow-hidden">
-        <Allotment ref={allotmentRef} onDragEnd={onDragEnd} defaultSizes={defaultSizes} onVisibleChange={(_i, v) => setPs({ assetsShowLog: v })} minSize={120}>
+        <Allotment ref={allotmentRef} onDragEnd={onDragEnd} defaultSizes={defaultSizes} onVisibleChange={(_i, v) => setProjectSettings({ assetsShowLog: v })} minSize={120}>
           {/* Left pane: generation form + assets */}
           <Allotment.Pane>
             <div className="h-full flex flex-col overflow-hidden">
@@ -238,7 +238,7 @@ export function AssetsPanel() {
                       key={presetItem.label}
                       variant={selectedPreset === i ? "default" : "outline"}
                       size="sm"
-                      onClick={() => setPs({ assetsPreset: i })}
+                      onClick={() => setProjectSettings({ assetsPreset: i })}
                       className="text-[10px] font-mono h-6 px-1.5"
                       disabled={!isRunning}
                     >
@@ -252,7 +252,7 @@ export function AssetsPanel() {
                   <span className="shrink-0">steps</span>
                   <Slider
                     value={[steps]}
-                    onValueChange={([value]) => setPs({ assetsSteps: value })}
+                    onValueChange={([value]) => setProjectSettings({ assetsSteps: value })}
                     min={1}
                     max={20}
                     step={1}
@@ -299,7 +299,7 @@ export function AssetsPanel() {
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6"
-                        onClick={() => setPs({ assetsViewMode: ps.assetsViewMode === "list" ? "grid" : "list" })}
+                        onClick={() => setProjectSettings({ assetsViewMode: ps.assetsViewMode === "list" ? "grid" : "list" })}
                         title={ps.assetsViewMode === "list" ? "Gallery view" : "List view"}
                       >
                         {ps.assetsViewMode === "list" ? <LayoutGrid size={13} /> : <LayoutList size={13} />}
@@ -307,7 +307,7 @@ export function AssetsPanel() {
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={bonsai.refreshAssets} title="Refresh assets">
                         <RefreshCw size={13} />
                       </Button>
-                      <Select value={ps.assetsSortOrder} onValueChange={(v) => setPs({ assetsSortOrder: v as typeof ps.assetsSortOrder })}>
+                      <Select value={ps.assetsSortOrder} onValueChange={(v) => setProjectSettings({ assetsSortOrder: v as typeof ps.assetsSortOrder })}>
                         <SelectTrigger className="h-6 w-auto gap-1 border-none shadow-sm text-[10px] font-mono px-1.5 [&>svg]:hidden hover:bg-muted">
                           <ArrowDownUp size={11} className="shrink-0" />
                           <SelectValue />

@@ -33,7 +33,7 @@ import type { ToolPermissionMode } from "@/lib/ipc";
 
 export function SettingsModal() {
   const { settings, setSettings } = useSettings();
-  const { ps, setPs } = useProjectSettingsStore();
+  const { ps, setProjectSettings } = useProjectSettingsStore();
   const [open, setOpen] = useState(false);
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
 
@@ -411,7 +411,7 @@ export function SettingsModal() {
                   <div className="space-y-1.5">
                     <Input
                       value={ps.directories.themes}
-                      onChange={(e) => setPs({ directories: { ...ps.directories, themes: e.target.value } })}
+                      onChange={(e) => setProjectSettings({ directories: { ...ps.directories, themes: e.target.value } })}
                       placeholder="src/styles/themes"
                       className="font-mono text-xs max-w-xs"
                     />
@@ -422,7 +422,7 @@ export function SettingsModal() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPs({ directories: { ...ps.directories, themes: "src/styles/themes" } })}
+                    onClick={() => setProjectSettings({ directories: { ...ps.directories, themes: "src/styles/themes" } })}
                     disabled={ps.directories.themes === "src/styles/themes"}
                   >
                     Reset to default
@@ -443,7 +443,7 @@ export function SettingsModal() {
                         value={ps.runnerPort}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val) && val >= 1024 && val <= 65535) setPs({ runnerPort: val });
+                          if (!isNaN(val) && val >= 1024 && val <= 65535) setProjectSettings({ runnerPort: val });
                         }}
                         className="h-8 text-xs w-28"
                       />

@@ -204,7 +204,7 @@ interface FlowsViewProps {
 
 function FlowsViewInner({ screenIds }: FlowsViewProps) {
   const { settings } = useAppStore();
-  const { setPs } = useProjectSettingsStore();
+  const { setProjectSettings } = useProjectSettingsStore();
   const projectDir = `projects/${settings.project}`;
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
@@ -251,9 +251,9 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
 
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: ScreenNode) => {
-      setPs({ activeView: "screens", activeScreen: node.id });
+      setProjectSettings({ activeView: "screens", activeScreen: node.id });
     },
-    [setPs]
+    [setProjectSettings]
   );
 
   const onNodeDragStop = useCallback(
@@ -280,7 +280,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
 
   const actions = useMemo<FlowsActions>(
     () => ({
-      openScreen: (id) => setPs({ activeView: "screens", activeScreen: id }),
+      openScreen: (id) => setProjectSettings({ activeView: "screens", activeScreen: id }),
       setDefaultScreen: async (id) => {
         try {
           const nav = await loadNavigation(projectDir);
@@ -324,7 +324,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
     }),
     // setEdges is a stable setter from useEdgesState — safe to omit
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projectDir, setPs, setNodes, edges]
+    [projectDir, setProjectSettings, setNodes, edges]
   );
 
   if (screenIds.length === 0) {

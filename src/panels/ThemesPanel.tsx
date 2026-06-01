@@ -32,15 +32,14 @@ import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
 import { notify } from "@/hooks/useToast";
 import { getThemeSystemPrompt, outputFilePathSection } from "@/lib/prompts";
-import { getParentCss } from "@/lib/preview";
 import { PromptInspector } from "@/components/PromptInspector";
-import Frame from "react-frame-component";
+import { ThemeTokenPreview } from "@/panels/theme-preview/ThemeTokenPreview";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
 
 export function ThemesPanel() {
   const { settings } = useAppStore();
-  const { ps, setPs, openTheme: setSelectedThemeDir } = useProjectSettingsStore();
+  const { ps, setProjectSettings, openTheme: setSelectedThemeDir } = useProjectSettingsStore();
   const selectedThemeDir = ps.activeTheme;
   const themesDevice = ps.themesDevice;
   const themesFramework = ps.themesFramework;
@@ -48,8 +47,8 @@ export function ThemesPanel() {
   const themesDarkPreview = ps.themesDarkPreview;
   const themesCodeOpen = ps.themesCodeOpen;
   const themesShowInspector = ps.themesShowInspector;
+  const themesPreviewMode = ps.themesPreviewMode;
   const [css, setCss] = useState("");
-  const [previewKey, setPreviewKey] = useState(0);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveDialogName, setSaveDialogName] = useState("");
   const [designMd, setDesignMd] = useState("");
@@ -67,8 +66,8 @@ export function ThemesPanel() {
   const cssActive = generationMode === "css";
   const designActive = generationMode === "design";
 
-  const toggleCss = () => setPs({ themesGenerationMode: "css" });
-  const toggleDesign = () => setPs({ themesGenerationMode: "design" });
+  const toggleCss = () => setProjectSettings({ themesGenerationMode: "css" });
+  const toggleDesign = () => setProjectSettings({ themesGenerationMode: "design" });
 
   const themeDir = selectedThemeDir || "main";
   const themeOutputPath = `projects/${settings.project}/themes/${themeDir}/theme.css`;
@@ -142,23 +141,21 @@ export function ThemesPanel() {
 
   const applyGeneratedCss = useCallback((content: string) => {
     setCss(content);
-    setPreviewKey((k) => k + 1);
     persistTheme(content, "");
-    setPs({ themesCodeOpen: true });
+    setProjectSettings({ themesCodeOpen: true });
     const entityId = `theme-${selectedThemeDir || "main"}`;
     const msgs = useChatStore.getState().chats[entityId]?.messages ?? [];
     const lastUser = [...msgs].reverse().find((m) => m.role === "user");
     const prompt = lastUser?.content ?? "";
     void saveItemMeta(`projects/${settings.project}`, "themes", selectedThemeDir || "main", prompt)
       .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
-  }, [persistTheme, setPs, settings.project, selectedThemeDir]);
+  }, [persistTheme, setProjectSettings, settings.project, selectedThemeDir]);
 
   const handleApplyCode = useCallback((content: string) => {
     const stripped = content.replace(/<thinking[\s\S]*?<\/think>/g, "").trim();
     const cleaned = stripped.replace(/^```(?:css)?\s*/i, "").replace(/\s*```$/i, "").trim();
     if (cleaned) {
       setCss(cleaned);
-      setPreviewKey((k) => k + 1);
     }
   }, []);
 
@@ -223,12 +220,10 @@ export function ThemesPanel() {
       if (fileName === "design.json") {
         setDesignJson(content);
         setCodeTab("tokens");
-        setPreviewKey((k) => k + 1);
         window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
         toast.success("Design language generated");
       } else if (fileName === "theme.css") {
         setCss(content);
-        setPreviewKey((k) => k + 1);
         writeFile(`${generatedDir}/src/styles/preview-theme.css`, content).catch((e) =>
           notify.error("Failed to update preview CSS", getErrorMessage(e))
         );
@@ -248,7 +243,6 @@ export function ThemesPanel() {
   useEffect(() => {
     if (loadedCss !== undefined) {
       setCss(loadedCss);
-      setPreviewKey((k) => k + 1);
     }
   }, [loadedCss]);
 
@@ -289,13 +283,12 @@ export function ThemesPanel() {
     mobile: "375px",
   };
 
-  const parentCss = getParentCss();
 
   return (
     <div className="h-full flex flex-col">
       <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
         <Allotment.Pane minSize={300}>
-          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_i, v) => setPs({ themesShowInspector: v })}>
+          <Allotment vertical ref={inspectorRef} onDragEnd={inspectorOnDragEnd} defaultSizes={inspectorDefault} onVisibleChange={(_i, v) => setProjectSettings({ themesShowInspector: v })}>
             <Allotment.Pane minSize={200}>
               <div className="h-full flex flex-col bg-card">
                 <div className="panel-toolbar h-10 px-3 gap-2">
@@ -304,8 +297,8 @@ export function ThemesPanel() {
                   <ThemeFrameworkPills
                     themesFramework={themesFramework}
                     themesDarkLightSupport={themesDarkLightSupport}
-                    onSetFramework={(f) => setPs({ themesFramework: f })}
-                    onToggleDarkLight={() => setPs({ themesDarkLightSupport: !themesDarkLightSupport })}
+                    onSetFramework={(f) => setProjectSettings({ themesFramework: f })}
+                    onToggleDarkLight={() => setProjectSettings({ themesDarkLightSupport: !themesDarkLightSupport })}
                   />
                   <Button
                     variant="ghost" size="icon" className="h-6 w-6"
@@ -398,7 +391,7 @@ export function ThemesPanel() {
               </div>
             </Allotment.Pane>
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ themesShowInspector: !themesShowInspector })}>
+              <PaneHeader onClick={() => setProjectSettings({ themesShowInspector: !themesShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
                 {themesShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
@@ -426,116 +419,35 @@ export function ThemesPanel() {
         </Allotment.Pane>
 
         <Allotment.Pane minSize={400}>
-          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setPs({ themesCodeOpen: v })}>
+          <Allotment vertical ref={codeRef} onDragEnd={codeOnDragEnd} defaultSizes={codeDefault} onVisibleChange={(_i, v) => setProjectSettings({ themesCodeOpen: v })}>
             <Allotment.Pane>
               <div className="h-full flex flex-col">
                 <ThemePreviewToolbar
                   themesDevice={themesDevice}
                   themesDarkPreview={themesDarkPreview}
-                  onSetDevice={(d) => setPs({ themesDevice: d })}
-                  onToggleDarkPreview={() => setPs({ themesDarkPreview: !themesDarkPreview })}
+                  viewMode={themesPreviewMode}
+                  onSetDevice={(d) => setProjectSettings({ themesDevice: d })}
+                  onToggleDarkPreview={() => setProjectSettings({ themesDarkPreview: !themesDarkPreview })}
+                  onSetViewMode={(m) => setProjectSettings({ themesPreviewMode: m })}
                 />
-                <div className="flex-1 overflow-auto p-4 bg-muted/30 flex justify-center">
-                  {css ? (
-                    <div
-                      className="h-full bg-background shadow-lg border border-border overflow-hidden"
-                      style={{ width: deviceWidth[themesDevice] }}
-                    >
-                      <Frame
-                        key={`${selectedThemeDir}-${previewKey}`}
-                        className="w-full h-full border-0"
-                        head={
-                          <style>
-                            {`${parentCss}
-${css}
-.dark { color-scheme: dark; }
-body { margin: 0; font-family: sans-serif; }
-* { box-sizing: border-box; }`}
-                          </style>
-                        }
-                      >
-                        <div
-                          className={themesDarkPreview ? "dark" : ""}
-                          style={{
-                            minHeight: "100%",
-                            padding: 16,
-                            background: "var(--background, #fff)",
-                            color: "var(--foreground, #000)",
-                          }}
-                        >
-                          <div className="p-4 space-y-4 max-w-lg">
-                          <h1 className="text-2xl font-bold" style={{ color: 'var(--foreground, #000)' }}>Theme Preview</h1>
-                          <p className="text-sm" style={{ color: 'var(--muted-foreground, #666)' }}>{"A visual overview of your theme\u2019s tokens."}</p>
-
-                          <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Buttons</p>
-                          <div className="flex flex-wrap gap-2">
-                            <button className="px-4 py-2 rounded text-sm font-medium" style={{ background: 'var(--primary, #333)', color: 'var(--primary-foreground, #fff)' }}>Primary</button>
-                            <button className="px-4 py-2 rounded text-sm font-medium border" style={{ background: 'var(--secondary, #eee)', color: 'var(--secondary-foreground, #333)', borderColor: 'var(--border, #ddd)' }}>Secondary</button>
-                            <button className="px-4 py-2 rounded text-sm font-medium" style={{ background: 'var(--accent, #e8f4fd)', color: 'var(--accent-foreground, #333)' }}>Accent</button>
-                            <button className="px-4 py-2 rounded text-sm font-medium" style={{ background: 'var(--destructive, #e53e3e)', color: 'var(--destructive-foreground, #fff)' }}>Destructive</button>
-                            <button className="px-4 py-2 rounded text-sm font-medium opacity-50 cursor-not-allowed" style={{ background: 'var(--muted, #f1f1f1)', color: 'var(--muted-foreground, #888)' }} disabled>Disabled</button>
-                          </div>
-
-                          <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Form</p>
-                          <div className="flex flex-col gap-2 max-w-xs">
-                            <label className="text-sm font-medium" style={{ color: 'var(--foreground, #000)' }}>Label</label>
-                            <input className="px-3 py-2 rounded border text-sm w-full" style={{ background: 'var(--input, var(--background, #fff))', borderColor: 'var(--border, #ddd)', color: 'var(--foreground, #000)', outline: 'none' }} placeholder="Input field" />
-                            <input className="px-3 py-2 rounded border text-sm w-full opacity-50" style={{ background: 'var(--input, var(--background, #fff))', borderColor: 'var(--border, #ddd)', color: 'var(--muted-foreground, #888)' }} placeholder="Disabled input" disabled />
-                          </div>
-
-                          <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Badges</p>
-                          <div className="flex flex-wrap gap-2">
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ background: 'var(--primary, #333)', color: 'var(--primary-foreground, #fff)' }}>Primary</span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ background: 'var(--secondary, #eee)', color: 'var(--secondary-foreground, #333)' }}>Secondary</span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ background: 'var(--accent, #e8f4fd)', color: 'var(--accent-foreground, #333)' }}>Accent</span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium" style={{ background: 'var(--destructive, #e53e3e)', color: 'var(--destructive-foreground, #fff)' }}>Danger</span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium border" style={{ background: 'transparent', color: 'var(--foreground, #000)', borderColor: 'var(--border, #ddd)' }}>Outline</span>
-                          </div>
-
-                          <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Cards</p>
-                          <div className="rounded border p-4 space-y-2" style={{ background: 'var(--card, #fff)', borderColor: 'var(--border, #ddd)' }}>
-                            <p className="font-semibold text-sm" style={{ color: 'var(--card-foreground, var(--foreground, #000))' }}>Card Title</p>
-                            <p className="text-sm" style={{ color: 'var(--muted-foreground, #666)' }}>Card body text with muted foreground color.</p>
-                            <button className="px-3 py-1.5 rounded text-xs font-medium" style={{ background: 'var(--primary, #333)', color: 'var(--primary-foreground, #fff)' }}>Action</button>
-                          </div>
-
-                          <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Alert</p>
-                          <div className="rounded border p-3 text-sm" style={{ background: 'var(--accent, #e8f4fd)', borderColor: 'var(--border, #ddd)', color: 'var(--accent-foreground, #333)' }}>
-                            <strong>Note:</strong> This is an informational alert using accent colors.
-                          </div>
-                          <div className="rounded border p-3 text-sm" style={{ background: 'var(--destructive, #fee2e2)', borderColor: 'var(--destructive, #e53e3e)', color: 'var(--destructive-foreground, #7f1d1d)' }}>
-                            <strong>Error:</strong> This is a destructive/error alert.
-                          </div>
-
-                          <div style={{ height: 1, background: 'var(--border, #ddd)' }} />
-                          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted-foreground, #888)' }}>Typography</p>
-                          <h2 className="text-xl font-bold" style={{ color: 'var(--foreground, #000)' }}>Heading 2</h2>
-                          <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground, #000)' }}>Heading 3</h3>
-                          <p className="text-sm" style={{ color: 'var(--foreground, #000)' }}>Body text at normal size.</p>
-                          <p className="text-xs" style={{ color: 'var(--muted-foreground, #666)' }}>Muted small text for captions and hints.</p>
-                        </div>
-                      </div>
-                    </Frame>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center text-muted-foreground text-sm">
-                      Generated themes will preview here
-                    </div>
-                  )}
+                <div
+                  className="flex-1 overflow-hidden"
+                  style={{ width: deviceWidth[themesDevice] === "100%" ? undefined : deviceWidth[themesDevice] }}
+                >
+                  <ThemeTokenPreview
+                    css={css}
+                    isDark={themesDarkPreview}
+                    viewMode={themesPreviewMode}
+                  />
                 </div>
               </div>
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setPs({ themesCodeOpen: !themesCodeOpen })}>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("css"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}><Braces size={10} />CSS</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}><Sliders size={10} />Tokens</button>
-                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); if (!themesCodeOpen) setPs({ themesCodeOpen: true }); }}><Palette size={10} />Design</button>
+              <PaneHeader onClick={() => setProjectSettings({ themesCodeOpen: !themesCodeOpen })}>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "css" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("css"); if (!themesCodeOpen) setProjectSettings({ themesCodeOpen: true }); }}><Braces size={10} />CSS</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "tokens" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("tokens"); if (!themesCodeOpen) setProjectSettings({ themesCodeOpen: true }); }}><Sliders size={10} />Tokens</button>
+                <button className={["px-1.5 py-0.5 text-[11px] font-medium rounded transition-colors flex items-center gap-1", codeTab === "guidelines" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"].join(" ")} onClick={(e) => { e.stopPropagation(); setCodeTab("guidelines"); if (!themesCodeOpen) setProjectSettings({ themesCodeOpen: true }); }}><Palette size={10} />Design</button>
                 <div className="flex-1" />
                 {themesCodeOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>

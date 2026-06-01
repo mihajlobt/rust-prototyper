@@ -51,6 +51,7 @@ export interface ProjectSettings {
   themesFramework: "shadcn" | "daisy" | "bootstrap" | "generic";
   themesDarkLightSupport: boolean;
   themesGenerationMode: "css" | "design";
+  themesPreviewMode: "preview" | "gallery";
 
   // Runner panel
   runnerDevice: "desktop" | "tablet" | "mobile";
@@ -129,6 +130,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   themesFramework: "shadcn",
   themesDarkLightSupport: true,
   themesGenerationMode: "design",
+  themesPreviewMode: "preview",
 
   runnerDevice: "desktop",
   runnerZoom: 1,
@@ -206,7 +208,7 @@ interface ProjectSettingsStore {
    * Patch project settings. Applies optimistically to Zustand immediately,
    * then persists to disk (debounced 400ms).
    */
-  setPs: (patch: Partial<ProjectSettings>) => void;
+  setProjectSettings: (patch: Partial<ProjectSettings>) => void;
 
   // Navigation helpers
   openComponent: (name: string) => void;
@@ -242,7 +244,7 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     set({ projectId, ps: loaded, loaded: true });
   },
 
-  setPs: (patch) => {
+  setProjectSettings: (patch) => {
     const { projectId } = get();
     // Optimistic sync update — UI is instant
     set((s) => ({ ps: { ...s.ps, ...patch } }));
@@ -256,9 +258,9 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     }).catch(console.error);
   },
 
-  openComponent: (name) => get().setPs({ activeView: "components", activeComponent: name }),
-  openScreen:    (name) => get().setPs({ activeView: "screens",    activeScreen: name }),
-  openTheme:     (name) => get().setPs({ activeView: "themes",     activeTheme: name }),
-  openWorkflow:  (name) => get().setPs({ activeView: "workflows",  activeWorkflow: name }),
-  openApi:       (id)   => get().setPs({ activeView: "apis",       activeApi: id }),
+  openComponent: (name) => get().setProjectSettings({ activeView: "components", activeComponent: name }),
+  openScreen:    (name) => get().setProjectSettings({ activeView: "screens",    activeScreen: name }),
+  openTheme:     (name) => get().setProjectSettings({ activeView: "themes",     activeTheme: name }),
+  openWorkflow:  (name) => get().setProjectSettings({ activeView: "workflows",  activeWorkflow: name }),
+  openApi:       (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
 }));
