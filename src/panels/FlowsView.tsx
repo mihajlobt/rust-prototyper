@@ -8,12 +8,10 @@ import {
   BackgroundVariant,
   useNodesState,
   useEdgesState,
-  addEdge,
   Handle,
   Position,
   type Node,
   type Edge,
-  type Connection,
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -27,7 +25,17 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Separator } from "@/components/ui/separator";
-import { loadNavigation, saveNavigation, addNavLink, removeNavLink, syncGeneratedRouter, getDefaultPorts, type Navigation, type NavPort, type NavScreen } from "@/lib/navigation";
+import {
+  loadNavigation,
+  saveNavigation,
+  removeHotspot,
+  syncGeneratedRouter,
+  getHotspotLinks,
+  hotspotLabel,
+  type Navigation,
+  type NavScreen,
+  type Hotspot,
+} from "@/lib/navigation";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -39,7 +47,7 @@ import { CustomEdge } from "@/panels/flows/CustomEdge";
 interface ScreenNodeData {
   label: string;
   isDefault: boolean;
-  ports: NavPort[];
+  outgoing: Array<{ id: string; label: string }>; // one per hotspot
   [key: string]: unknown;
 }
 
@@ -56,36 +64,7 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
     ? "var(--ring)"
     : "var(--border)";
 
-  const inputPorts = data.ports.filter((p) => p.direction === "input");
-  const outputPorts = data.ports.filter((p) => p.direction === "output");
-
-  const getPortColor = (port: NavPort) =>
-    port.type === "data" ? "var(--status-done)" : "var(--primary)";
-
-  const isDefaultPort = (port: NavPort) =>
-    port.id.endsWith(":default-in") || port.id.endsWith(":default-out");
-
-  // Show inline port rows when there are named ports or more than one port on either side.
-  // Default single-in/single-out nodes use centered handles with no rows.
-  const showPortRows =
-    data.ports.some((p) => !isDefaultPort(p)) ||
-    inputPorts.length > 1 ||
-    outputPorts.length > 1;
-
-  const maxRows = Math.max(inputPorts.length, outputPorts.length);
-
-  // Handle style for port-row handles — absolute inside their relative row div,
-  // straddling the card edge (centered on the boundary at ±4px = half of 8px dot).
-  const edgeHandleStyle = (port: NavPort, side: "left" | "right"): React.CSSProperties => ({
-    position: "absolute",
-    [side]: -4,
-    top: "50%",
-    transform: "translateY(-50%)",
-    width: 8,
-    height: 8,
-    borderColor: getPortColor(port),
-    background: "var(--card)",
-  });
+  const showRows = data.outgoing.length > 0;
 
   return (
     <ContextMenu>
@@ -94,29 +73,23 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
           className="bg-card rounded-lg shadow-md cursor-pointer select-none"
           style={{ width: 180, border: `1.5px solid ${borderColor}` }}
         >
-          {/* Centered handles for default single-port nodes — no port row section */}
-          {!showPortRows &&
-            inputPorts.map((p) => (
-              <Handle
-                key={p.id}
-                type="target"
-                id={p.id}
-                position={Position.Left}
-                style={{ borderColor: getPortColor(p), background: "var(--card)" }}
-              />
-            ))}
-          {!showPortRows &&
-            outputPorts.map((p) => (
-              <Handle
-                key={p.id}
-                type="source"
-                id={p.id}
-                position={Position.Right}
-                style={{ borderColor: getPortColor(p), background: "var(--card)" }}
-              />
-            ))}
+          {/* Single target handle centered on left */}
+          <Handle
+            type="target"
+            id={`${id}:in`}
+            position={Position.Left}
+            style={{ borderColor: "var(--primary)", background: "var(--card)" }}
+          />
+          {/* Fallback single source handle when no outgoing hotspots */}
+          {!showRows && (
+            <Handle
+              type="source"
+              id={`${id}:out`}
+              position={Position.Right}
+              style={{ borderColor: "var(--primary)", background: "var(--card)" }}
+            />
+          )}
 
-          {/* Header */}
           <div className="px-3 pt-1.5 pb-2">
             <div
               className="mb-1.5 h-0.5 rounded-full"
@@ -137,48 +110,23 @@ function ScreenNodeComponent({ data, selected, id }: NodeProps<ScreenNode>) {
             </div>
           </div>
 
-          {/* Port rows — one row per max(inputs, outputs), handles at card edges */}
-          {showPortRows && (
+          {/* Per-hotspot source handles */}
+          {showRows && (
             <div className="border-t border-border/30 pb-0.5">
-              {Array.from({ length: maxRows }, (_, i) => {
-                const inPort = inputPorts[i];
-                const outPort = outputPorts[i];
-                return (
-                  <div key={i} className="relative flex items-center h-5 px-2">
-                    {inPort && (
-                      <>
-                        <Handle
-                          type="target"
-                          id={inPort.id}
-                          position={Position.Left}
-                          style={edgeHandleStyle(inPort, "left")}
-                        />
-                        {!isDefaultPort(inPort) && (
-                          <span className="text-[8px] text-foreground/60 truncate max-w-[64px] pl-1">
-                            {inPort.name}
-                          </span>
-                        )}
-                      </>
-                    )}
-                    <div className="flex-1" />
-                    {outPort && (
-                      <>
-                        {!isDefaultPort(outPort) && (
-                          <span className="text-[8px] text-foreground/60 truncate max-w-[64px] pr-1 text-right">
-                            {outPort.name}
-                          </span>
-                        )}
-                        <Handle
-                          type="source"
-                          id={outPort.id}
-                          position={Position.Right}
-                          style={edgeHandleStyle(outPort, "right")}
-                        />
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+              {data.outgoing.map((h) => (
+                <div key={h.id} className="relative flex items-center h-5 px-2">
+                  <div className="flex-1" />
+                  <span className="text-[8px] text-foreground/50 truncate max-w-[120px] pr-1 text-right">
+                    {h.label}
+                  </span>
+                  <Handle
+                    type="source"
+                    id={h.id}
+                    position={Position.Right}
+                    style={{ position: "absolute", right: -4, top: "50%", transform: "translateY(-50%)", width: 8, height: 8, borderColor: "var(--primary)", background: "var(--card)" }}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -217,9 +165,10 @@ function buildNodes(screenIds: string[], nav: Navigation, existingNodes: ScreenN
   const navScreenById = new Map(nav.screens.map((s) => [s.id, s]));
   return screenIds.map((id, i) => {
     const navScreen = navScreenById.get(id);
-    const ports = navScreen?.ports ?? getDefaultPorts(id);
-    // Priority: in-memory (drag in progress) > saved in navigation.json > grid default
     const saved = navScreen?.x != null && navScreen?.y != null ? { x: navScreen.x, y: navScreen.y } : undefined;
+    const outgoing = nav.hotspots
+      .filter((h: Hotspot) => h.screenId === id && h.targetScreenId)
+      .map((h: Hotspot) => ({ id: h.id, label: hotspotLabel(h) }));
     return {
       id,
       type: "screen" as const,
@@ -228,23 +177,22 @@ function buildNodes(screenIds: string[], nav: Navigation, existingNodes: ScreenN
       data: {
         label: id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         isDefault: id === nav.defaultScreen,
-        ports,
+        outgoing,
       },
     };
   });
 }
 
 function buildEdges(nav: Navigation): Edge[] {
-  return nav.links.map((link) => ({
-    id: link.id,
+  return getHotspotLinks(nav).map((link) => ({
+    id: link.hotspotId,
     source: link.from,
     target: link.to,
-    sourceHandle: link.fromPort,
-    targetHandle: link.toPort,
+    sourceHandle: link.hotspotId,
+    targetHandle: `${link.to}:in`,
     type: "flow",
-    animated: link.type === "navigation",
-    style: { stroke: link.type === "data" ? "var(--status-done)" : "var(--primary)", strokeWidth: 1.5, strokeDasharray: link.type === "data" ? "5,5" : undefined },
-    data: { linkType: link.type },
+    animated: true,
+    style: { stroke: "var(--primary)", strokeWidth: 1.5 },
   }));
 }
 
@@ -259,7 +207,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   const { setPs } = useProjectSettingsStore();
   const projectDir = `projects/${settings.project}`;
 
-const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const loadFlow = useCallback(async () => {
@@ -272,52 +220,23 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
     }
   }, [projectDir, screenIds, setNodes, setEdges]);
 
-  // Re-load when project changes
   useEffect(() => {
     loadFlow();
   }, [loadFlow]);
 
-  // Listen for navigation-changed events (emitted by PortsEditor/ScreensPanel after saves)
   useEffect(() => {
     const handler = () => loadFlow();
     window.addEventListener("navigation-changed", handler);
     return () => window.removeEventListener("navigation-changed", handler);
   }, [loadFlow]);
 
-  const onConnect = useCallback(
-    async (connection: Connection) => {
-      if (!connection.source || !connection.target) return;
-      const fromPort = connection.sourceHandle ?? `${connection.source}:default-out`;
-      const toPort = connection.targetHandle ?? `${connection.target}:default-in`;
-      try {
-        await addNavLink(projectDir, connection.source, fromPort, connection.target, toPort, "navigation");
-        setEdges((eds) =>
-          addEdge(
-            {
-              ...connection,
-              id: `${connection.source}:${fromPort}->${connection.target}:${toPort}`,
-              type: "flow",
-              animated: true,
-              style: { stroke: "var(--primary)", strokeWidth: 1.5 },
-            },
-            eds
-          )
-        );
-        await syncGeneratedRouter(projectDir);
-      } catch (e) {
-        notify.error("Failed to add navigation link", getErrorMessage(e));
-      }
-    },
-    [projectDir, setEdges]
-  );
-
   const onEdgesDelete = useCallback(
     async (deleted: Edge[]) => {
       for (const edge of deleted) {
         try {
-          await removeNavLink(projectDir, edge.id);
+          await removeHotspot(projectDir, edge.id);
         } catch (e) {
-          notify.error("Failed to remove navigation link", getErrorMessage(e));
+          notify.error("Failed to remove link", getErrorMessage(e));
         }
       }
       try {
@@ -343,12 +262,10 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
         const nav = await loadNavigation(projectDir);
         let screen: NavScreen | undefined = nav.screens.find((s) => s.id === node.id);
         if (!screen) {
-          // Auto-register screen if absent (pre-navigation.json projects or first drag)
           screen = {
             id: node.id,
             path: `/${node.id}`,
             title: node.id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            ports: getDefaultPorts(node.id),
           };
           nav.screens.push(screen);
           if (!nav.defaultScreen) nav.defaultScreen = node.id;
@@ -385,19 +302,21 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
         try {
           const edgesToRemove = edges.filter((e) => e.source === id || e.target === id);
           for (const edge of edgesToRemove) {
-            await removeNavLink(projectDir, edge.id);
+            await removeHotspot(projectDir, edge.id);
           }
           setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
           await syncGeneratedRouter(projectDir);
+          window.dispatchEvent(new Event("navigation-changed"));
         } catch (e) {
           notify.error("Failed to disconnect edges", getErrorMessage(e));
         }
       },
       deleteEdge: async (edgeId) => {
         try {
-          await removeNavLink(projectDir, edgeId);
+          await removeHotspot(projectDir, edgeId);
           setEdges((eds) => eds.filter((e) => e.id !== edgeId));
           await syncGeneratedRouter(projectDir);
+          window.dispatchEvent(new Event("navigation-changed"));
         } catch (e) {
           notify.error("Failed to delete link", getErrorMessage(e));
         }
@@ -427,7 +346,6 @@ const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
         onEdgesDelete={onEdgesDelete}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeDragStop={onNodeDragStop}

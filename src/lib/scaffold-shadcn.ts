@@ -473,7 +473,7 @@ import App from './App.tsx'
 const queryClient = new QueryClient()
 
 // Hotspot position tracking
-let __hotspots: { portId: string; selector: string }[] = [];
+let __hotspots: { id: string; portId?: string; selector: string }[] = [];
 let __linkModeCleanup: (() => void) | null = null;
 let __retryHandle = 0;
 
@@ -486,7 +486,8 @@ function sendHotspotPositions() {
       const el = document.querySelector(h.selector);
       if (el) {
         const r = el.getBoundingClientRect();
-        positions[h.portId] = { x: r.left, y: r.top, w: r.width, h: r.height };
+        // key by id (new) — portId is kept for backward compat with older parents
+        positions[h.id] = { x: r.left, y: r.top, w: r.width, h: r.height };
         found++;
       }
     } catch (_) { /* ignore invalid selectors */ }
@@ -507,7 +508,7 @@ window.addEventListener('resize', sendHotspotPositions, { passive: true });
 // Global message listener
 window.addEventListener('message', (event) => {
   if (event.data?.type === '__set-hotspots') {
-    __hotspots = (event.data.hotspots as { portId: string; selector: string }[]) || [];
+    __hotspots = (event.data.hotspots as { id: string; portId?: string; selector: string }[]) || [];
     __retryHandle = 0;
     sendHotspotPositions();
     return;
@@ -518,8 +519,7 @@ window.addEventListener('message', (event) => {
     return;
   }
   if (event.data?.type === 'enable-element-select') {
-    const portId = event.data.portId as string;
-    if (!portId || !document.body) return;
+    if (!document.body) return;
 
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:50;cursor:crosshair;background:rgba(0,120,255,0.1);pointer-events:all;';
@@ -528,8 +528,6 @@ window.addEventListener('message', (event) => {
     info.textContent = 'Click an element to select it (Esc to cancel)';
     overlay.appendChild(info);
     document.body.appendChild(overlay);
-
-    let activePortId = portId;
 
     const cleanup = () => {
       overlay.remove();
@@ -543,7 +541,6 @@ window.addEventListener('message', (event) => {
       const target = e.target as HTMLElement;
       window.parent.postMessage({
         type: 'element-selected',
-        portId: activePortId,
         elementTag: target.tagName.toLowerCase(),
         elementText: (target.innerText || '').trim().slice(0, 50),
         elementId: target.id || '',
@@ -593,7 +590,6 @@ window.addEventListener('message', (event) => {
     document.head.appendChild(style);
 
     let hoveredEl: HTMLElement | null = null;
-    let activePortId = event.data.portId as string;
 
     const hoverHandler = (e: MouseEvent) => {
       if (hoveredEl) hoveredEl.removeAttribute('data-link-hover');
@@ -610,7 +606,6 @@ window.addEventListener('message', (event) => {
       const selector = getSelector(target);
       window.parent.postMessage({
         type: 'element-selected',
-        portId: activePortId,
         elementTag: target.tagName.toLowerCase(),
         elementText: (target.innerText || '').trim().slice(0, 50),
         elementId: target.id || '',

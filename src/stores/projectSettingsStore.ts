@@ -29,7 +29,7 @@ export interface ProjectSettings {
   screensShowInspector: boolean;
   screensDarkPreview: boolean;
   screensCodeOpen: boolean;
-  screensCodeTab: "editor" | "ports";
+  screensCodeTab: "editor" | "links" | "flow";
   /** Theme applied to the live screen preview only — independent of the
    *  generation design language (stylePreset). */
   screensPreviewTheme: string;
@@ -234,6 +234,10 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     // Coerce legacy "both" generation mode to "design"
     if ((loaded as unknown as Record<string, unknown>).themesGenerationMode === "both") {
       (loaded as unknown as Record<string, unknown>).themesGenerationMode = "design";
+    }
+    // Coerce legacy "ports" tab to "links"
+    if ((loaded as unknown as Record<string, unknown>).screensCodeTab === "ports") {
+      (loaded as unknown as Record<string, unknown>).screensCodeTab = "links";
     }
     set({ projectId, ps: loaded, loaded: true });
   },

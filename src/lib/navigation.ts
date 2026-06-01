@@ -3,34 +3,16 @@
 
 import { readFile, writeFile, readDir, isNotFoundError } from "@/lib/ipc";
 
-export interface NavPort {
-  id: string;
-  name: string;
-  direction: "input" | "output";
-  type: "navigation" | "data";
-  schema: string;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface NavScreen {
   id: string;
   path: string;
   title: string;
-  ports: NavPort[];
   layout?: string;
   /** Canvas position in the Flows view */
   x?: number;
   y?: number;
-}
-
-export interface NavLink {
-  id: string;
-  from: string;
-  fromPort: string;
-  to: string;
-  toPort: string;
-  type: "navigation" | "data";
-  payloadSchema?: string;
-  params?: Record<string, string>;
 }
 
 export interface Hotspot {
@@ -39,36 +21,143 @@ export interface Hotspot {
   selector: string;
   rect: { x: number; y: number; w: number; h: number };
   targetScreenId: string;
-  portId: string;
+  name?: string;
+  params?: Record<string, string>;
   createdAt: number;
 }
 
 export interface Navigation {
   defaultScreen: string;
   screens: NavScreen[];
-  links: NavLink[];
   hotspots: Hotspot[];
 }
+
+// ─── Migration ────────────────────────────────────────────────────────────────
+
+export interface MigrationReport {
+  syntheticCount: number;
+  droppedDataLinkCount: number;
+}
+
+type LegacyRaw = {
+  defaultScreen?: string;
+  screens?: Array<{
+    id: string; path: string; title: string;
+    layout?: string; x?: number; y?: number;
+    ports?: unknown[];
+  }>;
+  links?: Array<{
+    id: string; from: string; fromPort: string; to: string; toPort: string;
+    type: "navigation" | "data";
+    params?: Record<string, string>;
+  }>;
+  hotspots?: Array<{
+    id: string; screenId: string; selector: string;
+    rect: { x: number; y: number; w: number; h: number };
+    targetScreenId: string;
+    name?: string; params?: Record<string, string>;
+    createdAt: number; portId?: string;
+  }>;
+};
+
+function migrateNavigation(
+  data: LegacyRaw,
+  onMigration?: (report: MigrationReport) => void
+): Navigation {
+  const legacyHotspots = data.hotspots ?? [];
+  const legacyLinks = data.links ?? [];
+
+  const hotspotByPortId = new Map<string, Hotspot>();
+  const newHotspots: Hotspot[] = [];
+
+  for (const lh of legacyHotspots) {
+    const h: Hotspot = {
+      id: lh.id,
+      screenId: lh.screenId,
+      selector: lh.selector,
+      rect: lh.rect,
+      targetScreenId: lh.targetScreenId,
+      name: lh.name,
+      params: lh.params,
+      createdAt: lh.createdAt,
+    };
+    if (lh.portId) hotspotByPortId.set(lh.portId, h);
+    newHotspots.push(h);
+  }
+
+  let syntheticCount = 0;
+  let droppedDataLinkCount = 0;
+
+  for (const link of legacyLinks) {
+    if (link.type === "data") { droppedDataLinkCount++; continue; }
+    const existing = hotspotByPortId.get(link.fromPort);
+    if (existing) {
+      if (!existing.targetScreenId) existing.targetScreenId = link.to;
+    } else {
+      // Orphan manual link — preserve topology as a logical hotspot (empty selector)
+      newHotspots.push({
+        id: `hotspot-migrated-${Date.now()}-${syntheticCount}`,
+        screenId: link.from,
+        selector: "",
+        rect: { x: 0, y: 0, w: 0, h: 0 },
+        targetScreenId: link.to,
+        name: link.fromPort,
+        createdAt: Date.now(),
+      });
+      syntheticCount++;
+    }
+  }
+
+  const newScreens: NavScreen[] = (data.screens ?? []).map((screen) => ({
+    id: screen.id,
+    path: screen.path,
+    title: screen.title,
+    layout: screen.layout,
+    x: screen.x,
+    y: screen.y,
+  }));
+
+  if ((syntheticCount > 0 || droppedDataLinkCount > 0) && onMigration) {
+    onMigration({ syntheticCount, droppedDataLinkCount });
+  }
+
+  return { defaultScreen: data.defaultScreen ?? "", screens: newScreens, hotspots: newHotspots };
+}
+
+// ─── Persistence ──────────────────────────────────────────────────────────────
 
 const NAVIGATION_FILE = "navigation.json";
 
 function defaultNav(): Navigation {
-  return { defaultScreen: "", screens: [], links: [], hotspots: [] };
+  return { defaultScreen: "", screens: [], hotspots: [] };
 }
 
-export async function loadNavigation(projectDir: string): Promise<Navigation> {
+export async function loadNavigation(
+  projectDir: string,
+  options?: { onMigration?: (report: MigrationReport) => void }
+): Promise<Navigation> {
   try {
     const raw = await readFile(`${projectDir}/${NAVIGATION_FILE}`);
     const parsed = JSON.parse(raw) as unknown;
     if (typeof parsed !== "object" || parsed === null || !("screens" in parsed)) {
-      throw new Error(`navigation.json has unexpected shape`);
+      throw new Error("navigation.json has unexpected shape");
     }
-    const nav = parsed as Partial<Navigation>;
+    const data = parsed as LegacyRaw;
+
+    const isLegacy =
+      Array.isArray(data.links) ||
+      (Array.isArray(data.screens) && data.screens.some((s) => s.ports !== undefined));
+
+    if (isLegacy) {
+      const nav = migrateNavigation(data, options?.onMigration);
+      await saveNavigation(projectDir, nav).catch((e) => console.warn("Migration save failed:", e));
+      return nav;
+    }
+
     return {
-      defaultScreen: nav.defaultScreen ?? "",
-      screens: nav.screens ?? [],
-      links: nav.links ?? [],
-      hotspots: nav.hotspots ?? [],
+      defaultScreen: data.defaultScreen ?? "",
+      screens: data.screens ?? [],
+      hotspots: data.hotspots ?? [],
     };
   } catch (e) {
     if (isNotFoundError(e)) return defaultNav();
@@ -80,12 +169,25 @@ export async function saveNavigation(projectDir: string, nav: Navigation): Promi
   await writeFile(`${projectDir}/${NAVIGATION_FILE}`, JSON.stringify(nav, null, 2));
 }
 
-export function getDefaultPorts(screenId: string): NavPort[] {
-  return [
-    { id: `${screenId}:default-in`, name: "Default In", direction: "input", type: "navigation", schema: "{}" },
-    { id: `${screenId}:default-out`, name: "Default Out", direction: "output", type: "navigation", schema: "{}" },
-  ];
+// ─── Display helpers ──────────────────────────────────────────────────────────
+
+function selectorLeaf(selector: string): string {
+  return selector.split(" > ").pop()?.replace(/:nth-of-type\(\d+\)/g, "").trim() ?? "";
 }
+
+export function hotspotLabel(h: Hotspot): string {
+  return (h.name ?? selectorLeaf(h.selector)) || "Element";
+}
+
+export function getHotspotLinks(
+  nav: Navigation
+): Array<{ from: string; to: string; hotspotId: string; selector: string }> {
+  return nav.hotspots
+    .filter((h) => h.targetScreenId)
+    .map((h) => ({ from: h.screenId, to: h.targetScreenId, hotspotId: h.id, selector: h.selector }));
+}
+
+// ─── Screen CRUD ──────────────────────────────────────────────────────────────
 
 export async function addScreenToNavigation(projectDir: string, screenId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
@@ -94,7 +196,6 @@ export async function addScreenToNavigation(projectDir: string, screenId: string
     id: screenId,
     path: `/${screenId}`,
     title: screenId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    ports: getDefaultPorts(screenId),
   });
   if (!nav.defaultScreen) nav.defaultScreen = screenId;
   await saveNavigation(projectDir, nav);
@@ -103,59 +204,12 @@ export async function addScreenToNavigation(projectDir: string, screenId: string
 export async function removeScreenFromNavigation(projectDir: string, screenId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
   nav.screens = nav.screens.filter((s) => s.id !== screenId);
-  nav.links = nav.links.filter((l) => l.from !== screenId && l.to !== screenId);
-  if (nav.defaultScreen === screenId) {
-    nav.defaultScreen = nav.screens[0]?.id ?? "";
+  // Clear target on hotspots pointing to deleted screen (preserves element selection for re-linking)
+  for (const h of nav.hotspots) {
+    if (h.targetScreenId === screenId) h.targetScreenId = "";
   }
-  await saveNavigation(projectDir, nav);
-}
-
-export async function addNavLink(
-  projectDir: string,
-  from: string,
-  fromPort: string,
-  to: string,
-  toPort: string,
-  type: "navigation" | "data" = "navigation",
-  params?: Record<string, string>
-): Promise<void> {
-  const nav = await loadNavigation(projectDir);
-  const id = `${from}:${fromPort}->${to}:${toPort}`;
-  if (nav.links.some((l) => l.id === id)) return;
-  nav.links.push({ id, from, fromPort, to, toPort, type, params });
-  // Keep any hotspot for this port in sync with the new target
-  for (const hotspot of nav.hotspots) {
-    if (hotspot.portId === fromPort) {
-      hotspot.targetScreenId = to;
-    }
-  }
-  await saveNavigation(projectDir, nav);
-}
-
-export async function removeNavLink(projectDir: string, linkId: string): Promise<void> {
-  const nav = await loadNavigation(projectDir);
-  const removed = nav.links.find((l) => l.id === linkId);
-  nav.links = nav.links.filter((l) => l.id !== linkId);
-  // Clear targetScreenId on any hotspot whose port drove this link
-  if (removed) {
-    for (const hotspot of nav.hotspots) {
-      if (hotspot.portId === removed.fromPort) {
-        hotspot.targetScreenId = "";
-      }
-    }
-  }
-  await saveNavigation(projectDir, nav);
-}
-
-export async function updateNavLink(
-  projectDir: string,
-  linkId: string,
-  updates: Partial<Pick<NavLink, "fromPort" | "toPort" | "type" | "payloadSchema" | "params">>
-): Promise<void> {
-  const nav = await loadNavigation(projectDir);
-  const link = nav.links.find((l) => l.id === linkId);
-  if (!link) return;
-  Object.assign(link, updates);
+  nav.hotspots = nav.hotspots.filter((h) => h.screenId !== screenId);
+  if (nav.defaultScreen === screenId) nav.defaultScreen = nav.screens[0]?.id ?? "";
   await saveNavigation(projectDir, nav);
 }
 
@@ -167,23 +221,11 @@ export async function renameScreenInNavigation(projectDir: string, oldId: string
     screen.path = `/${newId}`;
     screen.title = newId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
-  for (const link of nav.links) {
-    if (link.from === oldId) { link.from = newId; link.id = `${newId}:${link.fromPort}->${link.to}:${link.toPort}`; }
-    if (link.to === oldId)   { link.to = newId; link.id = `${link.from}:${link.fromPort}->${newId}:${link.toPort}`; }
+  for (const h of nav.hotspots) {
+    if (h.screenId === oldId) h.screenId = newId;
+    if (h.targetScreenId === oldId) h.targetScreenId = newId;
   }
   if (nav.defaultScreen === oldId) nav.defaultScreen = newId;
-  await saveNavigation(projectDir, nav);
-}
-
-export async function updateScreenPorts(
-  projectDir: string,
-  screenId: string,
-  ports: NavPort[]
-): Promise<void> {
-  const nav = await loadNavigation(projectDir);
-  const screen = nav.screens.find((s) => s.id === screenId);
-  if (!screen) return;
-  screen.ports = ports;
   await saveNavigation(projectDir, nav);
 }
 
@@ -199,22 +241,65 @@ export async function updateScreenLayout(
   await saveNavigation(projectDir, nav);
 }
 
-export async function addHotspot(projectDir: string, hotspot: Hotspot): Promise<void> {
+// ─── Hotspot CRUD ─────────────────────────────────────────────────────────────
+
+export async function createHotspot(
+  projectDir: string,
+  screenId: string,
+  selector: string,
+  rect: { x: number; y: number; w: number; h: number },
+  targetScreenId: string,
+  name?: string
+): Promise<Hotspot> {
   const nav = await loadNavigation(projectDir);
+  if (!nav.screens.some((s) => s.id === screenId)) {
+    nav.screens.push({
+      id: screenId,
+      path: `/${screenId}`,
+      title: screenId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    });
+    if (!nav.defaultScreen) nav.defaultScreen = screenId;
+  }
+  const hotspot: Hotspot = {
+    id: `hotspot-${Date.now()}`,
+    screenId,
+    selector,
+    rect,
+    targetScreenId,
+    name,
+    createdAt: Date.now(),
+  };
   nav.hotspots.push(hotspot);
+  await saveNavigation(projectDir, nav);
+  return hotspot;
+}
+
+export async function updateHotspotTarget(
+  projectDir: string,
+  hotspotId: string,
+  targetScreenId: string
+): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  const hotspot = nav.hotspots.find((h) => h.id === hotspotId);
+  if (!hotspot) return;
+  hotspot.targetScreenId = targetScreenId;
+  await saveNavigation(projectDir, nav);
+}
+
+export async function updateHotspotName(
+  projectDir: string,
+  hotspotId: string,
+  name: string | undefined
+): Promise<void> {
+  const nav = await loadNavigation(projectDir);
+  const hotspot = nav.hotspots.find((h) => h.id === hotspotId);
+  if (!hotspot) return;
+  hotspot.name = name;
   await saveNavigation(projectDir, nav);
 }
 
 export async function removeHotspot(projectDir: string, hotspotId: string): Promise<void> {
   const nav = await loadNavigation(projectDir);
-  const hotspot = nav.hotspots.find((h) => h.id === hotspotId);
-  if (hotspot) {
-    const screen = nav.screens.find((s) => s.id === hotspot.screenId);
-    if (screen) {
-      screen.ports = (screen.ports ?? []).filter((p) => p.id !== hotspot.portId);
-    }
-    nav.links = nav.links.filter((l) => l.fromPort !== hotspot.portId);
-  }
   nav.hotspots = nav.hotspots.filter((h) => h.id !== hotspotId);
   await saveNavigation(projectDir, nav);
 }
@@ -224,73 +309,7 @@ export async function getHotspotsForScreen(projectDir: string, screenId: string)
   return nav.hotspots.filter((h) => h.screenId === screenId);
 }
 
-export async function createHotspotWithLink(
-  projectDir: string,
-  screenId: string,
-  portId: string,
-  selector: string,
-  rect: { x: number; y: number; w: number; h: number },
-  targetScreenId: string
-): Promise<Hotspot> {
-  const nav = await loadNavigation(projectDir);
-
-  // Auto-register screen if absent — happens for projects predating navigation.json
-  // or when navigation.json was missing/corrupted.
-  let screen = nav.screens.find((s) => s.id === screenId);
-  if (!screen) {
-    screen = {
-      id: screenId,
-      path: `/${screenId}`,
-      title: screenId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      ports: getDefaultPorts(screenId),
-    };
-    nav.screens.push(screen);
-    if (!nav.defaultScreen) nav.defaultScreen = screenId;
-  }
-  screen.ports ??= [];
-
-  const hotspot: Hotspot = {
-    id: `hotspot-${Date.now()}`,
-    screenId,
-    selector,
-    rect,
-    targetScreenId,
-    portId,
-    createdAt: Date.now(),
-  };
-
-  const port: NavPort = {
-    id: portId,
-    name: selector.split(" ").pop() ?? "Hotspot",
-    direction: "output",
-    type: "navigation",
-    schema: "{}",
-  };
-
-  if (!screen.ports.find((p) => p.id === portId)) {
-    screen.ports.push(port);
-  }
-
-  nav.hotspots.push(hotspot);
-
-  // Use canonical link ID format (same as addNavLink) so FlowsView deduplication works —
-  // a hotspot link and a manually-drawn FlowsView edge for the same connection share one ID.
-  const targetPortId = `${targetScreenId}:default-in`;
-  const linkId = `${screenId}:${portId}->${targetScreenId}:${targetPortId}`;
-  if (!nav.links.find((l) => l.fromPort === portId)) {
-    nav.links.push({
-      id: linkId,
-      from: screenId,
-      fromPort: portId,
-      to: targetScreenId,
-      toPort: targetPortId,
-      type: "navigation",
-    });
-  }
-
-  await saveNavigation(projectDir, nav);
-  return hotspot;
-}
+// ─── Router generation ────────────────────────────────────────────────────────
 
 function getChildPath(path: string, parentPath: string): string {
   return path.startsWith(parentPath + "/") ? path.slice(parentPath.length + 1) : path;
@@ -453,7 +472,7 @@ ${hotspotLinks.join(",\n")},
 }
 `.trim() : "";
 
-  const content = `// Auto-generated — edit navigation in the Flows panel, not here.
+  const content = `// Auto-generated — edit navigation in the Screens panel, not here.
 import React, { useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 ${pageImports}
