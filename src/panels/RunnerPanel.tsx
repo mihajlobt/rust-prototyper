@@ -72,7 +72,7 @@ export function RunnerPanel() {
   const [newFolderName, setNewFolderName] = useState("");
 
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("runner", 2);
-  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
+  const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3, [true, true, ps.runnerTerminalOpen]);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -405,7 +405,7 @@ export function RunnerPanel() {
           {/* Editor + Preview + Terminal */}
           <Allotment.Pane>
             <div className="h-full flex flex-col">
-              <Allotment vertical ref={verticalRef} onDragEnd={verticalOnDragEnd} defaultSizes={verticalDefault} className="flex-1 min-h-0">
+              <Allotment vertical ref={verticalRef} onDragEnd={verticalOnDragEnd} defaultSizes={verticalDefault} className="flex-1 min-h-0" onVisibleChange={(_i, v) => setProjectSettings({ runnerTerminalOpen: v })}>
                 <Allotment.Pane>
                   <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault}>
                     {/* Editor with tabs */}
