@@ -202,7 +202,7 @@ export function useWizard(): UseWizardResult {
 
     setMessages((prev) => [
       ...prev,
-      { id: assistantId, role: "assistant", content: "", toolCalls: [], streamChunks: [] },
+      { id: assistantId, role: "assistant", content: "", toolCalls: [] },
     ])
 
     channel.onmessage = (msg) => {
@@ -224,8 +224,7 @@ export function useWizard(): UseWizardResult {
           pendingThemeSlugRef.current = String(msg.data.args.theme_slug ?? "")
         }
         if (msg.data.tool === "register_screen") {
-          // Store the screen path so we can navigate the preview after router.tsx is updated
-          pendingScreenPathRef.current = String(msg.data.args.path ?? "")
+          pendingScreenPathRef.current = (msg.data.args.path as string) || ""
         }
         // Snapshot accumulated thinking/text as a chunk at this tool boundary — same as
         // streamHandler.ts addStreamChunk call on ToolCall
@@ -269,8 +268,8 @@ export function useWizard(): UseWizardResult {
         // When router.tsx is written, navigate the preview to the last registered screen.
         // The router update makes the new route available via HMR; a short delay lets Vite settle.
         if (msg.data.tool === "write_file" && msg.data.success && pendingScreenPathRef.current) {
-          const writtenPath = String(msg.data.path ?? "")
-          if (writtenPath.includes("router")) {
+          const writtenPath = (msg.data.path as string) || ""
+          if (writtenPath.endsWith("router.tsx")) {
             const screenPath = pendingScreenPathRef.current
             pendingScreenPathRef.current = null
             setTimeout(() => setPreviewNavigatePath(screenPath), 1500)
