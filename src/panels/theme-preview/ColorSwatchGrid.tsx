@@ -15,24 +15,24 @@ const COLOR_GROUPS: Array<{ label: string; tokens: Array<{ var: string; label: s
     label: "Surface",
     tokens: [
       { var: "--card", label: "Card" },
-      { var: "--card-foreground", label: "Card foreground" },
+      { var: "--card-foreground", label: "Card fg" },
       { var: "--popover", label: "Popover" },
-      { var: "--popover-foreground", label: "Popover foreground" },
+      { var: "--popover-foreground", label: "Popover fg" },
     ],
   },
   {
     label: "Interactive",
     tokens: [
       { var: "--primary", label: "Primary" },
-      { var: "--primary-foreground", label: "Primary foreground" },
+      { var: "--primary-foreground", label: "Primary fg" },
       { var: "--secondary", label: "Secondary" },
-      { var: "--secondary-foreground", label: "Secondary foreground" },
+      { var: "--secondary-foreground", label: "Secondary fg" },
       { var: "--accent", label: "Accent" },
-      { var: "--accent-foreground", label: "Accent foreground" },
+      { var: "--accent-foreground", label: "Accent fg" },
       { var: "--destructive", label: "Destructive" },
-      { var: "--destructive-foreground", label: "Destructive foreground" },
+      { var: "--destructive-foreground", label: "Destructive fg" },
       { var: "--muted", label: "Muted" },
-      { var: "--muted-foreground", label: "Muted foreground" },
+      { var: "--muted-foreground", label: "Muted fg" },
     ],
   },
   {
@@ -45,7 +45,7 @@ const COLOR_GROUPS: Array<{ label: string; tokens: Array<{ var: string; label: s
   },
 ];
 
-function SwatchRow({ cssVar, value }: { cssVar: string; label: string; value: string }) {
+function SwatchCard({ cssVar, label, value }: { cssVar: string; label: string; value: string }) {
   const [copied, setCopied] = useState(false);
 
   function copy() {
@@ -55,24 +55,32 @@ function SwatchRow({ cssVar, value }: { cssVar: string; label: string; value: st
   }
 
   return (
-    <div className="group flex items-center gap-3 py-1 px-4 hover:bg-foreground/[0.03] transition-colors">
+    <button
+      onClick={copy}
+      className={cn(
+        "group/card flex flex-col rounded-md overflow-hidden border border-border/40",
+        "hover:border-border transition-colors text-left w-full"
+      )}
+      title={`var(${cssVar}) — click to copy`}
+    >
       <div
-        className="h-[18px] w-[18px] shrink-0 rounded border border-black/10 dark:border-white/10"
+        className="h-14 w-full shrink-0 relative"
         style={{ backgroundColor: `var(${cssVar})` }}
-      />
-      <span className="font-mono text-[10px] text-muted-foreground w-44 shrink-0 truncate">{cssVar}</span>
-      <span className="flex-1 font-mono text-[10px] text-muted-foreground/50 truncate">{value || "—"}</span>
-      <button
-        onClick={copy}
-        className={cn(
-          "shrink-0 opacity-0 group-hover:opacity-100 transition-all",
-          copied ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"
-        )}
-        title={`Copy var(${cssVar})`}
       >
-        {copied ? <Check size={10} /> : <Copy size={10} />}
-      </button>
-    </div>
+        <div className="absolute top-1 right-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
+          {copied ? (
+            <Check size={12} className="text-white drop-shadow" />
+          ) : (
+            <Copy size={12} className="text-white drop-shadow" />
+          )}
+        </div>
+      </div>
+      <div className="px-2 py-1.5 bg-card">
+        <div className="font-mono text-[9px] text-muted-foreground truncate">{cssVar}</div>
+        <div className="text-[10px] font-medium truncate">{label}</div>
+        <div className="font-mono text-[9px] text-muted-foreground/50 truncate">{value || "—"}</div>
+      </div>
+    </button>
   );
 }
 
@@ -84,28 +92,31 @@ interface ColorSwatchGridProps {
 export function ColorSwatchGrid({ css, isDark }: ColorSwatchGridProps) {
   const lightTokens = parseTokenBlock(css, ":root");
   const darkTokens = parseTokenBlock(css, ".dark");
-  const tokens = isDark && Object.keys(darkTokens).length > 0
-    ? { ...lightTokens, ...darkTokens }
-    : lightTokens;
+  const tokens =
+    isDark && Object.keys(darkTokens).length > 0
+      ? { ...lightTokens, ...darkTokens }
+      : lightTokens;
 
   return (
     <div>
       <h3 className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground px-4 pt-3 pb-2">
         Colors
       </h3>
-      {COLOR_GROUPS.map((group, gi) => (
-        <div key={group.label} className={gi > 0 ? "mt-1" : ""}>
-          <div className="px-4 pb-1 text-[9px] text-muted-foreground/50 uppercase tracking-widest">
+      {COLOR_GROUPS.map((group) => (
+        <div key={group.label} className="px-4 pb-3">
+          <div className="text-[9px] text-muted-foreground/50 uppercase tracking-widest pb-1.5">
             {group.label}
           </div>
-          {group.tokens.map((t) => (
-            <SwatchRow
-              key={t.var}
-              cssVar={t.var}
-              label={t.label}
-              value={tokens[t.var] ?? ""}
-            />
-          ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {group.tokens.map((t) => (
+              <SwatchCard
+                key={t.var}
+                cssVar={t.var}
+                label={t.label}
+                value={tokens[t.var] ?? ""}
+              />
+            ))}
+          </div>
         </div>
       ))}
     </div>

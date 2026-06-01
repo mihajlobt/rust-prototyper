@@ -33,43 +33,59 @@ export function TypographyShowcase({ css }: TypographyShowcaseProps) {
         Typography
       </h3>
 
-      {/* Font families — only show if theme defines them */}
+      {/* Font families */}
       {fontRoles.length > 0 && (
-        <div className="px-4 pb-3 space-y-1.5">
-          <div className="text-[9px] text-muted-foreground/50 uppercase tracking-widest pb-1">Families</div>
+        <div className="px-4 pb-3 space-y-2">
+          <div className="text-[9px] text-muted-foreground/50 uppercase tracking-widest pb-1">
+            Families
+          </div>
           {fontRoles.map((role) => (
-            <div key={role.var} className="flex items-baseline gap-3">
-              <span className="text-[10px] text-muted-foreground/50 w-14 shrink-0">{role.label}</span>
-              <span
-                className="text-[13px] text-foreground/80 truncate"
+            <div
+              key={role.var}
+              className="rounded-md border border-border/30 p-3 bg-card/50 space-y-1"
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-[10px] text-muted-foreground/50">{role.label}</span>
+                <span className="font-mono text-[9px] text-muted-foreground/40 truncate max-w-[160px]">
+                  {tokens[role.var]}
+                </span>
+              </div>
+              <div
+                className="text-lg leading-tight text-foreground/85 truncate"
                 style={{ fontFamily: `var(${role.var})` }}
               >
                 {SPECIMEN}
-              </span>
-              <span className="font-mono text-[9px] text-muted-foreground/40 shrink-0 truncate max-w-[160px]">
-                {tokens[role.var]}
-              </span>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Type scale */}
-      <div className="px-4 pb-1 text-[9px] text-muted-foreground/50 uppercase tracking-widest">Scale</div>
-      <div className="divide-y divide-border/30">
+      {/* Type scale as proportional cards */}
+      <div className="px-4 pb-1 text-[9px] text-muted-foreground/50 uppercase tracking-widest">
+        Scale
+      </div>
+      <div className="px-4 pb-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
         {TYPE_SCALE.map((step) => (
           <div
             key={step.label}
-            className="flex items-center gap-3 px-4 py-1 hover:bg-foreground/[0.03] transition-colors"
+            className="rounded-md border border-border/30 p-2.5 bg-card/50 flex flex-col justify-center"
+            style={{ minHeight: `calc(${step.px} + ${parseInt(step.px) * 0.8}px)` }}
           >
-            <span className="font-mono text-[10px] text-muted-foreground/50 w-8 shrink-0">{step.label}</span>
             <span
-              className="flex-1 truncate leading-tight text-foreground/75"
+              className="leading-tight text-foreground/80 mb-0.5 truncate"
               style={{ fontSize: step.px }}
             >
-              {SPECIMEN}
+              Aa
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground/40 shrink-0">{step.px}</span>
+            <div className="flex items-baseline justify-between">
+              <span className="font-mono text-[9px] text-muted-foreground/50">
+                {step.label}
+              </span>
+              <span className="font-mono text-[9px] text-muted-foreground/40">
+                {step.px}
+              </span>
+            </div>
           </div>
         ))}
       </div>
