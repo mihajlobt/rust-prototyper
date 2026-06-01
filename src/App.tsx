@@ -37,7 +37,32 @@ export default function App() {
     document.documentElement.style.setProperty("--primary", settings.accent);
     document.documentElement.style.setProperty("--ring", settings.accent);
     document.documentElement.style.setProperty("--sidebar-primary", settings.accent);
-  }, [settings.accent]);
+
+    // Derive file-type icon colors from the accent hue using oklch color theory.
+    // All icons share consistent lightness + chroma; only the hue angle varies.
+    // Relationships: analogous ±30°, split-complementary ±60°, triadic ±120°, complementary 180°.
+    const match = settings.accent.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)/);
+    if (match) {
+      const hue = parseFloat(match[3]);
+      // Brighter in dark mode so icons read clearly against dark backgrounds.
+      const L = settings.dark ? 0.65 : 0.48;
+      const C = 0.14;
+      const set = (name: string, delta: number) =>
+        document.documentElement.style.setProperty(
+          name,
+          `oklch(${L} ${C} ${((hue + delta) % 360 + 360) % 360})`,
+        );
+
+      set("--file-ts",     0);    // TypeScript/JS  — accent base
+      set("--file-tsx",    30);   // TSX/JSX        — analogous +30°
+      set("--file-css",   -30);   // CSS/SCSS       — analogous −30°
+      set("--file-json",  180);   // JSON           — complementary (maximum contrast)
+      set("--file-md",    120);   // Markdown       — triadic
+      set("--file-img",  -120);   // Images/assets  — triadic −
+      set("--file-html",   60);   // HTML           — split-complementary
+      set("--file-config", 150);  // Config/YAML    — between triadic and complementary
+    }
+  }, [settings.accent, settings.dark]);
 
   useEffect(() => {
     const el = document.documentElement;
