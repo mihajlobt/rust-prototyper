@@ -130,11 +130,16 @@ fn validate_disk_path(raw: &str) -> Result<std::path::PathBuf, AppError> {
 
 #[tauri::command]
 pub async fn reveal_in_explorer(path: String, app: AppHandle) -> Result<(), AppError> {
-    // reveal_in_explorer receives absolute disk paths (e.g. from bonsai_assets)
-    // which resolve_path rejects because they start with '/'. Use validate_disk_path
-    // instead, which allows absolute paths but rejects traversal and non-existent paths.
-    let _app_data = app_data_dir(&app)?; // validate app handle is available
-    let resolved = validate_disk_path(&path)?;
+    // Accepts both absolute disk paths (e.g. from bonsai_assets) and relative paths
+    // starting with "projects/" (e.g. from RunnerPanel's file tree). Relative paths
+    // are resolved against app_data_dir before validation.
+    let app_data = app_data_dir(&app)?;
+    let full_path = if std::path::Path::new(&path).is_absolute() {
+        std::path::PathBuf::from(&path)
+    } else {
+        app_data.join(&path)
+    };
+    let resolved = validate_disk_path(&full_path.to_string_lossy())?;
     let target = if resolved.is_file() {
         resolved.parent().map(|p| p.to_path_buf()).unwrap_or(resolved)
     } else {

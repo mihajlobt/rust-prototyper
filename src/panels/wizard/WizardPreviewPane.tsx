@@ -181,7 +181,18 @@ export function WizardPreviewPane({
         </Button>
 
         {/* Refresh */}
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => iframeRef.current?.contentWindow?.location.reload()} title="Refresh preview">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={() => {
+            if (iframeRef.current) {
+              // Reassign src to force reload without touching contentWindow (cross-origin safe)
+              iframeRef.current.src = iframeRef.current.src
+            }
+          }}
+          title="Refresh preview"
+        >
           <RefreshCw size={12} />
         </Button>
 
