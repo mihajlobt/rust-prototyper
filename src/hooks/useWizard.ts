@@ -10,7 +10,7 @@ import {
   type AskUserQuestionType,
   type Message,
 } from "@/lib/ipc"
-import type { MentionAsset } from "@/types/chat"
+import type { MentionAsset, StreamChunk } from "@/types/chat"
 import { useAppStore } from "@/stores/appStore"
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore"
 import { useDevServerStore } from "@/lib/dev-server-manager"
@@ -36,6 +36,8 @@ export interface WizardMessage {
   content: string
   thinking?: string
   toolCalls: WizardToolCall[]
+  /** Thinking/text chunks grouped by tool boundaries — same shape as ChatMessage.streamChunks */
+  streamChunks?: StreamChunk[]
 }
 
 export interface WizardAnnotation {
@@ -66,6 +68,7 @@ export interface UseWizardResult {
   pendingAskUser: PendingAskUser | null
   annotations: WizardAnnotation[]
   devUrl: string | null
+  previewNavigatePath: string | null
   mentions: MentionAsset[]
   systemPrompt: string
   thinkEnabled: boolean
@@ -136,6 +139,10 @@ export function useWizard(): UseWizardResult {
   const activeRequestIdRef = useRef<number | null>(null)
   const stopRef = useRef(false)
   const pendingThemeSlugRef = useRef<string | null>(null)
+  // Tracks the route path of the last register_screen call so we can navigate
+  // the preview iframe after the router is updated.
+  const pendingScreenPathRef = useRef<string | null>(null)
+  const [previewNavigatePath, setPreviewNavigatePath] = useState<string | null>(null)
 
   const cachedSystemPrompt = useMemo((): string => {
     const schemaJson = JSON.stringify(z.toJSONSchema(designLanguageSpecSchema), null, 2)
@@ -190,11 +197,12 @@ export function useWizard(): UseWizardResult {
     const channel = new Channel<CompletionEvent>()
     let contentAccumulated = ""
     let thinkingAccumulated = ""
+    let chunkIndex = 0  // matches streamHandler.ts chunk boundary pattern
     const assistantId = makeId()
 
     setMessages((prev) => [
       ...prev,
-      { id: assistantId, role: "assistant", content: "", toolCalls: [] },
+      { id: assistantId, role: "assistant", content: "", toolCalls: [], streamChunks: [] },
     ])
 
     channel.onmessage = (msg) => {
@@ -212,15 +220,31 @@ export function useWizard(): UseWizardResult {
           ),
         )
       } else if (msg.event === "ToolCall") {
-        // Track set_active_theme slug so ToolResult can apply it in-memory
         if (msg.data.tool === "set_active_theme") {
           pendingThemeSlugRef.current = String(msg.data.args.theme_slug ?? "")
         }
+        if (msg.data.tool === "register_screen") {
+          // Store the screen path so we can navigate the preview after router.tsx is updated
+          pendingScreenPathRef.current = String(msg.data.args.path ?? "")
+        }
+        // Snapshot accumulated thinking/text as a chunk at this tool boundary — same as
+        // streamHandler.ts addStreamChunk call on ToolCall
+        const chunk: StreamChunk = {
+          index: chunkIndex++,
+          thinking: thinkingAccumulated,
+          text: contentAccumulated,
+        }
+        thinkingAccumulated = ""
+        contentAccumulated = ""
+        setStreamingThinking("")
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
+                  content: "",
+                  thinking: undefined,
+                  streamChunks: [...(m.streamChunks ?? []), chunk],
                   toolCalls: [
                     ...m.toolCalls,
                     { tool: msg.data.tool, args: msg.data.args, pending: true },
@@ -238,11 +262,19 @@ export function useWizard(): UseWizardResult {
         })
         setPhase("awaiting_answer")
       } else if (msg.event === "ToolResult") {
-        // Apply set_active_theme in-memory immediately so the active theme updates
-        // without requiring a project reload (the Rust side wrote to the store file).
         if (msg.data.tool === "set_active_theme" && msg.data.success && pendingThemeSlugRef.current) {
           setProjectSettings({ stylePreset: pendingThemeSlugRef.current })
           pendingThemeSlugRef.current = null
+        }
+        // When router.tsx is written, navigate the preview to the last registered screen.
+        // The router update makes the new route available via HMR; a short delay lets Vite settle.
+        if (msg.data.tool === "write_file" && msg.data.success && pendingScreenPathRef.current) {
+          const writtenPath = String(msg.data.path ?? "")
+          if (writtenPath.includes("router")) {
+            const screenPath = pendingScreenPathRef.current
+            pendingScreenPathRef.current = null
+            setTimeout(() => setPreviewNavigatePath(screenPath), 1500)
+          }
         }
         setPendingAskUser(null)
         setPhase("running")
@@ -259,6 +291,17 @@ export function useWizard(): UseWizardResult {
         )
       } else if (msg.event === "Done") {
         activeRequestIdRef.current = null
+        // Flush any remaining accumulated content as the final chunk (same as streamHandler.ts)
+        if (thinkingAccumulated || contentAccumulated) {
+          const finalChunk: StreamChunk = { index: chunkIndex, thinking: thinkingAccumulated, text: contentAccumulated }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: contentAccumulated, thinking: thinkingAccumulated || undefined, streamChunks: [...(m.streamChunks ?? []), finalChunk] }
+                : m,
+            ),
+          )
+        }
         setPhase("complete")
         setStreamingThinking("")
         const projectDir = `projects/${settings.project}`
@@ -397,6 +440,8 @@ export function useWizard(): UseWizardResult {
     setAnnotations([])
     setMentions([])
     setStreamingThinking("")
+    setPreviewNavigatePath(null)
+    pendingScreenPathRef.current = null
     setPhase("idle")
   }, [stopGeneration])
 
@@ -407,6 +452,7 @@ export function useWizard(): UseWizardResult {
     pendingAskUser,
     annotations,
     devUrl,
+    previewNavigatePath,
     mentions,
     systemPrompt: cachedSystemPrompt,
     thinkEnabled,

@@ -31,6 +31,7 @@ function wizardMessageToChatMessage(msg: WizardMessage): ChatMessage {
     content: msg.content,
     ...(msg.thinking ? { thinking: msg.thinking } : {}),
     ...(msg.toolCalls.length > 0 ? { toolCalls: msg.toolCalls.map(wizardToolCallToRecord) } : {}),
+    ...(msg.streamChunks?.length ? { streamChunks: msg.streamChunks } : {}),
   }
 }
 
@@ -159,6 +160,7 @@ export function WizardPanel() {
                 device={ps.wizardDevice}
                 darkMode={ps.wizardDarkPreview}
                 annotations={wizard.annotations}
+                previewNavigatePath={wizard.previewNavigatePath}
                 onSetDevice={(device) => setProjectSettings({ wizardDevice: device })}
                 onToggleDark={() => setProjectSettings({ wizardDarkPreview: !ps.wizardDarkPreview })}
                 onAddAnnotation={wizard.addAnnotation}

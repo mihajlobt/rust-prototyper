@@ -24,6 +24,8 @@ interface WizardPreviewPaneProps {
   device: "desktop" | "tablet" | "mobile"
   darkMode: boolean
   annotations: WizardAnnotation[]
+  /** When set, navigate the preview iframe to this route path after HMR settles. */
+  previewNavigatePath: string | null
   onSetDevice: (device: "desktop" | "tablet" | "mobile") => void
   onToggleDark: () => void
   onAddAnnotation: (annotation: Omit<WizardAnnotation, "id" | "createdAt">) => void
@@ -40,6 +42,7 @@ export function WizardPreviewPane({
   device,
   darkMode,
   annotations,
+  previewNavigatePath,
   onSetDevice,
   onToggleDark,
   onAddAnnotation,
@@ -59,6 +62,14 @@ export function WizardPreviewPane({
       iframeRef.current.contentWindow?.postMessage({ type: "set-dark", value: darkMode }, "*")
     }
   }, [darkMode])
+
+  // Navigate preview to the newly registered screen path when triggered by useWizard.
+  // previewNavigatePath is set after router.tsx is written (HMR has had 1.5s to settle).
+  useEffect(() => {
+    if (!previewNavigatePath || !devUrl || !iframeRef.current) return
+    const base = devUrl.replace(/\/$/, "")
+    iframeRef.current.src = `${base}${previewNavigatePath}`
+  }, [previewNavigatePath, devUrl])
 
   const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const overlay = overlayRef.current

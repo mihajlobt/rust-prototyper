@@ -101,7 +101,10 @@ Generate each screen one at a time:
 1. Write ${generatedRoot}/src/pages/{screenId}.tsx with full, polished UI
 2. Immediately after write_file, call register_screen with the screen's ID, title, and URL path
 3. Run run_tsc to validate; fix all TypeScript errors before proceeding to the next screen
-4. After ALL screens are done, write the router file: ${generatedRoot}/src/router.tsx
+4. After EACH screen is registered, update the router file: ${generatedRoot}/src/router.tsx
+   to include ALL screens registered so far (incremental update so the preview can navigate
+   to the new screen while remaining screens are being generated)
+5. After ALL screens and their router entries are done, do a final router write to confirm
 
 PHASE 5 — DONE:
 After the router is written, tell the user the app is ready and summarize:
