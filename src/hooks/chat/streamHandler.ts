@@ -1,9 +1,16 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
-import { writeFile, type CompletionEvent } from "@/lib/ipc"
+import { writeFile, resolveAskUser, type CompletionEvent, type AskUserQuestionType } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
 import { stripFences, type PendingToolResult } from "./messages"
+
+export interface AskUserPayload {
+  requestId: number
+  question: string
+  questionType: AskUserQuestionType
+  choices?: string[]
+}
 
 // ─── Factory: createStreamHandler ──────────────────────────────────────────
 //
@@ -26,12 +33,20 @@ export interface StreamHandlerParams {
   outputPath: string | undefined
   pendingToolResultsRef: MutableRefObject<PendingToolResult[]>
   setToolResultTick: Dispatch<SetStateAction<number>>
+  /** Called when the model invokes ask_user. Section-agnostic — any panel can provide this.
+   *  If absent, the request is defensively resolved so the backend doesn't block. */
+  onAskUserRef?: MutableRefObject<((payload: AskUserPayload) => void) | undefined>
+  /** Called for every ToolCall event, before the store update. */
+  onToolCallRef?: MutableRefObject<((tool: string, args: Record<string, unknown>) => void) | undefined>
+  /** Called for every ToolResult event, after the store update. */
+  onToolResultRef?: MutableRefObject<((tool: string, success: boolean, output: string, path?: string) => void) | undefined>
 }
 
 export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
     onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath, pendingToolResultsRef, setToolResultTick,
+    onAskUserRef, onToolCallRef, onToolResultRef,
   } = params
 
   let contentAccumulated = ""
@@ -91,6 +106,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
         })
       }
     } else if (msg.event === "ToolCall") {
+      onToolCallRef?.current?.(msg.data.tool, msg.data.args)
       useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       // Flush accumulated thinking/text as a chunk at tool boundary
       useChatStore.getState().addStreamChunk(entityId, {
@@ -123,6 +139,20 @@ export function createStreamHandler(params: StreamHandlerParams) {
       if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
       useChatStore.getState().setStreamingContent(entityId, "")
       useChatStore.getState().setStreamingThinking(entityId, "")
+    } else if (msg.event === "AskUser") {
+      // Section-agnostic: any panel that registers onAskUser receives this.
+      // If no handler is registered, immediately resolve so the Rust agent
+      // loop is not blocked for the 600s timeout.
+      if (onAskUserRef?.current) {
+        onAskUserRef.current({
+          requestId: msg.data.request_id,
+          question: msg.data.question,
+          questionType: msg.data.question_type,
+          choices: msg.data.choices,
+        })
+      } else {
+        resolveAskUser(msg.data.request_id, "ask_user not handled in this section").catch(() => {})
+      }
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
       if ((tool === "write_file" || tool === "edit_file") && success) {
@@ -147,6 +177,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
       }
       pendingToolResultsRef.current.push({ tool, success, output, path, content })
       setToolResultTick((tick) => tick + 1)
+      onToolResultRef?.current?.(tool, success, output, path)
     } else if (msg.event === "Done") {
       const finalThinking = thinkingAccumulated
       const finalContent = contentAccumulated

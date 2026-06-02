@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { MapPin, RectangleHorizontal, Trash2, CheckCheck, Send } from "lucide-react"
-import type { WizardAnnotation } from "@/hooks/useWizard"
+import type { WizardAnnotation } from "./types"
 
 interface WizardAnnotationsProps {
   annotations: WizardAnnotation[]

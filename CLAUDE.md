@@ -24,15 +24,15 @@ All Rust logic lives in `src-tauri/src/lib.rs`. Frontend IPC uses `@tauri-apps/a
 
 ```
 src/
-  panels/          # 8 panels: Screens, Components, Themes, APIs, Runner, Library, Assets + Workflows
+  panels/          # 9 panels: Wizard, Screens, Components, Themes, APIs, Runner, Library, Assets (+ workflows/ for WorkflowsView)
   workflows/       # WorkflowsView.tsx — graph execution engine
   layout/          # Header.tsx, SidebarRail.tsx
-  hooks/           # useSettings.ts, useChat.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, use-mobile.ts
+  hooks/           # useSettings.ts, useChat.ts, useWizard.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, use-mobile.ts
   lib/ipc.ts       # All invoke() wrappers — single source of truth for Rust↔TS calls
   modals/          # SettingsModal, ProjectManagerModal, ExportModal, AddLibraryModal, PromptConfigModal, ComponentExportModal, SaveComponentModal (+ StylesEditor.tsx is a tabbed editor in Settings, not a true modal)
   components/ui/   # shadcn/ui primitives
 src-tauri/
-  src/lib.rs       # All Rust commands (43 total)
+  src/lib.rs       # All Rust commands (44 total)
   capabilities/default.json   # Tauri plugin permissions
   tauri.conf.json  # Window config, CSP, devUrl (1420)
 ```
@@ -46,7 +46,7 @@ Commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permiss
 | Process | `bun_dev`, `bun_build`, `bun_install`, `bun_install_sync`, `run_shell_command`, `run_shell_command_sync`, `run_shell_command_capture`, `kill_process`, `kill_all_processes`, `kill_port` |
 | File System | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
 | HTTP | `http_request` |
-| AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
 | Bonsai | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export | `export_project`, `export_component` |
 | Workflows | `save_workflow`, `load_workflow`, `list_workflows` |
@@ -63,13 +63,14 @@ channel.onmessage = (msg) => {
   if (msg.event === 'ToolCall')       handleToolCall(msg.data);
   if (msg.event === 'ToolPermission') requestApproval(msg.data);
   if (msg.event === 'ToolResult')     showToolResult(msg.data);
+  if (msg.event === 'AskUser')        promptUser(msg.data);  // wizard: text | choice | confirm
   if (msg.event === 'Done')           setLoading(false);
   if (msg.event === 'Error')          setError(msg.data.message);
 };
 await generateCompletionStream(model, messages, host, apiKey, channel);
 ```
 
-`CompletionEvent` mirrors the Rust enum in `lib.rs` and includes 6 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `Done`, `Error`.
+`CompletionEvent` mirrors the Rust enum in `lib.rs` and includes 7 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `Done`, `Error`. The `AskUser` event fires when the model invokes the `ask_user` tool; the frontend must call `resolveAskUser()` (the `resolve_ask_user` Rust command) within 180s or the agent loop auto-resolves with "No response".
 
 ## Data persistence
 

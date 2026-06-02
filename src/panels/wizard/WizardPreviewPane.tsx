@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Smartphone, Tablet, Monitor, Sun, Moon, Pencil, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { WizardAnnotation } from "@/hooks/useWizard"
+import type { WizardAnnotation } from "./types"
 
 interface DraftAnnotation {
   x: number

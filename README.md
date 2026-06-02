@@ -85,7 +85,7 @@ src/
   App.tsx                  # App shell — allotment layout, view routing, dark/accent theming
   main.tsx                 # React entry point
   layout/
-    Header.tsx             # 8 view tabs, model picker, project selector, settings
+    Header.tsx             # 9 view tabs (Wizard, Screens, Components, Design, Workflows, APIs, Assets, Runner, Library), model picker, project selector, settings
     SidebarRail.tsx        # File explorer sidebar with CRUD for screens/components/etc.
   panels/
     ScreensPanel.tsx       # Chat + AI generation + device preview
@@ -96,6 +96,15 @@ src/
     RunnerPanel.tsx        # File tree, terminal, live preview
     RunnerFileTree.tsx     # Runner's file browser
     RunnerDialogs.tsx      # Runner dialog components
+    runner/                  # 3 sub-components split out from RunnerPanel (DnD tabs, preview, terminal)
+      RunnerTerminal.tsx     # Terminal header (28px) + collapsible content (Logs/Network)
+      RunnerEditor.tsx       # Tabs + CodeMirror; @atlaskit/pragmatic-drag-and-drop reorder
+      RunnerPreview.tsx      # iframe + device/zoom/dark/refresh controls
+    WizardPanel.tsx        # Full-app generator: ask_user Q&A, live preview, visual annotations
+    wizard/                  # 3 sub-components for the wizard panel
+      WizardChatPanel.tsx    # Chat + inspector + ask_user input
+      WizardPreviewPane.tsx  # Cross-origin iframe with postMessage reload
+      WizardAnnotations.tsx  # Visual annotation overlay (point/region)
     LibraryPanel.tsx       # Searchable component/theme/screen/api library
     AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
     assets/
@@ -140,6 +149,7 @@ src/
   hooks/
     useSettings.ts              # Tauri Store persistence (thin re-export)
     useChat.ts                   # Chat session management + streaming
+    useWizard.ts                 # Wizard panel: ask_user, annotations, dev server bootstrap
     useProjectFiles.ts          # Project file operations + query keys
     useModelCapabilities.ts     # Model capability detection
     useAllotmentLayout.ts       # Pane size persistence
@@ -173,6 +183,7 @@ src/
       components.ts          # Component prompt templates
       themes.ts              # Theme prompt templates
       workflows.ts           # Workflow prompt templates
+      wizard.ts              # Full-app-generation prompt templates (uses ask_user)
       shared.ts              # Shared prompt utilities
     preview.tsx              # Preview rendering (Babel JSX transform)
     utils.ts                 # cn() class-merger helper
@@ -187,7 +198,7 @@ src/
     globals.css             # Tailwind v4 @theme inline block + CSS custom properties
 src-tauri/
   src/
-    lib.rs                   # App setup, plugins, generate_handler![] (43 commands)
+    lib.rs                   # App setup, plugins, generate_handler![] (44 commands)
     main.rs                  # Thin passthrough to lib.rs
     commands/
       process.rs             # Bun/shell spawning, kill
@@ -207,13 +218,14 @@ src-tauri/
   Cargo.toml                 # Rust dependencies
 ```
 
-## Views (8 Panels)
+## Views (9 Panels)
 
 | View | ID | Panel Component | Description |
 |------|----|-----------------|-------------|
+| Wizard | `wizard` | `WizardPanel` | Full-app generator with `ask_user` Q&A, live preview, visual annotations |
 | Screens | `screens` | `ScreensPanel` | Chat + AI generation + device preview (embeds `FlowsView`) |
 | Components | `components` | `ComponentsPanel` | Prompt → component code + live preview |
-| Themes | `themes` | `ThemesPanel` | Prompt → CSS theme generation |
+| Design (Themes) | `themes` | `ThemesPanel` | Prompt → CSS theme generation |
 | Workflows | `workflows` | `WorkflowsView` | Node-based execution canvas (React Flow) |
 | APIs | `apis` | `APIsPanel` | HTTP request/response testing |
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
@@ -239,7 +251,7 @@ Run state is communicated separately via `--status-running` (blue), `--status-do
 (emerald), `--status-error` (red), `--status-paused` (gold) on the node border. See
 [DESIGN.md](DESIGN.md) for the full token system.
 
-## Rust Commands (43 total)
+## Rust Commands (44 total)
 
 All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permissions (e.g., `shell:default`, `fs:default`) must be declared in `capabilities/default.json` — missing either causes silent failure.
 
@@ -248,7 +260,7 @@ All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin per
 | Process (10) | `bun_dev`, `bun_build`, `bun_install`, `bun_install_sync`, `run_shell_command`, `run_shell_command_sync`, `run_shell_command_capture`, `kill_process`, `kill_all_processes`, `kill_port` |
 | File System (9) | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
 | HTTP (1) | `http_request` |
-| AI (7) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| AI (8) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
 | Bonsai (11) | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export (2) | `export_project`, `export_component` |
 | Workflows (3) | `save_workflow`, `load_workflow`, `list_workflows` |

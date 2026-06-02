@@ -4,10 +4,9 @@ import { MessageList, ChatInput } from "@/components/chat";
 import { AskUserCard } from "@/components/ui/AskUserCard";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
-import type { PendingAskUser, WizardPhase } from "@/hooks/useWizard";
+import type { PendingAskUser } from "./types";
 
 interface WizardChatPanelProps {
-  phase: WizardPhase;
   messages: ChatMessage[];
   isStreaming: boolean;
   thinkingContent: string;
@@ -45,7 +44,6 @@ interface WizardChatPanelProps {
 }
 
 export function WizardChatPanel({
-  phase,
   messages,
   isStreaming,
   thinkingContent,
@@ -93,7 +91,7 @@ export function WizardChatPanel({
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-destructive"
           onClick={onReset}
-          disabled={messages.length === 0 && phase === "idle"}
+          disabled={messages.length === 0}
           title="Reset wizard"
         >
           <RotateCcw size={13} />
@@ -129,7 +127,7 @@ export function WizardChatPanel({
           value={input}
           onChange={onChangeInput}
           onSend={onSend}
-          disabled={isStreaming || phase === "awaiting_answer"}
+          disabled={isStreaming || pendingAskUser !== null}
           attachments={attachments}
           onAddAttachment={onAddAttachment}
           onRemoveAttachment={onRemoveAttachment}
@@ -149,7 +147,7 @@ export function WizardChatPanel({
           canTools={canTools}
           onStop={isStreaming ? onStop : undefined}
           placeholder={
-            phase === "idle"
+            messages.length === 0
               ? "Describe the app you want to build…"
               : "Ask for changes…"
           }
