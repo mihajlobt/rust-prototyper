@@ -145,7 +145,7 @@ export function ItemContextMenu({ item, onOpen, onRename, onDuplicate, onCopyPro
         <ContextMenuItem onClick={onRename}>Rename</ContextMenuItem>
         <ContextMenuItem onClick={onDuplicate} disabled={item.type === "api"}>Duplicate</ContextMenuItem>
         <ContextMenuSeparator />
-        {hasPrompt && <ContextMenuItem onClick={onCopyPrompt}>Copy initial prompt</ContextMenuItem>}
+        <ContextMenuItem onClick={onCopyPrompt} disabled={!hasPrompt}>Copy initial prompt</ContextMenuItem>
         <ContextMenuItem onClick={onExport}>Export file</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">Delete</ContextMenuItem>

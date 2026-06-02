@@ -57,13 +57,16 @@ import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/chat"
 
-function toolPartFromRecord(tc: ToolCallRecord): ToolPart {
+function toolPartFromRecord(tc: ToolCallRecord, isStreaming = true): ToolPart {
   // "(no output)" from grep/filter commands ≠ error (just no match)
   // Also handle empty string results from write/edit tools
   const isEmptyOutput = tc.result === "" || tc.result === undefined || tc.result === "(no output)"
   // Only show error if success is explicitly false AND output has actual content
   const isRealError = tc.success === false && !isEmptyOutput
-  const state = tc.pending
+  // Only show "Processing" if the stream is still active. If streaming has ended
+  // but pending is still true (stale state from a mid-stream tab switch before
+  // the useEffect drainer could flush), treat as completed rather than stuck.
+  const state = (tc.pending && isStreaming)
     ? "input-streaming"
     : isEmptyOutput
     ? "output-empty"
@@ -347,7 +350,7 @@ const MessageBubble = memo(function MessageBubble({
         elements.push(
           <Tool
             key={`tool-${i}`}
-            toolPart={toolPartFromRecord(toolCalls[i])}
+            toolPart={toolPartFromRecord(toolCalls[i], isStreaming)}
             defaultOpen={i === toolCalls.length - 1 && isStreaming}
           />
         )

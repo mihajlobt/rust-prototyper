@@ -224,6 +224,13 @@ export function ThemesPanel() {
         setCodeTab("tokens");
         window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
         toast.success("Design language generated");
+        // Record the prompt that produced this design language so Library can display/copy it
+        const entityId = `theme-${selectedThemeDir || "main"}`;
+        const msgs = useChatStore.getState().chats[entityId]?.messages ?? [];
+        const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+        const prompt = lastUser?.content ?? "";
+        void saveItemMeta(`projects/${settings.project}`, "themes", selectedThemeDir || "main", prompt)
+          .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
       } else if (fileName === "theme.css") {
         setCss(content);
         writeFile(`${generatedDir}/src/styles/preview-theme.css`, content).catch((e) =>

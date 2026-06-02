@@ -17,8 +17,9 @@ interface ChatStore {
   setStreamingContent: (id: string, content: string) => void
   setStreamingThinking: (id: string, thinking: string) => void
   attachToolCall: (id: string, tool: string, path: string, args: Record<string, unknown>) => void
-  updateLastToolResult: (id: string, tool: string, result: string, success: boolean) => void
-  patchLastToolCallPath: (id: string, tool: string, path: string) => void
+  /** Resolve the first pending tool call matching `tool` (front-to-back order matches
+   *  ToolCall/ToolResult arrival order, fixing result swapping for parallel same-name tools). */
+  resolveToolCall: (id: string, tool: string, result: string, success: boolean, path: string) => void
   clearChat: (id: string) => void
   addStreamChunk: (id: string, chunk: StreamChunk) => void
   attachToolPermission: (id: string, record: ToolPermissionRecord) => void
@@ -84,34 +85,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
     }),
 
-  updateLastToolResult: (id, tool, result, success) =>
+  resolveToolCall: (id, tool, result, success, path) =>
     set((s) => {
       const chat = s.chats[id] ?? EMPTY
       const messages = [...chat.messages]
       const last = messages[messages.length - 1]
       if (last?.role === "assistant" && last.toolCalls?.length) {
         const toolCalls = [...last.toolCalls]
-        for (let i = toolCalls.length - 1; i >= 0; i--) {
+        // Search front-to-back: ToolCall events arrive in index order and ToolResult
+        // events are emitted in the same index order after parallel execution completes.
+        // Searching from the front ensures result[0] matches toolCalls[0], not toolCalls[N].
+        for (let i = 0; i < toolCalls.length; i++) {
           if (toolCalls[i].tool === tool && toolCalls[i].pending) {
-            toolCalls[i] = { ...toolCalls[i], result, success, pending: false }
-            break
-          }
-        }
-        messages[messages.length - 1] = { ...last, toolCalls }
-      }
-      return { chats: { ...s.chats, [id]: { ...chat, messages } } }
-    }),
-
-  patchLastToolCallPath: (id, tool, path) =>
-    set((s) => {
-      const chat = s.chats[id] ?? EMPTY
-      const messages = [...chat.messages]
-      const last = messages[messages.length - 1]
-      if (last?.role === "assistant" && last.toolCalls?.length) {
-        const toolCalls = [...last.toolCalls]
-        for (let i = toolCalls.length - 1; i >= 0; i--) {
-          if (toolCalls[i].tool === tool) {
-            toolCalls[i] = { ...toolCalls[i], path }
+            toolCalls[i] = { ...toolCalls[i], result, success, pending: false, path }
             break
           }
         }

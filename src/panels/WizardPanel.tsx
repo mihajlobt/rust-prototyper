@@ -134,8 +134,6 @@ export function WizardPanel() {
     const text = chat.input.trim()
     if (!text) return
     if (chat.messages.length === 0) {
-      // Fresh start: clear any previous chat then send
-      chat.clearChat()
       chat.sendMessage(text)
     } else {
       // Follow-up: append annotation context then send

@@ -1,6 +1,6 @@
 import type { ItemMeta } from "@/lib/item-meta";
 
-export type ItemType = "component" | "theme" | "screen" | "api";
+export type ItemType = "component" | "theme" | "screen" | "api" | "workflow";
 export type SortKey = "updated" | "name" | "type";
 export type ViewMode = "list" | "gallery";
 
@@ -17,6 +17,7 @@ export const TYPE_COLORS: Record<ItemType, string> = {
   component: "text-violet-400",
   theme:     "text-rose-400",
   api:       "text-amber-400",
+  workflow:  "text-emerald-400",
 };
 
 export const TYPE_BG: Record<ItemType, string> = {
@@ -24,17 +25,18 @@ export const TYPE_BG: Record<ItemType, string> = {
   component: "bg-violet-400/10",
   theme:     "bg-rose-400/10",
   api:       "bg-amber-400/10",
+  workflow:  "bg-emerald-400/10",
 };
 
 export const TYPE_LABELS: Record<ItemType, string> = {
-  screen: "Screen", component: "Component", theme: "Theme", api: "API",
+  screen: "Screen", component: "Component", theme: "Theme", api: "API", workflow: "Workflow",
 };
 
 export const SORT_LABELS: Record<SortKey, string> = {
   updated: "Recent", name: "Name", type: "Type",
 };
 
-export const ALL_TYPES: ItemType[] = ["screen", "component", "theme", "api"];
+export const ALL_TYPES: ItemType[] = ["screen", "component", "theme", "workflow", "api"];
 
 export interface RowActions {
   openItem: (item: LibraryItem) => void;

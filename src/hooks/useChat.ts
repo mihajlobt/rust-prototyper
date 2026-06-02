@@ -17,7 +17,7 @@ import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
 import { useModelCapabilities } from "@/hooks/useModelCapabilities"
 import { resolveThinkParam } from "./chat/think"
-import { buildApiMessages, type PendingToolResult } from "./chat/messages"
+import { buildApiMessages } from "./chat/messages"
 import { createStreamHandler, type AskUserPayload, type AskUserFormPayload } from "./chat/streamHandler"
 export type { AskUserPayload, AskUserFormPayload }
 
@@ -133,13 +133,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   // Track which entityIds we've already loaded from disk
   const loadedRef = useRef<Set<string>>(new Set())
 
-  // Queue of ToolResult payloads waiting for a post-paint flush.
-  // Written synchronously from channel.onmessage; drained by the effect below
-  // or synchronously by finalize() before writing to disk.
-  const pendingToolResultsRef = useRef<PendingToolResult[]>([])
-  // Incrementing this causes the post-paint useEffect to drain the queue.
-  const [toolResultTick, setToolResultTick] = useState(0)
-
   // Cold start: load from disk the first time this entityId is accessed
   useEffect(() => {
     if (loadedRef.current.has(entityId)) return
@@ -159,31 +152,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       .catch(() => {})
     return () => { cancelled = true }
   }, [entityId, chatPath])
-
-  // Drain pending tool results after the browser has painted so the pending
-  // spinner (Tool card "input-streaming" state) is visible for at least one frame.
-  //
-  // The Tauri Channel while-loop dispatches ToolCall + ToolResult synchronously
-  // in a single JS call stack. Any React state update inside that stack can't
-  // produce a visible paint until JS yields. Queuing the visual store update
-  // here and applying it in useEffect — which React guarantees fires after the
-  // browser has painted (react.dev/reference/react/useEffect) — breaks the
-  // synchronous batch and ensures the spinner paints first.
-  //
-  // finalize() also drains the queue synchronously before writing to disk,
-  // so the persisted chat.json always has pending=false on tool calls.
-  useEffect(() => {
-    if (toolResultTick === 0) return
-    for (const result of pendingToolResultsRef.current.splice(0)) {
-      useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
-      if (result.tool === "write_file" && result.content) {
-        if (useChatStore.getState().chats[entityId]?.isStreaming) {
-          useChatStore.getState().setStreamingContent(entityId, "")
-        }
-        useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
-      }
-    }
-  }, [toolResultTick, entityId])
 
   const sendMessage = useCallback(async (textOverride?: string) => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -246,7 +214,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const onMessage = createStreamHandler({
       entityId, chatPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
-      pendingToolResultsRef, setToolResultTick,
       onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
     })
     channel.onmessage = onMessage
@@ -342,7 +309,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const onMessage = createStreamHandler({
       entityId, chatPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
-      pendingToolResultsRef, setToolResultTick,
       onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
     })
     channel.onmessage = onMessage

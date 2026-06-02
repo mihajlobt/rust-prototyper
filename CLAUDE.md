@@ -46,7 +46,7 @@ Commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permiss
 | Process | `bun_dev`, `bun_build`, `bun_install`, `bun_install_sync`, `run_shell_command`, `run_shell_command_sync`, `run_shell_command_capture`, `kill_process`, `kill_all_processes`, `kill_port` |
 | File System | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
 | HTTP | `http_request` |
-| AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
 | Bonsai | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export | `export_project`, `export_component` |
 | Workflows | `save_workflow`, `load_workflow`, `list_workflows` |
@@ -63,14 +63,19 @@ channel.onmessage = (msg) => {
   if (msg.event === 'ToolCall')       handleToolCall(msg.data);
   if (msg.event === 'ToolPermission') requestApproval(msg.data);
   if (msg.event === 'ToolResult')     showToolResult(msg.data);
-  if (msg.event === 'AskUser')        promptUser(msg.data);  // wizard: text | choice | confirm
+  if (msg.event === 'AskUser')        promptUser(msg.data);     // any panel: text | choice | confirm
+  if (msg.event === 'AskUserForm')   promptForm(msg.data);     // any panel: structured multi-field form
   if (msg.event === 'Done')           setLoading(false);
   if (msg.event === 'Error')          setError(msg.data.message);
 };
 await generateCompletionStream(model, messages, host, apiKey, channel);
 ```
 
-`CompletionEvent` mirrors the Rust enum in `lib.rs` and includes 7 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `Done`, `Error`. The `AskUser` event fires when the model invokes the `ask_user` tool; the frontend must call `resolveAskUser()` (the `resolve_ask_user` Rust command) within 180s or the agent loop auto-resolves with "No response".
+`CompletionEvent` mirrors the Rust enum in `lib.rs` and includes 8 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `AskUserForm`, `Done`, `Error`.
+
+- `AskUser` fires when the model calls `ask_user`; frontend calls `resolveAskUser()` within 180s.
+- `AskUserForm` fires when the model calls `ask_user_form`; frontend calls `resolveAskUserForm()` within 180s.
+- Both are section-agnostic: register `onAskUser`/`onAskUserForm` in `useChat` options. If no handler is registered the backend is immediately unblocked with an empty response.
 
 ## Data persistence
 

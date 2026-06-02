@@ -1,9 +1,9 @@
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
+import type { MutableRefObject, RefObject } from "react"
 import { writeFile, resolveAskUser, resolveAskUserForm, type CompletionEvent, type AskUserQuestionType, type FormField } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
-import { stripFences, type PendingToolResult } from "./messages"
+import { stripFences } from "./messages"
 
 export interface AskUserPayload {
   requestId: number
@@ -22,9 +22,14 @@ export interface AskUserFormPayload {
 //
 // Extracted to eliminate ~80 lines of duplicated channel.onmessage + finalize
 // logic between sendMessage and regenerate. Returns a bound handler that
-// closes over accumulated state. Also fixes the regenerate path's missing
-// rafThinkingId cancel (previously only finalize() in sendMessage cancelled
-// both raf IDs; the inline Done handler in regenerate only cancelled rafId).
+// closes over accumulated state.
+//
+// Tool results are written directly to Zustand in the ToolResult handler.
+// The previous pendingToolResultsRef + useEffect drain approach was intended
+// to ensure the "Processing" spinner painted for one frame before being cleared,
+// but it introduced a tab-switch bug: if the component unmounted before the
+// useEffect fired, pending:true was never cleared. Direct Zustand writes are
+// simpler and correct.
 
 export interface StreamHandlerParams {
   entityId: string
@@ -37,8 +42,6 @@ export interface StreamHandlerParams {
   onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
   onToolWriteRef: MutableRefObject<((path: string, content: string) => void) | undefined>
   outputPath: string | undefined
-  pendingToolResultsRef: MutableRefObject<PendingToolResult[]>
-  setToolResultTick: Dispatch<SetStateAction<number>>
   /** Called when the model invokes ask_user. Section-agnostic — any panel can provide this.
    *  If absent, the request is defensively resolved so the backend doesn't block. */
   onAskUserRef?: MutableRefObject<((payload: AskUserPayload) => void) | undefined>
@@ -54,7 +57,7 @@ export interface StreamHandlerParams {
 export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
-    onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath, pendingToolResultsRef, setToolResultTick,
+    onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
     onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
   } = params
 
@@ -69,14 +72,6 @@ export function createStreamHandler(params: StreamHandlerParams) {
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
     if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
     activeRequestIdRef.current = null
-    // Flush any queued tool results synchronously so the finalized message
-    // has pending=false and the correct path before we persist to disk.
-    // (The useEffect drainer fires post-paint, which may be after Done arrives.)
-    for (const result of pendingToolResultsRef.current.splice(0)) {
-      useChatStore.getState().updateLastToolResult(entityId, result.tool, result.output, result.success)
-      useChatStore.getState().patchLastToolCallPath(entityId, result.tool, result.path ?? "")
-    }
-    // Preserve toolCalls (now correctly flushed) in the finalized message
     const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
     const currentLast = msgs[msgs.length - 1]
     const finalMessage: ChatMessage = {
@@ -174,28 +169,22 @@ export function createStreamHandler(params: StreamHandlerParams) {
       }
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
+      // Single atomic mutation: first pending match (front-to-back) gets result + path.
+      useChatStore.getState().resolveToolCall(entityId, tool, output, success, path ?? "")
       if ((tool === "write_file" || tool === "edit_file") && success) {
         if (tool === "write_file") {
           toolWritten = true
-          // Clear any streaming text that was accumulating before this write
           contentAccumulated = ""
           useChatStore.getState().setStreamingContent(entityId, "")
           if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
         }
-        // Fire onCodeOutput for write_file and edit_file when the path matches the
-        // designated primary output file. edit_file sends the full post-edit content
-        // in `content` (written_content from executor), so the preview stays in sync.
         if (content && outputPath && path === outputPath) {
           onCodeOutputRef.current?.(stripFences(content))
         }
-        // Fire onToolWrite for ALL successful write_file / edit_file calls so
-        // consumers that manage multiple files (e.g. ThemesPanel) can react.
         if (content && path) {
           onToolWriteRef.current?.(path, stripFences(content))
         }
       }
-      pendingToolResultsRef.current.push({ tool, success, output, path, content })
-      setToolResultTick((tick) => tick + 1)
       onToolResultRef?.current?.(tool, success, output, path)
     } else if (msg.event === "Done") {
       const finalThinking = thinkingAccumulated

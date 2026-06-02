@@ -1,16 +1,6 @@
 import type { Message } from "@/lib/ipc"
 import type { ChatMessage } from "@/types/chat"
 
-/** Buffered tool result awaiting post-paint flush. Lives in the shared
- *  `pendingToolResultsRef` so finalize() and the drain effect can both consume it. */
-export interface PendingToolResult {
-  tool: string
-  success: boolean
-  output: string
-  path: string | undefined
-  content: string | undefined
-}
-
 /** Strip leading ```lang and trailing ``` from a code block. Used after the
  *  model emits a fenced file content via write_file / edit_file tool calls. */
 export function stripFences(content: string): string {

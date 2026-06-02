@@ -7,7 +7,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { readDir, readFile, writeFile, deleteDir, deleteFile, renameFile, createDir, getErrorMessage } from "@/lib/ipc";
+import { readDir, readFile, writeFile, deleteDir, deleteFile, renameFile, createDir, listWorkflows, getErrorMessage } from "@/lib/ipc";
 import { save, confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
@@ -22,7 +22,7 @@ import type { LibraryItem, ItemType, SortKey, ViewMode, RowActions } from "@/pan
 
 export function LibraryPanel() {
   const { settings } = useAppStore();
-  const { openComponent, openScreen, openTheme, openApi } = useProjectSettingsStore();
+  const { openComponent, openScreen, openTheme, openApi, openWorkflow } = useProjectSettingsStore();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -48,6 +48,14 @@ export function LibraryPanel() {
         { type: "theme",     dir: `${base}/themes`,      isDir: true  },
         { type: "api",       dir: `${base}/apis`,        isDir: false },
       ];
+      // Workflows are stored via Rust commands (not plain file dirs)
+      try {
+        const workflowEntries = await listWorkflows(project);
+        for (const entry of workflowEntries) {
+          const id = entry.name.replace(/\.json$/, "");
+          all.push({ id, name: id, type: "workflow", meta: null });
+        }
+      } catch { /* no workflows yet */ }
       for (const { type, dir, isDir } of dirMap) {
         try {
           const entries = await readDir(dir);
@@ -97,6 +105,7 @@ export function LibraryPanel() {
     else if (item.type === "screen") openScreen(item.id);
     else if (item.type === "theme") openTheme(item.id);
     else if (item.type === "api") openApi(item.id);
+    else if (item.type === "workflow") openWorkflow(item.id);
   };
 
   const handleDelete = async (item: LibraryItem) => {
@@ -106,9 +115,10 @@ export function LibraryPanel() {
       theme:     `${base}/themes/${item.id}`,
       screen:    `${base}/screens/${item.id}`,
       api:       `${base}/apis/${item.id}.json`,
+      workflow:  `projects/${project}/workflows/${item.id}.json`,
     };
     try {
-      if (item.type === "api") await deleteFile(paths.api);
+      if (item.type === "api" || item.type === "workflow") await deleteFile(paths[item.type]);
       else await deleteDir(paths[item.type]);
       if (expandedId === `${item.type}-${item.id}`) setExpandedId(null);
       invalidate();
@@ -116,7 +126,7 @@ export function LibraryPanel() {
   };
 
   const handleDuplicate = async (item: LibraryItem) => {
-    if (item.type === "api") { notify.error("Duplicate", "Not supported for APIs"); return; }
+    if (item.type === "api" || item.type === "workflow") { notify.error("Duplicate", "Not supported for this type"); return; }
     const srcDir = `${base}/${item.type}s/${item.id}`;
     const destDir = `${base}/${item.type}s/${item.id}-copy`;
     try {
@@ -139,8 +149,9 @@ export function LibraryPanel() {
       theme:     `${base}/themes/${item.id}/theme.css`,
       screen:    `${base}/screens/${item.id}/screen.tsx`,
       api:       `${base}/apis/${item.id}.json`,
+      workflow:  `projects/${project}/workflows/${item.id}.json`,
     };
-    const exts: Record<ItemType, string> = { component: "tsx", theme: "css", screen: "tsx", api: "json" };
+    const exts: Record<ItemType, string> = { component: "tsx", theme: "css", screen: "tsx", api: "json", workflow: "json" };
     try {
       const content = await readFile(paths[item.type]);
       const dest = await save({ filters: [{ name: item.type.toUpperCase(), extensions: [exts[item.type]] }], defaultPath: `${item.name}.${exts[item.type]}` });
@@ -161,6 +172,7 @@ export function LibraryPanel() {
       theme:     { from: `${base}/themes/${item.id}`,     to: `${base}/themes/${newId}` },
       screen:    { from: `${base}/screens/${item.id}`,    to: `${base}/screens/${newId}` },
       api:       { from: `${base}/apis/${item.id}.json`,  to: `${base}/apis/${newId}.json` },
+      workflow:  { from: `projects/${project}/workflows/${item.id}.json`, to: `projects/${project}/workflows/${newId}.json` },
     };
     try { await renameFile(paths[item.type].from, paths[item.type].to); invalidate(); }
     catch (e) { notify.error("Rename failed", getErrorMessage(e)); }
@@ -189,6 +201,7 @@ export function LibraryPanel() {
     component: items.filter((i) => i.type === "component").length,
     theme:     items.filter((i) => i.type === "theme").length,
     api:       items.filter((i) => i.type === "api").length,
+    workflow:  items.filter((i) => i.type === "workflow").length,
   };
 
   const isEmpty = !isFetching && filtered.length === 0;

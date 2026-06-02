@@ -98,14 +98,14 @@ src/
     RunnerDialogs.tsx      # Runner dialog components
     runner/                  # 3 sub-components split out from RunnerPanel (DnD tabs, preview, terminal)
       RunnerTerminal.tsx     # Terminal header (28px) + collapsible content (Logs/Network)
-      RunnerEditor.tsx       # Tabs + CodeMirror; @atlaskit/pragmatic-drag-and-drop reorder
+      RunnerEditor.tsx       # Tabs + CodeMirror; vanilla HTML5 drag-to-reorder with ref-based indicator
       RunnerPreview.tsx      # iframe + device/zoom/dark/refresh controls
     WizardPanel.tsx        # Full-app generator: ask_user Q&A, live preview, visual annotations
     wizard/                  # 3 sub-components for the wizard panel
       WizardChatPanel.tsx    # Chat + inspector + ask_user input
       WizardPreviewPane.tsx  # Cross-origin iframe with postMessage reload
       WizardAnnotations.tsx  # Visual annotation overlay (point/region)
-    LibraryPanel.tsx       # Searchable component/theme/screen/api library
+    LibraryPanel.tsx       # Searchable library: components, themes, screens, workflows, APIs
     AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
     assets/
       AssetGrid.tsx          # List/grid gallery with context menu
@@ -228,7 +228,7 @@ src-tauri/
 | Workflows | `workflows` | `WorkflowsView` | Node-based execution canvas (React Flow) |
 | APIs | `apis` | `APIsPanel` | HTTP request/response testing |
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
-| Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, APIs |
+| Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, workflows, APIs |
 | Assets | `assets` | `AssetsPanel` | AI image generation (Bonsai), asset gallery |
 
 ### Workflow Node System
@@ -250,7 +250,7 @@ Run state is communicated separately via `--status-running` (blue), `--status-do
 (emerald), `--status-error` (red), `--status-paused` (gold) on the node border. See
 [DESIGN.md](DESIGN.md) for the full token system.
 
-## Rust Commands (44 total)
+## Rust Commands (45 total)
 
 All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permissions (e.g., `shell:default`, `fs:default`) must be declared in `capabilities/default.json` — missing either causes silent failure.
 
@@ -259,7 +259,7 @@ All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin per
 | Process (10) | `bun_dev`, `bun_build`, `bun_install`, `bun_install_sync`, `run_shell_command`, `run_shell_command_sync`, `run_shell_command_capture`, `kill_process`, `kill_all_processes`, `kill_port` |
 | File System (9) | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
 | HTTP (1) | `http_request` |
-| AI (8) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| AI (9) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
 | Bonsai (11) | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export (2) | `export_project`, `export_component` |
 | Workflows (3) | `save_workflow`, `load_workflow`, `list_workflows` |
@@ -287,14 +287,15 @@ channel.onmessage = (msg) => {
   if (msg.event === 'ToolCall') handleToolCall(msg.data);
   if (msg.event === 'ToolPermission') requestApproval(msg.data);
   if (msg.event === 'ToolResult')     showToolResult(msg.data);
-  if (msg.event === 'AskUser')        promptUser(msg.data);  // wizard: text | choice | confirm
+  if (msg.event === 'AskUser')        promptUser(msg.data);     // any panel: text | choice | confirm
+  if (msg.event === 'AskUserForm')   promptForm(msg.data);     // any panel: multi-field form
   if (msg.event === 'Done')     setLoading(false);
   if (msg.event === 'Error')    setError(msg.data.message);
 };
 await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, ...);
 ```
 
-`CompletionEvent` mirrors the Rust enum and includes `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `Done`, and `Error` variants. The `AskUser` event is used by the Wizard panel; the frontend must call `resolveAskUser()` (the `resolve_ask_user` Rust command) within 180s.
+`CompletionEvent` mirrors the Rust enum and includes 8 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `AskUserForm`, `Done`, `Error`. Both `AskUser` and `AskUserForm` are section-agnostic — any panel can register `onAskUser`/`onAskUserForm` callbacks in `useChat`; if no handler is registered the backend is immediately unblocked. The frontend must call `resolveAskUser()` / `resolveAskUserForm()` within 180s.
 
 ## Data Persistence
 
@@ -339,15 +340,12 @@ answer (180s timeout per question, see `agent_loop.rs`).
 
 The Wizard is implemented as a thin panel-level wrapper over `useChat` —
 no dedicated hook. It uses the same chat infrastructure as the other
-panels, augmented with three optional `useChat` callbacks:
+panels, augmented with four optional `useChat` callbacks:
 
-- `onAskUser`: receives the new `AskUser` event; renders the `AskUserCard`
-  and resolves via `resolveAskUser()` (the `resolve_ask_user` Rust command).
-- `onToolCall`: fires before each `ToolCall` store update; the wizard uses
-  this to capture `set_active_theme` slugs in-memory.
-- `onToolResult`: fires after each `ToolResult` store update; the wizard
-  uses this to apply the active theme and detect `router.tsx` writes that
-  should trigger preview navigation.
+- `onAskUser`: receives `AskUser` events; renders `AskUserCard` (text/choice/confirm). Resolves via `resolveAskUser()`.
+- `onAskUserForm`: receives `AskUserForm` events; renders `AskUserFormCard` (multi-field form). Resolves via `resolveAskUserForm()`.
+- `onToolCall`: fires before each `ToolCall` store update; captures `set_active_theme` slugs and `register_screen` paths in-memory.
+- `onToolResult`: fires after each `ToolResult` store update; applies the active theme and detects `router.tsx` writes to trigger preview navigation.
 
 Key features:
 - **Live preview** with cross-origin iframe (uses `react-frame-component` + `postMessage({type:"reload"})` for HMR).
