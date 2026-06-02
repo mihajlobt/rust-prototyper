@@ -406,13 +406,13 @@ const MessageBubble = memo(function MessageBubble({
               </>
             )}
 
-            {/* Live content after all tools — only when streaming */}
-            {(isStreaming && hasTools) && (
+            {/* Live content after all tools — only render when there's something to show */}
+            {(isStreaming && hasTools && content) && (
               <MessageContent markdown isStreaming className="text-sm">{content}</MessageContent>
             )}
 
-            {/* Generating indicator — streaming with no content yet */}
-            {isStreaming && !hasThinking && content === "" && !hasTools && (
+            {/* Generating indicator — streaming with no accumulated content yet */}
+            {isStreaming && !hasThinking && !content && (
               <Loader variant="loading-dots" size="sm" text="Generating" />
             )}
           </>
