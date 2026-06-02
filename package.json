@@ -15,9 +15,6 @@
     "test:tauri": "wdio run src/__tests__/tauri/wdio.conf.ts"
   },
   "dependencies": {
-    "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
-    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
-    "@atlaskit/pragmatic-drag-and-drop-react-drop-indicator": "^3.2.16",
     "@babel/standalone": "^7.29.2",
     "@base-ui/react": "^1.5.0",
     "@codemirror/lang-css": "^6.3.1",
@@ -31,7 +28,6 @@
     "@codemirror/legacy-modes": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@fontsource-variable/geist": "^5.2.8",
-    "@formkit/auto-animate": "^0.9.0",
     "@headless-tree/core": "^1.6.3",
     "@headless-tree/react": "^1.6.3",
     "@hookform/resolvers": "^5.4.0",

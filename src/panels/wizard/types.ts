@@ -1,4 +1,4 @@
-import type { AskUserQuestionType } from "@/lib/ipc"
+import type { AskUserQuestionType, FormField } from "@/lib/ipc"
 
 export interface WizardAnnotation {
   id: string
@@ -17,4 +17,10 @@ export interface PendingAskUser {
   question: string
   questionType: AskUserQuestionType
   choices?: string[]
+}
+
+export interface PendingAskUserForm {
+  requestId: number
+  title: string
+  fields: FormField[]
 }

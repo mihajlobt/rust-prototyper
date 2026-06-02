@@ -2,9 +2,10 @@ import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageList, ChatInput } from "@/components/chat";
 import { AskUserCard } from "@/components/ui/AskUserCard";
+import { AskUserFormCard } from "@/components/ui/AskUserFormCard";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
-import type { PendingAskUser } from "./types";
+import type { PendingAskUser, PendingAskUserForm } from "./types";
 
 interface WizardChatPanelProps {
   messages: ChatMessage[];
@@ -12,11 +13,13 @@ interface WizardChatPanelProps {
   thinkingContent: string;
   pendingPermissions: ToolPermissionRecord[];
   pendingAskUser: PendingAskUser | null;
+  pendingAskUserForm: PendingAskUserForm | null;
 
   onRegenerate: () => void;
   onDeleteFrom: (index: number) => void;
   onResolvePermission: (requestId: number, decision: ToolPermissionDecision, toolName: string) => void;
   onResolveAskUser: () => void;
+  onResolveAskUserForm: () => void;
   onReset: () => void;
 
   // Input
@@ -49,10 +52,12 @@ export function WizardChatPanel({
   thinkingContent,
   pendingPermissions,
   pendingAskUser,
+  pendingAskUserForm,
   onRegenerate,
   onDeleteFrom,
   onResolvePermission,
   onResolveAskUser,
+  onResolveAskUserForm,
   onReset,
   input,
   onChangeInput,
@@ -118,6 +123,17 @@ export function WizardChatPanel({
             questionType={pendingAskUser.questionType}
             choices={pendingAskUser.choices}
             onResolve={onResolveAskUser}
+          />
+        </div>
+      )}
+
+      {pendingAskUserForm && (
+        <div className="border-t border-border px-3 py-2.5 shrink-0">
+          <AskUserFormCard
+            requestId={pendingAskUserForm.requestId}
+            title={pendingAskUserForm.title}
+            fields={pendingAskUserForm.fields}
+            onResolve={onResolveAskUserForm}
           />
         </div>
       )}

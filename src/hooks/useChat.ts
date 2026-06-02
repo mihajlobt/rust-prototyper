@@ -18,8 +18,8 @@ import { notify } from "@/hooks/useToast"
 import { useModelCapabilities } from "@/hooks/useModelCapabilities"
 import { resolveThinkParam } from "./chat/think"
 import { buildApiMessages, type PendingToolResult } from "./chat/messages"
-import { createStreamHandler, type AskUserPayload } from "./chat/streamHandler"
-export type { AskUserPayload }
+import { createStreamHandler, type AskUserPayload, type AskUserFormPayload } from "./chat/streamHandler"
+export type { AskUserPayload, AskUserFormPayload }
 
 // Re-export for external consumers (ComponentsPanel, ScreensPanel).
 // The implementation lives in ./chat/think to keep this hook file small.
@@ -47,6 +47,8 @@ interface UseChatOptions {
   panelMaxToolCalls?: number
   /** Called when the model invokes the ask_user tool. Section-agnostic — register in any panel. */
   onAskUser?: (payload: AskUserPayload) => void
+  /** Called when the model invokes the ask_user_form tool. Section-agnostic — register in any panel. */
+  onAskUserForm?: (payload: AskUserFormPayload) => void
   /** Called for every ToolCall event before the store update. */
   onToolCall?: (tool: string, args: Record<string, unknown>) => void
   /** Called for every ToolResult event after the store update. */
@@ -55,7 +57,7 @@ interface UseChatOptions {
 
 // ─── useChat hook ──────────────────────────────────────────────────────────
 
-export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls, onAskUser, onToolCall, onToolResult }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls, onAskUser, onAskUserForm, onToolCall, onToolResult }: UseChatOptions) {
   // Destructure individual settings fields instead of selecting the full
   // settings object. Zustand's shallow equality means each selector re-renders
   // only when its specific value changes. The full `settings` object was
@@ -80,6 +82,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   useEffect(() => { onToolWriteRef.current = onToolWrite }, [onToolWrite])
   const onAskUserRef = useRef(onAskUser) as MutableRefObject<typeof onAskUser>
   useEffect(() => { onAskUserRef.current = onAskUser }, [onAskUser])
+  const onAskUserFormRef = useRef(onAskUserForm) as MutableRefObject<typeof onAskUserForm>
+  useEffect(() => { onAskUserFormRef.current = onAskUserForm }, [onAskUserForm])
   const onToolCallRef = useRef(onToolCall) as MutableRefObject<typeof onToolCall>
   useEffect(() => { onToolCallRef.current = onToolCall }, [onToolCall])
   const onToolResultRef = useRef(onToolResult) as MutableRefObject<typeof onToolResult>
@@ -243,7 +247,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       entityId, chatPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       pendingToolResultsRef, setToolResultTick,
-      onAskUserRef, onToolCallRef, onToolResultRef,
+      onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
     })
     channel.onmessage = onMessage
 
@@ -339,7 +343,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       entityId, chatPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       pendingToolResultsRef, setToolResultTick,
-      onAskUserRef, onToolCallRef, onToolResultRef,
+      onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
     })
     channel.onmessage = onMessage
 

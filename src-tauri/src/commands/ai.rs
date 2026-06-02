@@ -43,6 +43,7 @@ pub enum CompletionEvent {
     ToolPermission { request_id: u64, tool: String, args: serde_json::Value },
     ToolResult { tool: String, success: bool, output: String, path: Option<String>, content: Option<String> },
     AskUser { request_id: u64, question: String, question_type: AskUserQuestionType, choices: Option<Vec<String>> },
+    AskUserForm { request_id: u64, title: String, fields: Vec<FormField> },
     Done { done_reason: Option<String> },
     Error { message: String },
 }
@@ -75,6 +76,27 @@ pub enum AskUserQuestionType {
     Text,
     Choice,
     Confirm,
+}
+
+/// Field type for ask_user_form tool calls.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FormFieldType {
+    Text,
+    Choice,
+    Multiselect,
+    Confirm,
+}
+
+/// A single field definition within an ask_user_form call.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct FormField {
+    pub id: String,
+    pub label: String,
+    pub field_type: FormFieldType,
+    pub choices: Option<Vec<String>>,
+    pub placeholder: Option<String>,
+    pub required: Option<bool>,
 }
 
 // ─── Request / response types ─────────────────────────────────────────────────
@@ -512,6 +534,25 @@ pub fn resolve_ask_user(
         .ok_or_else(|| AppError::NotFound(format!("Ask-user request {request_id} not found or already resolved")))?;
     drop(pending);
     let _ = sender.send(answer);
+    Ok(())
+}
+
+/// Resolve a pending ask_user_form request.
+/// answers is a JSON object mapping field IDs to string or string[] values.
+#[tauri::command]
+pub fn resolve_ask_user_form(
+    request_id: u64,
+    answers: serde_json::Value,
+    app: AppHandle,
+) -> Result<(), AppError> {
+    let state = app.state::<crate::AppState>();
+    let mut pending = state.pending_ask_user_form.lock().unwrap();
+    let sender = pending
+        .remove(&request_id)
+        .ok_or_else(|| AppError::NotFound(format!("Form request {request_id} not found or already resolved")))?;
+    drop(pending);
+    let answers_string = serde_json::to_string(&answers).unwrap_or_else(|_| "{}".to_string());
+    let _ = sender.send(answers_string);
     Ok(())
 }
 

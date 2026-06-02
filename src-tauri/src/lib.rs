@@ -19,6 +19,8 @@ pub struct AppState {
     pub pending_permissions: Mutex<HashMap<u64, commands::ai::PendingToolPermission>>,
     /// Maps ask_user request_id -> pending oneshot sender for the user's answer string.
     pub pending_ask_user: Mutex<HashMap<u64, tokio::sync::oneshot::Sender<String>>>,
+    /// Maps ask_user_form request_id -> pending oneshot sender for the JSON answers string.
+    pub pending_ask_user_form: Mutex<HashMap<u64, tokio::sync::oneshot::Sender<String>>>,
     /// Monotonically increasing counter for permission IDs and ask_user request IDs.
     pub next_permission_id: AtomicU64,
     pub bonsai_process: tokio::sync::Mutex<Option<BonsaiServer>>,
@@ -121,6 +123,7 @@ pub fn run() {
             http_client,
             pending_permissions: Mutex::new(HashMap::new()),
             pending_ask_user: Mutex::new(HashMap::new()),
+            pending_ask_user_form: Mutex::new(HashMap::new()),
             next_permission_id: AtomicU64::new(1),
             bonsai_process: tokio::sync::Mutex::new(None),
             bonsai_port: AtomicU16::new(0),
@@ -153,6 +156,7 @@ pub fn run() {
             commands::ai::stop_generation_stream,
             commands::ai::resolve_tool_permission,
             commands::ai::resolve_ask_user,
+            commands::ai::resolve_ask_user_form,
             commands::ai_ollama::list_ollama_models,
             commands::ai_ollama::save_model_presets,
             commands::ai_ollama::load_model_presets,

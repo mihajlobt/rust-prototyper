@@ -185,12 +185,24 @@ export function getApiKeyForProvider(provider: Provider, apiKeys: Record<string,
 
 export type AskUserQuestionType = "text" | "choice" | "confirm";
 
+export type FormFieldType = "text" | "choice" | "multiselect" | "confirm";
+
+export interface FormField {
+  id: string
+  label: string
+  field_type: FormFieldType
+  choices?: string[]
+  placeholder?: string
+  required?: boolean
+}
+
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
   | { event: "ToolPermission"; data: { request_id: number; tool: string; args: Record<string, unknown> } }
   | { event: "ToolResult"; data: { tool: string; success: boolean; output: string; path?: string; content?: string } }
   | { event: "AskUser"; data: { request_id: number; question: string; question_type: AskUserQuestionType; choices?: string[] } }
+  | { event: "AskUserForm"; data: { request_id: number; title: string; fields: FormField[] } }
   | { event: "Done"; data: { done_reason?: string } | null }
   | { event: "Error"; data: { message: string } };
 
@@ -205,10 +217,17 @@ export async function resolveToolPermission(
   return invoke("resolve_tool_permission", { permissionId: requestId, decision });
 }
 
-/** Resolve a pending ask_user request. Called when the user submits
- *  their answer to the AI's question in the Wizard panel. */
+/** Resolve a pending ask_user request. */
 export async function resolveAskUser(requestId: number, answer: string): Promise<void> {
   return invoke("resolve_ask_user", { requestId, answer });
+}
+
+/** Resolve a pending ask_user_form request with all field answers. */
+export async function resolveAskUserForm(
+  requestId: number,
+  answers: Record<string, string | string[]>,
+): Promise<void> {
+  return invoke("resolve_ask_user_form", { requestId, answers });
 }
 
 /** Non-streaming completion — returns full response at once */

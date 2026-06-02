@@ -73,22 +73,44 @@ pub enum AskUserQuestionTypeArg {
     Confirm,
 }
 
-/// Args struct is used only for JSON Schema generation via make_schema;
-/// actual field access happens through serde_json in request_ask_user.
 #[allow(dead_code)]
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct AskUserArgs {
-    /// The question to ask the user. Be specific and actionable — avoid vague questions.
     pub question: String,
-    /// Type of answer: "text" for open-ended input, "choice" for picking from a list, "confirm" for Yes/No.
     pub question_type: AskUserQuestionTypeArg,
-    /// Required when question_type is "choice". List of options the user can
-    /// select from (2–6 items). Each entry MUST be a plain string — the UI
-    /// renders one button per string. Do NOT nest objects, do NOT use a
-    /// linked-list `{ "description": "...", "item": {...} }` shape, do NOT
-    /// include keys other than the string itself. Example:
-    /// `["Coinbase-style — bold colors, easy buy/sell", "TradingView-style — dense charts"]`.
+    /// Required when question_type is "choice". Each entry must be a plain string.
     pub choices: Option<Vec<String>>,
+}
+
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FormFieldTypeArg {
+    Text,
+    Choice,
+    Multiselect,
+    Confirm,
+}
+
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct FormFieldArg {
+    /// Key used in the response JSON object.
+    pub id: String,
+    pub label: String,
+    pub field_type: FormFieldTypeArg,
+    /// Required for "choice" and "multiselect" field types.
+    pub choices: Option<Vec<String>>,
+    pub placeholder: Option<String>,
+    /// Defaults to true.
+    pub required: Option<bool>,
+}
+
+#[allow(dead_code)]
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct AskUserFormArgs {
+    pub title: String,
+    pub fields: Vec<FormFieldArg>,
 }
 
 #[allow(dead_code)]
@@ -202,8 +224,37 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "ask_user".to_string(),
-                description: "Pause and ask the user a question before proceeding. Use for: clarifying requirements, confirming design direction, getting approval on a plan, or gathering preferences not yet specified. Only ask when the answer meaningfully changes what you build — do not ask trivial questions. Present choices when there are clear discrete options; use text for open-ended input; use confirm for simple yes/no approvals.".to_string(),
+                description: r#"Pause and ask the user a single question, then wait for their answer before continuing. For collecting several pieces of information at once, prefer ask_user_form.
+
+question_type values:
+- "choice"  — single-select from a list; provide a choices array, e.g. choices: ["SaaS dashboard", "Marketing site", "Mobile app"]
+- "confirm" — Yes / No; only use at major phase gates (e.g. "Here is the design system I'll use — ready to generate the screens?"). Do NOT use for procedural step confirmations like "I created this screen, continue?" or "I'm about to write the router, OK?" — just proceed.
+- "text"    — open-ended free text, e.g. "Describe the main user workflow"
+
+Schema: { question: string, question_type: "text"|"choice"|"confirm", choices?: string[] }"#.to_string(),
                 parameters: make_schema::<AskUserArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "ask_user_form".to_string(),
+                description: r#"Present a structured form with multiple fields and wait for the user to fill it in all at once. Returns a JSON object mapping each field id to the user's answer (string for text/choice/confirm, string[] for multiselect).
+
+field_type values:
+- "text"        — free-text input
+- "choice"      — single-select buttons; provide choices array
+- "multiselect" — multi-select checkboxes; provide choices array
+- "confirm"     — Yes / No toggle
+
+Example:
+  ask_user_form(title: "Tell me about your app", fields: [
+    { id: "name",     label: "App name",           field_type: "text",        placeholder: "e.g. TaskFlow" },
+    { id: "type",     label: "What kind of app?",  field_type: "choice",      choices: ["SaaS dashboard", "Mobile app", "Landing page", "Internal tool"] },
+    { id: "features", label: "Key features",        field_type: "multiselect", choices: ["Auth", "Dashboard", "Notifications", "Search", "Settings"] }
+  ])
+Returns: { "name": "TaskFlow", "type": "SaaS dashboard", "features": ["Dashboard", "Notifications"] }"#.to_string(),
+                parameters: make_schema::<AskUserFormArgs>(),
             },
         },
         ToolInfo {

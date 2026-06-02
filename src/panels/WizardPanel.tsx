@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Allotment } from "allotment"
 import { ChevronUp, ChevronDown } from "lucide-react"
 import { useChat } from "@/hooks/useChat"
-import type { AskUserPayload } from "@/hooks/useChat"
+import type { AskUserPayload, AskUserFormPayload } from "@/hooks/useChat"
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout"
 import { useAppStore } from "@/stores/appStore"
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore"
@@ -19,7 +19,7 @@ import { PromptInspector } from "@/components/PromptInspector"
 import { PaneHeader } from "@/components/ui/pane-header"
 import { getHostForProvider } from "@/lib/ipc"
 import type { ToolPermissionDecision } from "@/lib/ipc"
-import type { WizardAnnotation, PendingAskUser } from "./wizard/types"
+import type { WizardAnnotation, PendingAskUser, PendingAskUserForm } from "./wizard/types"
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10)
@@ -43,6 +43,7 @@ export function WizardPanel() {
   const devServerStore = useDevServerStore()
 
   const [pendingAskUser, setPendingAskUser] = useState<PendingAskUser | null>(null)
+  const [pendingAskUserForm, setPendingAskUserForm] = useState<PendingAskUserForm | null>(null)
   const [annotations, setAnnotations] = useState<WizardAnnotation[]>([])
   const [previewNavigatePath, setPreviewNavigatePath] = useState<string | null>(null)
 
@@ -65,6 +66,14 @@ export function WizardPanel() {
     })
   }, [])
 
+  const handleAskUserForm = useCallback((payload: AskUserFormPayload) => {
+    setPendingAskUserForm({
+      requestId: payload.requestId,
+      title: payload.title,
+      fields: payload.fields,
+    })
+  }, [])
+
   const handleToolCall = useCallback((tool: string, args: Record<string, unknown>) => {
     if (tool === "set_active_theme") pendingThemeSlugRef.current = (args.theme_slug as string) || ""
     if (tool === "register_screen") pendingScreenPathRef.current = (args.path as string) || ""
@@ -82,6 +91,8 @@ export function WizardPanel() {
         setTimeout(() => setPreviewNavigatePath(screenPath), 1500)
       }
     }
+    if (tool === "ask_user_form") setPendingAskUserForm(null)
+    if (tool === "ask_user") setPendingAskUser(null)
   }, [setProjectSettings])
 
   const chat = useChat({
@@ -91,6 +102,7 @@ export function WizardPanel() {
     outputPath: `projects/${settings.project}/generated/src/pages/home.tsx`,
     panelMaxToolCalls: settings.panelMaxToolCalls.wizard ?? 50,
     onAskUser: handleAskUser,
+    onAskUserForm: handleAskUserForm,
     onToolCall: handleToolCall,
     onToolResult: handleToolResult,
   })
@@ -145,6 +157,7 @@ export function WizardPanel() {
     chat.stopGeneration()
     chat.clearChat()
     setPendingAskUser(null)
+    setPendingAskUserForm(null)
     setAnnotations([])
     setPreviewNavigatePath(null)
     pendingThemeSlugRef.current = null
@@ -173,10 +186,12 @@ export function WizardPanel() {
                 thinkingContent={chat.thinkingContent}
                 pendingPermissions={chat.pendingPermissions}
                 pendingAskUser={pendingAskUser}
+                pendingAskUserForm={pendingAskUserForm}
                 onRegenerate={chat.regenerate}
                 onDeleteFrom={chat.deleteFrom}
                 onResolvePermission={handleResolvePermission}
                 onResolveAskUser={() => setPendingAskUser(null)}
+                onResolveAskUserForm={() => setPendingAskUserForm(null)}
                 onReset={handleReset}
                 input={chat.input}
                 onChangeInput={chat.setInput}

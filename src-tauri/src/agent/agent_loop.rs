@@ -364,6 +364,71 @@ async fn request_ask_user(
     }
 }
 
+/// Send an ask_user_form event to the frontend and block until the user submits all answers.
+/// Returns a JSON string mapping field ids to their answers.
+async fn request_ask_user_form(
+    args: &serde_json::Value,
+    channel: &Channel<CompletionEvent>,
+    cancel_token: &CancellationToken,
+    app_handle: &tauri::AppHandle,
+) -> String {
+    use crate::commands::ai::{FormField, FormFieldType};
+
+    let state = app_handle.state::<crate::AppState>();
+    let request_id = state.next_permission_id.fetch_add(1, Ordering::SeqCst);
+
+    let title = args.get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Please answer these questions")
+        .to_string();
+
+    let fields: Vec<FormField> = args.get("fields")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter().filter_map(|f| {
+                let obj = f.as_object()?;
+                let id = obj.get("id")?.as_str()?.to_string();
+                let label = obj.get("label")?.as_str()?.to_string();
+                let field_type = match obj.get("field_type").and_then(|v| v.as_str()) {
+                    Some("choice") => FormFieldType::Choice,
+                    Some("multiselect") => FormFieldType::Multiselect,
+                    Some("confirm") => FormFieldType::Confirm,
+                    _ => FormFieldType::Text,
+                };
+                let choices = obj.get("choices").and_then(|v| v.as_array()).map(|arr| {
+                    arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
+                });
+                let placeholder = obj.get("placeholder").and_then(|v| v.as_str()).map(str::to_string);
+                let required = obj.get("required").and_then(|v| v.as_bool());
+                Some(FormField { id, label, field_type, choices, placeholder, required })
+            }).collect()
+        })
+        .unwrap_or_default();
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    {
+        let mut pending = state.pending_ask_user_form.lock().unwrap();
+        pending.insert(request_id, tx);
+    }
+
+    let _ = channel.send(CompletionEvent::AskUserForm { request_id, title, fields });
+
+    tokio::select! {
+        result = rx => {
+            state.pending_ask_user_form.lock().unwrap().remove(&request_id);
+            result.unwrap_or_else(|_| "{}".to_string())
+        }
+        _ = cancel_token.cancelled() => {
+            state.pending_ask_user_form.lock().unwrap().remove(&request_id);
+            "{}".to_string()
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(180)) => {
+            state.pending_ask_user_form.lock().unwrap().remove(&request_id);
+            "{}".to_string()
+        }
+    }
+}
+
 pub struct AgentLoopParams<'a> {
     pub http_client: &'a reqwest::Client,
     pub host: &'a str,
@@ -481,13 +546,21 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                         });
                     }
 
-                    // ask_user is handled here — no permission gate, no execute_tool call.
-                    // It emits AskUser event and blocks until the user submits an answer.
+                    // ask_user / ask_user_form handled here — no permission gate, no execute_tool call.
                     if name == "ask_user" {
                         let answer = request_ask_user(&arg, &channel, &cancel_token, &app_handle).await;
                         return (idx, ToolExecutionResult {
                             success: true,
                             output: answer,
+                            written_path: None,
+                            written_content: None,
+                        });
+                    }
+                    if name == "ask_user_form" {
+                        let answers_json = request_ask_user_form(&arg, &channel, &cancel_token, &app_handle).await;
+                        return (idx, ToolExecutionResult {
+                            success: true,
+                            output: answers_json,
                             written_path: None,
                             written_content: None,
                         });

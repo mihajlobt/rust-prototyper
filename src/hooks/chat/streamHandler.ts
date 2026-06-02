@@ -1,5 +1,5 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react"
-import { writeFile, resolveAskUser, type CompletionEvent, type AskUserQuestionType } from "@/lib/ipc"
+import { writeFile, resolveAskUser, resolveAskUserForm, type CompletionEvent, type AskUserQuestionType, type FormField } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
@@ -10,6 +10,12 @@ export interface AskUserPayload {
   question: string
   questionType: AskUserQuestionType
   choices?: string[]
+}
+
+export interface AskUserFormPayload {
+  requestId: number
+  title: string
+  fields: FormField[]
 }
 
 // ─── Factory: createStreamHandler ──────────────────────────────────────────
@@ -36,6 +42,9 @@ export interface StreamHandlerParams {
   /** Called when the model invokes ask_user. Section-agnostic — any panel can provide this.
    *  If absent, the request is defensively resolved so the backend doesn't block. */
   onAskUserRef?: MutableRefObject<((payload: AskUserPayload) => void) | undefined>
+  /** Called when the model invokes ask_user_form. Section-agnostic.
+   *  If absent, the request is defensively resolved with empty answers. */
+  onAskUserFormRef?: MutableRefObject<((payload: AskUserFormPayload) => void) | undefined>
   /** Called for every ToolCall event, before the store update. */
   onToolCallRef?: MutableRefObject<((tool: string, args: Record<string, unknown>) => void) | undefined>
   /** Called for every ToolResult event, after the store update. */
@@ -46,7 +55,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
     onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath, pendingToolResultsRef, setToolResultTick,
-    onAskUserRef, onToolCallRef, onToolResultRef,
+    onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
   } = params
 
   let contentAccumulated = ""
@@ -152,6 +161,16 @@ export function createStreamHandler(params: StreamHandlerParams) {
         })
       } else {
         resolveAskUser(msg.data.request_id, "ask_user not handled in this section").catch(() => {})
+      }
+    } else if (msg.event === "AskUserForm") {
+      if (onAskUserFormRef?.current) {
+        onAskUserFormRef.current({
+          requestId: msg.data.request_id,
+          title: msg.data.title,
+          fields: msg.data.fields,
+        })
+      } else {
+        resolveAskUserForm(msg.data.request_id, {}).catch(() => {})
       }
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
