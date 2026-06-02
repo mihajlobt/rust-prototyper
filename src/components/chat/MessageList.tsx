@@ -362,7 +362,7 @@ const MessageBubble = memo(function MessageBubble({
       elements.push(
         <Tool
           key={`tool-${i}`}
-          toolPart={toolPartFromRecord(toolCalls[i])}
+          toolPart={toolPartFromRecord(toolCalls[i], isStreaming)}
           defaultOpen={i === toolCalls.length - 1 && isStreaming}
         />
       )
