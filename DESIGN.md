@@ -83,6 +83,23 @@ icon. Tuned for the dark canvas; a separate light set exists.
 doing*. They never mix on the same surface — type lives on the accent bar, status on the
 border.
 
+### File-type colors (Runner)
+
+The Runner's file tree uses 8 file-type hue tokens derived from the user accent
+via `oklch()` color theory (see `App.tsx`). All tokens share lightness/chroma;
+only the hue angle varies.
+
+| Token | Δ from accent | Type |
+|---|---|---|
+| `--file-ts` | 0° | TypeScript/JS |
+| `--file-tsx` | +30° | TSX/JSX |
+| `--file-css` | −30° | CSS/SCSS |
+| `--file-json` | +180° | JSON |
+| `--file-md` | +120° | Markdown |
+| `--file-img` | −120° | Images/assets |
+| `--file-html` | +60° | HTML |
+| `--file-config` | +150° | Config/YAML |
+
 ---
 
 ## Typography

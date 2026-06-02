@@ -27,7 +27,7 @@ src/
   panels/          # 9 panels: Wizard, Screens, Components, Themes, APIs, Runner, Library, Assets (+ workflows/ for WorkflowsView)
   workflows/       # WorkflowsView.tsx — graph execution engine
   layout/          # Header.tsx, SidebarRail.tsx
-  hooks/           # useSettings.ts, useChat.ts, useWizard.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, use-mobile.ts
+  hooks/           # useSettings.ts, useChat.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, use-mobile.ts
   lib/ipc.ts       # All invoke() wrappers — single source of truth for Rust↔TS calls
   modals/          # SettingsModal, ProjectManagerModal, ExportModal, AddLibraryModal, PromptConfigModal, ComponentExportModal, SaveComponentModal (+ StylesEditor.tsx is a tabbed editor in Settings, not a true modal)
   components/ui/   # shadcn/ui primitives

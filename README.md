@@ -287,12 +287,15 @@ channel.onmessage = (msg) => {
   if (msg.event === 'Chunk')    append(msg.data.text);
   if (msg.event === 'ToolCall') handleToolCall(msg.data);
   if (msg.event === 'ToolPermission') requestApproval(msg.data);
+  if (msg.event === 'ToolResult')     showToolResult(msg.data);
+  if (msg.event === 'AskUser')        promptUser(msg.data);  // wizard: text | choice | confirm
   if (msg.event === 'Done')     setLoading(false);
+  if (msg.event === 'Error')    setError(msg.data.message);
 };
 await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, ...);
 ```
 
-`CompletionEvent` mirrors the Rust enum and includes `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `Done`, and `Error` variants.
+`CompletionEvent` mirrors the Rust enum and includes `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `Done`, and `Error` variants. The `AskUser` event is used by the Wizard panel; the frontend must call `resolveAskUser()` (the `resolve_ask_user` Rust command) within 180s.
 
 ## Data Persistence
 
@@ -326,6 +329,24 @@ await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, 
 | `Ctrl+Shift+Z` | Redo | WorkflowsView |
 
 Shortcuts use `window.addEventListener('keydown', ...)` in `useEffect`.
+
+## Wizard Panel
+
+The Wizard (`WizardPanel`, hook `useWizard.ts`, view ID `wizard`) is a full-app
+generator that walks the model through collaborative design. It is the only
+panel that uses the `ask_user` tool — the model can pause mid-generation
+and ask the user a `text`, `choice`, or `confirm` question, then resume
+based on the answer (180s timeout per question, see `agent_loop.rs`).
+
+Key features:
+- **Live preview** with cross-origin iframe (uses `react-frame-component` + `postMessage({type:"reload"})` for HMR).
+- **Visual annotations**: click points or drag regions on the preview to send spatial feedback to the model. See `WizardAnnotations.tsx`.
+- **Theme/screen sync**: when the model calls `set_active_theme` the active theme preset updates immediately; when it calls `register_screen` then writes `router.tsx`, the preview auto-navigates to the new screen (1500ms delay).
+- **Dev server bootstrap**: on first output, the wizard auto-starts the runner dev server if a scaffold exists.
+
+The Wizard uses the same `useChat` streaming pipeline as the other panels but
+registers a custom `onAskUser` callback to receive the new `AskUser` event
+variant (see AI streaming in `CLAUDE.md`).
 
 ## Test Architecture
 
