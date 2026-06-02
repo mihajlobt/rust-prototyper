@@ -132,14 +132,14 @@ export function WizardPanel() {
       if (annotationContext) setAnnotations((prev) => prev.map((a) => ({ ...a, resolved: true })))
       chat.sendMessage(fullText)
     }
-  }, [chat, annotations])
+  }, [chat.input, chat.messages.length, chat.clearChat, chat.sendMessage, annotations])
 
   const handleSendAnnotations = useCallback(() => {
     const annotationContext = serializeAnnotations(annotations)
     if (!annotationContext) return
     setAnnotations((prev) => prev.map((a) => ({ ...a, resolved: true })))
     chat.sendMessage(`Please apply my visual annotations:${annotationContext}`)
-  }, [chat, annotations])
+  }, [chat.sendMessage, annotations])
 
   const handleReset = useCallback(() => {
     chat.stopGeneration()
@@ -149,7 +149,7 @@ export function WizardPanel() {
     setPreviewNavigatePath(null)
     pendingThemeSlugRef.current = null
     pendingScreenPathRef.current = null
-  }, [chat])
+  }, [chat.stopGeneration, chat.clearChat])
 
   const { ref: outerRef, onDragEnd: outerDragEnd, defaultSizes: outerSizes } = useAllotmentLayout("wizard-outer", 2)
   const { ref: inspectorRef, onDragEnd: inspectorDragEnd, defaultSizes: inspectorSizes } = useAllotmentLayout("wizard-inspector", 3)

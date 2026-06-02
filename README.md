@@ -148,8 +148,7 @@ src/
     PreviewErrorBoundary.tsx
   hooks/
     useSettings.ts              # Tauri Store persistence (thin re-export)
-    useChat.ts                   # Chat session management + streaming
-    useWizard.ts                 # Wizard panel: ask_user, annotations, dev server bootstrap
+    useChat.ts                   # Chat session management + streaming (used by all panel-level UIs including the Wizard)
     useProjectFiles.ts          # Project file operations + query keys
     useModelCapabilities.ts     # Model capability detection
     useAllotmentLayout.ts       # Pane size persistence
@@ -332,11 +331,23 @@ Shortcuts use `window.addEventListener('keydown', ...)` in `useEffect`.
 
 ## Wizard Panel
 
-The Wizard (`WizardPanel`, hook `useWizard.ts`, view ID `wizard`) is a full-app
-generator that walks the model through collaborative design. It is the only
-panel that uses the `ask_user` tool — the model can pause mid-generation
-and ask the user a `text`, `choice`, or `confirm` question, then resume
-based on the answer (180s timeout per question, see `agent_loop.rs`).
+The Wizard (`WizardPanel`, view ID `wizard`) is a full-app generator that
+walks the model through collaborative design. It is the only panel that
+uses the `ask_user` tool — the model can pause mid-generation and ask the
+user a `text`, `choice`, or `confirm` question, then resume based on the
+answer (180s timeout per question, see `agent_loop.rs`).
+
+The Wizard is implemented as a thin panel-level wrapper over `useChat` —
+no dedicated hook. It uses the same chat infrastructure as the other
+panels, augmented with three optional `useChat` callbacks:
+
+- `onAskUser`: receives the new `AskUser` event; renders the `AskUserCard`
+  and resolves via `resolveAskUser()` (the `resolve_ask_user` Rust command).
+- `onToolCall`: fires before each `ToolCall` store update; the wizard uses
+  this to capture `set_active_theme` slugs in-memory.
+- `onToolResult`: fires after each `ToolResult` store update; the wizard
+  uses this to apply the active theme and detect `router.tsx` writes that
+  should trigger preview navigation.
 
 Key features:
 - **Live preview** with cross-origin iframe (uses `react-frame-component` + `postMessage({type:"reload"})` for HMR).
@@ -344,9 +355,8 @@ Key features:
 - **Theme/screen sync**: when the model calls `set_active_theme` the active theme preset updates immediately; when it calls `register_screen` then writes `router.tsx`, the preview auto-navigates to the new screen (1500ms delay).
 - **Dev server bootstrap**: on first output, the wizard auto-starts the runner dev server if a scaffold exists.
 
-The Wizard uses the same `useChat` streaming pipeline as the other panels but
-registers a custom `onAskUser` callback to receive the new `AskUser` event
-variant (see AI streaming in `CLAUDE.md`).
+The streaming code for the AskUser handler is shown in `CLAUDE.md`'s AI
+streaming section.
 
 ## Test Architecture
 
