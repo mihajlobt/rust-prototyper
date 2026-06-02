@@ -1,3 +1,8 @@
+---
+title: Shared Chat Component Design
+layout: default
+---
+
 # Shared Chat Component Design
 
 **Date:** 2026-04-24  

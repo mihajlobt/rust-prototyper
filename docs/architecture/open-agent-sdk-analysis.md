@@ -1,3 +1,8 @@
+---
+title: Open Agent SDK Analysis — Prototyper Integration Feasibility
+layout: default
+---
+
 # Open Agent SDK Analysis — Prototyper Integration Feasibility
 
 > **Version audited:** `open-agent-sdk` v0.6.4 (commit `6b48021`)

@@ -1,3 +1,8 @@
+---
+title: Chat Stream & Tool Usage Flow
+layout: default
+---
+
 # Chat Stream & Tool Usage Flow
 
 A Mermaid sequence diagram mirroring the flow documented in `docs/chat-flow.html`, with source references verified against the actual implementation.

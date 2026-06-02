@@ -1,0 +1,44 @@
+# Jekyll configuration for Prototyper docs
+# Deployed to: https://mihajlobt.github.io/rust-prototyper/
+
+title: Prototyper Docs
+description: Architecture, plans, and specs for the Prototyper Tauri desktop app
+baseurl: /rust-prototyper
+url: https://mihajlobt.github.io
+
+# Use a custom layout (no theme dependency)
+theme: null
+plugins: []
+
+# Source: ./docs
+source: .
+
+# Build settings
+permalink: /:basename/
+markdown: kramdown
+highlighter: rouge
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Files/dirs to exclude from the build
+exclude:
+  - api/
+  - headless-tree/
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - .bundle/
+  - node_modules/
+
+# Don't copy these to the build
+keep_files: []
+
+# Default front matter
+defaults:
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: default

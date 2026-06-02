@@ -1,3 +1,8 @@
+---
+title: Tool Permission System — Architecture Report
+layout: default
+---
+
 # Tool Permission System — Architecture Report
 
 ## Executive Summary

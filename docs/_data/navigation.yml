@@ -1,0 +1,23 @@
+# Sidebar navigation for the docs site
+# Each item has: title (display), url (relative to site root with leading /), children (optional)
+
+- title: Home
+  url: /
+- title: Architecture
+  children:
+    - title: Chat Stream & Tool Flow
+      url: /architecture/chat-flow/
+    - title: Tool Permission System
+      url: /architecture/tool-permission-architecture/
+    - title: Open Agent SDK Analysis
+      url: /architecture/open-agent-sdk-analysis/
+- title: Plans
+  children:
+    - title: Native Context Menu
+      url: /plans/context-menu/
+    - title: Shared Chat
+      url: /plans/shared-chat/
+- title: Specs
+  children:
+    - title: Shared Chat Design
+      url: /specs/shared-chat-design/
