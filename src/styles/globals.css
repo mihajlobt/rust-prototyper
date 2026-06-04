@@ -5,52 +5,37 @@
 
 @plugin "@tailwindcss/typography";
 
-/* Consistent thin scrollbars — scoped to overflow containers only */
-.overflow-auto, .overflow-y-auto, .overflow-x-auto,
-.overflow-scroll, .overflow-y-scroll, .overflow-x-scroll {
+
+/* Scrollbar styling — only effective when GTK_OVERLAY_SCROLLING=0 (set in lib.rs on Linux).
+   At that point WebKit renders scrollbars itself, inside the compositor, making them CSS-styleable. */
+* {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.5 0 0 / 0.25) transparent;
+  scrollbar-color: oklch(0.45 0 0 / 0.4) transparent;
 }
-.overflow-auto::-webkit-scrollbar,
-.overflow-y-auto::-webkit-scrollbar,
-.overflow-x-auto::-webkit-scrollbar,
-.overflow-scroll::-webkit-scrollbar,
-.overflow-y-scroll::-webkit-scrollbar,
-.overflow-x-scroll::-webkit-scrollbar {
+.dark * {
+  scrollbar-color: oklch(0.7 0 0 / 0.3) transparent;
+}
+::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-.overflow-auto::-webkit-scrollbar-track,
-.overflow-y-auto::-webkit-scrollbar-track,
-.overflow-x-auto::-webkit-scrollbar-track,
-.overflow-scroll::-webkit-scrollbar-track,
-.overflow-y-scroll::-webkit-scrollbar-track,
-.overflow-x-scroll::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
-.overflow-auto::-webkit-scrollbar-thumb,
-.overflow-y-auto::-webkit-scrollbar-thumb,
-.overflow-x-auto::-webkit-scrollbar-thumb,
-.overflow-scroll::-webkit-scrollbar-thumb,
-.overflow-y-scroll::-webkit-scrollbar-thumb,
-.overflow-x-scroll::-webkit-scrollbar-thumb {
-  background: oklch(0.5 0 0 / 0.25);
-  border-radius: 3px;
+::-webkit-scrollbar-thumb {
+  background: oklch(0.45 0 0 / 0.4);
+  border-radius: 10px;
 }
-.overflow-auto::-webkit-scrollbar-thumb:hover,
-.overflow-y-auto::-webkit-scrollbar-thumb:hover,
-.overflow-x-auto::-webkit-scrollbar-thumb:hover,
-.overflow-scroll::-webkit-scrollbar-thumb:hover,
-.overflow-y-scroll::-webkit-scrollbar-thumb:hover,
-.overflow-x-scroll::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.5 0 0 / 0.45);
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.45 0 0 / 0.65);
 }
-.overflow-auto::-webkit-scrollbar-corner,
-.overflow-y-auto::-webkit-scrollbar-corner,
-.overflow-x-auto::-webkit-scrollbar-corner,
-.overflow-scroll::-webkit-scrollbar-corner,
-.overflow-y-scroll::-webkit-scrollbar-corner,
-.overflow-x-scroll::-webkit-scrollbar-corner {
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.7 0 0 / 0.3);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.7 0 0 / 0.55);
+}
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 

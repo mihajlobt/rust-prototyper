@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { RotateCcw } from "lucide-react";
 import { PROMPT_DEFINITIONS, type PromptGroup } from "@/lib/prompts";
 import type { Settings } from "@/hooks/useSettings";
+import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
 interface PromptsTabProps {
   settings: Settings;
@@ -33,8 +32,7 @@ export function PromptsTab({ settings, setSettings }: PromptsTabProps) {
         Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
         Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
       </p>
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="px-1 pb-2">
+      <div className="flex-1 min-h-0 overflow-y-auto px-1 pb-2">
         {PROMPT_GROUPS.map((group) => {
           const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
           return (
@@ -61,15 +59,18 @@ export function PromptsTab({ settings, setSettings }: PromptsTabProps) {
                         </span>
                       </button>
                       {isExpanded && (
-                        <div className="px-3 pb-3 space-y-2 border-t border-border bg-muted/20">
-                          <p className="text-[11px] text-muted-foreground pt-2">{def.description}</p>
-                          <Textarea
-                            className="font-mono text-xs min-h-[180px] resize-y"
-                            placeholder={def.getDefault()}
+                        <div className="pb-3 space-y-2 border-t border-border bg-muted/20">
+                          <p className="text-[11px] text-muted-foreground pt-2 px-3">{def.description}</p>
+                          <CodeMirrorEditor
                             value={settings.prompts[def.key] ?? ""}
-                            onChange={(e) => setPrompt(def.key, e.target.value)}
+                            onChange={(val) => setPrompt(def.key, val)}
+                            mode="markdown"
+                            lineWrapping
+                            minimal
+                            height="auto"
+                            placeholder={def.getDefault()}
                           />
-                          <div className="flex justify-end">
+                          <div className="flex justify-end px-3">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -90,8 +91,7 @@ export function PromptsTab({ settings, setSettings }: PromptsTabProps) {
             </div>
           );
         })}
-        </div>
-      </ScrollArea>
+      </div>
     </>
   );
 }

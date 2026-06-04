@@ -17,7 +17,7 @@ task(
   subagent_type="Image Specialist",
   description="Generate/edit visual content",
   prompt="Context to load:
-          - .opencode/context/core/visual-development.md
+          - .opencode/context/core/guides/visual-development.md
           
           Task: [Specific visual requirement]
           
@@ -107,4 +107,4 @@ task(
 ## Related Files
 
 - [Overview](./design-iteration-overview.md)
-- [Visual Development](../visual-development.md)
+- [Visual Development](../guides/visual-development.md)

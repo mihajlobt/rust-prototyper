@@ -10,29 +10,35 @@
 
 ## Example 1: Category Navigation (Function-Based)
 
-**File**: `openagents-repo/navigation.md`
+**File**: `prototyper/navigation.md`
 
 **Pattern**: Function-Based (repository-specific)
 
 **Token count**: ~250 tokens
 
 ```markdown
-# OpenAgents Control Repository Navigation
+# Prototyper Project Navigation
 
-**Purpose**: Navigate OpenAgents Control repository context
+**Purpose**: Prototyper Tauri v2 + React 19 project context
 
 ---
 
 ## Structure
 
 ```
-openagents-repo/
+prototyper/
 ├── navigation.md
-├── quick-start.md
-│
-├── core-concepts/
-│   ├── agent-architecture.md
-│   ├── eval-framework.md
+├── panels/
+│   └── assets/
+│       ├── concepts/
+│       │   └── assets-panel.md
+│       └── guides/
+│           └── ui-patterns.md
+└── backend/
+    └── bonsai/
+        └── concepts/
+            └── bonsai-backend.md
+```
 │   └── registry-system.md
 │
 ├── guides/

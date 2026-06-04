@@ -51,7 +51,7 @@ This folder is referenced from:
 - `.opencode/context/core/standards/project-intelligence.md` (standards and patterns)
 - `.opencode/context/core/system/context-guide.md` (context loading)
 
-See `.opencode/context/core/context-system.md` for the broader context architecture.
+See `.opencode/context/core/context-system/overview.md` for the broader context architecture.
 
 ## Maintenance
 

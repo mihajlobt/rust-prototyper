@@ -57,4 +57,6 @@
 ## Related
 
 - **Standards** → `../standards/navigation.md`
-- **OpenAgents Control Delegation** → `../../openagents-repo/guides/subagent-invocation.md`
+- **Task delegation caching** → `./task-delegation-caching.md`
+- **Subagent specialists** → `./task-delegation-specialists.md`
+- **External library handling** → `./external-libraries-scenarios.md`

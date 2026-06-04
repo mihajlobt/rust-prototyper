@@ -11,8 +11,6 @@
 ```
 core/
 ├── navigation.md
-├── context-system.md
-├── essential-patterns.md
 │
 ├── standards/
 │   ├── navigation.md
@@ -20,18 +18,37 @@ core/
 │   ├── test-coverage.md
 │   ├── documentation.md
 │   ├── security-patterns.md
-│   └── code-analysis.md
+│   ├── project-intelligence.md
+│   └── project-intelligence-management.md
 │
 ├── workflows/
 │   ├── navigation.md
 │   ├── code-review.md
 │   ├── task-delegation-basics.md
+│   ├── task-delegation-caching.md
+│   ├── task-delegation-specialists.md
 │   ├── feature-breakdown.md
+│   ├── delegation.md
+│   ├── review.md
 │   ├── session-management.md
-│   └── design-iteration-overview.md
+│   ├── external-context-integration.md
+│   ├── external-context-management.md
+│   ├── external-libraries-faq.md
+│   ├── external-libraries-scenarios.md
+│   ├── component-planning.md
+│   ├── design-iteration-overview.md
+│   ├── design-iteration-best-practices.md
+│   ├── design-iteration-plan-file.md
+│   ├── design-iteration-plan-iterations.md
+│   ├── design-iteration-stage-animation.md
+│   ├── design-iteration-stage-implementation.md
+│   ├── design-iteration-stage-layout.md
+│   ├── design-iteration-stage-theme.md
+│   └── design-iteration-visual-content.md
 │
 ├── guides/
-│   ├── navigation.md
+│   ├── essential-patterns.md
+│   ├── visual-development.md
 │   └── resuming-sessions.md
 │
 ├── task-management/
@@ -44,18 +61,33 @@ core/
 │       └── navigation.md
 │
 ├── system/
-│   └── context-guide.md
+│   ├── context-guide.md
+│   └── context-paths.md
 │
 └── context-system/
     ├── navigation.md
+    ├── overview.md
     ├── examples/
     │   └── navigation.md
     ├── guides/
-    │   └── navigation.md
+    │   ├── compact.md
+    │   ├── creation.md
+    │   ├── navigation-design-basics.md
+    │   ├── navigation-templates.md
+    │   ├── organizing-context.md
+    │   └── workflows.md
     ├── operations/
-    │   └── navigation.md
+    │   ├── error.md
+    │   ├── extract.md
+    │   ├── harvest.md
+    │   ├── migrate.md
+    │   ├── organize.md
+    │   └── update.md
     └── standards/
-        └── navigation.md
+        ├── codebase-references.md
+        ├── frontmatter.md
+        ├── mvi.md
+        └── structure.md
 ```
 
 ---
@@ -72,9 +104,10 @@ core/
 | **Delegate task** | `workflows/task-delegation-basics.md` |
 | **Break down feature** | `workflows/feature-breakdown.md` |
 | **Resume session** | `guides/resuming-sessions.md` |
+| **Essential patterns** | `guides/essential-patterns.md` |
+| **Visual content** | `guides/visual-development.md` |
 | **Manage tasks** | `task-management/navigation.md` |
-| **Task CLI commands** | `task-management/lookup/task-commands.md` |
-| **Context system** | `context-system.md` |
+| **Context system** | `context-system/overview.md` |
 
 ---
 
@@ -89,5 +122,7 @@ core/
 
 ## Related Context
 
+- **Prototyper project** → `../prototyper/navigation.md`
+- **Project intelligence** → `../project-intelligence/navigation.md`
 - **Development** → `../development/navigation.md`
-- **OpenAgents Control Repo** → `../openagents-repo/navigation.md`
+- **UI** → `../ui/navigation.md`

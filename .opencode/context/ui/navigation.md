@@ -1,79 +1,63 @@
-<!-- Context: ui/navigation | Priority: critical | Version: 1.0 | Updated: 2026-02-15 -->
+<!-- Context: ui/navigation | Priority: critical | Version: 1.1 | Updated: 2026-06-04 -->
 
 # UI Context
 
-**Purpose**: User interface design patterns, standards, and best practices across all platforms
+**Purpose**: User interface design patterns, standards, and best practices for the Prototyper web frontend
 
-**Last Updated**: 2026-01-07
+**Last Updated**: 2026-06-04
 
 ---
 
 ## Overview
 
-This category contains UI/UX patterns, design systems, and interface standards for building user-facing applications across different platforms.
+This category contains UI/UX patterns, design systems, and interface standards for the Prototyper React 19 + Tailwind v4 + shadcn/ui stack.
 
 ---
 
 ## Directory Structure
 
-### 📁 Subcategories
+### Subcategories
 
 | Subcategory | Description | Path |
 |-------------|-------------|------|
-| **web/** | Web UI patterns, animations, styling, React components | [web/navigation.md](web/navigation.md) |
-| **terminal/** | Terminal UI (TUI) patterns for CLI applications | [terminal/navigation.md](terminal/navigation.md) |
-
-### Future Subcategories
-
-- **mobile/** - React Native, Flutter patterns (planned)
-- **desktop/** - Electron, Tauri patterns (planned)
+| **web/** | Web UI patterns, animations, styling, React 19 components, shadcn/ui | [web/navigation.md](web/navigation.md) |
 
 ---
 
 ## Quick Navigation
 
 ### Web UI
-- Animation patterns and micro-interactions
-- CSS styling standards and design systems
-- React component patterns
-- Design assets and resources
-- Scroll-linked animations (scrollytelling)
-
-### Terminal UI
-- CLI/TUI patterns (planned)
-- Ink, Blessed component patterns (planned)
-- Terminal animations and progress indicators (planned)
+- Tailwind v4 utility-first patterns
+- shadcn/ui component primitives
+- React 19 hooks and component design
+- CSS animations and micro-interactions
+- Design tokens and theming
 
 ---
 
 ## Usage
 
-**Web development**: Navigate to `web/` for browser-based UI patterns
-
-**CLI/TUI development**: Navigate to `terminal/` for terminal interface patterns
-
-**Cross-platform**: Consider patterns from multiple subcategories
+**Web development** (Prototyper frontend): Navigate to `web/` for browser-based UI patterns, Tailwind v4 styling, React 19 patterns, and animations.
 
 ---
 
 ## Scope
 
 This category covers:
-- ✅ Visual design patterns
-- ✅ Animation and transitions
+- ✅ Tailwind v4 utility-first styling
+- ✅ shadcn/ui design system
+- ✅ React 19 component patterns
+- ✅ CSS animations and transitions
+- ✅ Design tokens and theming
 - ✅ Component architecture
-- ✅ Styling standards
-- ✅ Design systems
-- ✅ Accessibility patterns
-- ⏳ Platform-specific patterns (mobile, desktop)
 
 ---
 
 ## Related Categories
 
-- `development/` - General development patterns (backend, APIs, clean code)
-- `product/` - Product design and UX strategy
-- `content/` - Content design and copywriting
+- `prototyper/` - Prototyper project context (Tauri v2 + React 19)
+- `core/` - Universal standards and workflows
+- `development/` - General development patterns
 
 ---
 

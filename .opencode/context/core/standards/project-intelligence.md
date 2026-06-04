@@ -68,10 +68,10 @@ For new team members or agents:
 
 - **Lazy Loading**: Load project intelligence first when joining a project
 - **Layering**: Then load standards and specific context as needed
-- **Reference**: See `.opencode/context/core/context-system.md` for system overview
+- **Reference**: See `.opencode/context/core/context-system/overview.md` for system overview
 
 ## Related Files
 
 - **Management Guide**: `.opencode/context/core/standards/project-intelligence-management.md`
-- **Context System**: `.opencode/context/core/context-system.md`
+- **Context System**: `.opencode/context/core/context-system/overview.md`
 - **Standards Index**: `.opencode/context/core/standards/navigation.md`

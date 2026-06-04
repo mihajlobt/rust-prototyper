@@ -135,7 +135,7 @@ interface CodeMirrorEditorProps {
   readOnly?: boolean;
   className?: string;
   placeholder?: string;
-  /** Editor height. Defaults to "100%". */
+  /** Editor height. Defaults to "100%". Use "auto" to grow with content (no internal scroll). */
   height?: string;
   /** Soft-wrap long lines instead of scrolling horizontally. */
   lineWrapping?: boolean;

@@ -23,7 +23,7 @@
 └── errors/       # Troubleshooting
 ```
 
-**Example**: `openagents-repo/`
+**Example**: `prototyper/`
 
 ---
 
@@ -87,14 +87,19 @@ mkdir -p {category}/{subcategory}
 
 ## Pattern Examples
 
-### Function-Based (openagents-repo/)
+### Function-Based (prototyper/)
 ```
-openagents-repo/
-├── concepts/agents.md
-├── examples/subagent-example.md
-├── guides/creating-agents.md
-├── lookup/commands.md
-└── errors/tool-errors.md
+prototyper/
+├── panels/
+│   └── assets/
+│       ├── concepts/
+│       │   └── assets-panel.md
+│       └── guides/
+│           └── ui-patterns.md
+└── backend/
+    └── bonsai/
+        └── concepts/
+            └── bonsai-backend.md
 ```
 
 ### Concern-Based (development/)

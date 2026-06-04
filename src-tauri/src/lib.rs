@@ -96,6 +96,12 @@ pub use commands::ai::CompletionEvent;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // GTK overlay scrollbars are native widgets rendered above WebKit's compositor stack,
+    // so they appear above position:fixed overlays regardless of z-index.
+    // Disabling overlay scrolling makes them render as normal layout elements inside WebKit.
+    #[cfg(target_os = "linux")]
+    unsafe { std::env::set_var("GTK_OVERLAY_SCROLLING", "0"); }
+
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {

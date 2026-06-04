@@ -56,16 +56,18 @@
 ## Structure
 
 ```
-openagents-repo/
+prototyper/
 ├── navigation.md
-├── quick-start.md
-├── concepts/
-│   └── subagent-testing-modes.md
-├── guides/
-│   ├── adding-agent.md
-│   └── testing-agent.md
-└── lookup/
-    └── commands.md
+├── panels/
+│   └── assets/
+│       ├── concepts/
+│       │   └── assets-panel.md
+│       └── guides/
+│           └── ui-patterns.md
+└── backend/
+    └── bonsai/
+        └── concepts/
+            └── bonsai-backend.md
 ```
 ```
 
