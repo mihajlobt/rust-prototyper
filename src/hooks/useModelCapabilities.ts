@@ -19,8 +19,14 @@ type Capabilities = {
 }
 
 const PROVIDER_CAPS: Record<string, Capabilities> = {
-  openai:  { thinking: false, vision: true,  tools: true, contextLength: 128000, loading: false, family: undefined },
-  claude:  { thinking: false, vision: true,  tools: true, contextLength: 200000, loading: false, family: undefined },
+  openai: { thinking: false, vision: true, tools: true, contextLength: 128000, loading: false, family: undefined },
+}
+
+// Claude capabilities vary by model — detected in useModelCapabilities below.
+function claudeCaps(modelId: string): Capabilities {
+  // Extended thinking: claude-3-7-sonnet and all claude 4.x models
+  const thinking = /claude-3-7|claude-(opus|sonnet|haiku)-4/.test(modelId)
+  return { thinking, vision: true, tools: true, contextLength: 200000, loading: false, family: "claude" }
 }
 
 const EMPTY_CAPS: Capabilities = { thinking: false, vision: false, tools: false, loading: false, family: undefined }
@@ -62,8 +68,9 @@ export function useModelCapabilities(modelId: string): Capabilities {
     retry: 1,
   })
 
-  // Non-Ollama providers — return static capabilities
+  // Non-Ollama providers — return static or model-specific capabilities
   if (!isOllama) {
+    if (provider === "claude") return claudeCaps(modelId)
     return PROVIDER_CAPS[provider] ?? EMPTY_CAPS
   }
 

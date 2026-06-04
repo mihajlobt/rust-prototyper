@@ -235,6 +235,7 @@ async fn generate_ollama_completion_stream(
         let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
         let tool_filter: std::collections::HashSet<String> = request.tool_filter.iter().cloned().collect();
         crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
+            provider: &request.provider,
             http_client,
             host: &request.host,
             api_key: &request.api_key,
@@ -368,6 +369,44 @@ struct OllamaStreamMessage {
     thinking: Option<String>,
 }
 
+// ─── Claude streaming ─────────────────────────────────────────────────────────
+
+async fn generate_claude_completion_stream(
+    request: &CompletionRequest,
+    app_data_dir: &std::path::Path,
+    channel: &Channel<CompletionEvent>,
+    cancel_token: &CancellationToken,
+    http_client: &reqwest::Client,
+    app_handle: &AppHandle,
+) -> Result<(), AppError> {
+    if let Some(path) = request.output_path.as_deref() {
+        let json_messages = messages_to_ollama_json(&request.messages);
+        let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
+        let tool_filter: std::collections::HashSet<String> = request.tool_filter.iter().cloned().collect();
+        crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
+            provider: "claude",
+            http_client,
+            host: &request.host,
+            api_key: &request.api_key,
+            model: &request.model,
+            model_family: "",
+            initial_messages_json: json_messages,
+            think: request.think.as_ref().and_then(think_type_from_value),
+            app_data_dir,
+            output_path: path,
+            channel,
+            cancel_token,
+            app_handle,
+            permission_mode: request.tool_permission_mode,
+            tool_allowlist: allowlist,
+            max_tool_calls: request.max_tool_calls,
+            tool_filter,
+        }).await
+    } else {
+        chat_completion_claude(http_client, &request.api_key, &request.model, &request.messages, true, Some(channel), cancel_token).await.map(|_| ())
+    }
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -461,7 +500,7 @@ pub async fn generate_completion_stream(
             let cancel_clone = cancel_token.clone();
             tokio::spawn(async move {
                 let state = app_handle.state::<AppState>();
-                let result = chat_completion_claude(&client, &normalized.api_key, &normalized.model, &normalized.messages, true, Some(&on_event), &cancel_clone).await;
+                let result = generate_claude_completion_stream(&normalized, &app_data, &on_event, &cancel_clone, &client, &app_handle).await;
                 state.cancellation_tokens.lock().unwrap().remove(&request_id);
                 if let Err(e) = result {
                     let _ = on_event.send(CompletionEvent::Error { message: e.to_string() });

@@ -14,11 +14,11 @@ use crate::commands::ai::{ToolPermissionDecision, ToolPermissionMode, AskUserQue
 use crate::{AppError, CompletionEvent};
 use super::{executor::{execute_tool, ToolExecutionResult}, tools::build_tools};
 
-const MAX_ITERATIONS: u8 = 20;
-const MAX_WRITES: u8 = 10;
-const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 15000;
+pub(super) const MAX_ITERATIONS: u8 = 20;
+pub(super) const MAX_WRITES: u8 = 10;
+pub(super) const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 15000;
 
-fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
+pub(super) fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     let parts: Vec<&str> = output_path.splitn(3, '/').collect();
     if parts.len() >= 2 {
         app_data_dir.join(parts[0]).join(parts[1])
@@ -27,7 +27,7 @@ fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
     }
 }
 
-async fn setup_project_dir(proj_dir: &Path) {
+pub(super) async fn setup_project_dir(proj_dir: &Path) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
@@ -210,7 +210,7 @@ async fn stream_turn(
 
 /// Check if a tool should be gated or auto-allowed.
 /// Returns (should_gate, always_allow_this_tool).
-fn check_permission_gate(
+pub(super) fn check_permission_gate(
     tool: &str,
     mode: ToolPermissionMode,
     allowlist: &HashSet<String>,
@@ -226,7 +226,7 @@ fn check_permission_gate(
 }
 
 /// Request permission from the user and block until resolved.
-async fn request_permission(
+pub(super) async fn request_permission(
     tool: &str,
     args: &serde_json::Value,
     channel: &Channel<CompletionEvent>,
@@ -278,8 +278,7 @@ async fn request_permission(
     decision
 }
 
-/// Send an ask_user event to the frontend and block until the user submits an answer.
-async fn request_ask_user(
+pub(super) async fn request_ask_user(
     args: &serde_json::Value,
     channel: &Channel<CompletionEvent>,
     cancel_token: &CancellationToken,
@@ -364,9 +363,7 @@ async fn request_ask_user(
     }
 }
 
-/// Send an ask_user_form event to the frontend and block until the user submits all answers.
-/// Returns a JSON string mapping field ids to their answers.
-async fn request_ask_user_form(
+pub(super) async fn request_ask_user_form(
     args: &serde_json::Value,
     channel: &Channel<CompletionEvent>,
     cancel_token: &CancellationToken,
@@ -430,6 +427,7 @@ async fn request_ask_user_form(
 }
 
 pub struct AgentLoopParams<'a> {
+    pub provider: &'a str,
     pub http_client: &'a reqwest::Client,
     pub host: &'a str,
     pub api_key: &'a str,
@@ -453,7 +451,10 @@ pub struct AgentLoopParams<'a> {
 }
 
 pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
-    let AgentLoopParams { http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter } = params;
+    if params.provider == "claude" {
+        return super::claude::run_agent_loop_claude(params).await;
+    }
+    let AgentLoopParams { provider: _, http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter } = params;
     let max_iterations = max_tool_calls.filter(|&n| n > 0).unwrap_or(MAX_ITERATIONS);
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
