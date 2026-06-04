@@ -21,10 +21,7 @@ import { useChatStore } from "@/stores/chatStore";
 // Screens gets the full coding toolset. Wizard-specific tools (ask_user, register_screen,
 // set_active_theme, validate_design_json) are excluded because useChat has no handler for
 // ask_user — receiving it would block the backend for 600s.
-const SCREEN_TOOL_FILTER = [
-  "write_file", "edit_file", "read_file", "bash",
-  "run_tsc", "run_lint", "run_build", "glob", "grep",
-];
+import { SCREENS_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
 import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { PaneHeader } from "@/components/ui/pane-header";
@@ -44,6 +41,7 @@ import { useScreenCode } from "@/hooks/useScreenCode";
 
 export function ScreensPanel() {
   const { settings } = useAppStore();
+  const screenToolFilter = useAppStore((s) => s.settings.panelToolFilter.screens);
   const { ps, setProjectSettings } = useProjectSettingsStore();
 
   const screenId = ps.activeScreen;
@@ -247,7 +245,7 @@ export function ScreensPanel() {
     },
     // Tool models: write_file fires with raw code (no fences) for the primary output file only.
     onCodeOutput: (code) => applyScreenCode(code),
-    panelToolFilter: SCREEN_TOOL_FILTER,
+    panelToolFilter: screenToolFilter ?? SCREENS_TOOL_FILTER_DEFAULT,
     panelMaxToolCalls: settings.panelMaxToolCalls.screens,
   });
 

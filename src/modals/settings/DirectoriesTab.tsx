@@ -19,7 +19,7 @@ const DEFAULT_THEMES_DIR = "src/styles/themes";
 
 export function DirectoriesTab({ ps, setProjectSettings }: DirectoriesTabProps) {
   return (
-    <ScrollArea className="flex-1 overflow-hidden">
+    <ScrollArea className="flex-1 min-h-0">
       <div className="space-y-6">
 
         {/* Fixed paths — read-only reference */}

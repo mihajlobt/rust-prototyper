@@ -50,6 +50,12 @@ export interface Settings {
     themes?: number;
     wizard?: number;
   };
+  panelToolFilter: {
+    wizard?: string[];
+    screens?: string[];
+    components?: string[];
+    themes?: string[];
+  };
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -73,6 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
   toolAllowlist: [],
   maxToolCalls: 20,
   panelMaxToolCalls: {},
+  panelToolFilter: {},
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

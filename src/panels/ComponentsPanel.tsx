@@ -42,7 +42,7 @@ import { PaneHeader } from "@/components/ui/pane-header";
 import { useChat, resolveThinkParam } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
 
-const COMPONENTS_TOOL_FILTER = ["write_file", "edit_file", "read_file", "run_tsc", "run_lint", "run_build", "glob", "grep"];
+import { COMPONENTS_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
 import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
 import {
   ComponentsChatPanel,
@@ -61,6 +61,7 @@ interface CtxApi {
 
 export function ComponentsPanel() {
   const { settings } = useAppStore();
+  const componentsToolFilter = useAppStore((s) => s.settings.panelToolFilter.components);
   const { ps, setProjectSettings, openComponent: setSelectedComponent } = useProjectSettingsStore();
   const queryClient = useQueryClient();
 
@@ -339,7 +340,7 @@ export function ComponentsPanel() {
     onOutput: (content) => { const c = extractCode(content); if (c) applyCode(c); },
     // Tool models: write_file fires with raw code (no fences) for the primary output file only.
     onCodeOutput: (c) => applyCode(c),
-    panelToolFilter: COMPONENTS_TOOL_FILTER,
+    panelToolFilter: componentsToolFilter ?? COMPONENTS_TOOL_FILTER_DEFAULT,
     panelMaxToolCalls: settings.panelMaxToolCalls.components,
   });
 

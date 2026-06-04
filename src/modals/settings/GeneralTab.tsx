@@ -43,7 +43,7 @@ const GLOW_LEVELS = ["off", "subtle", "full"] as const;
 
 export function GeneralTab({ settings, setSettings }: GeneralTabProps) {
   return (
-    <ScrollArea className="flex-1 overflow-hidden">
+    <ScrollArea className="flex-1 min-h-0">
       <div className="space-y-6">
 
         {/* Appearance */}

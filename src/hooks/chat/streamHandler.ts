@@ -1,22 +1,10 @@
 import type { MutableRefObject, RefObject } from "react"
-import { writeFile, resolveAskUser, resolveAskUserForm, type CompletionEvent, type AskUserQuestionType, type FormField } from "@/lib/ipc"
+import { writeFile, type CompletionEvent } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
+import { useAskUserStore } from "@/stores/askUserStore"
 import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
 import { stripFences } from "./messages"
-
-export interface AskUserPayload {
-  requestId: number
-  question: string
-  questionType: AskUserQuestionType
-  choices?: string[]
-}
-
-export interface AskUserFormPayload {
-  requestId: number
-  title: string
-  fields: FormField[]
-}
 
 // ─── Factory: createStreamHandler ──────────────────────────────────────────
 //
@@ -42,12 +30,6 @@ export interface StreamHandlerParams {
   onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
   onToolWriteRef: MutableRefObject<((path: string, content: string) => void) | undefined>
   outputPath: string | undefined
-  /** Called when the model invokes ask_user. Section-agnostic — any panel can provide this.
-   *  If absent, the request is defensively resolved so the backend doesn't block. */
-  onAskUserRef?: MutableRefObject<((payload: AskUserPayload) => void) | undefined>
-  /** Called when the model invokes ask_user_form. Section-agnostic.
-   *  If absent, the request is defensively resolved with empty answers. */
-  onAskUserFormRef?: MutableRefObject<((payload: AskUserFormPayload) => void) | undefined>
   /** Called for every ToolCall event, before the store update. */
   onToolCallRef?: MutableRefObject<((tool: string, args: Record<string, unknown>) => void) | undefined>
   /** Called for every ToolResult event, after the store update. */
@@ -58,7 +40,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
     onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
-    onAskUserRef, onAskUserFormRef, onToolCallRef, onToolResultRef,
+    onToolCallRef, onToolResultRef,
   } = params
 
   let contentAccumulated = ""
@@ -144,29 +126,18 @@ export function createStreamHandler(params: StreamHandlerParams) {
       useChatStore.getState().setStreamingContent(entityId, "")
       useChatStore.getState().setStreamingThinking(entityId, "")
     } else if (msg.event === "AskUser") {
-      // Section-agnostic: any panel that registers onAskUser receives this.
-      // If no handler is registered, immediately resolve so the Rust agent
-      // loop is not blocked for the 600s timeout.
-      if (onAskUserRef?.current) {
-        onAskUserRef.current({
-          requestId: msg.data.request_id,
-          question: msg.data.question,
-          questionType: msg.data.question_type,
-          choices: msg.data.choices,
-        })
-      } else {
-        resolveAskUser(msg.data.request_id, "ask_user not handled in this section").catch(() => {})
-      }
+      useAskUserStore.getState().setAskUser({
+        requestId: msg.data.request_id,
+        question: msg.data.question,
+        questionType: msg.data.question_type,
+        choices: msg.data.choices,
+      })
     } else if (msg.event === "AskUserForm") {
-      if (onAskUserFormRef?.current) {
-        onAskUserFormRef.current({
-          requestId: msg.data.request_id,
-          title: msg.data.title,
-          fields: msg.data.fields,
-        })
-      } else {
-        resolveAskUserForm(msg.data.request_id, {}).catch(() => {})
-      }
+      useAskUserStore.getState().setAskUserForm({
+        requestId: msg.data.request_id,
+        title: msg.data.title,
+        fields: msg.data.fields,
+      })
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
       // Single atomic mutation: first pending match (front-to-back) gets result + path.

@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Allotment } from "allotment"
 import { ChevronUp, ChevronDown } from "lucide-react"
 import { useChat } from "@/hooks/useChat"
-import type { AskUserPayload, AskUserFormPayload } from "@/hooks/useChat"
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout"
 import { useAppStore } from "@/stores/appStore"
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore"
@@ -19,7 +18,9 @@ import { PromptInspector } from "@/components/PromptInspector"
 import { PaneHeader } from "@/components/ui/pane-header"
 import { getHostForProvider } from "@/lib/ipc"
 import type { ToolPermissionDecision } from "@/lib/ipc"
-import type { WizardAnnotation, PendingAskUser, PendingAskUserForm } from "./wizard/types"
+import type { WizardAnnotation } from "./wizard/types"
+import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults"
+import { useAskUserStore } from "@/stores/askUserStore"
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10)
@@ -39,11 +40,10 @@ function serializeAnnotations(annotations: WizardAnnotation[]): string {
 
 export function WizardPanel() {
   const { settings } = useAppStore()
+  const wizardToolFilter = useAppStore((s) => s.settings.panelToolFilter.wizard)
   const { ps, setProjectSettings } = useProjectSettingsStore()
   const devServerStore = useDevServerStore()
 
-  const [pendingAskUser, setPendingAskUser] = useState<PendingAskUser | null>(null)
-  const [pendingAskUserForm, setPendingAskUserForm] = useState<PendingAskUserForm | null>(null)
   const [annotations, setAnnotations] = useState<WizardAnnotation[]>([])
   const [previewNavigatePath, setPreviewNavigatePath] = useState<string | null>(null)
 
@@ -56,23 +56,6 @@ export function WizardPanel() {
   }, [settings.project])
 
   const wizardEntityId = `wizard-${settings.project}`
-
-  const handleAskUser = useCallback((payload: AskUserPayload) => {
-    setPendingAskUser({
-      requestId: payload.requestId,
-      question: payload.question,
-      questionType: payload.questionType,
-      choices: payload.choices,
-    })
-  }, [])
-
-  const handleAskUserForm = useCallback((payload: AskUserFormPayload) => {
-    setPendingAskUserForm({
-      requestId: payload.requestId,
-      title: payload.title,
-      fields: payload.fields,
-    })
-  }, [])
 
   const handleToolCall = useCallback((tool: string, args: Record<string, unknown>) => {
     if (tool === "set_active_theme") pendingThemeSlugRef.current = (args.theme_slug as string) || ""
@@ -91,8 +74,6 @@ export function WizardPanel() {
         setTimeout(() => setPreviewNavigatePath(screenPath), 1500)
       }
     }
-    if (tool === "ask_user_form") setPendingAskUserForm(null)
-    if (tool === "ask_user") setPendingAskUser(null)
   }, [setProjectSettings])
 
   const chat = useChat({
@@ -101,8 +82,7 @@ export function WizardPanel() {
     systemPrompt,
     outputPath: `projects/${settings.project}/generated/src/pages/home.tsx`,
     panelMaxToolCalls: settings.panelMaxToolCalls.wizard ?? 50,
-    onAskUser: handleAskUser,
-    onAskUserForm: handleAskUserForm,
+    panelToolFilter: wizardToolFilter ?? WIZARD_TOOL_FILTER_DEFAULT,
     onToolCall: handleToolCall,
     onToolResult: handleToolResult,
   })
@@ -154,8 +134,8 @@ export function WizardPanel() {
   const handleReset = useCallback(() => {
     chat.stopGeneration()
     chat.clearChat()
-    setPendingAskUser(null)
-    setPendingAskUserForm(null)
+    useAskUserStore.getState().clearAskUser()
+    useAskUserStore.getState().clearAskUserForm()
     setAnnotations([])
     setPreviewNavigatePath(null)
     pendingThemeSlugRef.current = null
@@ -183,13 +163,9 @@ export function WizardPanel() {
                 isStreaming={chat.isStreaming}
                 thinkingContent={chat.thinkingContent}
                 pendingPermissions={chat.pendingPermissions}
-                pendingAskUser={pendingAskUser}
-                pendingAskUserForm={pendingAskUserForm}
                 onRegenerate={chat.regenerate}
                 onDeleteFrom={chat.deleteFrom}
                 onResolvePermission={handleResolvePermission}
-                onResolveAskUser={() => setPendingAskUser(null)}
-                onResolveAskUserForm={() => setPendingAskUserForm(null)}
                 onReset={handleReset}
                 input={chat.input}
                 onChangeInput={chat.setInput}
@@ -257,7 +233,7 @@ export function WizardPanel() {
                 onRemove={(id) => setAnnotations((prev) => prev.filter((a) => a.id !== id))}
                 onResolve={(id) => setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, resolved: true } : a)))}
                 onSendToAi={handleSendAnnotations}
-                canSend={!chat.isStreaming && pendingAskUser === null}
+                canSend={!chat.isStreaming}
               />
             </Allotment.Pane>
           </Allotment>

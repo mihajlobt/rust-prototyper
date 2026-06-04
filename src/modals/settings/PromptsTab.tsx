@@ -33,7 +33,8 @@ export function PromptsTab({ settings, setSettings }: PromptsTabProps) {
         Edit the system prompts used during generation. Leave a slot empty to use the built-in default.
         Dynamic parts (icon library, current code, theme CSS) are always appended automatically.
       </p>
-      <ScrollArea className="h-100 px-4 py-2">
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="px-1 pb-2">
         {PROMPT_GROUPS.map((group) => {
           const defs = PROMPT_DEFINITIONS.filter((d) => d.group === group);
           return (
@@ -89,6 +90,7 @@ export function PromptsTab({ settings, setSettings }: PromptsTabProps) {
             </div>
           );
         })}
+        </div>
       </ScrollArea>
     </>
   );

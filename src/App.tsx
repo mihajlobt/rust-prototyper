@@ -15,6 +15,7 @@ import { WizardPanel } from "./panels/WizardPanel";
 import { useAppStore } from "./stores/appStore";
 import { useProjectSettingsStore } from "./stores/projectSettingsStore";
 import { Toaster } from "./components/ui/sonner";
+import { AskUserDialog } from "./components/AskUserDialog";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { setupGlobalErrorHandlers } from "./lib/notifications";
 import { useAllotmentLayout } from "./hooks/useAllotmentLayout";
@@ -85,6 +86,7 @@ export default function App() {
   return (
     <>
       <Toaster />
+      <AskUserDialog />
       <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground">
         <Header
           activeView={ps.activeView}

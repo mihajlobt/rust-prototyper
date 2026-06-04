@@ -17,6 +17,7 @@ import { ICON_LIBRARY_PACKAGES } from "@/lib/prompts";
 import { StylesEditor } from "@/modals/StylesEditor";
 import { GeneralTab } from "@/modals/settings/GeneralTab";
 import { AITab } from "@/modals/settings/AITab";
+import { AgentsTab } from "@/modals/settings/AgentsTab";
 import { DirectoriesTab } from "@/modals/settings/DirectoriesTab";
 import { PromptsTab } from "@/modals/settings/PromptsTab";
 
@@ -84,28 +85,33 @@ export function SettingsModal() {
           <TabsList variant="line" className="h-7">
             <TabsTrigger value="general" className="text-[11px]">General</TabsTrigger>
             <TabsTrigger value="ai" className="text-[11px]">AI</TabsTrigger>
+            <TabsTrigger value="agents" className="text-[11px]">Agents</TabsTrigger>
             <TabsTrigger value="directories" className="text-[11px]">Directories</TabsTrigger>
             <TabsTrigger value="styles" className="text-[11px]">Styles</TabsTrigger>
             <TabsTrigger value="prompts" className="text-[11px]">Prompts</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="flex-1 mt-4">
+          <TabsContent value="general" className="flex-1 mt-4 overflow-hidden flex flex-col">
             <GeneralTab settings={settings} setSettings={setSettings} />
           </TabsContent>
 
-          <TabsContent value="ai" className="flex-1 mt-4">
+          <TabsContent value="ai" className="flex-1 mt-4 overflow-hidden flex flex-col">
             <AITab settings={settings} setSettings={setSettings} />
           </TabsContent>
 
-          <TabsContent value="directories" className="flex-1 mt-4">
+          <TabsContent value="agents" className="flex-1 mt-4 overflow-hidden flex flex-col">
+            <AgentsTab settings={settings} setSettings={setSettings} />
+          </TabsContent>
+
+          <TabsContent value="directories" className="flex-1 mt-4 overflow-hidden flex flex-col">
             <DirectoriesTab ps={ps} setProjectSettings={setProjectSettings} />
           </TabsContent>
 
-          <TabsContent value="styles" className="flex-1 overflow-hidden mt-4">
+          <TabsContent value="styles" className="flex-1 mt-4 overflow-hidden flex flex-col">
             <StylesEditor />
           </TabsContent>
 
-          <TabsContent value="prompts" className="flex-1 mt-4">
+          <TabsContent value="prompts" className="flex-1 mt-4 overflow-hidden flex flex-col">
             <PromptsTab settings={settings} setSettings={setSettings} />
           </TabsContent>
         </Tabs>

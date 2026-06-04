@@ -28,7 +28,7 @@ import { ThemeCodeTabs } from "@/panels/ThemeCodeTabs";
 import { useChat } from "@/hooks/useChat";
 import { useChatStore } from "@/stores/chatStore";
 
-const DESIGN_TOOL_FILTER = ["write_file", "edit_file", "read_file", "bash", "glob", "grep"];
+import { DESIGN_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
 
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useThemeCss } from "@/hooks/useProjectFiles";
@@ -41,6 +41,7 @@ import { PaneHeader } from "@/components/ui/pane-header";
 
 export function ThemesPanel() {
   const { settings } = useAppStore();
+  const designToolFilter = useAppStore((s) => s.settings.panelToolFilter.themes);
   const { ps, setProjectSettings, openTheme: setSelectedThemeDir } = useProjectSettingsStore();
   const selectedThemeDir = ps.activeTheme;
   const themesDevice = ps.themesDevice;
@@ -240,7 +241,7 @@ export function ThemesPanel() {
         setDesignMd(content);
       }
     },
-    panelToolFilter: DESIGN_TOOL_FILTER,
+    panelToolFilter: designToolFilter ?? DESIGN_TOOL_FILTER_DEFAULT,
     panelMaxToolCalls: settings.panelMaxToolCalls.themes,
   });
 

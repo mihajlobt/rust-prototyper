@@ -26,7 +26,7 @@ const PANEL_OVERRIDES = [
 
 export function AITab({ settings, setSettings }: AITabProps) {
   return (
-    <ScrollArea className="flex-1 overflow-hidden">
+    <ScrollArea className="flex-1 min-h-0">
       <div className="space-y-6">
 
         {/* Providers — 2-col grid */}

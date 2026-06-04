@@ -1,25 +1,18 @@
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageList, ChatInput } from "@/components/chat";
-import { AskUserCard } from "@/components/ui/AskUserCard";
-import { AskUserFormCard } from "@/components/ui/AskUserFormCard";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
-import type { PendingAskUser, PendingAskUserForm } from "./types";
 
 interface WizardChatPanelProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   thinkingContent: string;
   pendingPermissions: ToolPermissionRecord[];
-  pendingAskUser: PendingAskUser | null;
-  pendingAskUserForm: PendingAskUserForm | null;
 
   onRegenerate: () => void;
   onDeleteFrom: (index: number) => void;
   onResolvePermission: (requestId: number, decision: ToolPermissionDecision, toolName: string) => void;
-  onResolveAskUser: () => void;
-  onResolveAskUserForm: () => void;
   onReset: () => void;
 
   // Input
@@ -51,13 +44,9 @@ export function WizardChatPanel({
   isStreaming,
   thinkingContent,
   pendingPermissions,
-  pendingAskUser,
-  pendingAskUserForm,
   onRegenerate,
   onDeleteFrom,
   onResolvePermission,
-  onResolveAskUser,
-  onResolveAskUserForm,
   onReset,
   input,
   onChangeInput,
@@ -113,37 +102,12 @@ export function WizardChatPanel({
         onResolvePermission={onResolvePermission}
       />
 
-      {/* AskUserCard in its own shrink-0 row so the answer area is never clipped
-          by sharing a container with ChatInput. MessageList flex-1 adjusts above. */}
-      {pendingAskUser && (
-        <div className="border-t border-border px-3 py-2.5 shrink-0">
-          <AskUserCard
-            requestId={pendingAskUser.requestId}
-            question={pendingAskUser.question}
-            questionType={pendingAskUser.questionType}
-            choices={pendingAskUser.choices}
-            onResolve={onResolveAskUser}
-          />
-        </div>
-      )}
-
-      {pendingAskUserForm && (
-        <div className="border-t border-border px-3 py-2.5 shrink-0">
-          <AskUserFormCard
-            requestId={pendingAskUserForm.requestId}
-            title={pendingAskUserForm.title}
-            fields={pendingAskUserForm.fields}
-            onResolve={onResolveAskUserForm}
-          />
-        </div>
-      )}
-
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0">
         <ChatInput
           value={input}
           onChange={onChangeInput}
           onSend={onSend}
-          disabled={isStreaming || pendingAskUser !== null}
+          disabled={isStreaming}
           attachments={attachments}
           onAddAttachment={onAddAttachment}
           onRemoveAttachment={onRemoveAttachment}
