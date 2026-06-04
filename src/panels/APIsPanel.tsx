@@ -29,6 +29,7 @@ import { ApiKeysSection } from "./apis/ApiKeysSection";
 import { RequestForm } from "./apis/RequestForm";
 import { ResponseViewer } from "./apis/ResponseViewer";
 import type { ApiKey, SavedApi } from "./apis/types";
+import { confirm } from "@tauri-apps/plugin-dialog";
 
 // Re-export public types for any external consumers
 export type { ApiKey, SavedApi } from "./apis/types";
@@ -144,7 +145,9 @@ export function APIsPanel() {
     );
   };
 
-  const deleteApi = (id: string) => {
+  const deleteApi = async (id: string) => {
+    const name = apis.find((a) => a.id === id)?.name ?? "this API";
+    if (!(await confirm(`Delete "${name}"?`, { title: "Delete API", kind: "warning" }))) return;
     setApis((prev) => prev.filter((a) => a.id !== id));
     if (selectedApiId === id) {
       setProjectSettings({

@@ -21,6 +21,7 @@ import type { ToolPermissionDecision } from "@/lib/ipc"
 import type { WizardAnnotation } from "./wizard/types"
 import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults"
 import { useAskUserStore } from "@/stores/askUserStore"
+import { confirm } from "@tauri-apps/plugin-dialog"
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10)
@@ -131,7 +132,8 @@ export function WizardPanel() {
     chat.sendMessage(`Please apply my visual annotations:${annotationContext}`)
   }, [chat.sendMessage, annotations])
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
+    if (!(await confirm("Reset the wizard and clear all messages?", { title: "Reset Wizard", kind: "warning" }))) return
     chat.stopGeneration()
     chat.clearChat()
     useAskUserStore.getState().clearAskUser()

@@ -52,13 +52,13 @@ export function ThemePreviewToolbar({
       <div className="flex-1" />
 
       <div className="flex items-center gap-1">
-        <Button variant={themesDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("mobile")}>
+        <Button variant={themesDevice === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" title="Mobile (375px)" onClick={() => onSetDevice("mobile")}>
           <Smartphone size={12} />
         </Button>
-        <Button variant={themesDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("tablet")}>
+        <Button variant={themesDevice === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" title="Tablet (768px)" onClick={() => onSetDevice("tablet")}>
           <Tablet size={12} />
         </Button>
-        <Button variant={themesDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("desktop")}>
+        <Button variant={themesDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" title="Desktop (full width)" onClick={() => onSetDevice("desktop")}>
           <Monitor size={12} />
         </Button>
       </div>

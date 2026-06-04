@@ -10,6 +10,7 @@ import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { toFileUrl } from "@/lib/ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { BonsaiConfigPopover } from "@/panels/assets/BonsaiConfigPopover";
 import { AssetGrid } from "@/panels/assets/AssetGrid";
 import { AssetPreviewLightbox } from "@/panels/assets/AssetPreviewLightbox";
@@ -115,6 +116,7 @@ export function AssetsPanel() {
   }, [bonsai.assets, ps.assetsSortOrder]);
 
   const handleDelete = useCallback(async (fileName: string) => {
+    if (!(await confirm(`Delete "${fileName}"?`, { title: "Delete Asset", kind: "warning" }))) return;
     await bonsai.deleteAsset(fileName);
     if (previewIndex !== undefined) {
       const deletedIndex = sortedAssets.findIndex((a) => a.file_name === fileName);

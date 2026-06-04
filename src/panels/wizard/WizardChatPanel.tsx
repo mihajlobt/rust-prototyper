@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageList, ChatInput } from "@/components/chat";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
@@ -88,7 +88,7 @@ export function WizardChatPanel({
           disabled={messages.length === 0}
           title="Reset wizard"
         >
-          <RotateCcw size={13} />
+          <Trash2 size={13} />
         </Button>
       </div>
 

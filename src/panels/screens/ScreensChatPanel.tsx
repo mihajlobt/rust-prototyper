@@ -1,5 +1,6 @@
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { MessageList, ChatInput } from "@/components/chat";
 import { ScreensContextToolbar } from "@/panels/screens/ScreensContextToolbar";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
@@ -106,7 +107,7 @@ export function ScreensChatPanel({
           variant="ghost"
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-destructive"
-          onClick={onClearChat}
+          onClick={async () => { if (await confirm("Clear all chat messages?", { title: "Clear Chat", kind: "warning" })) onClearChat(); }}
           title="Clear chat"
           disabled={messages.length === 0}
         >

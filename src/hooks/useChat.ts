@@ -89,6 +89,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<AttachmentFile[]>([])
   const [mentions, setMentions] = useState<MentionAsset[]>([])
+  // Refs so sendMessage reads current values at call time without being in its
+  // dep array — keeps sendMessage stable across keystrokes.
+  const inputRef = useRef(input)
+  const attachmentsRef = useRef(attachments)
+  const mentionsRef = useRef(mentions)
+  useEffect(() => { inputRef.current = input }, [input])
+  useEffect(() => { attachmentsRef.current = attachments }, [attachments])
+  useEffect(() => { mentionsRef.current = mentions }, [mentions])
   const activeBriefNameRef = useRef<string>("")
 
   const caps = useModelCapabilities(modelId)
@@ -148,9 +156,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
     if (currentChat.isStreaming) return
 
-    const currentInput = (textOverride ?? input).trim()
-    const currentAttachments = attachments
-    const currentMentions = mentions
+    const currentInput = (textOverride ?? inputRef.current).trim()
+    const currentAttachments = attachmentsRef.current
+    const currentMentions = mentionsRef.current
 
     if (!currentInput && currentAttachments.length === 0) return
 
@@ -228,11 +236,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", getErrorMessage(e))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    input, attachments, mentions, entityId, chatPath, systemPrompt,
+    entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
+    panelToolFilter, panelMaxToolCalls,
   ])
 
   const clearChat = useCallback(() => {

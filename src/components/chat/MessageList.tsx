@@ -56,6 +56,7 @@ import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/r
 import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/chat"
+import { confirm } from "@tauri-apps/plugin-dialog"
 
 function toolPartFromRecord(tc: ToolCallRecord, isStreaming = true): ToolPart {
   // "(no output)" from grep/filter commands ≠ error (just no match)
@@ -249,8 +250,8 @@ const MessageBubble = memo(function MessageBubble({
   onApplyCode, onRegenerate, onDeleteFrom,
 }: MessageBubbleProps) {
   const content = message.content
-  const hasChunks = !!message.streamChunks?.length
-  const hasTools = !!message.toolCalls?.length
+  const hasChunks = (message.streamChunks?.length ?? 0) > 0
+  const hasTools = (message.toolCalls?.length ?? 0) > 0
   const isEmpty = isStreaming && content === "" && !streamingThinking && !hasChunks && !hasTools
 
   const hasThinking = isStreaming ? streamingThinking.length > 0 : !!message.thinking
@@ -304,7 +305,7 @@ const MessageBubble = memo(function MessageBubble({
             </MessageAction>
             {onDeleteFrom && (
               <MessageAction tooltip="Delete from here">
-                <MsgActionBtn className="hover:text-destructive" onClick={() => onDeleteFrom(index)}>
+                <MsgActionBtn className="hover:text-destructive" onClick={async () => { if (await confirm("Delete this message and everything after it?", { title: "Delete Messages", kind: "warning" })) onDeleteFrom(index); }}>
                   <Trash2 size={13} />
                 </MsgActionBtn>
               </MessageAction>
@@ -379,6 +380,14 @@ const MessageBubble = memo(function MessageBubble({
       )
     }
 
+    // Generating indicator after the last pending tool (or after text chunk with no tool yet)
+    if (isStreaming && !streamingThinking.length) {
+      const lastTool = toolCalls[toolCalls.length - 1]
+      if (!lastTool || lastTool.pending) {
+        elements.push(<Loader key="generating" variant="loading-dots" size="sm" text="Generating" />)
+      }
+    }
+
     return elements
   }
 
@@ -411,10 +420,6 @@ const MessageBubble = memo(function MessageBubble({
               <MessageContent markdown isStreaming className="text-sm">{content}</MessageContent>
             )}
 
-            {/* Generating indicator — streaming with no accumulated content yet */}
-            {isStreaming && !hasThinking && !content && (
-              <Loader variant="loading-dots" size="sm" text="Generating" />
-            )}
           </>
         )}
 

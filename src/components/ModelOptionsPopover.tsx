@@ -13,6 +13,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { saveModelPresets, loadModelPresets, getErrorMessage, type ModelPreset } from "@/lib/ipc";
 import type { OllamaModelOptions } from "@/stores/appStore";
 import { notify } from "@/hooks/useToast";
+import { confirm } from "@tauri-apps/plugin-dialog";
 
 // ─── Field definitions ────────────────────────────────────────────────────────
 
@@ -177,6 +178,8 @@ export function ModelOptionsPopover() {
   };
 
   const deleteUserPreset = async (id: string) => {
+    const name = userPresets.find((p) => p.id === id)?.name ?? "this preset";
+    if (!(await confirm(`Delete "${name}"?`, { title: "Delete Preset", kind: "warning" }))) return;
     const next = userPresets.filter((p) => p.id !== id);
     await persistUserPresets(next);
     if (activePresetId === id) setActivePresetId(null);
