@@ -1,10 +1,11 @@
 # Jekyll configuration for Prototyper docs
-# Deployed to: https://mihajlobt.github.io/rust-prototyper/
+# Deployed via Cloudflare Pages — auto-publishes on every push to master.
+# Update `url` once your Cloudflare Pages project name is chosen.
 
 title: Prototyper Docs
 description: Architecture, plans, and specs for the Prototyper Tauri desktop app
-baseurl: /rust-prototyper
-url: https://mihajlobt.github.io
+baseurl: ""
+url: https://rust-prototyper.pages.dev
 
 # Use a custom layout (no theme dependency)
 theme: null
