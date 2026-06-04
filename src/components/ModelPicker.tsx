@@ -8,10 +8,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  listOllamaModels,
-} from "@/lib/ipc";
-import { OPENAI_MODELS, ANTHROPIC_MODELS, getProviderIcon, type Provider } from "@/lib/models";
+import { listOllamaModels, listAnthropicModels } from "@/lib/ipc";
+import { OPENAI_MODELS, getProviderIcon, type Provider } from "@/lib/models";
 import { useAppStore } from "@/stores/appStore";
 
 interface ModelPickerProps {
@@ -28,9 +26,6 @@ const CLOUD_CAPS: Record<string, { capabilities: string[]; contextLength: number
   "gpt-4o-mini":               { capabilities: ["completion", "vision", "tools"], contextLength: 128000 },
   "o3-mini":                   { capabilities: ["completion", "tools", "thinking"], contextLength: 200000 },
   "o1":                        { capabilities: ["completion", "thinking"], contextLength: 200000 },
-  "claude-opus-4-7":           { capabilities: ["completion", "vision", "tools"], contextLength: 200000 },
-  "claude-sonnet-4-6":         { capabilities: ["completion", "vision", "tools"], contextLength: 200000 },
-  "claude-haiku-4-5-20251001": { capabilities: ["completion", "vision", "tools"], contextLength: 200000 },
 };
 
 function formatContextK(ctxK?: number): string | null {
@@ -167,12 +162,23 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
   const triggerLabel = value || "Select model";
 
   const hasOpenAIKey = !!(settings.apiKeys["openai"]);
-  const hasAnthropicKey = !!(settings.apiKeys["claude"]);
+  const anthropicKey = settings.apiKeys["claude"] ?? "";
+  const hasAnthropicKey = !!anthropicKey;
 
-  const visibleLocal  = localModels.filter((m) => matches(m.id));
-  const visibleCloud  = cloudModels.filter((m) => matches(m.id));
-  const visibleOpenAI = OPENAI_MODELS.filter((m) => matches(m.id));
-  const visibleClaude = ANTHROPIC_MODELS.filter((m) => matches(m.id));
+  const anthropicQuery = useQuery({
+    queryKey: ["anthropic-models", anthropicKey],
+    queryFn: () => listAnthropicModels(anthropicKey),
+    enabled: hasAnthropicKey,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const anthropicModels = anthropicQuery.data ?? [];
+  const anthropicStatus: Status = !hasAnthropicKey ? "offline" : anthropicQuery.isPending ? "loading" : anthropicQuery.isError ? "offline" : "online";
+
+  const visibleLocal     = localModels.filter((m) => matches(m.id));
+  const visibleCloud     = cloudModels.filter((m) => matches(m.id));
+  const visibleOpenAI    = OPENAI_MODELS.filter((m) => matches(m.id));
+  const visibleAnthropic = anthropicModels.filter((m) => matches(m.id) || matches(m.display_name));
 
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
@@ -258,17 +264,28 @@ export function ModelPicker({ value, onChange, host, ollamaApiKey = "" }: ModelP
             </>
           )}
 
-          {hasAnthropicKey && visibleClaude.length > 0 && (
+          {hasAnthropicKey && (visibleAnthropic.length > 0 || anthropicStatus === "loading") && (
             <>
               <DropdownMenuSeparator className="my-1" />
-              <SectionHeader icon={<Bot size={11} />} label="Anthropic" />
-              {visibleClaude.map((m) => (
-                <ModelCard key={m.id} model={m} isActive={value === m.id} onClick={() => onChange({ modelId: m.id, provider: m.provider })} />
+              <SectionHeader icon={<Bot size={11} />} label="Anthropic" status={anthropicStatus} />
+              {anthropicStatus === "loading" && (
+                <p className="text-[10px] text-muted-foreground px-2.5 py-1">Loading…</p>
+              )}
+              {visibleAnthropic.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={{ id: m.id, name: m.display_name }}
+                  isActive={value === m.id}
+                  onClick={() => onChange({ modelId: m.id, provider: "claude" })}
+                  capabilities={["completion", "vision", "tools",
+                    ...(/claude-3-7|claude-(opus|sonnet|haiku)-4/.test(m.id) ? ["thinking"] : [])]}
+                  contextLength={200000}
+                />
               ))}
             </>
           )}
 
-          {query && visibleLocal.length === 0 && visibleCloud.length === 0 && visibleOpenAI.length === 0 && visibleClaude.length === 0 && (
+          {query && visibleLocal.length === 0 && visibleCloud.length === 0 && visibleOpenAI.length === 0 && visibleAnthropic.length === 0 && (
             <p className="text-[10px] text-muted-foreground px-2.5 py-2">{`No models match "${query}"`}</p>
           )}
         </div>

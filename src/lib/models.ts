@@ -11,11 +11,6 @@ export const OPENAI_MODELS: StaticModel[] = [
   { id: "o1",           name: "o1",           provider: "openai" },
 ];
 
-export const ANTHROPIC_MODELS: StaticModel[] = [
-  { id: "claude-opus-4-7",           name: "Claude Opus 4.7",           provider: "claude" },
-  { id: "claude-sonnet-4-6",         name: "Claude Sonnet 4.6",         provider: "claude" },
-  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5",           provider: "claude" },
-];
 
 export type Provider = "ollama-local" | "ollama-cloud" | "openai" | "claude"
 

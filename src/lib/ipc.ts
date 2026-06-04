@@ -311,6 +311,17 @@ export async function listOllamaModels(host: string, apiKey = ""): Promise<Ollam
   return invoke("list_ollama_models", { host, apiKey });
 }
 
+export interface AnthropicModel {
+  id: string;
+  display_name: string;
+  created_at: string;
+}
+
+/** Fetch all models available for an Anthropic API key via /v1/models. */
+export async function listAnthropicModels(apiKey: string): Promise<AnthropicModel[]> {
+  return invoke("list_anthropic_models", { apiKey });
+}
+
 // ─── Model Presets ───
 
 export interface ModelPreset {

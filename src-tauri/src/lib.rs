@@ -163,6 +163,7 @@ pub fn run() {
             commands::ai::resolve_tool_permission,
             commands::ai::resolve_ask_user,
             commands::ai::resolve_ask_user_form,
+            commands::ai::list_anthropic_models,
             commands::ai_ollama::list_ollama_models,
             commands::ai_ollama::save_model_presets,
             commands::ai_ollama::load_model_presets,

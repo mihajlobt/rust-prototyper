@@ -518,6 +518,30 @@ pub async fn generate_completion_stream(
     Ok(request_id)
 }
 
+/// Fetch available Claude models from the Anthropic /v1/models API.
+#[tauri::command]
+pub async fn list_anthropic_models(api_key: String, app: AppHandle) -> Result<Vec<serde_json::Value>, AppError> {
+    let state = app.state::<AppState>();
+    let res = state.http_client
+        .get("https://api.anthropic.com/v1/models")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .send()
+        .await
+        .map_err(|e| AppError::Http(e.to_string()))?;
+    if !res.status().is_success() {
+        let err = res.text().await.unwrap_or_default();
+        let msg = serde_json::from_str::<serde_json::Value>(&err)
+            .ok()
+            .and_then(|v| v["error"]["message"].as_str().map(String::from))
+            .unwrap_or(err);
+        return Err(AppError::Http(msg));
+    }
+    let json: serde_json::Value = res.json().await.map_err(|e| AppError::Http(e.to_string()))?;
+    let models = json["data"].as_array().cloned().unwrap_or_default();
+    Ok(models)
+}
+
 /// Cancel a running generation stream by request_id.
 /// Signals the CancellationToken which causes the stream loop to break,
 /// dropping the HTTP response body and closing the TCP connection.
