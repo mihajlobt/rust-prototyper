@@ -6,38 +6,20 @@
 @plugin "@tailwindcss/typography";
 
 
-/* Scrollbar styling — only effective when GTK_OVERLAY_SCROLLING=0 (set in lib.rs on Linux).
-   At that point WebKit renders scrollbars itself, inside the compositor, making them CSS-styleable. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: oklch(0.45 0 0 / 0.4) transparent;
-}
-.dark * {
-  scrollbar-color: oklch(0.7 0 0 / 0.3) transparent;
-}
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* Scrollbar styling — GTK_OVERLAY_SCROLLING=0 (lib.rs) forces WebKit to render scrollbars
+   inside its compositor, making them z-index aware and CSS-styleable. */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.45 0 0 / 0.4);
-  border-radius: 10px;
+  background: oklch(0.5 0 0 / 0.35);
+  border-radius: 100px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.45 0 0 / 0.65);
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.7 0 0 / 0.3);
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.7 0 0 / 0.55);
-}
-::-webkit-scrollbar-corner {
-  background: transparent;
-}
+::-webkit-scrollbar-thumb:hover { background: oklch(0.5 0 0 / 0.6); }
+.dark ::-webkit-scrollbar-thumb { background: oklch(0.7 0 0 / 0.25); }
+.dark ::-webkit-scrollbar-thumb:hover { background: oklch(0.7 0 0 / 0.5); }
+* { scrollbar-width: thin; scrollbar-color: oklch(0.5 0 0 / 0.35) transparent; }
+.dark * { scrollbar-color: oklch(0.7 0 0 / 0.25) transparent; }
 
 @custom-variant dark (&:where(.dark, .dark *));
 
