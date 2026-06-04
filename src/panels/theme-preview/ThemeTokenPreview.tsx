@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { rescopeThemeCss } from "./ThemeScopedStyle";
+import { parseTokenBlock } from "./ThemeScopedStyle";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { TypographyShowcase } from "./TypographyShowcase";
 import { SpacingVisualizer } from "./SpacingVisualizer";
@@ -15,19 +15,14 @@ interface ThemeTokenPreviewProps {
 }
 
 export function ThemeTokenPreview({ css, isDark, viewMode }: ThemeTokenPreviewProps) {
-  const [ready, setReady] = useState(false);
-
-  // Inject rescoped theme CSS into document.head; clean up on unmount or css change.
-  // ComponentGallery defers render until ready so Tailwind class resolution is correct.
-  useEffect(() => {
-    if (!css) { setReady(false); return; }
-    const tag = document.createElement("style");
-    tag.setAttribute("data-theme-preview", "true");
-    tag.textContent = rescopeThemeCss(css);
-    document.head.appendChild(tag);
-    setReady(true);
-    return () => { tag.remove(); setReady(false); };
-  }, [css]);
+  // Apply theme tokens as inline styles — CSS custom properties cascade to all children
+  // within this container, exactly like a ThemeProvider. No <style> injection means
+  // @import, @font-face, and body/html rules in the generated CSS never touch the app.
+  const themeVars = useMemo(() => {
+    const root = parseTokenBlock(css, ":root");
+    const dark = isDark ? parseTokenBlock(css, ".dark") : {};
+    return { ...root, ...dark } as React.CSSProperties;
+  }, [css, isDark]);
 
   if (!css) {
     return (
@@ -38,12 +33,8 @@ export function ThemeTokenPreview({ css, isDark, viewMode }: ThemeTokenPreviewPr
     );
   }
 
-  if (!ready) {
-    return <div className="flex items-center justify-center h-full text-xs text-muted-foreground/40">Loading…</div>;
-  }
-
   return (
-    <div className={cn("theme-preview-scope h-full overflow-auto", isDark && "dark")}>
+    <div className={cn("h-full overflow-auto", isDark && "dark")} style={themeVars}>
       <div className="bg-background text-foreground min-h-full">
         {viewMode === "gallery" ? (
           <ComponentGallery />
