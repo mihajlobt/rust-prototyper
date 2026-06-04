@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettings } from "@/hooks/useSettings";
 import { DESIGN_BRIEF_TEMPLATES } from "@/lib/prompts";
+import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
 export function StylesEditor() {
   const { settings, setSettings } = useSettings();
@@ -79,11 +79,14 @@ export function StylesEditor() {
                 onChange={(e) => setNewName(e.target.value)}
                 className="h-7 text-xs"
               />
-              <Textarea
-                placeholder={"Write a design brief in markdown.\n\nDescribe colors, typography, spacing, component style, mood, and anti-patterns.\nThe AI will follow these instructions when generating screens and components."}
+              <CodeMirrorEditor
                 value={newContent}
-                onChange={(e) => setNewContent(e.target.value)}
-                className="font-mono text-xs min-h-[160px] resize-y"
+                onChange={setNewContent}
+                mode="markdown"
+                lineWrapping
+                minimal
+                height="160px"
+                placeholder={"Write a design brief in markdown.\n\nDescribe colors, typography, spacing, component style, mood, and anti-patterns.\nThe AI will follow these instructions when generating screens and components."}
               />
               <div className="flex gap-2 justify-end">
                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => { setExpandedIndex(null); setNewName(""); setNewContent(""); }}>Cancel</Button>
@@ -135,11 +138,14 @@ export function StylesEditor() {
                         onBlur={() => saveStyle(i)}
                         placeholder="Style name"
                       />
-                      <Textarea
-                        className="font-mono text-xs min-h-[200px] resize-y"
+                      <CodeMirrorEditor
                         value={draftValue}
-                        onChange={(e) => setDraftValue(e.target.value)}
+                        onChange={setDraftValue}
                         onBlur={() => saveStyle(i)}
+                        mode="markdown"
+                        lineWrapping
+                        minimal
+                        height="200px"
                         placeholder="Design brief content (markdown)…"
                       />
                       <p className="text-[10px] text-muted-foreground">

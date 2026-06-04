@@ -49,10 +49,16 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(
       termRef.current = term;
       fitRef.current = fit;
 
-      const observer = new ResizeObserver(() => fit.fit());
+      // rAF prevents fit() from triggering a ResizeObserver loop
+      let rafId = 0;
+      const observer = new ResizeObserver(() => {
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => fit.fit());
+      });
       observer.observe(containerRef.current);
 
       return () => {
+        cancelAnimationFrame(rafId);
         observer.disconnect();
         term.dispose();
         termRef.current = null;

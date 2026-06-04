@@ -67,7 +67,7 @@ export function PromptsTab({ settings, setSettings }: PromptsTabProps) {
                             mode="markdown"
                             lineWrapping
                             minimal
-                            height="auto"
+                            height="220px"
                             placeholder={def.getDefault()}
                           />
                           <div className="flex justify-end px-3">
