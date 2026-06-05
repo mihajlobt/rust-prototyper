@@ -95,8 +95,17 @@ fn parse_show_response(json: &serde_json::Value) -> OllamaModelDetails {
         .unwrap_or_default();
     let details = &json["details"];
     let family = details["family"].as_str().unwrap_or("").to_string();
-    let families = details["families"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+    let families: Vec<String> = details["families"]
+        .as_array()
+        .map(|arr| {
+            let mut v: Vec<String> = Vec::with_capacity(arr.len());
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    v.push(s.to_string());
+                }
+            }
+            v
+        })
         .unwrap_or_default();
     let context_length = {
         let mi = json.get("model_info");
