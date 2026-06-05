@@ -21,12 +21,12 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
-import { ProjectExplorer, SECTION_NAMES } from "@/components/ProjectExplorer";
+import { ProjectExplorer, SECTION_NAMES, SECTION_TREE_PATH } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
 
 export function SidebarRail() {
   const { settings } = useAppStore();
-  const { setProjectSettings, openComponent, openScreen, openTheme, openWorkflow, openApi } = useProjectSettingsStore();
+  const { setProjectSettings, openComponent, openScreen, openTheme, openWorkflow, openApi, openPlan } = useProjectSettingsStore();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -45,10 +45,10 @@ export function SidebarRail() {
     const onTreeChanged = (event: Event) => {
       const section = (event as CustomEvent<{ section?: SectionName }>).detail?.section;
       if (section) {
-        queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+        queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[section]) });
       } else {
         for (const name of SECTION_NAMES) {
-          queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, name) });
+          queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[name]) });
         }
       }
     };
@@ -68,6 +68,7 @@ export function SidebarRail() {
     else if (section === "themes") openTheme(name);
     else if (section === "workflows") openWorkflow(name);
     else if (section === "apis") openApi(name.replace(/\.json$/, ""));
+    else if (section === "plans") openPlan(name.replace(/\.md$/, ""));
   };
 
   // --- Open new dialog prepopulated for a section type ---
@@ -77,13 +78,24 @@ export function SidebarRail() {
     setShowNewDialog(true);
   };
 
-  // Map item type to the section name used in query keys
-  const typeToSection: Record<string, string> = {
+  // Invalidate the tree query for a section. Wrapped so the query key uses
+  // the section's filesystem path (currently all sections live at projects/{id}/{name}).
+  const invalidateSection = (section: SectionName) => {
+    queryClient.invalidateQueries({
+      queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[section]),
+    });
+  };
+
+  // Map item type to the section name. All section names match their
+  // filesystem paths (projects/{id}/{name}), so the same string drives both
+  // the query key and the on-disk layout.
+  const typeToSection: Record<string, SectionName> = {
     screen: "screens",
     component: "components",
     theme: "themes",
     workflow: "workflows",
     api: "apis",
+    plan: "plans",
   };
 
   // --- Create ---
@@ -128,9 +140,19 @@ export function SidebarRail() {
           await writeFile(`${base}/apis/${id}.json`, JSON.stringify({ name: newItemName, endpoints: [], created: new Date().toISOString() }, null, 2));
           break;
         }
+        case "plan": {
+          // Plans live at projects/{id}/plans/ as plain .md files
+          // with YAML frontmatter (see src/lib/markdown/frontmatter.ts).
+          const plansDir = `${base}/plans`;
+          await createDir(plansDir);
+          const today = new Date().toISOString().slice(0, 10);
+          const initialContent = `---\ntitle: ${newItemName}\nstatus: draft\nupdated: ${today}\ntags:\n---\n\n# ${newItemName}\n\n`;
+          await writeFile(`${plansDir}/${id}.md`, initialContent);
+          break;
+        }
       }
       const section = typeToSection[newItemType];
-      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      invalidateSection(section);
       setShowNewDialog(false);
       setNewItemName("");
     } catch (e) {
@@ -146,6 +168,8 @@ export function SidebarRail() {
     try {
       if (section === "apis" || section === "workflows") {
         await deleteFile(`${base}/${section}/${name}.json`);
+      } else if (section === "plans") {
+        await deleteFile(`${base}/plans/${name}.md`);
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
@@ -158,7 +182,7 @@ export function SidebarRail() {
         await deleteDir(`${generatedDir}/src/components/${name}`).catch(() => {});
         await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync router", getErrorMessage(e)); });
       }
-      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      invalidateSection(section);
     } catch (e) {
       notify.error("Delete failed", getErrorMessage(e));
     }
@@ -167,7 +191,7 @@ export function SidebarRail() {
   // --- Rename ---
   const startRename = (section: SectionName, name: string) => {
     setRenameTarget({ section, name });
-    setRenameTo(name.replace(/\.json$/, ""));
+    setRenameTo(name.replace(/\.json$/, "").replace(/\.md$/, ""));
   };
 
   const handleRename = async () => {
@@ -177,6 +201,8 @@ export function SidebarRail() {
     try {
       if (section === "apis" || section === "workflows") {
         await renameFile(`${base}/${section}/${name}.json`, `${base}/${section}/${newId}.json`);
+      } else if (section === "plans") {
+        await renameFile(`${base}/plans/${name}.md`, `${base}/plans/${newId}.md`);
       } else {
         await renameFile(`${base}/${section}/${name}`, `${base}/${section}/${newId}`);
       }
@@ -189,7 +215,7 @@ export function SidebarRail() {
         await renameFile(`${generatedDir}/src/components/${name}`, `${generatedDir}/src/components/${newId}`).catch(() => {});
         await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync router", getErrorMessage(e)); });
       }
-      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      invalidateSection(section);
       setRenameTarget(null);
     } catch (e) {
       notify.error("Rename failed", getErrorMessage(e));
@@ -223,8 +249,13 @@ export function SidebarRail() {
         const meta = await readFile(`${base}/themes/${name}/prompt.json`).catch(() => "{}");
         await writeFile(`${dir}/theme.css`, css);
         await writeFile(`${dir}/prompt.json`, meta);
+      } else if (section === "plans") {
+        const srcPath = `${base}/plans/${name}.md`;
+        const dstPath = `${base}/plans/${newId}.md`;
+        const content = await readFile(srcPath).catch(() => "");
+        await writeFile(dstPath, content);
       }
-      await queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      invalidateSection(section);
     } catch (e) {
       notify.error("Duplicate failed", getErrorMessage(e));
     }
@@ -233,7 +264,7 @@ export function SidebarRail() {
   // --- Refresh ---
   const refreshAll = () => {
     for (const section of SECTION_NAMES) {
-      queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, section) });
+      invalidateSection(section);
     }
   };
 
@@ -296,6 +327,7 @@ export function SidebarRail() {
                 <SelectItem value="theme">Theme</SelectItem>
                 <SelectItem value="workflow">Workflow</SelectItem>
                 <SelectItem value="api">API</SelectItem>
+                <SelectItem value="plan">Plan</SelectItem>
               </SelectContent>
             </Select>
             <Input

@@ -68,7 +68,7 @@
 - If you need more, use one of these approaches:
   1. **Extract a component** — move the element into its own named React component.
   2. **`cva` (class-variance-authority)** — already used for shadcn/ui primitives.
-  3. **`@apply` in a CSS file** — for non-component HTML elements or repeated patterns. Add to the appropriate file in `src/styles/`.
+  3. **Reduce number of classes and do it with less**
 - When reducing class count, do NOT merge classes into a CSS class and then re-apply them alongside new Tailwind classes on the same element. If you extract to a CSS class, remove the equivalent Tailwind classes from the element — don't keep both.
 
 ## Allotment (split pane library)

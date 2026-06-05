@@ -11,6 +11,12 @@ export interface ProjectSettings {
   activeTheme: string | null;
   activeWorkflow: string | null;
   activeApi: string | null;
+  activePlan: string | null;
+
+  // Plans panel prefs
+  plansMode: "write" | "split" | "read" | "focus";
+  plansOutlineOpen: boolean;
+  plansChatOpen: boolean;
 
   // Project configuration
   stylePreset: string;
@@ -105,6 +111,11 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   activeTheme: null,
   activeWorkflow: null,
   activeApi: null,
+  activePlan: null,
+
+  plansMode: "split",
+  plansOutlineOpen: true,
+  plansChatOpen: false,
 
   stylePreset: "",
   applyDesignBrief: true,
@@ -225,6 +236,7 @@ interface ProjectSettingsStore {
   openTheme: (name: string) => void;
   openWorkflow: (name: string) => void;
   openApi: (id: string) => void;
+  openPlan: (name: string) => void;
 }
 
 export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get) => ({
@@ -272,4 +284,5 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
   openTheme:     (name) => get().setProjectSettings({ activeView: "themes",     activeTheme: name }),
   openWorkflow:  (name) => get().setProjectSettings({ activeView: "workflows",  activeWorkflow: name }),
   openApi:       (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
+  openPlan:      (name) => get().setProjectSettings({ activeView: "plans",      activePlan: name }),
 }));

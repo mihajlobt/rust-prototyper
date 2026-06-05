@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 /** All sections in order */
-export const SECTION_NAMES = ["screens", "components", "themes", "workflows", "apis"] as const;
+export const SECTION_NAMES = ["screens", "components", "themes", "workflows", "apis", "plans"] as const;
 export type SectionName = typeof SECTION_NAMES[number];
 
 /** UI labels for each section */
@@ -27,6 +27,7 @@ export const SECTION_LABELS: Record<SectionName, string> = {
   themes: "Design",
   workflows: "Workflows",
   apis: "APIs",
+  plans: "Plans",
 };
 
 /** Section → asset type for drag-and-drop */
@@ -36,15 +37,38 @@ export const SECTION_ASSET_TYPE: Record<SectionName, string | null> = {
   themes: "theme",
   workflows: null,
   apis: null,
+  plans: null,
 };
 
-/** Section → "screen" | "component" | "theme" | "api" | "workflow" for New dialog */
+/** Section → "screen" | "component" | "theme" | "api" | "workflow" | "plan" for New dialog */
 export const SECTION_NEW_TYPE: Record<SectionName, string> = {
   screens: "screen",
   components: "component",
   themes: "theme",
   workflows: "workflow",
   apis: "api",
+  plans: "plan",
+};
+
+/** Filesystem path under projects/{id}/ where each section's files live. */
+export const SECTION_TREE_PATH: Record<SectionName, string> = {
+  screens: "screens",
+  components: "components",
+  themes: "themes",
+  workflows: "workflows",
+  apis: "apis",
+  plans: "plans",
+};
+
+/** File extension stripped from leaf display names per section.
+ *  Empty string means "don't strip anything" (the leaf is a folder). */
+export const SECTION_LEAF_EXT: Record<SectionName, string> = {
+  screens: "",
+  components: "",
+  themes: "",
+  workflows: ".json",
+  apis: ".json",
+  plans: ".md",
 };
 
 /**
@@ -72,6 +96,7 @@ function AssetIcon({ section }: { section: SectionName }) {
     case "themes": return <Palette size={12} className="shrink-0 text-pink-400" />;
     case "workflows": return <Workflow size={12} className="shrink-0 text-green-400" />;
     case "apis": return <Globe size={12} className="shrink-0 text-yellow-400" />;
+    case "plans": return <FileText size={12} className="shrink-0 text-violet-400" />;
   }
 }
 
@@ -122,11 +147,12 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
   const settings = useAppStore((s) => s.settings);
   const project = settings.project;
 
-  const screensTree = useFlatProjectTree(project, "screens");
-  const componentsTree = useFlatProjectTree(project, "components");
-  const themesTree = useFlatProjectTree(project, "themes");
-  const workflowsTree = useFlatProjectTree(project, "workflows");
-  const apisTree = useFlatProjectTree(project, "apis");
+  const screensTree = useFlatProjectTree(project, SECTION_TREE_PATH.screens);
+  const componentsTree = useFlatProjectTree(project, SECTION_TREE_PATH.components);
+  const themesTree = useFlatProjectTree(project, SECTION_TREE_PATH.themes);
+  const workflowsTree = useFlatProjectTree(project, SECTION_TREE_PATH.workflows);
+  const apisTree = useFlatProjectTree(project, SECTION_TREE_PATH.apis);
+  const plansTree = useFlatProjectTree(project, SECTION_TREE_PATH.plans);
 
   // Map section name → query result for DRY access
   const sectionQueries: Record<SectionName, ReturnType<typeof useFlatProjectTree>> = useMemo(() => ({
@@ -135,7 +161,8 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
     themes: themesTree,
     workflows: workflowsTree,
     apis: apisTree,
-  }), [screensTree, componentsTree, themesTree, workflowsTree, apisTree]);
+    plans: plansTree,
+  }), [screensTree, componentsTree, themesTree, workflowsTree, apisTree, plansTree]);
 
   // Build flat lookup: itemId → TreeItemData
   const dataLookup = useMemo((): Record<string, TreeItemData> => {
@@ -147,7 +174,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
       // Section header — can have children (assets)
       lookup[sectionName] = {
         name: SECTION_LABELS[sectionName],
-        path: `projects/${project}/${sectionName}`,
+        path: `projects/${project}/${SECTION_TREE_PATH[sectionName]}`,
         hasChildren: true,
         section: sectionName,
         assetType: null,
@@ -155,9 +182,14 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
 
       // Each asset entry within the section
       for (const entry of entries) {
+        const leafExt = SECTION_LEAF_EXT[sectionName];
         // Asset items are leaves — no children, even for folders in FS
         lookup[entry.path] = {
-          name: entry.is_dir ? entry.name : entry.name.replace(/\.json$/, ""),
+          name: entry.is_dir
+            ? entry.name
+            : leafExt
+              ? entry.name.replace(new RegExp(`\\${leafExt}$`), "")
+              : entry.name,
           path: entry.path,
           hasChildren: false, // Assets are always leaves (files)
           section: sectionName,
@@ -217,6 +249,7 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
     themesTree.dataUpdatedAt,
     workflowsTree.dataUpdatedAt,
     apisTree.dataUpdatedAt,
+    plansTree.dataUpdatedAt,
     tree,
   ]);
 

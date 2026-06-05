@@ -20,3 +20,8 @@ export const DESIGN_TOOL_FILTER_DEFAULT = [
   "write_file", "edit_file", "read_file", "bash", "glob", "grep",
   "validate_design_json", "set_active_theme",
 ];
+
+export const PLANS_TOOL_FILTER_DEFAULT = [
+  "read_file", "glob", "grep", "write_file", "edit_file",
+  "ask_user", "ask_user_form",
+];

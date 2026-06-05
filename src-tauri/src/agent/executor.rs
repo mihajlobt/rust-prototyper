@@ -830,8 +830,10 @@ async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path, skip_policy
         },
     };
 
+    // grep runs unfiltered across all file types under the project. Only
+    // node_modules and .git are excluded — these never hold user content.
     let command = format!(
-        r#"grep -rn --include='*.tsx' --include='*.ts' --include='*.css' --include='*.json' --exclude-dir=node_modules --exclude-dir=.git {escaped_pattern} {escaped_path} | head -100; echo "EXIT:$?""#
+        r#"grep -rn --exclude-dir=node_modules --exclude-dir=.git {escaped_pattern} {escaped_path}; echo "EXIT:$?""#
     );
     let raw = run_sandboxed_command(&command, app_data_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);

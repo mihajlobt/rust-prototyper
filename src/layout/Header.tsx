@@ -9,6 +9,7 @@ import {
   PanelLeft,
   Image,
   Wand2,
+  FileText,
 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { SettingsModal } from "@/modals/SettingsModal";
@@ -23,6 +24,7 @@ const tabs = [
   { id: "screens", label: "Screens", icon: LayoutGrid },
   { id: "components", label: "Components", icon: Box },
   { id: "themes", label: "Design", icon: Palette },
+  { id: "plans", label: "Plans", icon: FileText },
   { id: "workflows", label: "Workflows", icon: GitBranch },
   { id: "apis", label: "APIs", icon: Terminal },
   { id: "assets", label: "Assets", icon: Image },

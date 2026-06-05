@@ -12,6 +12,7 @@ import { LibraryPanel } from "./panels/LibraryPanel";
 import { AssetsPanel } from "./panels/AssetsPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
 import { WizardPanel } from "./panels/WizardPanel";
+import { PlansPanel } from "./panels/PlansPanel";
 import { useAppStore } from "./stores/appStore";
 import { useProjectSettingsStore } from "./stores/projectSettingsStore";
 import { Toaster } from "./components/ui/sonner";
@@ -105,6 +106,7 @@ export default function App() {
                 {ps.activeView === "screens"    && <ScreensPanel />}
                 {ps.activeView === "components" && <ComponentsPanel />}
                 {ps.activeView === "themes"     && <ThemesPanel />}
+                {ps.activeView === "plans"      && <PlansPanel />}
                 <div style={{ display: ps.activeView === "workflows" ? "contents" : "none" }}>
                   <WorkflowsView />
                 </div>

@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import { useCallback, useMemo, useRef } from "react";
+import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
 import { json } from "@codemirror/lang-json";
@@ -141,6 +141,20 @@ interface CodeMirrorEditorProps {
   lineWrapping?: boolean;
   /** Compact mode — no line numbers, no fold gutter. For inline/embedded editors. */
   minimal?: boolean;
+  /**
+   * Optional ref-style callback that receives the underlying CodeMirror
+   * `EditorView` once mounted, and `null` when unmounted. Used by panels
+   * (Plans, etc.) that need to dispatch transactions from an external
+   * format toolbar without re-rendering on every keystroke.
+   */
+  viewRef?: React.MutableRefObject<EditorView | null>;
+  /**
+   * Extra CodeMirror extensions layered on top of the base set (language,
+   * color picker, line wrap, blur handler). Used by panels to plug in
+   * domain-specific features like autocomplete sources or update listeners
+   * without forking the editor.
+   */
+  extraExtensions?: Extension[];
 }
 
 export function CodeMirrorEditor({
@@ -155,8 +169,11 @@ export function CodeMirrorEditor({
   height = "100%",
   lineWrapping = false,
   minimal = false,
+  viewRef,
+  extraExtensions,
 }: CodeMirrorEditorProps) {
   const { settings } = useSettings();
+  const cmRef = useRef<ReactCodeMirrorRef>(null);
 
   const resolvedMode = filename ? getLanguageFromPath(filename) : mode;
 
@@ -169,16 +186,28 @@ export function CodeMirrorEditor({
     result.push(color);
     if (lineWrapping) result.push(EditorView.lineWrapping);
     if (onBlur) result.push(EditorView.domEventHandlers({ blur: () => { onBlur(); } }));
+    if (extraExtensions && extraExtensions.length > 0) result.push(...extraExtensions);
     return result;
-  }, [resolvedMode, lineWrapping, onBlur]);
+  }, [resolvedMode, lineWrapping, onBlur, extraExtensions]);
 
   const handleChange = useCallback((val: string) => { onChange?.(val); }, [onChange]);
 
   const themeEntry = EDITOR_THEMES[settings.editorTheme];
   const activeTheme = themeEntry ? themeEntry.ext : EDITOR_THEMES.oneDark.ext;
 
+  const setCmRef = useCallback(
+    (instance: ReactCodeMirrorRef | null) => {
+      cmRef.current = instance;
+      if (viewRef) {
+        viewRef.current = instance?.view ?? null;
+      }
+    },
+    [viewRef],
+  );
+
   return (
     <CodeMirror
+      ref={setCmRef}
       value={value}
       height={height}
       theme={activeTheme}

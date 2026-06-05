@@ -384,3 +384,99 @@
 .asset-highlight {
   animation: asset-highlight 1.5s ease-out;
 }
+
+/* ─── Plans section — rendered document styles (.md-render) ─────────────────── */
+/*
+ * Restyled prose container for the Plans preview. Inherits from
+ * @tailwindcss/typography (already loaded at the top of this file) via the
+ * `prose prose-sm dark:prose-invert` classes on the wrapper, then overrides
+ * to match the Quiet Instrument aesthetic:
+ *   - tighter line-height
+ *   - smaller headings (1.5 / 1.4 / 1.25 ratios)
+ *   - hairline hr color from the border token
+ *   - kbd chip, mention chip, tag chip reuse the same surface treatment as
+ *     callout sides
+ *   - callout variants get an icon-stripped header
+ */
+
+.md-render {
+  color: var(--foreground);
+  line-height: 1.72;
+  font-size: 14px;
+}
+
+.md-render h1 {
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 1.25rem 0 0.75rem;
+}
+.md-render h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 1.1rem 0 0.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2rem;
+}
+.md-render h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+.md-render h4 { font-size: 0.95rem; font-weight: 600; margin: 0.85rem 0 0.35rem; }
+.md-render h5 { font-size: 0.85rem; font-weight: 600; margin: 0.75rem 0 0.3rem; }
+.md-render h6 { font-size: 0.8rem; font-weight: 600; color: var(--muted-foreground); margin: 0.65rem 0 0.25rem; }
+
+.md-render p { margin: 0.5rem 0; }
+.md-render ul, .md-render ol { margin: 0.5rem 0; padding-left: 1.25rem; }
+.md-render li { margin: 0.15rem 0; }
+.md-render li > p { margin: 0; }
+
+.md-render hr { border: 0; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+
+.md-render blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+  margin: 0.75rem 0;
+}
+
+.md-render code:not(pre code) {
+  background: var(--muted);
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+
+.md-render table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.85em;
+}
+.md-render th, .md-render td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+.md-render th { background: var(--muted); font-weight: 600; }
+
+.md-render input[type="checkbox"] {
+  margin-right: 0.4rem;
+  vertical-align: middle;
+  accent-color: var(--primary);
+}
+
+.md-render a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-render *,
+  .md-render *::before,
+  .md-render *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
