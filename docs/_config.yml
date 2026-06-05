@@ -44,3 +44,8 @@ defaults:
       type: pages
     values:
       layout: default
+  - scope:
+      path: "context"
+    values:
+      layout: default
+      permalink: /context/:path/
