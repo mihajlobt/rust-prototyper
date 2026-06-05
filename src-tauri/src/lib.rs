@@ -102,6 +102,21 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     unsafe { std::env::set_var("GTK_OVERLAY_SCROLLING", "0"); }
 
+    // WebKitGTK's DMA-BUF rendering path can crash with `Gdk-Message: Error 71
+    // (Protocol error)` on Wayland compositors with newer Mesa/kwin combos where
+    // GBM buffer creation returns EINVAL. Falling back to SHM buffers avoids the
+    // crash while preserving GPU compositing via Skia — only the buffer-sharing
+    // mechanism changes. X11 users are unaffected (DMA-BUF still used); users
+    // who explicitly set the var are not overridden.
+    #[cfg(target_os = "linux")]
+    {
+        let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+        let already_set = std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some();
+        if wayland && !already_set {
+            unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1"); }
+        }
+    }
+
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {

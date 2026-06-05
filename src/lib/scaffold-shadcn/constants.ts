@@ -35,10 +35,13 @@ export const PROJECT_PATHS = {
  * CLI command to add all available shadcn components.
  * Uses --all so shadcn decides what's available for the chosen style,
  * rather than maintaining a hardcoded list that can go stale.
+ * Pinned to shadcn@4.10.0 to match the version verified working in the
+ * release build on 2026-06-05; @latest will drift and may introduce
+ * new interactive prompts the scaffolding flow can't bypass.
  * https://ui.shadcn.com/docs/cli
  */
 export const SHADCN_ADD_COMMAND: string =
-  "bunx --bun shadcn@latest add --all --overwrite";
+  "bunx --bun shadcn@4.10.0 add --all --overwrite";
 
 /**
  * CLI command to initialize shadcn for Vite. Creates a new project subdirectory.
@@ -50,11 +53,13 @@ export const SHADCN_ADD_COMMAND: string =
  * --pointer        enable pointer cursor for buttons
  * (-y/--yes defaults to true per CLI docs, not needed)
  *
+ * Pinned to shadcn@4.10.0 — see SHADCN_ADD_COMMAND.
+ *
  * Tested non-interactively in /tmp — all prompts suppressed, exit 0.
  * Ref: https://ui.shadcn.com/docs/cli — init options
  */
 export const SHADCN_INIT_COMMAND: string =
-  "bunx --bun shadcn@latest init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer";
+  "bunx --bun shadcn@4.10.0 init -t vite -b radix -p nova --no-monorepo --no-rtl --pointer";
 
 /**
  * Returns the canonical ESLint flat config for a shadcn-scaffolded preview project.

@@ -1,5 +1,25 @@
 # Release Notes
 
+## v0.1.2 (2026-06-05)
+
+Patch release. Fixes a Wayland launch crash and adds two diagnostic improvements.
+
+### Fixes
+
+- **Wayland launch crash on newer Mesa/kwin combos** (`<lib.rs>`): the Tauri binary now auto-sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` when `WAYLAND_DISPLAY` is present, avoiding the `Gdk-Message: Error 71 (Protocol error)` crash on Linux Wayland sessions where WebKitGTK's DMA-BUF buffer creation fails. Falls back to SHM buffers (Skia still GPU-composites); X11 users and explicit user overrides are unaffected.
+
+### Changes
+
+- **shadcn CLI pinned to `4.10.0`** (`src/lib/scaffold-shadcn/constants.ts`): replaces `@latest` so future upstream CLI changes can't drift the scaffold flags and break first-time setup.
+- **Self-diagnosing `Process` errors** (`src-tauri/src/commands/process.rs`): child stdout/stderr are now captured (last ~2 KB) and included in the error message returned to the frontend. The next `Process exited with code 1` will show what the child actually said.
+
+### Notes
+
+- All other behavior from v0.1.1 is preserved. Safe drop-in upgrade.
+- Same platform support: Linux x86_64, macOS arm64, macOS x64.
+
+---
+
 ## v0.1.1 (2026-06-05)
 
 Patch release. Fixes two permission-card bugs and reorganises the Settings tabs.

@@ -62,26 +62,46 @@ pub(crate) async fn spawn_bun_command_sync(
     let pid = child.pid();
     app.state::<AppState>().active_processes.lock().unwrap().insert(pid, child);
 
+    // Accumulate child output so non-zero exits produce a self-diagnosing error
+    // instead of the opaque "Process exited with code N". Keep last ~2KB.
+    let mut output = String::new();
+    const MAX_OUTPUT: usize = 2_000;
+
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(buf) => {
                 let line = String::from_utf8_lossy(&buf).to_string();
                 let _ = app.emit("terminal-output", serde_json::json!({ "pid": pid, "line": line, "source": "stdout" }));
+                append_capped(&mut output, &line, MAX_OUTPUT);
             }
             CommandEvent::Stderr(buf) => {
                 let line = String::from_utf8_lossy(&buf).to_string();
                 let _ = app.emit("terminal-output", serde_json::json!({ "pid": pid, "line": line, "source": "stderr" }));
+                append_capped(&mut output, &line, MAX_OUTPUT);
             }
             CommandEvent::Terminated(payload) => {
                 app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
                 return match payload.code {
                     Some(0) | None => Ok(()),
-                    Some(code) => Err(AppError::Process(format!("Process exited with code {code}"))),
+                    Some(code) => {
+                        let display_cmd = format!("{cmd} {}", args.join(" "));
+                        let msg = if output.is_empty() {
+                            format!("`{display_cmd}` exited with code {code} (no output captured)")
+                        } else {
+                            format!("`{display_cmd}` exited with code {code}. Output:\n{output}")
+                        };
+                        Err(AppError::Process(msg))
+                    }
                 };
             }
             CommandEvent::Error(e) => {
                 app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
-                return Err(AppError::Process(format!("Process error: {e}")));
+                let msg = if output.is_empty() {
+                    format!("`{cmd}` process error: {e}")
+                } else {
+                    format!("`{cmd}` process error: {e}. Output:\n{output}")
+                };
+                return Err(AppError::Process(msg));
             }
             _ => {}
         }
@@ -89,6 +109,24 @@ pub(crate) async fn spawn_bun_command_sync(
 
     app.state::<AppState>().active_processes.lock().unwrap().remove(&pid);
     Ok(())
+}
+
+/// Append a line to a capped buffer, keeping the most recent `cap` bytes.
+fn append_capped(buf: &mut String, line: &str, cap: usize) {
+    if buf.len() + line.len() + 1 > cap {
+        let overflow = (buf.len() + line.len() + 1).saturating_sub(cap);
+        let drop_at = buf.len().saturating_sub(overflow.min(buf.len()));
+        // Drop a UTF-8 char boundary to avoid splitting mid-codepoint
+        let mut idx = drop_at;
+        while idx > 0 && !buf.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        buf.drain(..idx);
+    }
+    buf.push_str(line);
+    if !buf.ends_with('\n') {
+        buf.push('\n');
+    }
 }
 
 pub(crate) async fn capture_command_output(
