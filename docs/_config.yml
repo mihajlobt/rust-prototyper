@@ -33,6 +33,10 @@ exclude:
   - .bundle/
   - node_modules/
 
+# Treat .json files inside context/ as static (don't try to process them)
+include:
+  - context/
+
 # Don't copy these to the build
 keep_files: []
 
@@ -41,5 +45,10 @@ defaults:
   - scope:
       path: ""
       type: pages
+    values:
+      layout: default
+  # Apply layout to context/ files that have no front matter
+  - scope:
+      path: "context"
     values:
       layout: default
