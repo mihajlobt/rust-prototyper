@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { parseTokenBlock } from "./ThemeScopedStyle";
+import { buildScopedThemeCss, THEME_PREVIEW_SCOPE } from "./ThemeScopedStyle";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 import { TypographyShowcase } from "./TypographyShowcase";
 import { SpacingVisualizer } from "./SpacingVisualizer";
@@ -15,14 +15,15 @@ interface ThemeTokenPreviewProps {
 }
 
 export function ThemeTokenPreview({ css, isDark, viewMode }: ThemeTokenPreviewProps) {
-  // Apply theme tokens as inline styles — CSS custom properties cascade to all children
-  // within this container, exactly like a ThemeProvider. No <style> injection means
-  // @import, @font-face, and body/html rules in the generated CSS never touch the app.
-  const themeVars = useMemo(() => {
-    const root = parseTokenBlock(css, ":root");
-    const dark = isDark ? parseTokenBlock(css, ".dark") : {};
-    return { ...root, ...dark } as React.CSSProperties;
-  }, [css, isDark]);
+  useEffect(() => {
+    const scoped = buildScopedThemeCss(css);
+    if (!scoped) return;
+    const el = document.createElement("style");
+    el.setAttribute("data-theme-preview", "");
+    el.textContent = scoped;
+    document.head.appendChild(el);
+    return () => el.remove();
+  }, [css]);
 
   if (!css) {
     return (
@@ -34,7 +35,7 @@ export function ThemeTokenPreview({ css, isDark, viewMode }: ThemeTokenPreviewPr
   }
 
   return (
-    <div className={cn("h-full overflow-auto", isDark && "dark")} style={themeVars}>
+    <div className={cn("h-full overflow-auto", THEME_PREVIEW_SCOPE, isDark && "dark")}>
       <div className="bg-background text-foreground min-h-full">
         {viewMode === "gallery" ? (
           <ComponentGallery />
