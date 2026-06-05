@@ -257,7 +257,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
   );
 
   const onNodeDragStop = useCallback(
-    async (_: React.MouseEvent, node: ScreenNode) => {
+    async (_: unknown, node: ScreenNode) => {
       try {
         const nav = await loadNavigation(projectDir);
         let screen: NavScreen | undefined = nav.screens.find((s) => s.id === node.id);
