@@ -1,5 +1,32 @@
 # Release Notes
 
+## v0.1.1 (2026-06-05)
+
+Patch release. Fixes two permission-card bugs and reorganises the Settings tabs.
+
+### Fixes
+
+- **Permission card IPC errors** (`5bd2c38`): `ToolPermissionCard` now wraps `resolveToolPermission` in a try-catch so `onResolve` is always called even if the IPC fails. Previously the card stayed stuck and the Rust side timed out after 300 s defaulting to Rejected.
+- **Double ToolResult on AlwaysAllowed** (`5bd2c38`): removed the synthetic `ToolResult` emitted before `execute_tool` for `AlwaysAllowed` — it was resolving the pending UI call with "Added to allowlist…", causing the actual tool result to be lost.
+- **Stale permission cards on stop/new message** (`2bf8b63`): stale cards no longer linger after a stop or a new message.
+
+### Changes
+
+- **Settings > AI tab**: now contains only Providers (host / API keys).
+- **Settings > Agents tab**: gains Tool Permission mode, always-allowed list, Max Tool Calls (global + per-panel); Tool Access table is now collapsible (collapsed by default).
+- **Settings > Styles tab**: gains Icon Library selector (moved from AI tab).
+
+### Documentation
+
+- Added `RELEASE_NOTES.md` at repo root for human-readable release history.
+
+### Notes
+
+- All other behavior from v0.1.0 is preserved. Safe drop-in upgrade.
+- Same platform support: Linux x86_64, macOS arm64, macOS x64.
+
+---
+
 ## v0.1.0 (2026-06-05)
 
 First public release of Prototyper. AI-powered UI prototyping desktop app built on Tauri v2 (Rust backend) + React 19 + TypeScript. Connects to local Ollama, Ollama Cloud, OpenAI, and Claude for code generation; spawns real `bun dev` processes for live preview.
