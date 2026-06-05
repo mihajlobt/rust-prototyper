@@ -1,5 +1,4 @@
 import { Fragment, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -87,8 +86,8 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
   }
 
   return (
-    <ScrollArea className="flex-1 min-h-0">
-      <div className="space-y-6">
+    <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+      <div className="space-y-6 pb-4">
 
         {/* Tool Permission */}
         <section className="space-y-3">
@@ -275,6 +274,6 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
         </section>
 
       </div>
-    </ScrollArea>
+    </div>
   );
 }
