@@ -161,6 +161,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const currentMentions = mentionsRef.current
 
     if (!currentInput && currentAttachments.length === 0) return
+    useChatStore.getState().clearPendingPermissions(entityId)
 
     // Build mention context block
     const mentionContext = currentMentions
@@ -261,6 +262,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     ;(stopRef as MutableRefObject<boolean>).current = true
     useChatStore.getState().setStreaming(entityId, false)
     useChatStore.getState().setStreamingThinking(entityId, "")
+    useChatStore.getState().clearPendingPermissions(entityId)
     // Cancel the backend stream — signals the Rust CancellationToken which
     // drops the HTTP connection, stopping generation at the source.
     // Per Ollama API docs there is no /api/abort; dropping the connection

@@ -24,6 +24,7 @@ interface ChatStore {
   addStreamChunk: (id: string, chunk: StreamChunk) => void
   attachToolPermission: (id: string, record: ToolPermissionRecord) => void
   resolveToolPermission: (id: string, requestId: number, decision: ToolPermissionRecord["decision"]) => void
+  clearPendingPermissions: (id: string) => void
 }
 
 const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "", pendingPermissions: [] }
@@ -136,4 +137,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       )
       return { chats: { ...s.chats, [id]: { ...chat, pendingPermissions } } }
     }),
+
+  clearPendingPermissions: (id) =>
+    set((s) => ({
+      chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), pendingPermissions: [] } },
+    })),
 }))
