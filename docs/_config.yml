@@ -11,6 +11,11 @@ url: https://rust-prototyper.pages.dev
 theme: null
 plugins: []
 
+collections:
+  context:
+    output: true
+    permalink: /context/:path/
+
 # Source: ./docs
 source: .
 
@@ -45,7 +50,7 @@ defaults:
     values:
       layout: default
   - scope:
-      path: "context"
+      path: ""
+      type: "context"
     values:
       layout: default
-      permalink: /context/:path/

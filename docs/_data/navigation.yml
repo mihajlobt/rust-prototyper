@@ -21,3 +21,17 @@
   children:
     - title: Shared Chat Design
       url: /specs/shared-chat-design/
+- title: Context
+  children:
+    - title: Overview
+      url: /context/navigation/
+    - title: Core
+      url: /context/core/navigation/
+    - title: Development
+      url: /context/development/navigation/
+    - title: Prototyper
+      url: /context/prototyper/navigation/
+    - title: Project Intelligence
+      url: /context/project-intelligence/navigation/
+    - title: UI
+      url: /context/ui/navigation/
