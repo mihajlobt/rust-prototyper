@@ -336,13 +336,7 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
                                 written_content: None,
                             });
                         }
-                        ToolPermissionDecision::AlwaysAllowed => {
-                            let _ = channel.send(CompletionEvent::ToolResult {
-                                tool: name.clone(), success: true,
-                                output: format!("Added {name} to allowlist, executing..."),
-                                path: None, content: None,
-                            });
-                        }
+                        ToolPermissionDecision::AlwaysAllowed => {}
                         ToolPermissionDecision::Accepted => {}
                     }
                 }

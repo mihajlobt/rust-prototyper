@@ -17,7 +17,11 @@ export interface ToolPermissionCardProps {
 
 export const ToolPermissionCard = memo(function ToolPermissionCard({ requestId, tool, args, onResolve }: ToolPermissionCardProps) {
   const handleDecision = useCallback(async (decision: ToolPermissionDecision) => {
-    await resolveToolPermission(requestId, decision)
+    try {
+      await resolveToolPermission(requestId, decision)
+    } catch (e) {
+      console.error("[ToolPermissionCard] resolveToolPermission failed:", e)
+    }
     onResolve?.(decision)
   }, [requestId, onResolve])
 

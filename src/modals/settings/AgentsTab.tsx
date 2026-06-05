@@ -1,7 +1,17 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import type { Settings } from "@/hooks/useSettings";
+import type { ToolPermissionMode } from "@/lib/ipc";
 import {
   WIZARD_TOOL_FILTER_DEFAULT,
   SCREENS_TOOL_FILTER_DEFAULT,
@@ -30,6 +40,13 @@ const PANEL_DEFAULTS: Record<PanelKey, string[]> = {
   themes:     DESIGN_TOOL_FILTER_DEFAULT,
 };
 
+const PANEL_MAX_TOOL_CALLS_OVERRIDES = [
+  { label: "Design",     panelKey: "themes" as const,     placeholder: "12" },
+  { label: "Components", panelKey: "components" as const, placeholder: "20" },
+  { label: "Screens",    panelKey: "screens" as const,    placeholder: "25" },
+  { label: "Wizard",     panelKey: "wizard" as const,     placeholder: "60" },
+];
+
 interface ToolGroup {
   label: string;
   tools: string[];
@@ -48,6 +65,8 @@ function getActivatedTools(settings: Settings, panelKey: PanelKey): string[] {
 }
 
 export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
+  const [toolTableOpen, setToolTableOpen] = useState(false);
+
   function toggle(panelKey: PanelKey, toolName: string, checked: boolean) {
     const current = getActivatedTools(settings, panelKey);
     const updated = checked
@@ -69,61 +88,192 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
 
   return (
     <ScrollArea className="flex-1 min-h-0">
-      <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          Controls which tools each agent can use. Unchecking a tool prevents the agent from calling it during generation.
-        </p>
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Tool</th>
-                {AGENTS.map(({ label }) => (
-                  <th key={label} className="text-center px-2 py-2 font-medium w-20">{label}</th>
+      <div className="space-y-6">
+
+        {/* Tool Permission */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tool Permission</p>
+          <div className="space-y-2">
+            <Select
+              value={settings.toolPermissionMode}
+              onValueChange={(v) => setSettings({ toolPermissionMode: v as ToolPermissionMode })}
+            >
+              <SelectTrigger className="w-full text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" side="bottom">
+                <SelectItem value="ask_every_time" className="text-xs">
+                  <span className="flex flex-col gap-0.5">
+                    <span>Ask every time</span>
+                    <span className="text-[10px] text-muted-foreground">Prompt before each tool use</span>
+                  </span>
+                </SelectItem>
+                <SelectItem value="auto_accept_read_only" className="text-xs">
+                  <span className="flex flex-col gap-0.5">
+                    <span>Auto-accept read-only</span>
+                    <span className="text-[10px] text-muted-foreground">Auto-allow read_file, reject writes/executes</span>
+                  </span>
+                </SelectItem>
+                <SelectItem value="auto_accept_all" className="text-xs">
+                  <span className="flex flex-col gap-0.5">
+                    <span>Auto-accept all</span>
+                    <span className="text-[10px] text-muted-foreground">No prompting, allow all tools</span>
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Controls how the agent requests permission to use tools. Use the permission card in chat to always-allow specific tools.
+            </p>
+          </div>
+          {settings.toolAllowlist.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Always Allowed</p>
+              <div className="flex flex-wrap gap-1.5">
+                {settings.toolAllowlist.map((tool) => (
+                  <div key={tool} className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs">
+                    <span className="font-mono">{tool}</span>
+                    <button
+                      onClick={() => setSettings({ toolAllowlist: settings.toolAllowlist.filter((t) => t !== tool) })}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {TOOL_GROUPS.map((group, groupIndex) => (
-                <Fragment key={group.label}>
-                  <tr className="bg-muted/20">
-                    <td
-                      colSpan={5}
-                      className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
-                    >
-                      {group.label}
-                    </td>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Max Tool Calls */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Max Tool Calls</p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={200}
+                className="w-24 text-xs"
+                value={settings.maxToolCalls}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  if (!isNaN(n) && n >= 1) setSettings({ maxToolCalls: n });
+                }}
+              />
+              <span className="text-xs text-muted-foreground">global default</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Maximum tool-call iterations per generation. Default: 20.
+            </p>
+          </div>
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Per-panel overrides</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {PANEL_MAX_TOOL_CALLS_OVERRIDES.map(({ label, panelKey, placeholder }) => {
+                const value = settings.panelMaxToolCalls[panelKey];
+                return (
+                  <div key={label} className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-20 shrink-0">{label}</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={200}
+                      placeholder={placeholder}
+                      className="w-16 text-xs"
+                      value={value ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const n = parseInt(raw, 10);
+                        setSettings({
+                          panelMaxToolCalls: {
+                            ...settings.panelMaxToolCalls,
+                            [panelKey]: raw === "" || isNaN(n) ? undefined : n,
+                          },
+                        });
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">Leave blank to use global default.</p>
+          </div>
+        </section>
+
+        {/* Tool Access — collapsible */}
+        <section className="space-y-2">
+          <button
+            className="flex w-full items-center justify-between text-left"
+            onClick={() => setToolTableOpen((v) => !v)}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tool Access</p>
+            {toolTableOpen
+              ? <ChevronDown size={13} className="text-muted-foreground" />
+              : <ChevronRight size={13} className="text-muted-foreground" />
+            }
+          </button>
+          {!toolTableOpen && (
+            <p className="text-xs text-muted-foreground">
+              Which tools each agent can call during generation.
+            </p>
+          )}
+          {toolTableOpen && (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Tool</th>
+                    {AGENTS.map(({ label }) => (
+                      <th key={label} className="text-center px-2 py-2 font-medium w-20">{label}</th>
+                    ))}
                   </tr>
-                  {group.tools.map((toolName, toolIndex) => (
-                    <tr
-                      key={toolName}
-                      className={
-                        groupIndex === TOOL_GROUPS.length - 1 && toolIndex === group.tools.length - 1
-                          ? ""
-                          : "border-b border-border/50"
-                      }
-                    >
-                      <td className="px-3 py-1.5 font-mono text-muted-foreground">{toolName}</td>
-                      {AGENTS.map(({ panelKey }) => {
-                        const activatedTools = getActivatedTools(settings, panelKey);
-                        const isChecked = activatedTools.includes(toolName);
-                        return (
-                          <td key={panelKey} className="text-center px-2 py-1.5">
-                            <Checkbox
-                              checked={isChecked}
-                              onCheckedChange={(checked) => toggle(panelKey, toolName, checked === true)}
-                              className="mx-auto"
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
+                </thead>
+                <tbody>
+                  {TOOL_GROUPS.map((group, groupIndex) => (
+                    <Fragment key={group.label}>
+                      <tr className="bg-muted/20">
+                        <td
+                          colSpan={5}
+                          className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
+                        >
+                          {group.label}
+                        </td>
+                      </tr>
+                      {group.tools.map((toolName, toolIndex) => (
+                        <tr
+                          key={toolName}
+                          className={
+                            groupIndex === TOOL_GROUPS.length - 1 && toolIndex === group.tools.length - 1
+                              ? ""
+                              : "border-b border-border/50"
+                          }
+                        >
+                          <td className="px-3 py-1.5 font-mono text-muted-foreground">{toolName}</td>
+                          {AGENTS.map(({ panelKey }) => {
+                            const activatedTools = getActivatedTools(settings, panelKey);
+                            const isChecked = activatedTools.includes(toolName);
+                            return (
+                              <td key={panelKey} className="text-center px-2 py-1.5">
+                                <Checkbox
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => toggle(panelKey, toolName, checked === true)}
+                                  className="mx-auto"
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
       </div>
     </ScrollArea>
   );

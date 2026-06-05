@@ -1,10 +1,17 @@
 import { useState } from "react";
-import { Plus, Trash2, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, FileText, Library } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSettings } from "@/hooks/useSettings";
-import { DESIGN_BRIEF_TEMPLATES } from "@/lib/prompts";
+import { DESIGN_BRIEF_TEMPLATES, type IconLibrary } from "@/lib/prompts";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 
 export function StylesEditor() {
@@ -46,6 +53,34 @@ export function StylesEditor() {
   return (
     <ScrollArea className="flex-1 min-h-0">
       <div className="space-y-6 pr-1">
+
+        {/* Icon Library */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Icon Library</p>
+          <div className="flex items-start gap-6">
+            <div className="w-64 space-y-1.5">
+              <Select value={settings.iconLibrary} onValueChange={(v) => setSettings({ iconLibrary: v as IconLibrary })}>
+                <SelectTrigger className="text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Library size={12} />
+                    <SelectValue placeholder="Select icon library" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent position="popper" side="bottom">
+                  <SelectItem value="lucide" className="text-xs">lucide-react (React components)</SelectItem>
+                  <SelectItem value="tabler" className="text-xs">Tabler Icons (CSS font)</SelectItem>
+                  <SelectItem value="fontawesome" className="text-xs">Font Awesome (CSS font)</SelectItem>
+                  <SelectItem value="bootstrap" className="text-xs">Bootstrap Icons (CSS font)</SelectItem>
+                  <SelectItem value="material" className="text-xs">Material Symbols (CSS font)</SelectItem>
+                  <SelectItem value="none" className="text-xs">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground pt-1.5">
+              Auto-installed in the generated folder.<br />Affects component and screen generation prompts.
+            </p>
+          </div>
+        </section>
 
         {/* Custom styles */}
         <section className="space-y-2">
