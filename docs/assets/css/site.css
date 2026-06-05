@@ -1,15 +1,26 @@
-/* Prototyper Docs — minimal, clean, dark-mode aware */
+/* Prototyper Docs — minimal, clean, dark-mode aware
+ * Inspired by the project's "Quiet Instrument" design language
+ * (greyscale chrome, hairline borders, dense but never cluttered).
+ */
 
 :root {
   --bg: #ffffff;
   --fg: #1a1a1a;
   --muted: #6a737d;
   --border: #e1e4e8;
+  --border-strong: #d0d7de;
   --sidebar-bg: #f8f9fa;
+  --sidebar-fg: #57606a;
   --accent: #0366d6;
   --accent-bg: #f1f8ff;
+  --accent-fg: #0969da;
   --code-bg: #f6f8fa;
   --code-fg: #24292e;
+  --card-bg: #ffffff;
+  --card-border: #e1e4e8;
+  --card-hover-border: #d0d7de;
+  --shadow-card: 0 1px 0 rgba(31, 35, 40, 0.04);
+  --shadow-card-hover: 0 3px 8px rgba(31, 35, 40, 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,11 +29,19 @@
     --fg: #c9d1d9;
     --muted: #8b949e;
     --border: #30363d;
+    --border-strong: #444c56;
     --sidebar-bg: #161b22;
+    --sidebar-fg: #c9d1d9;
     --accent: #58a6ff;
     --accent-bg: #1f6feb33;
+    --accent-fg: #79c0ff;
     --code-bg: #161b22;
     --code-fg: #c9d1d9;
+    --card-bg: #161b22;
+    --card-border: #30363d;
+    --card-hover-border: #58a6ff;
+    --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -41,6 +60,8 @@ html, body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* ---- Layout shell ---- */
+
 .site-header {
   display: flex;
   justify-content: space-between;
@@ -57,6 +78,7 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
   font-size: 18px;
   color: var(--fg);
+  letter-spacing: -0.01em;
 }
 
 .gh-link {
@@ -91,10 +113,10 @@ a:hover { text-decoration: underline; }
 .nav-item { margin-bottom: 16px; }
 
 .nav-group-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--muted);
   margin-bottom: 8px;
   padding: 0 8px;
@@ -106,6 +128,7 @@ a:hover { text-decoration: underline; }
   border-radius: 6px;
   font-size: 14px;
   color: var(--fg);
+  border-left: 2px solid transparent;
 }
 
 .nav-sublist li a:hover, .nav-top:hover {
@@ -113,11 +136,15 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
 }
 
-.nav-sublist li a.active {
+.nav-sublist li a.active,
+.nav-top.active {
   background: var(--accent-bg);
-  color: var(--accent);
+  color: var(--accent-fg);
   font-weight: 600;
+  border-left-color: var(--accent);
 }
+
+/* ---- Content ---- */
 
 .content {
   padding: 32px 48px;
@@ -132,6 +159,7 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
   font-size: 32px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 h2 { margin-top: 32px; font-size: 24px; font-weight: 600; }
@@ -141,6 +169,8 @@ h4 { margin-top: 20px; font-size: 16px; font-weight: 600; }
 p, ul, ol { margin: 12px 0; }
 
 ul, ol { padding-left: 24px; }
+
+/* ---- Code ---- */
 
 code {
   background: var(--code-bg);
@@ -159,6 +189,7 @@ pre {
   overflow-x: auto;
   font-size: 14px;
   line-height: 1.5;
+  border: 1px solid var(--border);
 }
 
 pre code {
@@ -166,6 +197,8 @@ pre code {
   padding: 0;
   font-size: inherit;
 }
+
+/* ---- Tables ---- */
 
 table {
   border-collapse: collapse;
@@ -178,14 +211,18 @@ th, td {
   border: 1px solid var(--border);
   padding: 8px 12px;
   text-align: left;
+  vertical-align: top;
 }
 
 th {
   background: var(--sidebar-bg);
   font-weight: 600;
+  font-size: 13px;
 }
 
 tr:nth-child(even) { background: var(--sidebar-bg); }
+
+/* ---- Blockquote ---- */
 
 blockquote {
   margin: 16px 0;
@@ -196,6 +233,67 @@ blockquote {
   border-radius: 0 6px 6px 0;
 }
 
+/* ---- Card grid (used on landing + section indexes) ---- */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 16px 0 24px 0;
+}
+
+.card {
+  display: block;
+  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--fg);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  box-shadow: var(--shadow-card);
+}
+
+.card:hover {
+  border-color: var(--card-hover-border);
+  box-shadow: var(--shadow-card-hover);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.card-body {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .card-grid { grid-template-columns: 1fr; }
+}
+
+/* ---- Mermaid container (placeholder — no client-side render yet) ---- */
+
+.mermaid {
+  background: var(--bg);
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ---- Footer ---- */
+
 .site-footer {
   text-align: center;
   padding: 24px;
@@ -204,10 +302,8 @@ blockquote {
   border-top: 1px solid var(--border);
 }
 
-/* Mermaid diagrams */
-.mermaid { background: var(--bg); }
+/* ---- Mobile ---- */
 
-/* Mobile */
 @media (max-width: 768px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar {

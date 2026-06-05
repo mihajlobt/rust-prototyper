@@ -1,43 +1,58 @@
 ---
 title: Home
 layout: default
+permalink: /
+description: Internal documentation for the Prototyper Tauri v2 desktop app
 ---
 
 # Prototyper
 
 AI-powered UI prototyping desktop app. Built with **Tauri v2** (Rust backend) + **React 19** + **TypeScript** frontend. Connects to local Ollama, Ollama Cloud, OpenAI, and Claude for code generation, and spawns real `bun dev` processes for live preview.
 
-## What's in these docs
-
-This site holds the **internal architecture, plans, and specs** for the project. For general usage docs (install, run, build) see the [README](https://github.com/mihajlobt/rust-prototyper#readme) on GitHub.
-
-### Architecture
-
-- [Chat Stream & Tool Flow]({{ '/architecture/chat-flow/' | relative_url }}) — Mermaid sequence diagram of the streaming chat + tool-call flow
-- [Tool Permission System]({{ '/architecture/tool-permission-architecture/' | relative_url }}) — Cursor-style accept/reject cards for agent tool calls
-- [Open Agent SDK Analysis]({{ '/architecture/open-agent-sdk-analysis/' | relative_url }}) — Feasibility audit of `open-agent-sdk` v0.6.4 as a drop-in replacement
-
-### Plans
-
-- [Native Context Menu]({{ '/plans/context-menu/' | relative_url }}) — Replace shadcn `ContextMenu` with Tauri v2 native menu in Runner panel
-- [Shared Chat]({{ '/plans/shared-chat/' | relative_url }}) — Cross-panel chat state plan
-
-### Specs
-
-- [Shared Chat Design]({{ '/specs/shared-chat-design/' | relative_url }}) — Detailed design spec for the shared chat feature
-
----
+This site holds the **internal architecture, standards, plans, and specs** for the project. For install, run, and build instructions see the [README](https://github.com/mihajlobt/rust-prototyper#readme) on GitHub.
 
 ## Tech stack
 
-| Layer | Technology |
-|-------|-----------|
-| Shell | Tauri v2 |
-| Frontend | React 19 + TypeScript |
-| Build | Vite |
-| Styling | Tailwind CSS v4 + shadcn/ui |
-| Backend | Rust (Tokio async) |
-| AI | Ollama, OpenAI, Claude |
-| Runtime | Bun |
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Shell | Tauri v2 | `2` |
+| Frontend | React | `^19.1.0` |
+| Language | TypeScript | `~5.8.3` |
+| Build | Vite | `^7.0.4` |
+| Styling | Tailwind CSS | `^4.2.4` |
+| UI Kit | shadcn/ui (radix-ui) | `radix-ui ^1.4.3` |
+| Layout | allotment | `^1.20.5` |
+| Editor | CodeMirror 6 (`@uiw/react-codemirror`) | `^4.25.9` |
+| Icons | lucide-react | `^1.11.0` |
+| State | Zustand | `^5.0.12` |
+| Data fetching | TanStack React Query | `^5.100.1` |
+| Graph | React Flow (`@xyflow/react`) | `^12.10.2` |
+| Terminal | xterm.js (`@xterm/xterm`) | `^6.0.0` |
+| Runtime | Bun | any recent |
+| Backend | Rust (edition 2021) | — |
+| AI | Ollama (`ollama-rs`) + OpenAI + Claude via `reqwest` | `0.3` |
 
-See the [GitHub repo](https://github.com/mihajlobt/rust-prototyper) for full tech-stack details.
+## Where to go next
+
+<div class="card-grid">
+  <a class="card" href="{{ '/getting-started/' | relative_url }}">
+    <div class="card-title">Getting Started</div>
+    <div class="card-body">Install, run, project layout, and the most common pitfalls.</div>
+  </a>
+  <a class="card" href="{{ '/architecture/' | relative_url }}">
+    <div class="card-title">Architecture</div>
+    <div class="card-body">Frontend, backend, IPC, data persistence, and AI streaming internals.</div>
+  </a>
+  <a class="card" href="{{ '/standards/' | relative_url }}">
+    <div class="card-title">Standards</div>
+    <div class="card-body">Coding rules, design language, and the context system that organizes the project.</div>
+  </a>
+  <a class="card" href="{{ '/context/navigation/' | relative_url }}">
+    <div class="card-title">Context</div>
+    <div class="card-body">The full 95-file AI context library auto-copied from <code>.opencode/context/</code>.</div>
+  </a>
+</div>
+
+---
+
+Last build: `{{ site.time | date: "%Y-%m-%d %H:%M:%S %Z" }}`

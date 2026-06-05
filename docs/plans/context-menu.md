@@ -1,6 +1,7 @@
 ---
 title: Plan — Replace shadcn ContextMenu with Tauri Native Menu
 layout: default
+permalink: /plans/context-menu/
 ---
 
 # Plan: Replace shadcn ContextMenu with Tauri Native Menu in Runner Panel

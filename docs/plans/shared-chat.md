@@ -1,6 +1,7 @@
 ---
 title: Shared Chat System — Implementation Plan
 layout: default
+permalink: /plans/shared-chat/
 ---
 
 # Shared Chat System Implementation Plan

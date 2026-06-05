@@ -1,6 +1,7 @@
 ---
 title: Shared Chat Component Design
 layout: default
+permalink: /specs/shared-chat-design/
 ---
 
 # Shared Chat Component Design

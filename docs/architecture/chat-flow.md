@@ -1,6 +1,7 @@
 ---
 title: Chat Stream & Tool Usage Flow
 layout: default
+permalink: /architecture/chat-flow/
 ---
 
 # Chat Stream & Tool Usage Flow

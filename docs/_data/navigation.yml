@@ -3,14 +3,48 @@
 
 - title: Home
   url: /
+- title: Getting Started
+  children:
+    - title: Overview
+      url: /getting-started/
+    - title: Install
+      url: /getting-started/install/
+    - title: Quickstart
+      url: /getting-started/quickstart/
+    - title: Project Structure
+      url: /getting-started/project-structure/
+    - title: Troubleshooting
+      url: /getting-started/troubleshooting/
 - title: Architecture
   children:
+    - title: Overview
+      url: /architecture/
+    - title: Frontend
+      url: /architecture/frontend/
+    - title: Backend
+      url: /architecture/backend/
+    - title: IPC
+      url: /architecture/ipc/
+    - title: Data Persistence
+      url: /architecture/data-persistence/
+    - title: AI Streaming
+      url: /architecture/ai-streaming/
     - title: Chat Stream & Tool Flow
       url: /architecture/chat-flow/
     - title: Tool Permission System
       url: /architecture/tool-permission-architecture/
     - title: Open Agent SDK Analysis
       url: /architecture/open-agent-sdk-analysis/
+- title: Standards
+  children:
+    - title: Overview
+      url: /standards/
+    - title: Coding
+      url: /standards/coding/
+    - title: Design Language
+      url: /standards/design/
+    - title: Context System
+      url: /standards/context-system/
 - title: Plans
   children:
     - title: Native Context Menu
@@ -27,11 +61,11 @@
       url: /context/navigation/
     - title: Core
       url: /context/core/navigation/
-    - title: Development
-      url: /context/development/navigation/
     - title: Prototyper
       url: /context/prototyper/navigation/
     - title: Project Intelligence
       url: /context/project-intelligence/navigation/
+    - title: Development
+      url: /context/development/navigation/
     - title: UI
       url: /context/ui/navigation/

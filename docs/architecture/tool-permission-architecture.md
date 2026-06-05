@@ -1,6 +1,7 @@
 ---
 title: Tool Permission System — Architecture Report
 layout: default
+permalink: /architecture/tool-permission-architecture/
 ---
 
 # Tool Permission System — Architecture Report

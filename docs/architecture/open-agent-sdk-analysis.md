@@ -1,6 +1,7 @@
 ---
 title: Open Agent SDK Analysis — Prototyper Integration Feasibility
 layout: default
+permalink: /architecture/open-agent-sdk-analysis/
 ---
 
 # Open Agent SDK Analysis — Prototyper Integration Feasibility
