@@ -86,8 +86,8 @@ export function WizardPanel() {
           if (wizardSessionRef.current !== session) return
           const tabId = `theme-${slug}`
           setPreviewTabs((prev) => {
-            const existing = prev.find((t) => t.id === tabId)
-            if (existing) return prev.map((t) => t.id === tabId ? { ...t, themeCss: css } : t)
+            const existing = prev.find((tab) => tab.id === tabId)
+            if (existing) return prev.map((tab) => tab.id === tabId ? { ...tab, themeCss: css } : tab)
             return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: slug, themeCss: css }]
           })
           setActivePreviewTabId(tabId)
@@ -96,7 +96,7 @@ export function WizardPanel() {
           if (wizardSessionRef.current !== session) return
           const tabId = `theme-${slug}`
           setPreviewTabs((prev) => {
-            if (prev.find((t) => t.id === tabId)) return prev
+            if (prev.find((tab) => tab.id === tabId)) return prev
             return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: slug }]
           })
           setActivePreviewTabId(tabId)
@@ -108,8 +108,8 @@ export function WizardPanel() {
         pendingScreenRef.current = null
         const tabId = `screen-${screenId}`
         setPreviewTabs((prev) => {
-          const existing = prev.find((t) => t.id === tabId)
-          if (existing) return prev.map((t) => t.id === tabId ? { ...t, label: title || t.label } : t)
+          const existing = prev.find((tab) => tab.id === tabId)
+          if (existing) return prev.map((tab) => tab.id === tabId ? { ...tab, label: title || tab.label } : tab)
           return [...prev, { id: tabId, type: "screen", label: title || urlPath, urlPath }]
         })
         setActivePreviewTabId(tabId)
@@ -120,7 +120,7 @@ export function WizardPanel() {
 
   const handleSelectPreviewTab = useCallback((tabId: string) => {
     setActivePreviewTabId(tabId)
-    const tab = previewTabs.find((t) => t.id === tabId)
+    const tab = previewTabs.find((tab) => tab.id === tabId)
     if (tab?.type === "screen" && tab.urlPath) {
       setPreviewNavigatePath(tab.urlPath)
     }
