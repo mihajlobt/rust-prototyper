@@ -4,23 +4,17 @@ import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import type { XTerminalHandle } from "@/components/XTerminal";
 import {
   Play, Square, Wrench, Package, PackagePlus, Loader2,
-  Plus as PlusIcon, FolderPlus, FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  readDir, readFile, writeFile, createDir, deleteFile,
-  deleteDir, renameFile, revealInExplorer,
+  readFile, writeFile, deleteFile, renameFile, revealInExplorer,
   bunBuild, bunInstall, killAllProcesses, killPort, runShellCommand,
   isNotFoundError, getErrorMessage,
-  type FileEntry,
 } from "@/lib/ipc";
-import { showContextMenu, createFileTreeActions } from "@/lib/context-menu";
 import { useAppStore } from "@/stores/appStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { watch, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { notify } from "@/hooks/useToast";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { hasGeneratedScaffold, scaffoldGenerated, ensureEslintPatched } from "@/lib/scaffold";
@@ -28,8 +22,7 @@ import { getGeneratedAppTsx, PROJECT_PATHS as GEN_PATHS } from "@/lib/scaffold-s
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 import { AddLibraryModal } from "@/modals/AddLibraryModal";
 import { useDevServerStore } from "@/lib/dev-server-manager";
-import { FileTree } from "@/panels/RunnerFileTree";
-import { RenameDialog, NewFolderDialog, NewFileDialog } from "@/panels/RunnerDialogs";
+import { RenameDialog } from "@/panels/RunnerDialogs";
 import { RunnerEditor } from "@/panels/runner/RunnerEditor";
 import { RunnerPreview } from "@/panels/runner/RunnerPreview";
 import { RunnerTerminalHeader, RunnerTerminalContent } from "@/panels/runner/RunnerTerminal";
@@ -43,35 +36,17 @@ export function RunnerPanel() {
   const devUrl = devServerStore.runnerUrl;
   const runnerDark = ps.runnerDarkPreview;
 
-  const [files, setFiles] = useState<FileEntry[]>([]);
   const [tabContents, setTabContents] = useState<Record<string, string>>({});
   const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
   const xtermRef = useRef<XTerminalHandle>(null);
   const logLinesRef = useRef<Array<{ line: string; source: string }>>([]);
   const [, setLogTick] = useState(0);
-  // File-tree expansion persists per-project. Backed by a string[] in projectSettingsStore;
-  // exposed here as a Set with a functional setter for ergonomic call sites.
-  const expandedDirs = useMemo(() => new Set(ps.runnerExpandedDirs), [ps.runnerExpandedDirs]);
-  const setExpandedDirs = useCallback(
-    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-      const prev = new Set(useProjectSettingsStore.getState().ps.runnerExpandedDirs);
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      setProjectSettings({ runnerExpandedDirs: [...next] });
-    },
-    [setProjectSettings]
-  );
-  const [newFileName, setNewFileName] = useState("");
-  const [showNewFile, setShowNewFile] = useState(false);
-  const [newFileParentDir, setNewFileParentDir] = useState<string>(generatedDir);
   const [isScaffolding, setIsScaffolding] = useState(false);
   const [shellCommand, setShellCommand] = useState("");
   const [showShellInput, setShowShellInput] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ path: string; name: string } | null>(null);
   const [renameTo, setRenameTo] = useState("");
-  const [newFolderTarget, setNewFolderTarget] = useState<string | null>(null);
-  const [newFolderName, setNewFolderName] = useState("");
 
-  const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("runner", 2);
   const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -79,47 +54,20 @@ export function RunnerPanel() {
   const activeTabPath = ps.runnerEditorActiveTabPath;
   const openTabs = useMemo(() => ps.runnerEditorTabs ?? [], [ps.runnerEditorTabs]);
 
-  const loadFiles = useCallback(async () => {
-    try { setFiles(await readDir(generatedDir)); } catch (e) { setFiles([]); if (!isNotFoundError(e)) notify.error("Failed to load files", getErrorMessage(e)); }
-  }, [generatedDir]);
-
-  const fileTreeRefreshKey = useUIStore((s) => s.fileTreeRefreshKey);
-
-  // Bump the shared refresh key after a file mutation. This re-runs loadFiles (top level)
-  // AND reloads every expanded AsyncDirChildren — so nested changes show immediately,
-  // without depending on the FS watcher (which debounces 500ms and can fail to start).
+  // Bump fileTreeRefreshKey so SidebarFilesTab reloads after tab-bar file mutations
   const refreshFiles = useCallback(() => {
     useUIStore.setState((s) => ({ fileTreeRefreshKey: s.fileTreeRefreshKey + 1 }));
   }, []);
 
-  useEffect(() => { loadFiles(); }, [loadFiles, fileTreeRefreshKey]);
-
-  // File watcher for auto-refresh
+  // Open a file requested by the sidebar Files tab
   useEffect(() => {
-    let cancelled = false;
-    let stopFn: (() => void) | null = null;
-    (async () => {
-      try {
-        const unwatch = await watch(
-          generatedDir,
-          () => {
-            if (!cancelled) {
-              useUIStore.setState((s) => ({ fileTreeRefreshKey: s.fileTreeRefreshKey + 1 }));
-            }
-          },
-          { baseDir: BaseDirectory.AppData, recursive: true, delayMs: 500 },
-        );
-        if (cancelled) { unwatch(); return; }
-        stopFn = unwatch;
-      } catch (error) {
-        console.warn("[watcher] failed to start:", error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      stopFn?.();
-    };
-  }, [generatedDir]);
+    const requested = ps.runnerRequestedFile;
+    if (!requested) return;
+    openTab(requested);
+    setProjectSettings({ runnerRequestedFile: null });
+    // openTab is defined below and stable; including it would create a circular dep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ps.runnerRequestedFile]);
 
   useEffect(() => {
     if (activeTabPath && !tabContents[activeTabPath]) {
@@ -247,7 +195,6 @@ export function RunnerPanel() {
         const wrappedStep = (msg: string) => { xtermRef.current?.writeln(`\x1b[36m${msg}\x1b[0m`); onStep(msg); };
         return scaffoldGenerated(generatedDir, settings.iconLibrary, wrappedStep);
       });
-      await loadFiles();
       xtermRef.current?.writeln("\x1b[32m✓ scaffold complete\x1b[0m");
       return true;
     } catch { return false; } finally { setIsScaffolding(false); }
@@ -263,17 +210,7 @@ export function RunnerPanel() {
   const handleBuild   = async () => { if (!(await ensureScaffold())) return; xtermRef.current?.writeln("\x1b[36m> bun build\x1b[0m"); try { await bunBuild(generatedDir); } catch (e) { notify.error("Build failed", getErrorMessage(e)); } };
   const handleInstall = async () => { xtermRef.current?.writeln("\x1b[36m> bun install\x1b[0m"); try { await bunInstall(generatedDir); } catch (e) { notify.error("Install failed", getErrorMessage(e)); } };
 
-  // ── File operations ─────────────────────────────────────────────────────
-
-  const toggleDir = (path: string) => {
-    const willExpand = !expandedDirs.has(path);
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path); else next.add(path);
-      return next;
-    });
-    if (willExpand) loadFiles();
-  };
+  // ── File operations (from editor tab bar) ──────────────────────────────
 
   const handleDeleteFile = async (path: string) => {
     if (!(await confirm(`Delete ${path.split("/").pop()}?`))) return;
@@ -282,25 +219,10 @@ export function RunnerPanel() {
     refreshFiles();
   };
 
-  const handleCreateFile = async () => {
-    if (!newFileName.trim()) return;
-    const path = `${newFileParentDir}/${newFileName.trim()}`;
-    await writeFile(path, "");
-    setNewFileName(""); setShowNewFile(false); setNewFileParentDir(generatedDir);
-    refreshFiles();
-    openTab(path);
+  const startRename = (path: string) => {
+    setRenameTarget({ path, name: path.split("/").pop() || "" });
+    setRenameTo(path.split("/").pop() || "");
   };
-
-  const handleDeleteDir = async (path: string) => {
-    if (!(await confirm(`Delete folder ${path.split("/").pop()}?`))) return;
-    await deleteDir(path);
-    for (const tab of openTabs.filter((t) => t.startsWith(path))) closeTab(tab);
-    setExpandedDirs((prev) => { const next = new Set(prev); next.delete(path); return next; });
-    refreshFiles();
-  };
-
-  const handleDeleteEntry = async (path: string, isDir: boolean) => { if (isDir) await handleDeleteDir(path); else await handleDeleteFile(path); };
-  const startRename = (path: string) => { setRenameTarget({ path, name: path.split("/").pop() || "" }); setRenameTo(path.split("/").pop() || ""); };
 
   const handleRename = async () => {
     if (!renameTarget || !renameTo.trim()) return;
@@ -317,13 +239,6 @@ export function RunnerPanel() {
       refreshFiles();
     } catch (e) { notify.error("Rename failed", getErrorMessage(e)); }
     setRenameTarget(null);
-  };
-
-  const startNewFolder = (parentPath: string) => { setNewFolderTarget(parentPath); setNewFolderName(""); };
-  const handleCreateFolder = async () => {
-    if (!newFolderTarget || !newFolderName.trim()) return;
-    try { await createDir(`${newFolderTarget}/${newFolderName.trim()}`); setExpandedDirs((prev) => { const next = new Set(prev); next.add(newFolderTarget); return next; }); refreshFiles(); } catch (e) { notify.error("Create folder failed", getErrorMessage(e)); }
-    setNewFolderTarget(null);
   };
 
   const handleKillAll = async () => {
@@ -360,130 +275,77 @@ export function RunnerPanel() {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <Allotment ref={outerRef} onDragEnd={outerOnDragEnd} defaultSizes={outerDefault}>
-          {/* File Tree */}
-          <Allotment.Pane preferredSize={200} minSize={150}>
-            <ScrollArea className="h-full overflow-hidden bg-card border-r border-border">
-              <div className="p-2">
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <span
-                    className="text-xs font-medium text-muted-foreground cursor-default"
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      showContextMenu(
-                        createFileTreeActions({
-                          onNewFile: () => { setNewFileParentDir(generatedDir); setShowNewFile(true); },
-                          onNewFolder: () => startNewFolder(generatedDir),
-                          onCollapseAll: () => setExpandedDirs(new Set()),
-                          onReveal: () => revealInExplorer(generatedDir),
-                          onRefresh: loadFiles,
-                        }),
-                        e.clientX,
-                        e.clientY
-                      );
-                    }}
-                  >
-                    Files
-                  </span>
-                  <div className="flex gap-0.5">
-                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => startNewFolder(generatedDir)}><FolderPlus size={10} /></Button>
-                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setNewFileParentDir(generatedDir); setShowNewFile(true); }}><PlusIcon size={10} /></Button>
-                  </div>
-                </div>
-                {files.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
-                      <FolderOpen size={20} className="opacity-30" />
-                      <p className="text-xs font-medium">No files yet</p>
-                      <p className="text-[10px] opacity-60">Files from your generated project will appear here</p>
-                    </div>
-                  )}
-                <FileTree entries={files} selectedFile={activeTabPath} expandedDirs={expandedDirs} onToggleDir={toggleDir} onSelectFile={openTab} onDeleteEntry={handleDeleteEntry} onRename={startRename} onNewFile={(p) => { setNewFileParentDir(p); setNewFileName(""); setShowNewFile(true); }} onNewFolder={startNewFolder} onCollapse={(p) => setExpandedDirs((prev) => { const next = new Set(prev); next.delete(p); return next; })} onReveal={revealInExplorer} depth={0} />
-              </div>
-            </ScrollArea>
+        <Allotment vertical ref={verticalRef} onDragEnd={verticalOnDragEnd} defaultSizes={verticalDefault} className="h-full" onVisibleChange={(_i, v) => setProjectSettings({ runnerTerminalOpen: v })}>
+          <Allotment.Pane>
+            <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault}>
+              <Allotment.Pane minSize={200}>
+                <RunnerEditor
+                  openTabs={openTabs}
+                  activeTabPath={activeTabPath}
+                  tabContents={tabContents}
+                  dirtyTabs={dirtyTabs}
+                  openTab={openTab}
+                  closeTab={closeTab}
+                  closeOtherTabs={closeOtherTabs}
+                  closeTabsToRight={closeTabsToRight}
+                  closeAllTabs={closeAllTabs}
+                  handleSaveFile={handleSaveFile}
+                  handleContentChange={handleContentChange}
+                  handleEditorBlur={handleEditorBlur}
+                  startRename={startRename}
+                  handleDeleteFile={handleDeleteFile}
+                  revealInExplorer={revealInExplorer}
+                  reorderTabs={reorderTabs}
+                />
+              </Allotment.Pane>
+
+              <Allotment.Pane minSize={300}>
+                <RunnerPreview
+                  devUrl={devUrl}
+                  runnerDark={runnerDark}
+                  runnerDevice={ps.runnerDevice}
+                  runnerZoom={ps.runnerZoom}
+                  iframeRef={iframeRef}
+                  setProjectSettings={setProjectSettings}
+                  handleRefreshPreview={handleRefreshPreview}
+                  zoomIn={zoomIn}
+                  zoomOut={zoomOut}
+                  zoomReset={zoomReset}
+                />
+              </Allotment.Pane>
+            </Allotment>
           </Allotment.Pane>
 
-          {/* Editor + Preview + Terminal */}
-          <Allotment.Pane>
-            <div className="h-full flex flex-col">
-              <Allotment vertical ref={verticalRef} onDragEnd={verticalOnDragEnd} defaultSizes={verticalDefault} className="flex-1 min-h-0" onVisibleChange={(_i, v) => setProjectSettings({ runnerTerminalOpen: v })}>
-                <Allotment.Pane>
-                  <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault}>
-                    {/* Editor with tabs */}
-                    <Allotment.Pane minSize={200}>
-                      <RunnerEditor
-                        openTabs={openTabs}
-                        activeTabPath={activeTabPath}
-                        tabContents={tabContents}
-                        dirtyTabs={dirtyTabs}
-                        openTab={openTab}
-                        closeTab={closeTab}
-                        closeOtherTabs={closeOtherTabs}
-                        closeTabsToRight={closeTabsToRight}
-                        closeAllTabs={closeAllTabs}
-                        handleSaveFile={handleSaveFile}
-                        handleContentChange={handleContentChange}
-                        handleEditorBlur={handleEditorBlur}
-                        startRename={startRename}
-                        handleDeleteFile={handleDeleteFile}
-                        revealInExplorer={revealInExplorer}
-                        reorderTabs={reorderTabs}
-                      />
-                    </Allotment.Pane>
+          {/* Terminal header — 28px locked pane, always visible.
+              Allotment.Pane must be a direct JSX child (not inside a fragment
+              from a sub-component) so Allotment correctly tracks visible changes. */}
+          <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+            <RunnerTerminalHeader
+              runnerActiveTab={ps.runnerActiveTab}
+              runnerTerminalOpen={ps.runnerTerminalOpen}
+              setShowShellInput={setShowShellInput}
+              setProjectSettings={setProjectSettings}
+            />
+          </Allotment.Pane>
 
-                    {/* Preview */}
-                    <Allotment.Pane minSize={300}>
-                      <RunnerPreview
-                        devUrl={devUrl}
-                        runnerDark={runnerDark}
-                        runnerDevice={ps.runnerDevice}
-                        runnerZoom={ps.runnerZoom}
-                        iframeRef={iframeRef}
-                        setProjectSettings={setProjectSettings}
-                        handleRefreshPreview={handleRefreshPreview}
-                        zoomIn={zoomIn}
-                        zoomOut={zoomOut}
-                        zoomReset={zoomReset}
-                      />
-                    </Allotment.Pane>
-                  </Allotment>
-                </Allotment.Pane>
-
-                {/* Terminal header — 28px locked pane, always visible.
-                    Allotment.Pane must be a direct JSX child (not inside a fragment
-                    from a sub-component) so Allotment correctly tracks visible changes. */}
-                <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-                  <RunnerTerminalHeader
-                    runnerActiveTab={ps.runnerActiveTab}
-                    runnerTerminalOpen={ps.runnerTerminalOpen}
-                    setShowShellInput={setShowShellInput}
-                    setProjectSettings={setProjectSettings}
-                  />
-                </Allotment.Pane>
-
-                {/* Terminal content — collapsible, same pattern as Components/Screens */}
-                <Allotment.Pane visible={ps.runnerTerminalOpen} preferredSize={200} minSize={100} snap>
-                  {ps.runnerTerminalOpen && (
-                    <RunnerTerminalContent
-                      xtermRef={xtermRef}
-                      runnerActiveTab={ps.runnerActiveTab}
-                      showShellInput={showShellInput}
-                      shellCommand={shellCommand}
-                      logLinesRef={logLinesRef}
-                      setShowShellInput={setShowShellInput}
-                      setShellCommand={setShellCommand}
-                      handleNewShell={handleNewShell}
-                    />
-                  )}
-                </Allotment.Pane>
-              </Allotment>
-            </div>
+          <Allotment.Pane visible={ps.runnerTerminalOpen} preferredSize={200} minSize={100} snap>
+            {ps.runnerTerminalOpen && (
+              <RunnerTerminalContent
+                xtermRef={xtermRef}
+                runnerActiveTab={ps.runnerActiveTab}
+                showShellInput={showShellInput}
+                shellCommand={shellCommand}
+                logLinesRef={logLinesRef}
+                setShowShellInput={setShowShellInput}
+                setShellCommand={setShellCommand}
+                handleNewShell={handleNewShell}
+              />
+            )}
           </Allotment.Pane>
         </Allotment>
       </div>
 
       <RenameDialog target={renameTarget} value={renameTo} onChange={setRenameTo} onConfirm={handleRename} onClose={() => setRenameTarget(null)} />
-      <NewFolderDialog target={newFolderTarget} value={newFolderName} onChange={setNewFolderName} onConfirm={handleCreateFolder} onClose={() => setNewFolderTarget(null)} />
-      <NewFileDialog open={showNewFile} value={newFileName} onChange={setNewFileName} onConfirm={handleCreateFile} onClose={() => setShowNewFile(false)} />
     </div>
   );
 }

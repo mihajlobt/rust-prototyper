@@ -6,6 +6,7 @@ pub struct FileEntry {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
+    pub modified_ms: Option<u64>,
 }
 
 #[tauri::command]
@@ -19,7 +20,11 @@ pub async fn read_dir(path: String, app: AppHandle) -> Result<Vec<FileEntry>, Ap
         let abs_path = entry.path();
         let rel_path = abs_path.strip_prefix(&base).unwrap_or(&abs_path).to_string_lossy().to_string();
         let is_dir = entry.file_type().await.map_err(AppError::Io)?.is_dir();
-        entries.push(FileEntry { name, path: rel_path, is_dir });
+        let modified_ms = entry.metadata().await.ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64);
+        entries.push(FileEntry { name, path: rel_path, is_dir, modified_ms });
     }
     Ok(entries)
 }

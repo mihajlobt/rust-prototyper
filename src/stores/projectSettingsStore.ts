@@ -68,6 +68,7 @@ export interface ProjectSettings {
   runnerEditorTabs: string[];
   runnerEditorActiveTabPath: string | null;
   runnerExpandedDirs: string[];
+  runnerRequestedFile: string | null;
 
   // APIs panel — persistent editor state
   apisName: string;
@@ -156,6 +157,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerEditorTabs: [],
   runnerEditorActiveTabPath: null,
   runnerExpandedDirs: [],
+  runnerRequestedFile: null,
 
   apisName: "",
   apisMethod: "GET",
@@ -237,6 +239,7 @@ interface ProjectSettingsStore {
   openWorkflow: (name: string) => void;
   openApi: (id: string) => void;
   openPlan: (name: string) => void;
+  openRunnerFile: (path: string) => void;
 }
 
 export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get) => ({
@@ -279,10 +282,11 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     }).catch(console.error);
   },
 
-  openComponent: (name) => get().setProjectSettings({ activeView: "components", activeComponent: name }),
-  openScreen:    (name) => get().setProjectSettings({ activeView: "screens",    activeScreen: name }),
-  openTheme:     (name) => get().setProjectSettings({ activeView: "themes",     activeTheme: name }),
-  openWorkflow:  (name) => get().setProjectSettings({ activeView: "workflows",  activeWorkflow: name }),
-  openApi:       (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
-  openPlan:      (name) => get().setProjectSettings({ activeView: "plans",      activePlan: name }),
+  openComponent:  (name) => get().setProjectSettings({ activeView: "components", activeComponent: name }),
+  openScreen:     (name) => get().setProjectSettings({ activeView: "screens",    activeScreen: name }),
+  openTheme:      (name) => get().setProjectSettings({ activeView: "themes",     activeTheme: name }),
+  openWorkflow:   (name) => get().setProjectSettings({ activeView: "workflows",  activeWorkflow: name }),
+  openApi:        (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
+  openPlan:       (name) => get().setProjectSettings({ activeView: "plans",      activePlan: name }),
+  openRunnerFile: (path) => get().setProjectSettings({ activeView: "runner",     runnerRequestedFile: path }),
 }));

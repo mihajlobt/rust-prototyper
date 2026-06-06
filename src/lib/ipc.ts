@@ -67,6 +67,7 @@ export interface FileEntry {
   name: string;
   path: string;
   is_dir: boolean;
+  modified_ms?: number;
 }
 
 export async function readDir(path: string): Promise<FileEntry[]> {

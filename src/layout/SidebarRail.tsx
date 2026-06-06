@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, LayoutGrid, FolderOpen, MessagesSquare } from "lucide-react";
+import { SidebarFilesTab } from "@/components/sidebar/SidebarFilesTab";
+import { SidebarChatsTab } from "@/components/sidebar/SidebarChatsTab";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +26,12 @@ import { notify } from "@/hooks/useToast";
 import { ProjectExplorer, SECTION_NAMES, SECTION_TREE_PATH } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
 
+type SidebarTab = "project" | "files" | "chats";
+
 export function SidebarRail() {
   const { settings } = useAppStore();
   const { setProjectSettings, openComponent, openScreen, openTheme, openWorkflow, openApi, openPlan } = useProjectSettingsStore();
+  const [activeTab, setActiveTab] = useState<SidebarTab>("project");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
   const [newItemName, setNewItemName] = useState("");
@@ -269,10 +274,52 @@ export function SidebarRail() {
   };
 
 
+  const TABS: { id: SidebarTab; icon: React.ElementType; color: string; title: string }[] = [
+    { id: "project", icon: LayoutGrid,      color: "text-violet-500", title: "Project" },
+    { id: "files",   icon: FolderOpen,      color: "text-sky-500",    title: "Files" },
+    { id: "chats",   icon: MessagesSquare,  color: "text-emerald-500", title: "Chats" },
+  ];
+
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
+      {/* Tab bar — icons only */}
+      <div className="flex border-b border-border shrink-0">
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              title={tab.title}
+              className={`flex-1 flex items-center justify-center py-2 transition-colors border-b-2 ${
+                active
+                  ? `${tab.color} border-current`
+                  : "text-muted-foreground border-transparent hover:text-foreground"
+              }`}
+            >
+              <Icon size={15} />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "files" && (
+        <div className="flex-1 overflow-hidden">
+          <SidebarFilesTab />
+        </div>
+      )}
+
+      {activeTab === "chats" && (
+        <div className="flex-1 overflow-hidden">
+          <SidebarChatsTab />
+        </div>
+      )}
+
+      {activeTab === "project" && (
       <ContextMenu>
-        <ContextMenuTrigger             asChild>
+        <ContextMenuTrigger asChild>
           <ScrollArea className="flex-1 overflow-hidden">
             <div className="py-2">
               <div className="px-2 space-y-0.5">
@@ -311,6 +358,7 @@ export function SidebarRail() {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      )}
 
       {/* New item dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>

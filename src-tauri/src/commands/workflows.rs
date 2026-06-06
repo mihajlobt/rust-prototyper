@@ -27,7 +27,11 @@ pub async fn list_workflows(project_id: String, app: AppHandle) -> Result<Vec<Fi
         if name.ends_with(".json") {
             let abs_path = entry.path();
             let rel_path = abs_path.strip_prefix(&base).unwrap_or(&abs_path).to_string_lossy().to_string();
-            entries.push(FileEntry { name, path: rel_path, is_dir: false });
+            let modified_ms = entry.metadata().await.ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64);
+            entries.push(FileEntry { name, path: rel_path, is_dir: false, modified_ms });
         }
     }
     Ok(entries)
