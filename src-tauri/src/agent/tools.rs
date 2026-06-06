@@ -209,7 +209,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "glob".to_string(),
-                description: "Find files matching a glob pattern within the current project. Pattern is relative to the project root (e.g. \"**/*.tsx\", \"generated/src/**/router.tsx\"). Returns matching file paths.".to_string(),
+                description: "Find files matching a glob pattern within the current project. Pattern is relative to the project root.".to_string(),
                 parameters: make_schema::<GlobArgs>(),
             },
         },
