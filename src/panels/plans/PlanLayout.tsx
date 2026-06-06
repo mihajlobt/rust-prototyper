@@ -25,8 +25,6 @@ interface PlanLayoutProps {
   mode: "write" | "split" | "read" | "focus";
   lineNumbers: boolean;
   chatOpen: boolean;
-  currentLine: number;
-  onCursorLineChange: (line: number) => void;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
   editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
@@ -40,7 +38,6 @@ export function PlanLayout({
   mode,
   lineNumbers,
   chatOpen,
-  onCursorLineChange,
   onSelectionChange,
   extraExtensions,
   editorHandle,
@@ -48,23 +45,22 @@ export function PlanLayout({
   chatSlot,
 }: PlanLayoutProps) {
   if (mode === "focus") {
-    return <FocusLayout source={source} onSourceChange={onSourceChange} onCursorLineChange={onCursorLineChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} />;
+    return <FocusLayout source={source} onSourceChange={onSourceChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} />;
   }
   if (mode === "read") {
     return <ReadLayout source={source} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
   if (mode === "write") {
-    return <WriteLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onCursorLineChange={onCursorLineChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+    return <WriteLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
-  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onCursorLineChange={onCursorLineChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
 }
 
 // ─── Mode: focus (no chat) ────────────────────────────────────────────────────
 
-function FocusLayout({ source, onSourceChange, onCursorLineChange, onSelectionChange, extraExtensions, editorHandle }: {
+function FocusLayout({ source, onSourceChange, onSelectionChange, extraExtensions, editorHandle }: {
   source: string;
   onSourceChange: (v: string) => void;
-  onCursorLineChange: (line: number) => void;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
   editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
@@ -77,7 +73,6 @@ function FocusLayout({ source, onSourceChange, onCursorLineChange, onSelectionCh
           value={source}
           onChange={onSourceChange}
           lineNumbers={false}
-          onCursorLineChange={onCursorLineChange}
           onSelectionChange={onSelectionChange}
           extraExtensions={extraExtensions}
         />
@@ -88,11 +83,10 @@ function FocusLayout({ source, onSourceChange, onCursorLineChange, onSelectionCh
 
 // ─── Mode: write (editor + chat) ─────────────────────────────────────────────
 
-function WriteLayout({ source, onSourceChange, lineNumbers, onCursorLineChange, onSelectionChange, extraExtensions, editorHandle, chatOpen, chatSlot }: {
+function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, chatOpen, chatSlot }: {
   source: string;
   onSourceChange: (v: string) => void;
   lineNumbers: boolean;
-  onCursorLineChange: (line: number) => void;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
   editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
@@ -115,7 +109,6 @@ function WriteLayout({ source, onSourceChange, lineNumbers, onCursorLineChange, 
               value={source}
               onChange={onSourceChange}
               lineNumbers={lineNumbers}
-              onCursorLineChange={onCursorLineChange}
               onSelectionChange={onSelectionChange}
               extraExtensions={extraExtensions}
             />
@@ -157,11 +150,10 @@ function ReadLayout({ source, onTaskToggle, chatOpen, chatSlot }: {
 
 // ─── Mode: split (editor + preview + chat) ───────────────────────────────────
 
-function SplitLayout({ source, onSourceChange, lineNumbers, onCursorLineChange, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, chatOpen, chatSlot }: {
+function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, chatOpen, chatSlot }: {
   source: string;
   onSourceChange: (v: string) => void;
   lineNumbers: boolean;
-  onCursorLineChange: (line: number) => void;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
   editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
@@ -186,7 +178,6 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onCursorLineChange, 
               value={source}
               onChange={onSourceChange}
               lineNumbers={lineNumbers}
-              onCursorLineChange={onCursorLineChange}
               onSelectionChange={onSelectionChange}
               extraExtensions={extraExtensions}
             />

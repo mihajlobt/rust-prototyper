@@ -34,7 +34,6 @@ export function PlansPanel() {
   const [source, setSource] = useState("");
   const [loading, setLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [currentLine, setCurrentLine] = useState(0);
   const [commandOpen, setCommandOpen] = useState(false);
   // Ref (not state) so CodeMirror selection updates don't re-render PlansPanel
   // on every mouse-drag tick. SelectionToChat reads from this ref on mouseup.
@@ -245,8 +244,6 @@ export function PlansPanel() {
               mode={plansMode}
               lineNumbers={false}
               chatOpen={plansChatOpen}
-              currentLine={currentLine}
-              onCursorLineChange={setCurrentLine}
               onSelectionChange={(info) => { selectionInfoRef.current = info; }}
               extraExtensions={extraExtensions}
               editorHandle={editorHandle}
