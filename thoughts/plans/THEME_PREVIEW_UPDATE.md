@@ -65,6 +65,8 @@ Showcase + Tokens were redundant (both show all token facets). **Two modes only:
 | `src/panels/ThemePreviewToolbar.tsx` | Add `viewMode / onSetViewMode` props. Add segmented control (Preview / Gallery) before existing device + dark toggles |
 | `src/stores/projectSettingsStore.ts` | Add `themesPreviewMode: "preview" \| "gallery"` with default `"preview"` + coercion guard in `loadProject` |
 
+> **Implementation note (post-plan relocation):** the `Tokens | Gallery` segmented control was *not* added to `ThemePreviewToolbar.tsx` as the table above describes. In the shipped implementation it lives in `src/panels/wizard/WizardPreviewPane.tsx` as a **floating** button group overlaid in the top-right of the Design tab's preview area (`absolute top-2 right-2 z-10 h-7 bg-background/80 backdrop-blur shadow-sm`), mirroring the Outline toggle in `src/panels/plans/PlanPreview.tsx:50`. The toolbar itself stays identical across all four Wizard tabs (device picker + dark mode + refresh + annotate).
+
 ---
 
 ## CSS Scoping — How It Works

@@ -29,7 +29,7 @@ The body uses Allotment-style resizable splits with 1px gutters. Canvas views (W
 
 | View | Component | Purpose |
 |------|-----------|---------|
-| Wizard | `WizardPanel` | Full-app generator with `ask_user` Q&A, live preview, visual annotations |
+| Wizard | `WizardPanel` | Full-app generator with `ask_user` Q&A, live preview, shared `AnnotationOverlay` (also wired on the Design tab), floating `Tokens \| Gallery` toggle in the Design-tab preview |
 | Screens | `ScreensPanel` | Chat + AI generation + device preview (embeds flow canvas) |
 | Components | `ComponentsPanel` | Prompt → component code + live preview |
 | Design (Themes) | `ThemesPanel` | Prompt → CSS theme generation |
@@ -53,7 +53,7 @@ src/hooks/
   useToast.ts                  # Toast notifications
   useBonsai.ts                 # Bonsai server + asset gallery lifecycle
   useScreenCode.ts             # Screen code save/load
-  useHotspotTracking.ts        # Hotspot tracking (Wizard annotations)
+  useHotspotTracking.ts        # Underlying hotspot/region tracker (consumed by the shared AnnotationOverlay in src/components/ui/AnnotationOverlay.tsx)
   use-mobile.ts                # Mobile breakpoint detection
 ```
 

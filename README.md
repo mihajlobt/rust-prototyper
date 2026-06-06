@@ -104,7 +104,7 @@ src/
     wizard/                  # 3 sub-components for the wizard panel
       WizardChatPanel.tsx    # Chat + inspector + ask_user input
       WizardPreviewPane.tsx  # Cross-origin iframe with postMessage reload
-      WizardAnnotations.tsx  # Visual annotation overlay (point/region)
+      WizardAnnotations.tsx  # Annotation list (pending/sent rows, remove/resolve, "Send to AI") — not the visual overlay
     LibraryPanel.tsx       # Searchable library: components, themes, screens, workflows, APIs
     AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
     assets/
@@ -136,7 +136,7 @@ src/
     SaveComponentModal.tsx      # Save generated component
   components/
     chat/                   # ChatInput, MessageList, MentionPicker, etc.
-    ui/                     # ~50 shadcn primitives + 20 domain components (70 total)
+    ui/                     # ~50 shadcn primitives + 20 domain components (70 total, incl. AnnotationOverlay)
     CodeMirrorEditor.tsx    # CM6 editor wrapper
     PromptInspector.tsx     # Assembled prompt / JSON / cURL viewer
     ModelPicker.tsx         # Provider + model selector
@@ -349,7 +349,8 @@ panels, augmented with four optional `useChat` callbacks:
 
 Key features:
 - **Live preview** with cross-origin iframe (uses `react-frame-component` + `postMessage({type:"reload"})` for HMR).
-- **Visual annotations**: click points or drag regions on the preview to send spatial feedback to the model. See `WizardAnnotations.tsx`.
+- **Visual annotations**: click points or drag regions on the preview to send spatial feedback to the model. The overlay is the shared `AnnotationOverlay` component at `src/components/ui/AnnotationOverlay.tsx` (wired on both the iframe view and the Design tab). `WizardAnnotations.tsx` is the annotation list (pending/sent rows with remove/resolve + "Send to AI") — not the visual overlay itself.
+- **Consistent preview toolbar**: the toolbar (device picker + dark mode + refresh + annotate) is identical across all four tabs; the Design tab adds a floating `Tokens | Gallery` segmented control overlaid in the top-right of the preview area (`absolute top-2 right-2 z-10 h-7 bg-background/80 backdrop-blur shadow-sm`), matching the Outline toggle treatment in `src/panels/plans/PlanPreview.tsx`.
 - **Theme/screen sync**: when the model calls `set_active_theme` the active theme preset updates immediately; when it calls `register_screen` then writes `router.tsx`, the preview auto-navigates to the new screen (1500ms delay).
 - **Dev server bootstrap**: on first output, the wizard auto-starts the runner dev server if a scaffold exists.
 

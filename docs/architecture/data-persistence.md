@@ -86,7 +86,7 @@ Saved via `save_model_presets` / `load_model_presets` (file system, app data dir
 
 - **Chat history** — lives in `chatStore` (Zustand) and is lost on app restart. This is intentional.
 - **Per-panel UI state** (open/closed sections, selected tabs) — resets each launch.
-- **Wizard annotations** — tied to the live preview, ephemeral by design.
+- **Preview annotations (Wizard)** — ephemeral by design. The shared `AnnotationOverlay` is wired on both the live preview iframe and the Design tab.
 
 ## What next
 

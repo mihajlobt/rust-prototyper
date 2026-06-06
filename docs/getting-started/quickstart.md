@@ -32,7 +32,7 @@ When the app opens, you'll see a 9-tab header (Wizard, Screens, Components, Desi
 1. **Open the Wizard** — click the `Wizard` tab. This is the only panel that uses `ask_user`, so it's the friendliest way to drive the model step by step.
 2. **Answer the first question** — the model will start with a short text or choice question (e.g. "What kind of app are you building?"). Type your answer and submit.
 3. **Watch the live preview** — as the model generates code, the preview iframe updates via `postMessage({type:"reload"})` HMR.
-4. **Annotate, if you want** — click points or drag regions on the preview to send spatial feedback back to the model.
+4. **Annotate, if you want** — click points or drag regions on the preview to send spatial feedback back to the model. The Design tab (4th in the header) uses the same shared overlay and adds a floating `Tokens | Gallery` toggle in the top-right of its preview area.
 5. **Switch to Runner** — the Runner tab shows the file tree, terminal (xterm.js), and live dev server. If the Wizard produced a scaffold, the dev server auto-starts.
 
 ## Try other panels
