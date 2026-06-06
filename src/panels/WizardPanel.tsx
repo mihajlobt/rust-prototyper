@@ -51,6 +51,11 @@ export function WizardPanel() {
   const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null)
   // Guards against readFile callbacks resolving after a wizard reset clears the tabs
   const wizardSessionRef = useRef(0)
+  // Mirror refs updated synchronously during render so the isStreaming effect sees current values
+  const previewTabsRef = useRef(previewTabs)
+  previewTabsRef.current = previewTabs
+  const activePreviewTabIdRef = useRef(activePreviewTabId)
+  activePreviewTabIdRef.current = activePreviewTabId
 
   const pendingThemeSlugRef = useRef<string | null>(null)
   const pendingScreenRef = useRef<{ screenId: string; title: string; urlPath: string } | null>(null)
@@ -113,7 +118,6 @@ export function WizardPanel() {
           return [...prev, { id: tabId, type: "screen", label: title || urlPath, urlPath }]
         })
         setActivePreviewTabId(tabId)
-        setTimeout(() => setPreviewNavigatePath(urlPath), 1500)
       }
     }
   }, [setProjectSettings])
@@ -137,7 +141,9 @@ export function WizardPanel() {
     onToolResult: handleToolResult,
   })
 
-  // Start dev server when streaming ends (wizard writes files, so onOutput never fires)
+  // Start dev server and navigate to active screen tab when streaming ends.
+  // previewTabsRef/activePreviewTabIdRef are read via refs to avoid adding them as deps
+  // (which would re-trigger dev server start on every tab change).
   const wasStreamingRef = useRef(false)
   useEffect(() => {
     if (wasStreamingRef.current && !chat.isStreaming) {
@@ -145,6 +151,10 @@ export function WizardPanel() {
       hasGeneratedScaffold(projectDir).then((ready) => {
         if (ready) devServerStore.startRunner(`${projectDir}/generated`, ps.runnerPort).catch(() => {})
       }).catch(() => {})
+      const activeTab = previewTabsRef.current.find((tab) => tab.id === activePreviewTabIdRef.current)
+      if (activeTab?.type === "screen" && activeTab.urlPath) {
+        setPreviewNavigatePath(activeTab.urlPath)
+      }
     }
     wasStreamingRef.current = chat.isStreaming
   // eslint-disable-next-line react-hooks/exhaustive-deps
