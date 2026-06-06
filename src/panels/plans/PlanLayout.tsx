@@ -25,7 +25,6 @@ interface PlanLayoutProps {
   mode: "write" | "split" | "read" | "focus";
   lineNumbers: boolean;
   chatOpen: boolean;
-  showOutline: boolean;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
   editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
@@ -39,7 +38,6 @@ export function PlanLayout({
   mode,
   lineNumbers,
   chatOpen,
-  showOutline,
   onSelectionChange,
   extraExtensions,
   editorHandle,
@@ -50,12 +48,12 @@ export function PlanLayout({
     return <FocusLayout source={source} onSourceChange={onSourceChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} />;
   }
   if (mode === "read") {
-    return <ReadLayout source={source} showOutline={showOutline} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+    return <ReadLayout source={source} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
   if (mode === "write") {
     return <WriteLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
-  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} showOutline={showOutline} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
 }
 
 // ─── Mode: focus (no chat) ────────────────────────────────────────────────────
@@ -126,9 +124,8 @@ function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
 
 // ─── Mode: read (preview + chat) ─────────────────────────────────────────────
 
-function ReadLayout({ source, showOutline, onTaskToggle, chatOpen, chatSlot }: {
+function ReadLayout({ source, onTaskToggle, chatOpen, chatSlot }: {
   source: string;
-  showOutline: boolean;
   onTaskToggle: (line: number) => void;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
@@ -142,7 +139,7 @@ function ReadLayout({ source, showOutline, onTaskToggle, chatOpen, chatSlot }: {
   return (
     <Allotment ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes}>
       <Allotment.Pane>
-        <PreviewPane parsed={parsed} showOutline={showOutline} onTaskToggle={onTaskToggle} />
+        <PreviewPane parsed={parsed} onTaskToggle={onTaskToggle} />
       </Allotment.Pane>
       <Allotment.Pane visible={chatOpen} minSize={CHAT_MIN} preferredSize={CHAT_PREFERRED}>
         {chatSlot}
@@ -153,14 +150,13 @@ function ReadLayout({ source, showOutline, onTaskToggle, chatOpen, chatSlot }: {
 
 // ─── Mode: split (editor + preview + chat) ───────────────────────────────────
 
-function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, showOutline, onTaskToggle, chatOpen, chatSlot }: {
+function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, chatOpen, chatSlot }: {
   source: string;
   onSourceChange: (v: string) => void;
   lineNumbers: boolean;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
   editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
-  showOutline: boolean;
   onTaskToggle: (line: number) => void;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
@@ -189,7 +185,7 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
         </div>
       </Allotment.Pane>
       <Allotment.Pane>
-        <PreviewPane parsed={parsed} showOutline={showOutline} onTaskToggle={onTaskToggle} />
+        <PreviewPane parsed={parsed} onTaskToggle={onTaskToggle} />
       </Allotment.Pane>
       <Allotment.Pane visible={chatOpen} minSize={CHAT_MIN} preferredSize={CHAT_PREFERRED}>
         {chatSlot}
@@ -200,16 +196,15 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
 
 // ─── Preview pane (shared by read + split modes) ─────────────────────────────
 
-function PreviewPane({ parsed, showOutline, onTaskToggle }: {
+function PreviewPane({ parsed, onTaskToggle }: {
   parsed: ReturnType<typeof parseFrontmatter>;
-  showOutline: boolean;
   onTaskToggle: (line: number) => void;
 }) {
   return (
     <div className="flex h-full flex-col">
       {parsed.frontmatter ? <FrontmatterHeader frontmatter={parsed.frontmatter} body={parsed.body} /> : null}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <PlanPreview body={parsed.body} showOutline={showOutline} onTaskToggle={onTaskToggle} />
+        <PlanPreview body={parsed.body} onTaskToggle={onTaskToggle} />
       </div>
     </div>
   );

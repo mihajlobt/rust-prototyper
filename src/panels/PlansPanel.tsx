@@ -35,7 +35,6 @@ export function PlansPanel() {
   const [loading, setLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [showOutline, setShowOutline] = useState(false);
   // Ref (not state) so CodeMirror selection updates don't re-render PlansPanel
   // on every mouse-drag tick. SelectionToChat reads from this ref on mouseup.
   const selectionInfoRef = useRef<SelectionInfo | null>(null);
@@ -229,11 +228,9 @@ export function PlansPanel() {
           savedAt={savedAt}
           mode={plansMode}
           chatOpen={plansChatOpen}
-          showOutline={showOutline}
           hasMessages={chat.messages.length > 0}
           onModeChange={(mode) => setProjectSettings({ plansMode: mode })}
           onChatToggle={() => setProjectSettings({ plansChatOpen: !plansChatOpen })}
-          onOutlineToggle={() => setShowOutline((v) => !v)}
           onCommandMenu={() => setCommandOpen(true)}
           onClearChat={async () => {
             const { confirm } = await import("@tauri-apps/plugin-dialog");
@@ -252,7 +249,6 @@ export function PlansPanel() {
               mode={plansMode}
               lineNumbers={false}
               chatOpen={plansChatOpen}
-              showOutline={showOutline}
               onSelectionChange={(info) => { selectionInfoRef.current = info; }}
               extraExtensions={extraExtensions}
               editorHandle={editorHandle}

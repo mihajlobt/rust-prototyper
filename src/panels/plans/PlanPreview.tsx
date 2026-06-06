@@ -12,15 +12,16 @@
 //   - Heading anchor links + outline scroll-spy via the inline DesignToc
 //     toggle (a top-right button reveals a 2-pane Allotment with the TOC).
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkDirective from "remark-directive";
 import { Allotment } from "allotment";
-import { Info, Lightbulb, AlertTriangle, AlertOctagon, CheckCircle2, Scale, HelpCircle, Target } from "lucide-react";
+import { Info, Lightbulb, AlertTriangle, AlertOctagon, CheckCircle2, Scale, HelpCircle, Target, List } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Toggle } from "@/components/ui/toggle";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
 import { DesignToc, slugify } from "@/components/ui/design-toc";
 import { remarkPlanDirectives } from "@/lib/markdown/directives";
@@ -28,7 +29,6 @@ import { KbdChip, MentionChip, TagChip } from "./chips";
 
 interface PlanPreviewProps {
   body: string;
-  showOutline: boolean;
   /** Called when a task checkbox in the preview is toggled. Line index is
    *  relative to the body (NOT the full source), 0-indexed. */
   onTaskToggle?: (line: number) => void;
@@ -36,12 +36,22 @@ interface PlanPreviewProps {
 
 const CALLOUT_RE = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|DECISION|QUESTION|GOAL)\]/i;
 
-export function PlanPreview({ body, showOutline, onTaskToggle }: PlanPreviewProps) {
+export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
   const components = useMemo(() => buildComponents(onTaskToggle), [onTaskToggle]);
+  const [showOutline, setShowOutline] = useState(false);
 
   return (
     <div className="relative h-full min-h-0">
-      <Allotment>
+      <Toggle
+        pressed={showOutline}
+        onPressedChange={setShowOutline}
+        variant="outline"
+        size="sm"
+        className="absolute top-2 right-2 z-10 h-7 gap-1 text-[10px] bg-background/80 backdrop-blur shadow-sm"
+      >
+        <List size={11} /> Outline
+      </Toggle>
+      <Allotment onVisibleChange={(index, visible) => { if (index === 0) setShowOutline(visible); }}>
         <Allotment.Pane visible={showOutline} minSize={120} preferredSize={200} snap>
           <div className="h-full overflow-auto border-r border-border bg-card/30 p-3">
             <DesignToc markdown={body} />

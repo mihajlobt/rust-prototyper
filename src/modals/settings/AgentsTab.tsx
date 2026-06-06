@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -8,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import type { Settings } from "@/hooks/useSettings";
 import type { ToolPermissionMode } from "@/lib/ipc";
 import {
@@ -207,76 +208,75 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
         </section>
 
         {/* Tool Access — collapsible */}
-        <section className="space-y-2">
-          <button
-            className="flex w-full items-center justify-between text-left"
-            onClick={() => setToolTableOpen((v) => !v)}
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tool Access</p>
-            {toolTableOpen
-              ? <ChevronDown size={13} className="text-muted-foreground" />
-              : <ChevronRight size={13} className="text-muted-foreground" />
-            }
-          </button>
-          {!toolTableOpen && (
-            <p className="text-xs text-muted-foreground">
-              Which tools each agent can call during generation.
-            </p>
-          )}
-          {toolTableOpen && (
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Tool</th>
-                    {AGENTS.map(({ label }) => (
-                      <th key={label} className="text-center px-2 py-2 font-medium w-20">{label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {TOOL_GROUPS.map((group, groupIndex) => (
-                    <Fragment key={group.label}>
-                      <tr className="bg-muted/20">
-                        <td
-                          colSpan={6}
-                          className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
-                        >
-                          {group.label}
-                        </td>
-                      </tr>
-                      {group.tools.map((toolName, toolIndex) => (
-                        <tr
-                          key={toolName}
-                          className={
-                            groupIndex === TOOL_GROUPS.length - 1 && toolIndex === group.tools.length - 1
-                              ? ""
-                              : "border-b border-border/50"
-                          }
-                        >
-                          <td className="px-3 py-1.5 font-mono text-muted-foreground">{toolName}</td>
-                          {AGENTS.map(({ panelKey }) => {
-                            const activatedTools = getActivatedTools(settings, panelKey);
-                            const isChecked = activatedTools.includes(toolName);
-                            return (
-                              <td key={panelKey} className="text-center px-2 py-1.5">
-                                <Checkbox
-                                  checked={isChecked}
-                                  onCheckedChange={(checked) => toggle(panelKey, toolName, checked === true)}
-                                  className="mx-auto"
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
+        <Collapsible open={toolTableOpen} onOpenChange={setToolTableOpen}>
+          <section className="space-y-2">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-left group">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Tool Access</p>
+              <ChevronDown
+                size={13}
+                className="text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+              />
+            </CollapsibleTrigger>
+            {!toolTableOpen && (
+              <p className="text-xs text-muted-foreground">
+                Which tools each agent can call during generation.
+              </p>
+            )}
+            <CollapsibleContent>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b-2 border-border bg-muted/50">
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Tool</th>
+                      {AGENTS.map(({ label }) => (
+                        <th key={label} className="text-center px-2 py-2 font-medium w-20">{label}</th>
                       ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {TOOL_GROUPS.map((group, groupIndex) => (
+                      <Fragment key={group.label}>
+                        <tr className={groupIndex > 0 ? "border-t-2 border-border bg-muted/30" : "bg-muted/30"}>
+                          <td
+                            colSpan={6}
+                            className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
+                          >
+                            {group.label}
+                          </td>
+                        </tr>
+                        {group.tools.map((toolName, toolIndex) => (
+                          <tr
+                            key={toolName}
+                            className={
+                              toolIndex < group.tools.length - 1
+                                ? "border-b border-border/40"
+                                : ""
+                            }
+                          >
+                            <td className="px-3 py-1.5 font-mono text-muted-foreground">{toolName}</td>
+                            {AGENTS.map(({ panelKey }) => {
+                              const activatedTools = getActivatedTools(settings, panelKey);
+                              const isChecked = activatedTools.includes(toolName);
+                              return (
+                                <td key={panelKey} className="text-center px-2 py-1.5">
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onCheckedChange={(checked) => toggle(panelKey, toolName, checked === true)}
+                                    className="mx-auto"
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CollapsibleContent>
+          </section>
+        </Collapsible>
 
       </div>
     </div>

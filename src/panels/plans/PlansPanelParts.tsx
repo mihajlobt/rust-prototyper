@@ -3,7 +3,6 @@ import {
   Columns2,
   FileText,
   Focus,
-  List,
   MessageSquare,
   Pencil,
   Search,
@@ -28,11 +27,9 @@ interface PlansToolbarProps {
   savedAt: number | null;
   mode: PlanMode;
   chatOpen: boolean;
-  showOutline: boolean;
   hasMessages: boolean;
   onModeChange: (mode: PlanMode) => void;
   onChatToggle: () => void;
-  onOutlineToggle: () => void;
   onCommandMenu: () => void;
   onClearChat: () => void;
 }
@@ -42,16 +39,12 @@ export function PlansToolbar({
   savedAt,
   mode,
   chatOpen,
-  showOutline,
   hasMessages,
   onModeChange,
   onChatToggle,
-  onOutlineToggle,
   onCommandMenu,
   onClearChat,
 }: PlansToolbarProps) {
-  const previewVisible = mode === "read" || mode === "split";
-
   return (
     <TooltipProvider delayDuration={300}>
       <div className="panel-toolbar h-10 gap-2 bg-card px-3">
@@ -74,23 +67,6 @@ export function PlansToolbar({
           </TooltipTrigger>
           <TooltipContent>Command palette ⌘K</TooltipContent>
         </Tooltip>
-        {previewVisible && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={showOutline ? "Hide outline" : "Show outline"}
-                aria-pressed={showOutline}
-                onClick={onOutlineToggle}
-              >
-                <List size={12} className={showOutline ? "text-primary" : undefined} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{showOutline ? "Hide outline" : "Show outline"}</TooltipContent>
-          </Tooltip>
-        )}
         {mode !== "focus" && (
           <Tooltip>
             <TooltipTrigger asChild>
