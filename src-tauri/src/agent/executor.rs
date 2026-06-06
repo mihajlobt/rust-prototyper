@@ -987,11 +987,41 @@ async fn execute_register_screen(
     }
 
     match tokio::fs::write(&nav_path, &serialized).await {
-        Ok(()) => ToolExecutionResult {
-            success: true,
-            output: format!("Screen '{}' registered at path '{}'. navigation.json updated.", parsed.screen_id, parsed.path),
-            written_path: Some(nav_path),
-            written_content: Some(serialized),
+        Ok(()) => {
+            // Create screens/{screenId}/ directory so the sidebar explorer can detect it.
+            // Writes meta.json only on first registration; on re-registration only updates updatedAt.
+            let screen_dir = proj_dir.join("screens").join(&parsed.screen_id);
+            let meta_path = screen_dir.join("meta.json");
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let _ = tokio::fs::create_dir_all(&screen_dir).await;
+            let meta = if meta_path.exists() {
+                tokio::fs::read_to_string(&meta_path).await.ok()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                    .map(|mut existing| {
+                        existing["updatedAt"] = serde_json::json!(now_ms);
+                        existing
+                    })
+                    .unwrap_or_else(|| serde_json::json!({
+                        "createdAt": now_ms, "updatedAt": now_ms, "initialPrompt": "", "updates": []
+                    }))
+            } else {
+                serde_json::json!({
+                    "createdAt": now_ms, "updatedAt": now_ms, "initialPrompt": "", "updates": []
+                })
+            };
+            if let Ok(meta_str) = serde_json::to_string_pretty(&meta) {
+                let _ = tokio::fs::write(&meta_path, meta_str).await;
+            }
+
+            ToolExecutionResult {
+                success: true,
+                output: format!("Screen '{}' registered at path '{}'. navigation.json updated.", parsed.screen_id, parsed.path),
+                written_path: Some(nav_path),
+                written_content: Some(serialized),
+            }
         },
         Err(e) => ToolExecutionResult {
             success: false,
