@@ -1350,11 +1350,20 @@ async fn execute_web_search(
     }
 
     let num = parsed.num_results.unwrap_or(5).clamp(1, 10);
-    let encoded_query = parsed.query.split_whitespace()
-        .collect::<Vec<_>>()
-        .join("+");
 
-    let url = format!("{}/search?q={}&format=json&num_results={}", searxng_url.trim_end_matches('/'), encoded_query, num);
+    fn percent_encode(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() * 3);
+        for b in s.bytes() {
+            match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+                b' ' => out.push('+'),
+                _ => out.push_str(&format!("%{b:02X}")),
+            }
+        }
+        out
+    }
+
+    let url = format!("{}/search?q={}&format=json", searxng_url.trim_end_matches('/'), percent_encode(&parsed.query));
 
     let resp = match http_client.get(&url).send().await {
         Ok(r) => r,
@@ -1369,8 +1378,8 @@ async fn execute_web_search(
     if !resp.status().is_success() {
         let code = resp.status().as_u16();
         let body = resp.text().await.unwrap_or_default();
-        let hint = if code == 400 {
-            " (SearXNG may need JSON format enabled in its settings.yml)"
+        let hint = if code == 403 || code == 400 {
+            " (SearXNG may need JSON format enabled — add '- json' under search.formats in settings.yml)"
         } else {
             ""
         };
