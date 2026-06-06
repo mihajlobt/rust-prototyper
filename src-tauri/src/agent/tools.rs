@@ -140,6 +140,14 @@ pub struct ValidateDesignJsonArgs {
     pub path: String,
 }
 
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct WebSearchArgs {
+    /// Search query string.
+    pub query: String,
+    /// Number of results to return (1–10, default 5).
+    pub num_results: Option<u32>,
+}
+
 fn make_schema<T: JsonSchema>() -> schemars::Schema {
     let mut settings = SchemaSettings::draft07();
     settings.inline_subschemas = true;
@@ -279,6 +287,14 @@ Returns: { "name": "TaskFlow", "type": "SaaS dashboard", "features": ["Dashboard
                 name: "validate_design_json".to_string(),
                 description: "Validate a design.json file against the DesignLanguageSpec schema. Returns a list of validation errors — empty output means valid. Call after writing design.json and fix all errors before proceeding.".to_string(),
                 parameters: make_schema::<ValidateDesignJsonArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "web_search".to_string(),
+                description: "Search the web via a local SearXNG instance and return titles, URLs, and snippets. Use to look up documentation, library releases, or any live information. Returns an error if SearXNG is not configured in Settings → AI.".to_string(),
+                parameters: make_schema::<WebSearchArgs>(),
             },
         },
     ]

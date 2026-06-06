@@ -58,6 +58,8 @@ export interface Settings {
     themes?: string[];
     plans?: string[];
   };
+  /** Base URL for the user's SearXNG instance. Empty = web_search disabled. */
+  searxngUrl: string;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -82,6 +84,7 @@ const DEFAULT_SETTINGS: Settings = {
   maxToolCalls: 20,
   panelMaxToolCalls: {},
   panelToolFilter: {},
+  searxngUrl: "",
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

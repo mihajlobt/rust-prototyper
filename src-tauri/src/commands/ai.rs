@@ -134,6 +134,10 @@ pub struct CompletionRequest {
     /// Empty = all tools available (default behavior).
     #[serde(default)]
     pub tool_filter: Vec<String>,
+    /// Base URL for the SearXNG instance used by the web_search tool (e.g. "http://localhost:8080").
+    /// Empty string means web_search is not configured.
+    #[serde(default)]
+    pub searxng_url: Option<String>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -252,6 +256,7 @@ async fn generate_ollama_completion_stream(
             tool_allowlist: allowlist,
             max_tool_calls: request.max_tool_calls,
             tool_filter,
+            searxng_url: request.searxng_url.clone().unwrap_or_default(),
         }).await
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name
@@ -401,6 +406,7 @@ async fn generate_claude_completion_stream(
             tool_allowlist: allowlist,
             max_tool_calls: request.max_tool_calls,
             tool_filter,
+            searxng_url: request.searxng_url.clone().unwrap_or_default(),
         }).await
     } else {
         chat_completion_claude(http_client, &request.api_key, &request.model, &request.messages, true, Some(channel), cancel_token).await.map(|_| ())

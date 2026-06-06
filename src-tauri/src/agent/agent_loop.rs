@@ -448,13 +448,15 @@ pub struct AgentLoopParams<'a> {
     /// If non-empty, only tools whose names are in this set are offered to the model.
     /// Empty = all tools available (default).
     pub tool_filter: HashSet<String>,
+    /// SearXNG base URL for the web_search tool (e.g. "http://localhost:8080"). Empty = disabled.
+    pub searxng_url: String,
 }
 
 pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
     if params.provider == "claude" {
         return super::claude::run_agent_loop_claude(params).await;
     }
-    let AgentLoopParams { provider: _, http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter } = params;
+    let AgentLoopParams { provider: _, http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter, searxng_url } = params;
     let max_iterations = max_tool_calls.filter(|&n| n > 0).unwrap_or(MAX_ITERATIONS);
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
@@ -531,6 +533,8 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 let channel = channel.clone();
                 let cancel_token = cancel_token.clone();
                 let app_handle = app_handle.clone();
+                let http = http_client.clone();
+                let surl = searxng_url.clone();
                 async move {
                     let skip = if name == "write_file" {
                         wc.load(Ordering::SeqCst) >= MAX_WRITES
@@ -586,7 +590,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                         }
                     }
 
-                    let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj, permission_mode).await;
+                    let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj, permission_mode, &http, &surl).await;
                     if name == "write_file" && result.success {
                         wc.fetch_add(1, Ordering::SeqCst);
                     }

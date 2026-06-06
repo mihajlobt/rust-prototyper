@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Server, Cloud, Zap, Bot } from "lucide-react";
+import { Server, Cloud, Zap, Bot, Search, CheckCircle2, XCircle } from "lucide-react";
 import type { Settings } from "@/hooks/useSettings";
+import { invoke } from "@tauri-apps/api/core";
 
 interface AITabProps {
   settings: Settings;
@@ -9,6 +12,25 @@ interface AITabProps {
 }
 
 export function AITab({ settings, setSettings }: AITabProps) {
+  const [searxngStatus, setSearxngStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+
+  async function testSearxng() {
+    const url = (settings.searxngUrl ?? "").trim();
+    if (!url) return;
+    setSearxngStatus("testing");
+    try {
+      const resp = await invoke<{ status: number }>("http_request", {
+        method: "GET",
+        url: `${url.replace(/\/$/, "")}/search?q=test&format=json`,
+        headers: {},
+        body: null,
+      });
+      setSearxngStatus(resp.status >= 200 && resp.status < 300 ? "ok" : "fail");
+    } catch {
+      setSearxngStatus("fail");
+    }
+  }
+
   return (
     <ScrollArea className="flex-1 min-h-0">
       <div className="space-y-6">
@@ -52,6 +74,42 @@ export function AITab({ settings, setSettings }: AITabProps) {
                 onChange={(e) => setSettings({ apiKeys: { ...settings.apiKeys, claude: e.target.value } })}
                 placeholder="sk-ant-..." className="h-8 text-xs" />
             </div>
+          </div>
+        </section>
+
+        {/* SearXNG */}
+        <section className="border-t border-border pt-4 space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Web Search</p>
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Search size={13} className="text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium">SearXNG</span>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={settings.searxngUrl ?? ""}
+                onChange={(e) => { setSettings({ searxngUrl: e.target.value }); setSearxngStatus("idle"); }}
+                placeholder="http://localhost:8080"
+                className="h-8 text-xs flex-1"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs shrink-0"
+                disabled={!settings.searxngUrl?.trim() || searxngStatus === "testing"}
+                onClick={testSearxng}
+              >
+                {searxngStatus === "ok" && <CheckCircle2 size={12} className="text-green-500" />}
+                {searxngStatus === "fail" && <XCircle size={12} className="text-destructive" />}
+                {searxngStatus === "testing" ? "Testing…" : searxngStatus === "idle" ? "Test" : searxngStatus === "ok" ? "OK" : "Failed"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Enables the <span className="font-mono">web_search</span> agent tool. Enable per-panel in Settings → Agents.
+            </p>
+            <p className="text-[11px] text-muted-foreground font-mono bg-muted rounded px-2 py-1 select-all">
+              docker run -d -p 8080:8080 -e BASE_URL=/ searxng/searxng
+            </p>
           </div>
         </section>
       </div>

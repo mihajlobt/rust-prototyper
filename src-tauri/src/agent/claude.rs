@@ -230,6 +230,7 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
         permission_mode, tool_allowlist, max_tool_calls, tool_filter,
         // unused for Claude:
         host: _, model_family: _,
+        searxng_url,
     } = params;
 
     let enable_thinking = matches!(think.as_ref(), Some(ThinkType::True));
@@ -301,6 +302,8 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
             let app_handle  = app_handle.clone();
             let app_data_dir = app_data_dir.to_path_buf();
             let output_path  = output_path.to_string();
+            let http        = http_client.clone();
+            let surl        = searxng_url.clone();
             async move {
                 if name == "write_file" && wc.load(Ordering::SeqCst) >= MAX_WRITES {
                     return (idx, crate::agent::executor::ToolExecutionResult {
@@ -341,7 +344,7 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
                     }
                 }
 
-                let result = execute_tool(&name, &arg, &app_data_dir, &output_path, &proj, permission_mode).await;
+                let result = execute_tool(&name, &arg, &app_data_dir, &output_path, &proj, permission_mode, &http, &surl).await;
                 if name == "write_file" && result.success {
                     wc.fetch_add(1, Ordering::SeqCst);
                 }

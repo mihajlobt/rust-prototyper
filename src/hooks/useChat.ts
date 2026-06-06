@@ -66,6 +66,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const toolPermissionMode = useAppStore((s) => s.settings.toolPermissionMode)
   const toolAllowlist = useAppStore((s) => s.settings.toolAllowlist)
   const maxToolCalls = useAppStore((s) => s.settings.maxToolCalls)
+  const searxngUrl  = useAppStore((s) => s.settings.searxngUrl)
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -229,6 +230,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         caps.family,
         panelMaxToolCalls ?? maxToolCalls,
         panelToolFilter,
+        searxngUrl || undefined,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -243,7 +245,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
-    panelToolFilter, panelMaxToolCalls,
+    panelToolFilter, panelMaxToolCalls, searxngUrl,
   ])
 
   const clearChat = useCallback(() => {
@@ -327,6 +329,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         caps.family,
         panelMaxToolCalls ?? maxToolCalls,
         panelToolFilter,
+        searxngUrl || undefined,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -339,7 +342,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
-    toolPermissionMode, toolAllowlist, maxToolCalls,
+    toolPermissionMode, toolAllowlist, maxToolCalls, searxngUrl,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {

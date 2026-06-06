@@ -1,7 +1,19 @@
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::commands::ai::ToolPermissionMode;
-use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs, RegisterScreenArgs, SetActiveThemeArgs, ValidateDesignJsonArgs};
+use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs, RegisterScreenArgs, SetActiveThemeArgs, ValidateDesignJsonArgs, WebSearchArgs};
+
+#[derive(serde::Deserialize)]
+struct SearxngResult {
+    title: String,
+    url: String,
+    content: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct SearxngResponse {
+    results: Vec<SearxngResult>,
+}
 
 enum ToolError {
     InvalidArguments(String),
@@ -41,6 +53,8 @@ pub async fn execute_tool(
     output_path: &str,
     project_dir: &Path,
     permission_mode: ToolPermissionMode,
+    http_client: &reqwest::Client,
+    searxng_url: &str,
 ) -> ToolExecutionResult {
     let skip_policy = matches!(permission_mode, ToolPermissionMode::AutoAcceptAll);
     match name {
@@ -56,6 +70,7 @@ pub async fn execute_tool(
         "register_screen" => execute_register_screen(args, app_data_dir, output_path).await,
         "set_active_theme" => execute_set_active_theme(args, app_data_dir, output_path).await,
         "validate_design_json" => execute_validate_design_json(args, app_data_dir).await,
+        "web_search" => execute_web_search(args, searxng_url, http_client).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),
@@ -1307,5 +1322,111 @@ async fn execute_bash(
             written_path: None,
             written_content: None,
         },
+    }
+}
+
+async fn execute_web_search(
+    args: &serde_json::Value,
+    searxng_url: &str,
+    http_client: &reqwest::Client,
+) -> ToolExecutionResult {
+    let parsed = match serde_json::from_value::<WebSearchArgs>(args.clone()) {
+        Ok(p) => p,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("web_search: {}", ToolError::InvalidArguments(e.to_string())),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if searxng_url.trim().is_empty() {
+        return ToolExecutionResult {
+            success: false,
+            output: "web_search: SearXNG is not configured. Set the SearXNG URL in Settings → AI.".to_string(),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let num = parsed.num_results.unwrap_or(5).clamp(1, 10);
+    let encoded_query = parsed.query.split_whitespace()
+        .collect::<Vec<_>>()
+        .join("+");
+
+    let url = format!("{}/search?q={}&format=json&num_results={}", searxng_url.trim_end_matches('/'), encoded_query, num);
+
+    let resp = match http_client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("web_search: request failed — {e}. Is SearXNG running at {searxng_url}?"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if !resp.status().is_success() {
+        let code = resp.status().as_u16();
+        let body = resp.text().await.unwrap_or_default();
+        let hint = if code == 400 {
+            " (SearXNG may need JSON format enabled in its settings.yml)"
+        } else {
+            ""
+        };
+        return ToolExecutionResult {
+            success: false,
+            output: format!("web_search: HTTP {code}{hint} — {}", &body[..body.len().min(200)]),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let text = match resp.text().await {
+        Ok(t) => t,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("web_search: failed to read response — {e}"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    let parsed_resp: SearxngResponse = match serde_json::from_str(&text) {
+        Ok(r) => r,
+        Err(e) => return ToolExecutionResult {
+            success: false,
+            output: format!("web_search: failed to parse JSON — {e}"),
+            written_path: None,
+            written_content: None,
+        },
+    };
+
+    if parsed_resp.results.is_empty() {
+        return ToolExecutionResult {
+            success: true,
+            output: format!("No results found for: {}", parsed.query),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let mut out = format!("Search results for: {}\n\n", parsed.query);
+    for (i, r) in parsed_resp.results.iter().take(num as usize).enumerate() {
+        out.push_str(&format!("[{}] {}\n    URL: {}\n", i + 1, r.title, r.url));
+        if let Some(snippet) = &r.content {
+            let trimmed = snippet.trim();
+            if !trimmed.is_empty() {
+                out.push_str(&format!("    {}\n", trimmed));
+            }
+        }
+        out.push('\n');
+    }
+
+    ToolExecutionResult {
+        success: true,
+        output: out,
+        written_path: None,
+        written_content: None,
     }
 }

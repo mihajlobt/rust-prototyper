@@ -278,6 +278,7 @@ export async function generateCompletionStream(
   modelFamily?: string,
   maxToolCalls?: number,
   toolFilter?: string[],
+  searxngUrl?: string,
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -294,6 +295,7 @@ export async function generateCompletionStream(
       modelFamily: modelFamily ?? null,
       maxToolCalls: maxToolCalls ?? null,
       toolFilter: toolFilter ?? [],
+      searxngUrl: searxngUrl ?? null,
     },
     onEvent,
   });

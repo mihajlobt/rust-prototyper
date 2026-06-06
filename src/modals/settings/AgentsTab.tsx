@@ -61,6 +61,7 @@ const TOOL_GROUPS: ToolGroup[] = [
   { label: "Execution",   tools: ["bash", "run_tsc", "run_lint", "run_build"] },
   { label: "Interaction", tools: ["ask_user", "ask_user_form"] },
   { label: "Wizard",      tools: ["register_screen", "set_active_theme", "validate_design_json"] },
+  { label: "Search",      tools: ["web_search"] },
 ];
 
 function getActivatedTools(settings: Settings, panelKey: PanelKey): string[] {
