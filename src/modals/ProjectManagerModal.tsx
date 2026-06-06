@@ -14,6 +14,8 @@ import { readDir, createDir, writeFile, deleteDir, readFile, getErrorMessage } f
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
 import { scaffoldGenerated } from "@/lib/scaffold";
+import { designLanguageSpecSchema } from "@/lib/design/spec";
+import * as z from "zod/v4";
 import { notify } from "@/hooks/useToast";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
 
@@ -119,6 +121,10 @@ export function ProjectManagerModal() {
     await writeFile(
       `${projectPath}/project.json`,
       JSON.stringify({ name: newProjectName, created: now, updated: now }, null, 2)
+    );
+    await writeFile(
+      `${projectPath}/themes/design-schema.json`,
+      JSON.stringify(z.toJSONSchema(designLanguageSpecSchema), null, 2)
     );
 
     setScaffolding(true);

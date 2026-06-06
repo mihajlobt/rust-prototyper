@@ -4,7 +4,6 @@ import { TOOL_USAGE_SECTION, DATA_LAYER_SECTION, SHADCN_COMPONENT_CATALOG } from
 
 export function getWizardSystemPrompt(
   projectId: string,
-  designSpecSchemaJson: string,
 ): string {
   const projectRoot = `projects/${projectId}`;
   const generatedRoot = `${projectRoot}/generated`;
@@ -17,7 +16,8 @@ ${TOOL_USAGE_SECTION}
 
 ASKING THE USER:
 - ask_user_form: collect several pieces of information at once with a structured form.
-- ask_user: ask a single question. Use choice/confirm/text question types as appropriate.
+- ask_user: ask a single question. Use type=text or type=choice for open-ended input. Reserve type=confirm strictly for binary decisions where both outcomes are meaningfully different actions.
+- Never use type=confirm as an approval gate — it gives the user no way to redirect or refine.
 - Only ask when the answer meaningfully changes what you build. Don't ask trivial questions.
 
 ${DATA_LAYER_SECTION}
@@ -61,8 +61,7 @@ export function AppRouter() {
 }
 \`\`\`
 
-DESIGN LANGUAGE JSON SCHEMA (write to ${projectRoot}/themes/{slug}/design.json):
-${designSpecSchemaJson}
+DESIGN LANGUAGE JSON SCHEMA: read_file("${projectRoot}/themes/design-schema.json") before writing any design.json.
 
 DECIDE VS ASK RULE:
 Decide implementation details yourself and state assumptions in your response. Only ask the user when the answer meaningfully changes architecture, design direction, or feature scope.
@@ -71,8 +70,7 @@ PHASE SIGNALS:
 At the end of each phase, emit a one-liner: ✓ Phase N complete: [brief summary of what was built/decided]
 
 FAILURE RECOVERY:
-If run_tsc errors persist after 3 edit_file attempts on the same file, call ask_user (type=confirm):
-"I'm having trouble fixing TypeScript errors in [screen]. Continue with known errors, or stop and review?"
+If run_tsc errors persist after 3 edit_file attempts on the same file, use ask_user (type=confirm) to let the user decide whether to continue or stop.
 
 ===== GENERATION PHASES =====
 
@@ -87,10 +85,10 @@ Generate a complete design language. Write three files:
 3. ${projectRoot}/themes/wizard/DESIGN.md — human-readable guidelines
 After writing design.json, call validate_design_json on it and fix all errors.
 After all three files are written, call set_active_theme("wizard") to make these tokens available for screen generation.
-Use ask_user (type=confirm) with a brief description: "I've created a [X] design system with [Y color palette] and [Z typography]. Looks good?"
+Summarise the design system and invite open-ended feedback using ask_user (type=text) before proceeding to screen generation.
 
 PHASE 3 — SCREEN PLAN:
-Plan 3–5 screens that cover the app's core flows. Describe them briefly, then use ask_user (type=confirm): "I'll generate these N screens: [list]. Ready to build?"
+Plan 3–5 screens that cover the app's core flows. Describe them briefly, then invite open-ended feedback using ask_user (type=text) before generating any code.
 
 PHASE 4 — SCREEN GENERATION:
 Generate each screen one at a time:

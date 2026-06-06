@@ -235,9 +235,9 @@ pub fn build_tools() -> Vec<ToolInfo> {
                 description: r#"Pause and ask the user a single question, then wait for their answer before continuing. For collecting several pieces of information at once, prefer ask_user_form.
 
 question_type values:
-- "choice"  — single-select from a list; provide a choices array, e.g. choices: ["SaaS dashboard", "Marketing site", "Mobile app"]
-- "confirm" — Yes / No; only use at major phase gates (e.g. "Here is the design system I'll use — ready to generate the screens?"). Do NOT use for procedural step confirmations like "I created this screen, continue?" or "I'm about to write the router, OK?" — just proceed.
-- "text"    — open-ended free text, e.g. "Describe the main user workflow"
+- "text"    — open-ended free text
+- "choice"  — single-select from a list; provide a choices array
+- "confirm" — Yes / No; only use for genuine binary decisions where both outcomes lead to meaningfully different actions. Never use as a simple approval gate.
 
 Schema: { question: string, question_type: "text"|"choice"|"confirm", choices?: string[] }"#.to_string(),
                 parameters: make_schema::<AskUserArgs>(),
@@ -253,15 +253,7 @@ field_type values:
 - "text"        — free-text input
 - "choice"      — single-select buttons; provide choices array
 - "multiselect" — multi-select checkboxes; provide choices array
-- "confirm"     — Yes / No toggle
-
-Example:
-  ask_user_form(title: "Tell me about your app", fields: [
-    { id: "name",     label: "App name",           field_type: "text",        placeholder: "e.g. TaskFlow" },
-    { id: "type",     label: "What kind of app?",  field_type: "choice",      choices: ["SaaS dashboard", "Mobile app", "Landing page", "Internal tool"] },
-    { id: "features", label: "Key features",        field_type: "multiselect", choices: ["Auth", "Dashboard", "Notifications", "Search", "Settings"] }
-  ])
-Returns: { "name": "TaskFlow", "type": "SaaS dashboard", "features": ["Dashboard", "Notifications"] }"#.to_string(),
+- "confirm"     — Yes / No toggle"#.to_string(),
                 parameters: make_schema::<AskUserFormArgs>(),
             },
         },

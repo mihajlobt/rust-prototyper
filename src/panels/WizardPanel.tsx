@@ -10,8 +10,6 @@ import { useDevServerStore } from "@/lib/dev-server-manager"
 import { useChatStore } from "@/stores/chatStore"
 import { hasGeneratedScaffold } from "@/lib/scaffold"
 import { getWizardSystemPrompt } from "@/lib/prompts/wizard"
-import { designLanguageSpecSchema } from "@/lib/design/spec"
-import * as z from "zod/v4"
 import { WizardChatPanel } from "./wizard/WizardChatPanel"
 import { WizardPreviewPane } from "./wizard/WizardPreviewPane"
 import { WizardAnnotations } from "./wizard/WizardAnnotations"
@@ -66,10 +64,7 @@ export function WizardPanel() {
   const pendingThemeSlugRef = useRef<string | null>(null)
   const pendingScreenRef = useRef<{ screenId: string; title: string; urlPath: string } | null>(null)
 
-  const systemPrompt = useMemo((): string => {
-    const schemaJson = JSON.stringify(z.toJSONSchema(designLanguageSpecSchema), null, 2)
-    return getWizardSystemPrompt(settings.project, schemaJson)
-  }, [settings.project])
+  const systemPrompt = useMemo(() => getWizardSystemPrompt(settings.project), [settings.project])
 
   const wizardEntityId = `wizard-${settings.project}`
 
