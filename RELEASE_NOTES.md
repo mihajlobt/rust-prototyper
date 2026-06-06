@@ -1,5 +1,31 @@
 # Release Notes
 
+## v0.1.3 (2026-06-06)
+
+Feature release. Adds the Plans section and a web search tool, plus several agent-execution fixes.
+
+### Highlights
+
+- **Plans section** (`13aeaa8` + 4 follow-ups): new tab in the sidebar for markdown-based project planning. Plans live at `projects/{id}/plans/{slug}.md`; the panel is a 3-pane Allotment (editor, live preview, chat agent) with a per-mode `Cmd+K` command palette, slash and `@`-mention autocomplete, and a dedicated planning agent that uses `write_file` to draft plans against the project's existing inventory. Outline toggle lives inside the preview pane; chat is a top-level Allotment pane in write/read/split modes.
+- **web_search tool** (`02bdbb7`, `5c1bcb6`): the agent can now run web searches via SearXNG (configurable URL in Settings → AI) for fresh-API lookups, library docs, and stack-trace research without leaving the chat.
+
+### Fixes
+
+- **find/grep tool execution** (`ad46f0e`): `prototyper.policy` now lists the `find` and `grep` flags the executor and model need (`-not`, `-path`, `-type`, `-rn`, `--exclude-dir`, etc.) and accepts unverified positional args. Glob/grep calls no longer fail with `UnknownOption` before ever running. Removed the `| head -200` cap from `glob` and the "up to 100 results" claim from the tool descriptions.
+- **SearXNG connectivity test** (`0ea8012`, `42a65b3`): the Settings → AI "Test" button now runs through a backend command rather than `http_request` (which blocks localhost connections) and uses native `fetch` to avoid the IPC round-trip.
+- **Plans: 9 bugs + Prompt Inspector** (`4cffa8e`): toolbar polish, send-button crash fix, and 9 other fixups across editor/preview/command palette/autocomplete; new Prompt Inspector panel for inspecting the exact system prompt + tool filter sent to the model.
+- **Plans: re-render perf** (`b733623`): editor selection drag no longer re-renders the chat or outline pane.
+- **CI** (`11be5f6`): upgraded GitHub Actions to Node 24 (silences the `set-output` deprecation warning).
+
+### Notes
+
+- Plans is opt-in: open a `.md` file in `projects/{id}/plans/` (create the folder via the sidebar `+` button → `Plan`) to start a plan.
+- The planning agent uses the same `useChat` hook as Themes / Wizard / Screens — same permission modes, same `toolAllowlist` flow, same channel-based streaming.
+- All other behavior from v0.1.2 is preserved. Safe drop-in upgrade.
+- Same platform support: Linux x86_64, macOS arm64, macOS x64.
+
+---
+
 ## v0.1.2 (2026-06-05)
 
 Patch release. Fixes a Wayland launch crash and adds two diagnostic improvements.
