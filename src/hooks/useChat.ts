@@ -136,12 +136,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   // Cold start: load from disk the first time this entityId is accessed
   useEffect(() => {
     if (loadedRef.current.has(entityId)) return
-    loadedRef.current.add(entityId)
     if (useChatStore.getState().chats[entityId]?.messages.length) return
     let cancelled = false
     readFile(chatPath)
       .then((raw) => {
         if (cancelled) return
+        // After cancelled check: StrictMode cleanup sets cancelled=true on Effect 1 so Effect 2 can retry — react.dev/reference/react/useEffect#my-effect-runs-twice-when-the-component-mounts
+        loadedRef.current.add(entityId)
         try {
           const messages = JSON.parse(raw) as ChatMessage[]
           if (Array.isArray(messages) && messages.length > 0) {
@@ -149,8 +150,21 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           }
         } catch { /* ignore corrupt chat file */ }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) loadedRef.current.add(entityId)
+      })
     return () => { cancelled = true }
+  }, [entityId, chatPath])
+
+  useEffect(() => {
+    const flush = () => {
+      const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
+      if (msgs.length > 0 && chatPath) {
+        writeFile(chatPath, JSON.stringify(msgs, null, 2)).catch(() => {})
+      }
+    }
+    window.addEventListener("beforeunload", flush)
+    return () => window.removeEventListener("beforeunload", flush)
   }, [entityId, chatPath])
 
   const sendMessage = useCallback(async (textOverride?: string) => {
@@ -191,6 +205,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const updatedMessages: ChatMessage[] = [...currentChat.messages, userMessage, assistantPlaceholder]
 
     useChatStore.getState().setMessages(entityId, updatedMessages)
+    writeFile(chatPath, JSON.stringify(updatedMessages, null, 2)).catch(() => {})
     useChatStore.getState().setStreaming(entityId, true)
     useChatStore.getState().setStreamingThinking(entityId, "")  // Clear previous thinking
     setInput("")
@@ -273,7 +288,12 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       stopGenerationRequest(activeRequestIdRef.current).catch(() => {})
       activeRequestIdRef.current = null
     }
-  }, [entityId])
+    // Persist partial response — finalize() won't run when stopRef is true
+    const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
+    if (msgs.length > 0 && chatPath) {
+      writeFile(chatPath, JSON.stringify(msgs, null, 2)).catch(() => {})
+    }
+  }, [entityId, chatPath])
 
   const regenerate = useCallback(async () => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -293,6 +313,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const assistantPlaceholder: ChatMessage = { role: "assistant", content: "" }
     const updatedMessages: ChatMessage[] = [...trimmed, userMsg, assistantPlaceholder]
     useChatStore.getState().setMessages(entityId, updatedMessages)
+    writeFile(chatPath, JSON.stringify(updatedMessages, null, 2)).catch(() => {})
     useChatStore.getState().setStreaming(entityId, true)
     useChatStore.getState().setStreamingThinking(entityId, "")
 
