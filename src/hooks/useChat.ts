@@ -156,17 +156,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     return () => { cancelled = true }
   }, [entityId, chatPath])
 
-  useEffect(() => {
-    const flush = () => {
-      const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
-      if (msgs.length > 0 && chatPath) {
-        writeFile(chatPath, JSON.stringify(msgs, null, 2)).catch(() => {})
-      }
-    }
-    window.addEventListener("beforeunload", flush)
-    return () => window.removeEventListener("beforeunload", flush)
-  }, [entityId, chatPath])
-
   const sendMessage = useCallback(async (textOverride?: string) => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
     if (currentChat.isStreaming) return
