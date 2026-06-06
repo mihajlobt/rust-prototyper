@@ -71,3 +71,27 @@ pub async fn http_request(
     let body = res.text().await.map_err(|e| AppError::Http(e.to_string()))?;
     Ok(HttpResponse { status, headers: res_headers, body })
 }
+
+/// Test a SearXNG instance by hitting its JSON search endpoint.
+/// Uses the same reqwest client as the agent (no localhost restriction).
+/// Returns Ok(true) if the instance is reachable and JSON-enabled, Err otherwise.
+#[tauri::command]
+pub async fn test_searxng_connection(url: String, app: AppHandle) -> Result<bool, String> {
+    let base = url.trim().trim_end_matches('/');
+    if base.is_empty() {
+        return Err("URL is empty".into());
+    }
+    let test_url = format!("{base}/search?q=test&format=json");
+    let state = app.state::<AppState>();
+    let resp = state.http_client
+        .get(&test_url)
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {e}"))?;
+
+    if resp.status().is_success() {
+        Ok(true)
+    } else {
+        Err(format!("HTTP {} — JSON format may not be enabled in SearXNG settings.yml", resp.status().as_u16()))
+    }
+}
