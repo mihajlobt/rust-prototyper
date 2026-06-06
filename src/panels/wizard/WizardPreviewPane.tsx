@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Smartphone, Tablet, Monitor, Sun, Moon, Pencil, X, RefreshCw } from "lucide-react"
+import { Smartphone, Tablet, Monitor, Sun, Moon, Pencil, X, RefreshCw, Play, Square, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useDevServerStore } from "@/lib/dev-server-manager"
 import { ThemeTokenPreview } from "@/panels/theme-preview/ThemeTokenPreview"
 import type { WizardAnnotation, WizardPreviewTab } from "./types"
 
@@ -22,7 +23,7 @@ interface TextPopup {
 }
 
 interface WizardPreviewPaneProps {
-  devUrl: string | null
+  generatedDir: string
   device: "desktop" | "tablet" | "mobile"
   darkMode: boolean
   annotations: WizardAnnotation[]
@@ -30,6 +31,7 @@ interface WizardPreviewPaneProps {
   previewNavigatePath: string | null
   previewTabs: WizardPreviewTab[]
   activePreviewTabId: string | null
+  themeCss: string | null
   onSelectTab: (id: string) => void
   onSetDevice: (device: "desktop" | "tablet" | "mobile") => void
   onToggleDark: () => void
@@ -43,18 +45,20 @@ const DEVICE_WIDTHS: Record<"desktop" | "tablet" | "mobile", number | null> = {
 }
 
 export function WizardPreviewPane({
-  devUrl,
+  generatedDir,
   device,
   darkMode,
   annotations,
   previewNavigatePath,
   previewTabs,
   activePreviewTabId,
+  themeCss,
   onSelectTab,
   onSetDevice,
   onToggleDark,
   onAddAnnotation,
 }: WizardPreviewPaneProps) {
+  const { runnerStatus, runnerUrl, startRunner, stopRunner } = useDevServerStore()
   const [annotationMode, setAnnotationMode] = useState(false)
   const [textPopup, setTextPopup] = useState<TextPopup | null>(null)
   const [popupText, setPopupText] = useState("")
@@ -62,10 +66,12 @@ export function WizardPreviewPane({
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const [liveRect, setLiveRect] = useState<DraftAnnotation | null>(null)
+  const [designMode, setDesignMode] = useState<"preview" | "gallery">("preview")
 
   const deviceWidth = DEVICE_WIDTHS[device]
-  const activeTab = previewTabs.find((tab) => tab.id === activePreviewTabId)
-  const isThemeTabActive = activeTab?.type === "theme"
+  const designOpen = activePreviewTabId === "design"
+  const activeScreenTab = previewTabs.find((tab) => tab.id === activePreviewTabId)
+  const currentPath = activeScreenTab ? (activeScreenTab.previewPath ?? activeScreenTab.urlPath) : null
 
   useEffect(() => {
     if (iframeRef.current) {
@@ -73,13 +79,11 @@ export function WizardPreviewPane({
     }
   }, [darkMode])
 
-  // Navigate preview to the newly registered screen path when triggered by useWizard.
-  // previewNavigatePath is set after router.tsx is written (HMR has had 1.5s to settle).
   useEffect(() => {
-    if (!previewNavigatePath || !devUrl || !iframeRef.current) return
-    const base = devUrl.replace(/\/$/, "")
+    if (!previewNavigatePath || !runnerUrl || !iframeRef.current) return
+    const base = runnerUrl.replace(/\/$/, "")
     iframeRef.current.src = `${base}${previewNavigatePath}`
-  }, [previewNavigatePath, devUrl])
+  }, [previewNavigatePath, runnerUrl])
 
   const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const overlay = overlayRef.current
@@ -176,63 +180,86 @@ export function WizardPreviewPane({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Toolbar — reusing device/dark pattern from ThemePreviewToolbar */}
       <div className="panel-toolbar h-10 shrink-0 px-3 gap-2 bg-card">
-        <span className="text-xs font-medium text-muted-foreground">Preview</span>
+        <span className="text-sm font-medium">Preview</span>
+
+        {/* Dev server start/stop */}
+        {runnerStatus === "running" ? (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={stopRunner} title="Stop preview server">
+            <Square size={12} />
+          </Button>
+        ) : runnerStatus === "starting" ? (
+          <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Starting…">
+            <Loader2 size={12} className="animate-spin" />
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { void startRunner(generatedDir) }} title="Start preview server">
+            <Play size={12} />
+          </Button>
+        )}
+
+        {currentPath && runnerUrl && (
+          <span className="text-xs text-muted-foreground font-mono truncate max-w-[160px]" title={currentPath}>
+            {currentPath}
+          </span>
+        )}
+
         <div className="flex-1" />
 
-        {/* Device selector */}
-        <div className="flex items-center gap-1">
-          <Button variant={device === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("mobile")} title="Mobile (375px)">
-            <Smartphone size={12} />
-          </Button>
-          <Button variant={device === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("tablet")} title="Tablet (768px)">
-            <Tablet size={12} />
-          </Button>
-          <Button variant={device === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("desktop")} title="Desktop (full width)">
-            <Monitor size={12} />
-          </Button>
-        </div>
+        {designOpen ? (
+          <>
+            <Tabs value={designMode} onValueChange={(mode) => setDesignMode(mode as "preview" | "gallery")}>
+              <TabsList className="h-6">
+                <TabsTrigger value="preview" className="text-xs">Tokens</TabsTrigger>
+                <TabsTrigger value="gallery" className="text-xs">Gallery</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <div className="w-px h-4 bg-border mx-1" />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-1">
+              <Button variant={device === "mobile" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("mobile")} title="Mobile (375px)">
+                <Smartphone size={12} />
+              </Button>
+              <Button variant={device === "tablet" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("tablet")} title="Tablet (768px)">
+                <Tablet size={12} />
+              </Button>
+              <Button variant={device === "desktop" ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => onSetDevice("desktop")} title="Desktop (full width)">
+                <Monitor size={12} />
+              </Button>
+            </div>
+            <div className="w-px h-4 bg-border mx-1" />
+          </>
+        )}
 
-        <div className="w-px h-4 bg-border mx-1" />
-
-        {/* Dark mode */}
         <Button variant={darkMode ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={onToggleDark} title={darkMode ? "Light mode" : "Dark mode"}>
           {darkMode ? <Moon size={12} /> : <Sun size={12} />}
         </Button>
 
-        {/* Refresh */}
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          onClick={() => {
-            if (iframeRef.current) {
-              // Reassign src to force reload without touching contentWindow (cross-origin safe)
-              iframeRef.current.src = iframeRef.current.src
-            }
-          }}
-          title="Refresh preview"
-        >
-          <RefreshCw size={12} />
-        </Button>
-
-        <div className="w-px h-4 bg-border mx-1" />
-
-        {/* Annotation toggle */}
-        <Button
-          size="sm"
-          variant={annotationMode ? "default" : "outline"}
-          className="h-6 gap-1 px-2 text-xs"
-          disabled={isThemeTabActive}
-          onClick={() => { setAnnotationMode((a) => !a); setTextPopup(null); setLiveRect(null) }}
-        >
-          <Pencil size={11} />
-          {annotationMode ? "Done" : "Annotate"}
-        </Button>
+        {!designOpen && (
+          <>
+            <Button size="icon" variant="ghost" className="h-7 w-7"
+              onClick={() => { if (iframeRef.current) iframeRef.current.src = iframeRef.current.src }}
+              title="Refresh preview"
+            >
+              <RefreshCw size={12} />
+            </Button>
+            <div className="w-px h-4 bg-border mx-1" />
+            <Button
+              size="sm"
+              variant={annotationMode ? "default" : "outline"}
+              className="h-6 gap-1 px-2 text-xs"
+              onClick={() => { setAnnotationMode((a) => !a); setTextPopup(null); setLiveRect(null) }}
+            >
+              <Pencil size={11} />
+              {annotationMode ? "Done" : "Annotate"}
+            </Button>
+          </>
+        )}
       </div>
 
-      {previewTabs.length > 0 && (
+      {(previewTabs.length > 0 || themeCss !== null) && (
         <Tabs value={activePreviewTabId ?? ""} onValueChange={onSelectTab} className="shrink-0">
           <TabsList variant="line" className="h-8 w-full justify-start rounded-none border-b px-2">
             {previewTabs.map((tab) => (
@@ -240,20 +267,20 @@ export function WizardPreviewPane({
                 {tab.label}
               </TabsTrigger>
             ))}
+            {themeCss !== null && (
+              <TabsTrigger value="design" className="text-xs">Design</TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
       )}
 
-      {/* Preview area — hidden (not unmounted) while theme tab is active so iframeRef stays valid */}
-      <div className={cn("relative flex-1 overflow-auto bg-muted/20 flex justify-center", isThemeTabActive && "hidden")}>
-        <div
-          className="relative h-full"
-          style={{ width: deviceWidth ? `${deviceWidth}px` : "100%" }}
-        >
-          {devUrl ? (
+      {/* Preview iframe — kept in DOM when design tab is active so iframeRef stays valid */}
+      <div className={cn("relative flex-1 overflow-auto bg-muted/20 flex justify-center", designOpen && "hidden")}>
+        <div className="relative h-full" style={{ width: deviceWidth ? `${deviceWidth}px` : "100%" }}>
+          {runnerUrl ? (
             <iframe
               ref={iframeRef}
-              src={devUrl}
+              src={runnerUrl}
               className="h-full w-full border-0"
               sandbox="allow-scripts allow-same-origin allow-forms"
             />
@@ -265,36 +292,24 @@ export function WizardPreviewPane({
             </div>
           )}
 
-          {/* Annotation overlay */}
           <div
             ref={overlayRef}
-            className={cn(
-              "absolute inset-0",
-              annotationMode ? "cursor-crosshair" : "pointer-events-none",
-            )}
+            className={cn("absolute inset-0", annotationMode ? "cursor-crosshair" : "pointer-events-none")}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           >
-            {/* Live drag rectangle */}
             {liveRect && liveRect.type === "region" && (
               <div
                 className="absolute border-2 border-primary bg-primary/10 pointer-events-none"
-                style={{
-                  left: `${liveRect.x}%`,
-                  top: `${liveRect.y}%`,
-                  width: `${liveRect.w}%`,
-                  height: `${liveRect.h}%`,
-                }}
+                style={{ left: `${liveRect.x}%`, top: `${liveRect.y}%`, width: `${liveRect.w}%`, height: `${liveRect.h}%` }}
               />
             )}
 
-            {/* Existing annotations */}
             {openAnnotations.map((annotation, index) => (
               <AnnotationMarker key={annotation.id} annotation={annotation} index={index + 1} />
             ))}
 
-            {/* Text input popup */}
             {textPopup && (
               <div
                 className="absolute z-10 flex w-52 flex-col gap-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
@@ -327,16 +342,19 @@ export function WizardPreviewPane({
         </div>
       </div>
 
-      {/* Theme preview — only mounts when theme tab is active */}
-      {isThemeTabActive && (
+      {designOpen && (
         <div className="flex-1 overflow-hidden">
-          <ThemeTokenPreview
-            css={activeTab?.themeCss ?? ""}
-            isDark={darkMode}
-            viewMode="preview"
-          />
+          <ThemeTokenPreview css={themeCss ?? ""} isDark={darkMode} viewMode={designMode} />
         </div>
       )}
+    </div>
+  )
+}
+
+function AnnotationTooltip({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={cn("absolute z-20 max-w-[200px] rounded bg-popover border border-border px-2 py-1 text-xs shadow-lg", className)}>
+      {children}
     </div>
   )
 }
@@ -363,9 +381,7 @@ function AnnotationMarker({ annotation, index }: { annotation: WizardAnnotation;
           {index}
         </div>
         {showTooltip && (
-          <div className="absolute top-5 left-0 z-20 max-w-[200px] rounded bg-popover border border-border px-2 py-1 text-xs shadow-lg">
-            {annotation.text}
-          </div>
+          <AnnotationTooltip className="top-5 left-0">{annotation.text}</AnnotationTooltip>
         )}
       </div>
     )
@@ -384,9 +400,7 @@ function AnnotationMarker({ annotation, index }: { annotation: WizardAnnotation;
         {index}
       </div>
       {showTooltip && (
-        <div className="absolute top-6 left-1/2 z-20 -translate-x-1/2 max-w-[200px] rounded bg-popover border border-border px-2 py-1 text-xs shadow-lg whitespace-nowrap">
-          {annotation.text}
-        </div>
+        <AnnotationTooltip className="top-6 left-1/2 -translate-x-1/2 whitespace-nowrap">{annotation.text}</AnnotationTooltip>
       )}
     </div>
   )

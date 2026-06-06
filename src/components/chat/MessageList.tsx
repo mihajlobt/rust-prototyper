@@ -58,7 +58,7 @@ import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/r
 import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/chat"
-import { useAskUserStore } from "@/stores/askUserStore"
+import type { AskUserQuestionType, FormField } from "@/lib/ipc"
 import { confirm } from "@tauri-apps/plugin-dialog"
 
 function toolPartFromRecord(tc: ToolCallRecord, isStreaming = true): ToolPart {
@@ -155,6 +155,19 @@ case "run_tsc": {
   }
 }
 
+interface PendingAskUser {
+  requestId: number
+  question: string
+  questionType: AskUserQuestionType
+  choices?: string[]
+}
+
+interface PendingAskUserForm {
+  requestId: number
+  title: string
+  fields: FormField[]
+}
+
 interface MessageListProps {
   messages: ChatMessage[]
   isStreaming: boolean
@@ -166,14 +179,21 @@ interface MessageListProps {
   pendingPermissions?: ToolPermissionRecord[]
   /** Called when user resolves a permission request (to update local state) */
   onResolvePermission?: (requestId: number, decision: ToolPermissionDecision, toolName: string) => void
+  /** Pending ask-user prompt from the agent, scoped to this panel's entity */
+  pendingAskUser?: PendingAskUser | null
+  onResolveAskUser?: () => void
+  /** Pending ask-user form from the agent, scoped to this panel's entity */
+  pendingAskUserForm?: PendingAskUserForm | null
+  onResolveAskUserForm?: () => void
 }
 
 const MessageListFn = ({
   messages, isStreaming, thinkingContent,
   onApplyCode, onRegenerate, onDeleteFrom,
   pendingPermissions, onResolvePermission,
+  pendingAskUser, onResolveAskUser,
+  pendingAskUserForm, onResolveAskUserForm,
 }: MessageListProps) => {
-  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -217,21 +237,21 @@ const MessageListFn = ({
                 ))}
             </div>
           )}
-          {pendingAskUser && (
+          {pendingAskUser && onResolveAskUser && (
             <AskUserCard
               requestId={pendingAskUser.requestId}
               question={pendingAskUser.question}
               questionType={pendingAskUser.questionType}
               choices={pendingAskUser.choices}
-              onResolve={clearAskUser}
+              onResolve={onResolveAskUser}
             />
           )}
-          {pendingAskUserForm && (
+          {pendingAskUserForm && onResolveAskUserForm && (
             <AskUserFormCard
               requestId={pendingAskUserForm.requestId}
               title={pendingAskUserForm.title}
               fields={pendingAskUserForm.fields}
-              onResolve={clearAskUserForm}
+              onResolve={onResolveAskUserForm}
             />
           )}
           <ChatContainerScrollAnchor />
@@ -249,10 +269,14 @@ export const MessageList = memo(MessageListFn, (prev, next) =>
   prev.isStreaming === next.isStreaming &&
   prev.thinkingContent === next.thinkingContent &&
   prev.pendingPermissions === next.pendingPermissions &&
+  prev.pendingAskUser === next.pendingAskUser &&
+  prev.pendingAskUserForm === next.pendingAskUserForm &&
   prev.onApplyCode === next.onApplyCode &&
   prev.onRegenerate === next.onRegenerate &&
   prev.onDeleteFrom === next.onDeleteFrom &&
-  prev.onResolvePermission === next.onResolvePermission
+  prev.onResolvePermission === next.onResolvePermission &&
+  prev.onResolveAskUser === next.onResolveAskUser &&
+  prev.onResolveAskUserForm === next.onResolveAskUserForm
 )
 
 interface MessageBubbleProps {

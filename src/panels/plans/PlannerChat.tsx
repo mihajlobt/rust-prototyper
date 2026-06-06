@@ -1,4 +1,5 @@
 import { MessageList, ChatInput } from "@/components/chat";
+import { useAskUserStore } from "@/stores/askUserStore";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
 import type { Message, Provider } from "@/lib/ipc";
@@ -92,7 +93,8 @@ export function PlannerChat({
   showInspector,
   onToggleInspector,
 }: PlannerChatProps) {
-  const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("plans-inspector", 3, [true, true, showInspector]);
+  const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("plans-inspector", 3, [true, true, showInspector])
+  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
 
   return (
     <Allotment vertical ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes} onVisibleChange={(_i, v) => { if (!v) onToggleInspector(); }}>
@@ -107,6 +109,10 @@ export function PlannerChat({
             onRegenerate={onRegenerate}
             onDeleteFrom={onDeleteFrom}
             onResolvePermission={onResolvePermission}
+            pendingAskUser={pendingAskUser}
+            onResolveAskUser={clearAskUser}
+            pendingAskUserForm={pendingAskUserForm}
+            onResolveAskUserForm={clearAskUserForm}
           />
           <div className="shrink-0 border-t border-border px-3 pb-3 pt-2">
             <ChatInput

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Allotment } from "allotment"
 import { ChevronUp, ChevronDown } from "lucide-react"
 import { useChat } from "@/hooks/useChat"
@@ -18,6 +19,7 @@ import { PromptInspector } from "@/components/PromptInspector"
 import { PaneHeader } from "@/components/ui/pane-header"
 import { getHostForProvider, readFile } from "@/lib/ipc"
 import { saveItemMeta } from "@/lib/item-meta"
+import { projectKeys } from "@/lib/queryKeys"
 import type { ToolPermissionDecision } from "@/lib/ipc"
 import type { WizardAnnotation, WizardPreviewTab } from "./wizard/types"
 import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults"
@@ -43,16 +45,19 @@ function serializeAnnotations(annotations: WizardAnnotation[]): string {
 export function WizardPanel() {
   const { settings } = useAppStore()
   const wizardToolFilter = useAppStore((s) => s.settings.panelToolFilter.wizard)
-  const { ps, setProjectSettings } = useProjectSettingsStore()
+  const { ps: projectSettings, setProjectSettings } = useProjectSettingsStore()
   const devServerStore = useDevServerStore()
+  const queryClient = useQueryClient()
 
   const [annotations, setAnnotations] = useState<WizardAnnotation[]>([])
   const [previewNavigatePath, setPreviewNavigatePath] = useState<string | null>(null)
   const [previewTabs, setPreviewTabs] = useState<WizardPreviewTab[]>([])
   const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null)
+  const [themeCss, setThemeCss] = useState<string | null>(null)
   // Guards against readFile callbacks resolving after a wizard reset clears the tabs
   const wizardSessionRef = useRef(0)
-  // Mirror refs updated synchronously during render so the isStreaming effect sees current values
+  // Refs break the dep-cycle: the streaming-end effect reads latest tab state without
+  // being coupled to tab changes that would re-trigger dev server start.
   const previewTabsRef = useRef(previewTabs)
   previewTabsRef.current = previewTabs
   const activePreviewTabIdRef = useRef(activePreviewTabId)
@@ -79,62 +84,64 @@ export function WizardPanel() {
     }
   }, [])
 
-  const handleToolResult = useCallback((tool: string, success: boolean, _output: string, path?: string) => {
+  const handleToolResult = useCallback((tool: string, success: boolean) => {
     if (tool === "set_active_theme" && success && pendingThemeSlugRef.current) {
       const slug = pendingThemeSlugRef.current
       setProjectSettings({ stylePreset: slug })
       pendingThemeSlugRef.current = null
-      // useAppStore.getState() avoids stale closure — same pattern as handleResolvePermission
       const project = useAppStore.getState().settings.project
       const session = wizardSessionRef.current
       readFile(`projects/${project}/themes/${slug}/theme.css`)
         .then((css) => {
           if (wizardSessionRef.current !== session) return
-          const tabId = `theme-${slug}`
+          setThemeCss(css)
+        })
+        .catch((err) => console.error("Failed to read theme CSS for design panel:", err))
+    }
+    if (tool === "register_screen" && success && pendingScreenRef.current) {
+      const { screenId, title, urlPath } = pendingScreenRef.current
+      pendingScreenRef.current = null
+      const project = useAppStore.getState().settings.project
+      const session = wizardSessionRef.current
+
+      saveItemMeta(`projects/${project}`, "screens", screenId, title)
+        .catch((err) => console.error("Failed to create screen meta for sidebar:", err))
+      queryClient.invalidateQueries({ queryKey: projectKeys.tree(project, "screens") })
+
+      readFile(`projects/${project}/navigation.json`)
+        .then((raw) => {
+          if (wizardSessionRef.current !== session) return
+          const nav = JSON.parse(raw) as { screens?: Array<{ id: string; path: string; preview_path?: string }> }
+          const entry = nav.screens?.find((s) => s.id === screenId)
+          const previewPath = entry?.preview_path ?? urlPath
+          const tabId = `screen-${screenId}`
           setPreviewTabs((prev) => {
             const existing = prev.find((tab) => tab.id === tabId)
-            if (existing) return prev.map((tab) => tab.id === tabId ? { ...tab, themeCss: css } : tab)
-            return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: slug, themeCss: css }]
+            if (existing) return prev.map((tab) => tab.id === tabId ? { ...tab, label: title || tab.label, previewPath } : tab)
+            return [...prev, { id: tabId, type: "screen" as const, label: title || urlPath, urlPath, previewPath }]
           })
           setActivePreviewTabId(tabId)
         })
         .catch((err) => {
-          console.error("Failed to read theme CSS for tab preview:", err)
+          console.error("Failed to read navigation.json for preview tab:", err)
           if (wizardSessionRef.current !== session) return
-          const tabId = `theme-${slug}`
+          const tabId = `screen-${screenId}`
           setPreviewTabs((prev) => {
             if (prev.find((tab) => tab.id === tabId)) return prev
-            return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: slug }]
+            return [...prev, { id: tabId, type: "screen" as const, label: title || urlPath, urlPath }]
           })
           setActivePreviewTabId(tabId)
         })
     }
-    if (tool === "register_screen" && success && pendingScreenRef.current) {
-      const { screenId, title } = pendingScreenRef.current
-      const project = useAppStore.getState().settings.project
-      saveItemMeta(`projects/${project}`, "screens", screenId, title)
-        .catch((err) => console.error("Failed to create screen meta for sidebar:", err))
-    }
-    if (tool === "write_file" && success && pendingScreenRef.current) {
-      if ((path || "").endsWith("router.tsx")) {
-        const { screenId, title, urlPath } = pendingScreenRef.current
-        pendingScreenRef.current = null
-        const tabId = `screen-${screenId}`
-        setPreviewTabs((prev) => {
-          const existing = prev.find((tab) => tab.id === tabId)
-          if (existing) return prev.map((tab) => tab.id === tabId ? { ...tab, label: title || tab.label } : tab)
-          return [...prev, { id: tabId, type: "screen", label: title || urlPath, urlPath }]
-        })
-        setActivePreviewTabId(tabId)
-      }
-    }
-  }, [setProjectSettings])
+  }, [setProjectSettings, queryClient])
 
   const handleSelectPreviewTab = useCallback((tabId: string) => {
     setActivePreviewTabId(tabId)
+    if (tabId === "design") return
     const selectedTab = previewTabs.find((tab) => tab.id === tabId)
-    if (selectedTab?.type === "screen" && selectedTab.urlPath) {
-      setPreviewNavigatePath(selectedTab.urlPath)
+    if (selectedTab?.type === "screen") {
+      const path = selectedTab.previewPath ?? selectedTab.urlPath
+      if (path) setPreviewNavigatePath(path)
     }
   }, [previewTabs])
 
@@ -143,17 +150,18 @@ export function WizardPanel() {
   useEffect(() => {
     const project = settings.project
     const session = wizardSessionRef.current
-    const stylePreset = ps.stylePreset
+    const stylePreset = projectSettings.stylePreset
 
     readFile(`projects/${project}/navigation.json`)
       .then((raw) => {
         if (wizardSessionRef.current !== session) return
-        const nav = JSON.parse(raw) as { screens?: Array<{ id: string; title: string; path: string }>; defaultScreen?: string }
+        const nav = JSON.parse(raw) as { screens?: Array<{ id: string; title: string; path: string; preview_path?: string }>; defaultScreen?: string }
         const screenTabs: WizardPreviewTab[] = (nav.screens ?? []).map((screen) => ({
           id: `screen-${screen.id}`,
           type: "screen" as const,
           label: screen.title || screen.id,
           urlPath: screen.path,
+          previewPath: screen.preview_path,
         }))
         if (screenTabs.length === 0) return
         setPreviewTabs((prev) => {
@@ -167,20 +175,23 @@ export function WizardPanel() {
           return defaultId ?? screenTabs[0].id
         })
       })
-      .catch(() => {})
+      .catch((err) => {
+        const msg = String(err)
+        if (!msg.includes("not found") && !msg.includes("No such")) console.error("Failed to restore navigation tabs:", err)
+      })
 
     if (stylePreset) {
       readFile(`projects/${project}/themes/${stylePreset}/theme.css`)
         .then((css) => {
           if (wizardSessionRef.current !== session) return
-          const tabId = `theme-${stylePreset}`
-          setPreviewTabs((prev) => {
-            if (prev.find((tab) => tab.id === tabId)) return prev
-            return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: stylePreset, themeCss: css }]
-          })
+          setThemeCss(css)
         })
-        .catch(() => {})
+        .catch((err) => {
+          const msg = String(err)
+          if (!msg.includes("not found") && !msg.includes("No such")) console.error("Failed to restore theme CSS:", err)
+        })
     }
+  // projectSettings.stylePreset intentionally excluded — only re-run on project switch, not on every settings change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.project])
 
@@ -195,21 +206,22 @@ export function WizardPanel() {
     onToolResult: handleToolResult,
   })
 
-  // previewTabsRef/activePreviewTabIdRef are read via refs to avoid adding them as deps
-  // (which would re-trigger dev server start on every tab change).
   const wasStreamingRef = useRef(false)
   useEffect(() => {
     if (wasStreamingRef.current && !chat.isStreaming) {
       const projectDir = `projects/${settings.project}`
       hasGeneratedScaffold(projectDir).then((ready) => {
-        if (ready) devServerStore.startRunner(`${projectDir}/generated`, ps.runnerPort).catch(() => {})
+        if (ready) devServerStore.startRunner(`${projectDir}/generated`, projectSettings.runnerPort).catch(() => {})
       }).catch(() => {})
       const activeTab = previewTabsRef.current.find((tab) => tab.id === activePreviewTabIdRef.current)
-      if (activeTab?.type === "screen" && activeTab.urlPath) {
-        setPreviewNavigatePath(activeTab.urlPath)
+      if (activeTab?.type === "screen") {
+        const path = activeTab.previewPath ?? activeTab.urlPath
+        if (path) setPreviewNavigatePath(path)
       }
     }
     wasStreamingRef.current = chat.isStreaming
+  // previewTabsRef/activePreviewTabIdRef are intentionally read via refs — adding them as deps would
+  // re-trigger dev server start on every tab change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.isStreaming])
 
@@ -235,7 +247,7 @@ export function WizardPanel() {
       if (annotationContext) setAnnotations((prev) => prev.map((a) => ({ ...a, resolved: true })))
       chat.sendMessage(fullText)
     }
-  }, [chat.input, chat.messages.length, chat.clearChat, chat.sendMessage, annotations])
+  }, [chat.input, chat.messages.length, chat.sendMessage, annotations])
 
   const handleSendAnnotations = useCallback(() => {
     const annotationContext = serializeAnnotations(annotations)
@@ -254,6 +266,7 @@ export function WizardPanel() {
     setPreviewNavigatePath(null)
     setPreviewTabs([])
     setActivePreviewTabId(null)
+    setThemeCss(null)
     wizardSessionRef.current++
     pendingThemeSlugRef.current = null
     pendingScreenRef.current = null
@@ -309,14 +322,14 @@ export function WizardPanel() {
             </Allotment.Pane>
 
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
-              <PaneHeader onClick={() => setProjectSettings({ wizardShowInspector: !ps.wizardShowInspector })}>
+              <PaneHeader onClick={() => setProjectSettings({ wizardShowInspector: !projectSettings.wizardShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
-                {ps.wizardShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                {projectSettings.wizardShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>
 
-            <Allotment.Pane visible={ps.wizardShowInspector} preferredSize={240} minSize={160} snap>
-              {ps.wizardShowInspector && (
+            <Allotment.Pane visible={projectSettings.wizardShowInspector} preferredSize={240} minSize={160} snap>
+              {projectSettings.wizardShowInspector && (
                 <PromptInspector
                   model={settings.modelId}
                   messages={inspectorMessages}
@@ -333,16 +346,17 @@ export function WizardPanel() {
           <Allotment ref={rightRef} onDragEnd={rightDragEnd} defaultSizes={rightSizes} vertical>
             <Allotment.Pane minSize={200}>
               <WizardPreviewPane
-                devUrl={devServerStore.runnerUrl}
-                device={ps.wizardDevice}
-                darkMode={ps.wizardDarkPreview}
+                generatedDir={`projects/${settings.project}/generated`}
+                device={projectSettings.wizardDevice}
+                darkMode={projectSettings.wizardDarkPreview}
                 annotations={annotations}
                 previewNavigatePath={previewNavigatePath}
                 previewTabs={previewTabs}
                 activePreviewTabId={activePreviewTabId}
+                themeCss={themeCss}
                 onSelectTab={handleSelectPreviewTab}
                 onSetDevice={(device) => setProjectSettings({ wizardDevice: device })}
-                onToggleDark={() => setProjectSettings({ wizardDarkPreview: !ps.wizardDarkPreview })}
+                onToggleDark={() => setProjectSettings({ wizardDarkPreview: !projectSettings.wizardDarkPreview })}
                 onAddAnnotation={(annotation) => setAnnotations((prev) => [...prev, { ...annotation, id: makeId(), createdAt: Date.now() }])}
               />
             </Allotment.Pane>

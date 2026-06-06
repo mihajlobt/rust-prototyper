@@ -12,12 +12,10 @@ export interface WizardAnnotation {
 
 export interface WizardPreviewTab {
   id: string
-  type: "screen" | "theme"
+  type: "screen"
   label: string
-  /** URL route for iframe navigation, e.g. "/dashboard". Screen tabs only. */
+  /** URL route pattern for this screen, e.g. "/paper/:id". */
   urlPath?: string
-  /** Theme directory slug, e.g. "wizard". Theme tabs only. */
-  themeSlug?: string
-  /** Raw CSS for ThemeTokenPreview. Populated after readFile resolves. */
-  themeCss?: string
+  /** Navigable URL with real IDs resolved, e.g. "/paper/p1". Falls back to urlPath for static routes. */
+  previewPath?: string
 }

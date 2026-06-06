@@ -3,6 +3,7 @@ import { Download, FolderUp, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { MessageList, ChatInput } from "@/components/chat";
+import { useAskUserStore } from "@/stores/askUserStore";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
@@ -101,6 +102,7 @@ export function ComponentsChatPanel({
   contextToolbar,
   headerActions,
 }: ChatPanelProps) {
+  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
   const handleClear = useCallback(async () => {
     const ok = await confirm("Clear all chat messages?", { title: "Clear Chat", kind: "warning" });
     if (ok) onClearChat();
@@ -169,6 +171,10 @@ export function ComponentsChatPanel({
         onRegenerate={onRegenerate}
         onDeleteFrom={onDeleteFrom}
         onResolvePermission={onResolvePermission}
+        pendingAskUser={pendingAskUser}
+        onResolveAskUser={clearAskUser}
+        pendingAskUserForm={pendingAskUserForm}
+        onResolveAskUserForm={clearAskUserForm}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         {contextToolbar}

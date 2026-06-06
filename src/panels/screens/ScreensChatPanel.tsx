@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { MessageList, ChatInput } from "@/components/chat";
 import { ScreensContextToolbar } from "@/panels/screens/ScreensContextToolbar";
+import { useAskUserStore } from "@/stores/askUserStore";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
 import type { ToolPermissionDecision, FileEntry } from "@/lib/ipc";
 
@@ -90,6 +91,7 @@ export function ScreensChatPanel({
   ctxComponents,
   projectPath,
 }: ScreensChatPanelProps) {
+  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
   return (
     <div className="h-full flex flex-col bg-card">
       <div className="panel-toolbar h-10 px-3 gap-2">
@@ -124,6 +126,10 @@ export function ScreensChatPanel({
           onRegenerate={onRegenerate}
           onDeleteFrom={onDeleteFrom}
           onResolvePermission={onResolvePermission}
+          pendingAskUser={pendingAskUser}
+          onResolveAskUser={clearAskUser}
+          pendingAskUserForm={pendingAskUserForm}
+          onResolveAskUserForm={clearAskUserForm}
         />
         <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
           <ScreensContextToolbar themes={themes} ctxApis={ctxApis} ctxComponents={ctxComponents} />

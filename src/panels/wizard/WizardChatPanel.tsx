@@ -1,6 +1,7 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageList, ChatInput } from "@/components/chat";
+import { useAskUserStore } from "@/stores/askUserStore";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
 
@@ -70,6 +71,7 @@ export function WizardChatPanel({
   onToggleTools,
   canTools,
 }: WizardChatPanelProps) {
+  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
   return (
     <div className="h-full flex flex-col bg-card">
       <div className="panel-toolbar h-10 px-3 gap-2">
@@ -100,6 +102,10 @@ export function WizardChatPanel({
         onRegenerate={onRegenerate}
         onDeleteFrom={onDeleteFrom}
         onResolvePermission={onResolvePermission}
+        pendingAskUser={pendingAskUser}
+        onResolveAskUser={clearAskUser}
+        pendingAskUserForm={pendingAskUserForm}
+        onResolveAskUserForm={clearAskUserForm}
       />
 
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0">

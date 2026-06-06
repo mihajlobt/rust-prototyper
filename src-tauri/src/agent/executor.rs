@@ -918,6 +918,7 @@ async fn execute_register_screen(
 
     let proj_dir = project_dir_from_output_path(app_data_dir, output_path);
     let nav_path = proj_dir.join("navigation.json");
+    let preview_path = compute_preview_path(&proj_dir, &parsed.path).await;
 
     // Load or create navigation.json
     let mut nav: serde_json::Value = if nav_path.exists() {
@@ -954,12 +955,14 @@ async fn execute_register_screen(
         if let Some(entry) = screens[pos].as_object_mut() {
             entry.insert("id".to_string(), serde_json::json!(parsed.screen_id));
             entry.insert("path".to_string(), serde_json::json!(parsed.path));
+            entry.insert("preview_path".to_string(), serde_json::json!(preview_path));
             entry.insert("title".to_string(), serde_json::json!(parsed.title));
         }
     } else {
         screens.push(serde_json::json!({
             "id": parsed.screen_id,
             "path": parsed.path,
+            "preview_path": preview_path,
             "title": parsed.title,
         }));
     }
@@ -1436,4 +1439,59 @@ async fn execute_web_search(
         written_path: None,
         written_content: None,
     }
+}
+
+async fn compute_preview_path(proj_dir: &Path, route_path: &str) -> String {
+    if !route_path.contains(':') {
+        return route_path.to_string();
+    }
+
+    // The first non-param segment names the resource so we can find matching data files by convention
+    let resource: String = route_path
+        .split('/')
+        .filter(|s| !s.is_empty() && !s.starts_with(':'))
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+
+    let data_dirs = [
+        proj_dir.join("data"),
+        proj_dir.join("generated").join("src").join("data"),
+    ];
+
+    for data_dir in &data_dirs {
+        let Ok(mut entries) = tokio::fs::read_dir(data_dir).await else { continue };
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if entry.path().is_file() && (resource.is_empty() || name.contains(resource.as_str())) {
+                candidates.push(entry.path());
+            }
+        }
+        for path in candidates {
+            let Ok(content) = tokio::fs::read_to_string(&path).await else { continue };
+            if let Some(id) = extract_first_id_from_data(&content) {
+                return substitute_route_params(route_path, &id);
+            }
+        }
+    }
+
+    route_path.to_string()
+}
+
+fn extract_first_id_from_data(content: &str) -> Option<String> {
+    use once_cell::sync::Lazy;
+    static RE: Lazy<regex::Regex> = Lazy::new(|| {
+        regex::Regex::new(r#"(?m)(?:^|[\s,{\[])(?:"id"|'id'|id)\s*:\s*["']([a-zA-Z0-9_-]+)["']"#)
+            .expect("valid static regex")
+    });
+    RE.captures(content)?.get(1).map(|m| m.as_str().to_string())
+}
+
+fn substitute_route_params(route: &str, value: &str) -> String {
+    use once_cell::sync::Lazy;
+    static RE: Lazy<regex::Regex> = Lazy::new(|| {
+        regex::Regex::new(r":[a-zA-Z0-9_]+").expect("valid static regex")
+    });
+    RE.replace_all(route, value).to_string()
 }

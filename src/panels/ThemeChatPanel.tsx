@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MessageList, ChatInput } from "@/components/chat";
+import { useAskUserStore } from "@/stores/askUserStore";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
 import type { DesignBriefTemplate } from "@/lib/prompts";
@@ -100,6 +101,7 @@ export function ThemeChatPanel({
   allSeeds,
   selectedSeed,
 }: ThemeChatPanelProps) {
+  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       <MessageList
@@ -111,6 +113,10 @@ export function ThemeChatPanel({
         onRegenerate={onRegenerate}
         onDeleteFrom={onDeleteFrom}
         onResolvePermission={onResolvePermission}
+        pendingAskUser={pendingAskUser}
+        onResolveAskUser={clearAskUser}
+        pendingAskUserForm={pendingAskUserForm}
+        onResolveAskUserForm={clearAskUserForm}
       />
       <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
         <div className="flex items-center gap-1.5">
