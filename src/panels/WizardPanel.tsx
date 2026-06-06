@@ -17,6 +17,7 @@ import { WizardAnnotations } from "./wizard/WizardAnnotations"
 import { PromptInspector } from "@/components/PromptInspector"
 import { PaneHeader } from "@/components/ui/pane-header"
 import { getHostForProvider, readFile } from "@/lib/ipc"
+import { saveItemMeta } from "@/lib/item-meta"
 import type { ToolPermissionDecision } from "@/lib/ipc"
 import type { WizardAnnotation, WizardPreviewTab } from "./wizard/types"
 import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults"
@@ -107,6 +108,12 @@ export function WizardPanel() {
           })
           setActivePreviewTabId(tabId)
         })
+    }
+    if (tool === "register_screen" && success && pendingScreenRef.current) {
+      const { screenId, title } = pendingScreenRef.current
+      const project = useAppStore.getState().settings.project
+      saveItemMeta(`projects/${project}`, "screens", screenId, title)
+        .catch((err) => console.error("Failed to create screen meta for sidebar:", err))
     }
     if (tool === "write_file" && success && pendingScreenRef.current) {
       if ((path || "").endsWith("router.tsx")) {
