@@ -64,7 +64,7 @@ export function WizardPreviewPane({
   const [liveRect, setLiveRect] = useState<DraftAnnotation | null>(null)
 
   const deviceWidth = DEVICE_WIDTHS[device]
-  const activeTab = previewTabs.find((t) => t.id === activePreviewTabId)
+  const activeTab = previewTabs.find((tab) => tab.id === activePreviewTabId)
   const isThemeTabActive = activeTab?.type === "theme"
 
   useEffect(() => {

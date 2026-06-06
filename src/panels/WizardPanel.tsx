@@ -97,7 +97,8 @@ export function WizardPanel() {
           })
           setActivePreviewTabId(tabId)
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("Failed to read theme CSS for tab preview:", err)
           if (wizardSessionRef.current !== session) return
           const tabId = `theme-${slug}`
           setPreviewTabs((prev) => {
@@ -124,9 +125,9 @@ export function WizardPanel() {
 
   const handleSelectPreviewTab = useCallback((tabId: string) => {
     setActivePreviewTabId(tabId)
-    const tab = previewTabs.find((tab) => tab.id === tabId)
-    if (tab?.type === "screen" && tab.urlPath) {
-      setPreviewNavigatePath(tab.urlPath)
+    const selectedTab = previewTabs.find((tab) => tab.id === tabId)
+    if (selectedTab?.type === "screen" && selectedTab.urlPath) {
+      setPreviewNavigatePath(selectedTab.urlPath)
     }
   }, [previewTabs])
 
@@ -141,7 +142,6 @@ export function WizardPanel() {
     onToolResult: handleToolResult,
   })
 
-  // Start dev server and navigate to active screen tab when streaming ends.
   // previewTabsRef/activePreviewTabIdRef are read via refs to avoid adding them as deps
   // (which would re-trigger dev server start on every tab change).
   const wasStreamingRef = useRef(false)
