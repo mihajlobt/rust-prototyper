@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Server, Cloud, Zap, Bot, Search, CheckCircle2, XCircle } from "lucide-react";
 import type { Settings } from "@/hooks/useSettings";
-import { invoke } from "@tauri-apps/api/core";
-
 interface AITabProps {
   settings: Settings;
   setSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -19,13 +17,8 @@ export function AITab({ settings, setSettings }: AITabProps) {
     if (!url) return;
     setSearxngStatus("testing");
     try {
-      const resp = await invoke<{ status: number }>("http_request", {
-        method: "GET",
-        url: `${url.replace(/\/$/, "")}/search?q=test&format=json`,
-        headers: {},
-        body: null,
-      });
-      setSearxngStatus(resp.status >= 200 && resp.status < 300 ? "ok" : "fail");
+      const resp = await fetch(`${url.replace(/\/$/, "")}/search?q=test&format=json`);
+      setSearxngStatus(resp.ok ? "ok" : "fail");
     } catch {
       setSearxngStatus("fail");
     }
