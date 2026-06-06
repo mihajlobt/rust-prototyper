@@ -307,7 +307,7 @@ export function ChatInput({
               <Square size={12} />
             </Button>
           ) : (
-            <Button type="button" size="sm" onClick={onSend} disabled={disabled || !value.trim()} className="px-2.5 py-1 h-auto">
+            <Button type="button" size="sm" onClick={() => onSend()} disabled={disabled || !value.trim()} className="px-2.5 py-1 h-auto">
               <Send size={12} />
             </Button>
           )}

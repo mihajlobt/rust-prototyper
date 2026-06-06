@@ -12,16 +12,15 @@
 //   - Heading anchor links + outline scroll-spy via the inline DesignToc
 //     toggle (a top-right button reveals a 2-pane Allotment with the TOC).
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkDirective from "remark-directive";
 import { Allotment } from "allotment";
-import { List, Info, Lightbulb, AlertTriangle, AlertOctagon, CheckCircle2, Scale, HelpCircle, Target } from "lucide-react";
+import { Info, Lightbulb, AlertTriangle, AlertOctagon, CheckCircle2, Scale, HelpCircle, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
 import { DesignToc, slugify } from "@/components/ui/design-toc";
 import { remarkPlanDirectives } from "@/lib/markdown/directives";
@@ -29,6 +28,7 @@ import { KbdChip, MentionChip, TagChip } from "./chips";
 
 interface PlanPreviewProps {
   body: string;
+  showOutline: boolean;
   /** Called when a task checkbox in the preview is toggled. Line index is
    *  relative to the body (NOT the full source), 0-indexed. */
   onTaskToggle?: (line: number) => void;
@@ -36,22 +36,11 @@ interface PlanPreviewProps {
 
 const CALLOUT_RE = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|DECISION|QUESTION|GOAL)\]/i;
 
-export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
-  const [showOutline, setShowOutline] = useState(false);
+export function PlanPreview({ body, showOutline, onTaskToggle }: PlanPreviewProps) {
   const components = useMemo(() => buildComponents(onTaskToggle), [onTaskToggle]);
 
   return (
     <div className="relative h-full min-h-0">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="absolute top-2 right-2 z-10 h-6 gap-1 px-2 text-[10px] font-medium"
-        onClick={() => setShowOutline((v) => !v)}
-        aria-pressed={showOutline}
-      >
-        <List size={11} /> Outline
-      </Button>
       <Allotment>
         <Allotment.Pane visible={showOutline} minSize={120} preferredSize={200} snap>
           <div className="h-full overflow-auto border-r border-border bg-card/30 p-3">

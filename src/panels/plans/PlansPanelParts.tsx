@@ -3,10 +3,12 @@ import {
   Columns2,
   FileText,
   Focus,
+  List,
   MessageSquare,
   Pencil,
   Search,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -26,9 +28,13 @@ interface PlansToolbarProps {
   savedAt: number | null;
   mode: PlanMode;
   chatOpen: boolean;
+  showOutline: boolean;
+  hasMessages: boolean;
   onModeChange: (mode: PlanMode) => void;
   onChatToggle: () => void;
+  onOutlineToggle: () => void;
   onCommandMenu: () => void;
+  onClearChat: () => void;
 }
 
 export function PlansToolbar({
@@ -36,16 +42,23 @@ export function PlansToolbar({
   savedAt,
   mode,
   chatOpen,
+  showOutline,
+  hasMessages,
   onModeChange,
   onChatToggle,
+  onOutlineToggle,
   onCommandMenu,
+  onClearChat,
 }: PlansToolbarProps) {
+  const previewVisible = mode === "read" || mode === "split";
+
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="panel-toolbar h-10 gap-3 bg-card px-3">
-        <FileText size={12} className="shrink-0 text-violet-400" />
+      <div className="panel-toolbar h-10 gap-2 bg-card px-3">
+        <FileText size={12} className="shrink-0 text-primary" />
         <span className="truncate text-xs font-medium">{planName}</span>
         <span className="font-mono text-[10px] text-muted-foreground">.md</span>
+        {savedAt ? <span className="text-[10px] text-muted-foreground">· Saved</span> : null}
         <div className="flex-1" />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -61,20 +74,56 @@ export function PlansToolbar({
           </TooltipTrigger>
           <TooltipContent>Command palette ⌘K</TooltipContent>
         </Tooltip>
+        {previewVisible && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={showOutline ? "Hide outline" : "Show outline"}
+                aria-pressed={showOutline}
+                onClick={onOutlineToggle}
+              >
+                <List size={12} className={showOutline ? "text-primary" : undefined} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{showOutline ? "Hide outline" : "Show outline"}</TooltipContent>
+          </Tooltip>
+        )}
+        {mode !== "focus" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={chatOpen ? "Hide agent" : "Show agent"}
+                onClick={onChatToggle}
+              >
+                <MessageSquare size={12} className={chatOpen ? "text-primary" : undefined} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{chatOpen ? "Hide agent" : "Show agent"}</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={chatOpen ? "Hide agent" : "Show agent"}
-              onClick={onChatToggle}
+              aria-label="Clear chat history"
+              disabled={!hasMessages}
+              className="text-muted-foreground hover:text-destructive"
+              onClick={onClearChat}
             >
-              <MessageSquare size={12} className={chatOpen ? "text-violet-300" : undefined} />
+              <Trash2 size={12} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{chatOpen ? "Hide agent" : "Show agent"}</TooltipContent>
+          <TooltipContent>Clear chat history</TooltipContent>
         </Tooltip>
+        <div className="w-px h-4 bg-border shrink-0" />
         <ToggleGroup
           type="single"
           value={mode}
@@ -85,19 +134,17 @@ export function PlansToolbar({
           {MODES.map((m) => {
             const Icon = m.icon;
             return (
-              <ToggleGroupItem key={m.id} value={m.id} aria-label={m.label}>
-                <span className="inline-flex items-center gap-1.5">
-                  <Icon size={10} />
-                  {m.label}
-                </span>
-              </ToggleGroupItem>
+              <Tooltip key={m.id}>
+                <TooltipTrigger asChild>
+                  <ToggleGroupItem value={m.id} aria-label={m.label}>
+                    <Icon size={12} />
+                  </ToggleGroupItem>
+                </TooltipTrigger>
+                <TooltipContent>{m.label}</TooltipContent>
+              </Tooltip>
             );
           })}
         </ToggleGroup>
-        <div className="flex-1" />
-        <span className="text-[10px] text-muted-foreground">
-          {savedAt ? "Saved" : ""}
-        </span>
       </div>
     </TooltipProvider>
   );
