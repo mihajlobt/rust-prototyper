@@ -50,12 +50,15 @@ function MsgActionBtn({ className, children, ...props }: React.ButtonHTMLAttribu
 import { Tool } from "@/components/ui/tool"
 import type { ToolPart } from "@/components/ui/tool"
 import { ToolPermissionCard, type ToolPermissionDecision } from "@/components/ui/ToolPermissionCard"
+import { AskUserCard } from "@/components/ui/AskUserCard"
+import { AskUserFormCard } from "@/components/ui/AskUserFormCard"
 import { ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor } from "@/components/ui/chat-container"
 import { Message, MessageAvatar, MessageContent, MessageActions, MessageAction } from "@/components/ui/message"
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "@/components/ui/reasoning"
 import { Loader } from "@/components/ui/loader"
 import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/chat"
+import { useAskUserStore } from "@/stores/askUserStore"
 import { confirm } from "@tauri-apps/plugin-dialog"
 
 function toolPartFromRecord(tc: ToolCallRecord, isStreaming = true): ToolPart {
@@ -170,6 +173,7 @@ const MessageListFn = ({
   onApplyCode, onRegenerate, onDeleteFrom,
   pendingPermissions, onResolvePermission,
 }: MessageListProps) => {
+  const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -212,6 +216,23 @@ const MessageListFn = ({
                   />
                 ))}
             </div>
+          )}
+          {pendingAskUser && (
+            <AskUserCard
+              requestId={pendingAskUser.requestId}
+              question={pendingAskUser.question}
+              questionType={pendingAskUser.questionType}
+              choices={pendingAskUser.choices}
+              onResolve={clearAskUser}
+            />
+          )}
+          {pendingAskUserForm && (
+            <AskUserFormCard
+              requestId={pendingAskUserForm.requestId}
+              title={pendingAskUserForm.title}
+              fields={pendingAskUserForm.fields}
+              onResolve={clearAskUserForm}
+            />
           )}
           <ChatContainerScrollAnchor />
         </ChatContainerContent>
