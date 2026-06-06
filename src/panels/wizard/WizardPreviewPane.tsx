@@ -329,7 +329,7 @@ export function WizardPreviewPane({
 
       {/* Theme preview — only mounts when theme tab is active */}
       {isThemeTabActive && (
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
           <ThemeTokenPreview
             css={activeTab?.themeCss ?? ""}
             isDark={darkMode}
