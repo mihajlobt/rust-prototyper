@@ -49,11 +49,13 @@ pub struct LintCheckArgs {
     pub path: String,
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct GlobArgs {
-    /// Glob pattern relative to the current project root. No ".." allowed.
-    /// Examples: "**/*.tsx", "generated/src/**/router.tsx", "themes/*/theme.css"
+    /// Glob pattern to match files against (e.g. "**/*.tsx", "**/*.json").
     pub pattern: String,
+    /// Directory to search within, relative to the project root. Omit to search the entire project.
+    pub path: Option<String>,
 }
 
 #[derive(serde::Deserialize, JsonSchema)]
@@ -209,7 +211,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "glob".to_string(),
-                description: "Find files matching a glob pattern within the current project. Pattern is relative to the project root.".to_string(),
+                description: "Fast file pattern matching tool. Returns matching file paths within the current project. Use path to narrow the search to a subdirectory; omit to search the entire project. You can call multiple tools in a single response — speculatively batch glob calls that are potentially useful.".to_string(),
                 parameters: make_schema::<GlobArgs>(),
             },
         },

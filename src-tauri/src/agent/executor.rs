@@ -775,7 +775,21 @@ async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
         };
     }
 
-    let absolute_pattern = project_dir.join(&parsed.pattern);
+    if parsed.path.as_deref().is_some_and(|p| p.contains("..")) {
+        return ToolExecutionResult {
+            success: false,
+            output: format!("glob: {}", ToolError::Security("path traversal not allowed".into())),
+            written_path: None,
+            written_content: None,
+        };
+    }
+
+    let search_base = match &parsed.path {
+        Some(p) => project_dir.join(p),
+        None => project_dir.to_path_buf(),
+    };
+
+    let absolute_pattern = search_base.join(&parsed.pattern);
     let pattern_str = absolute_pattern.to_string_lossy();
 
     let entries = match glob::glob(&pattern_str) {
