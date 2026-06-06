@@ -1,39 +1,29 @@
 // PlanPreview — the live preview pane for the Plans section.
 //
-// Built directly on `react-markdown` rather than reusing the `Markdown` UI
-// component, because the plans preview needs:
-//   - `remark-directive` for `:::timeline` / `:::details` / etc.
-//   - `remark-gfm` (already in the global `Markdown`, but we set it ourselves)
+// Built directly on `react-markdown` rather than reusing the global
+// `Markdown` component because plans need:
+//   - `remark-directive` for `:::timeline` / `:::details` / `:::columns` / etc.
 //   - A custom `pre`/`code` chain that:
-//       - keeps shiki highlighting for block code (titled fences), AND
-//       - transforms inline `code` content for kbd (`[[Cmd]]`), mentions
-//         (`@kind/name`), and hashtags (`#tag`).
+//       - shiki highlighting for block code (CodeBlock chain),
+//       - color swatches for inline color literals (parity with global Markdown),
+//       - chip rendering for mentions/kbd/tags.
 //   - Task checkboxes that toggle the source string via a callback.
-//   - Heading anchor links fed into the outline rail (scroll-spy in phase 3).
-//   - Callout blockquotes (`> [!NOTE]`, `> [!WARNING]`, etc.) with a custom
-//     icon + hue per variant.
-//
-// Body text comes from `parseFrontmatter()` — frontmatter is rendered
-// separately by `<FrontmatterHeader>`.
+//   - Callout blockquotes (`> [!NOTE]`, etc.) with a custom icon + hue.
+//   - Heading anchor links + outline scroll-spy via the inline DesignToc
+//     toggle (a top-right button reveals a 2-pane Allotment with the TOC).
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkDirective from "remark-directive";
-import {
-  Info,
-  Lightbulb,
-  AlertTriangle,
-  AlertOctagon,
-  CheckCircle2,
-  Scale,
-  HelpCircle,
-  Target,
-} from "lucide-react";
+import { Allotment } from "allotment";
+import { List, Info, Lightbulb, AlertTriangle, AlertOctagon, CheckCircle2, Scale, HelpCircle, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
+import { DesignToc, slugify } from "@/components/ui/design-toc";
 import { remarkPlanDirectives } from "@/lib/markdown/directives";
 import { KbdChip, MentionChip, TagChip } from "./chips";
 
@@ -47,15 +37,42 @@ interface PlanPreviewProps {
 const CALLOUT_RE = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|DECISION|QUESTION|GOAL)\]/i;
 
 export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
+  const [showOutline, setShowOutline] = useState(false);
   const components = useMemo(() => buildComponents(onTaskToggle), [onTaskToggle]);
+
   return (
-    <div className="md-render prose prose-sm dark:prose-invert max-w-none p-4">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkDirective, remarkBreaks, remarkPlanDirectives]}
-        components={components}
+    <div className="relative h-full min-h-0">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="absolute top-2 right-2 z-10 h-6 gap-1 px-2 text-[10px] font-medium"
+        onClick={() => setShowOutline((v) => !v)}
+        aria-pressed={showOutline}
       >
-        {body}
-      </ReactMarkdown>
+        <List size={11} /> Outline
+      </Button>
+      <Allotment>
+        <Allotment.Pane visible={showOutline} minSize={120} preferredSize={200} snap>
+          <div className="h-full overflow-auto border-r border-border bg-card/30 p-3">
+            <DesignToc markdown={body} />
+          </div>
+        </Allotment.Pane>
+        <Allotment.Pane minSize={200}>
+          <div className="h-full overflow-auto">
+            <div className="mx-auto max-w-[760px] p-4">
+              <div className="md-render prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkDirective, remarkBreaks, remarkPlanDirectives]}
+                  components={components}
+                >
+                  {body}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        </Allotment.Pane>
+      </Allotment>
     </div>
   );
 }
@@ -82,18 +99,12 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
     },
     code: function CodeComponent({ children, className }) {
       const text = String(children ?? "");
-      // Block code (with a language) is handled by `pre` above. When we reach
-      // this handler with className set, it's block code without a `pre`
-      // wrapper (defensive). When className is empty, it's inline code.
       if (className && /language-/.test(className)) {
         return <code className={className}>{children}</code>;
       }
       return <InlineCode text={text} />;
     },
     blockquote: function BlockquoteComponent({ children }) {
-      // The first child of a callout is a paragraph containing the variant
-      // marker text like "[!NOTE] Body…". We peek into the rendered children
-      // to extract the variant.
       const variant = extractCalloutVariant(children);
       if (variant) {
         return <Callout variant={variant}>{children}</Callout>;
@@ -117,9 +128,6 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
       );
     },
     input: function CheckboxComponent({ checked, ...rest }) {
-      // Checkboxes come from GFM task lists. We render them disabled — the
-      // preview's task toggling is wired via a click on the parent <li>, not
-      // the checkbox itself (see <li> override below).
       return (
         <input
           type="checkbox"
@@ -131,7 +139,6 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
       );
     },
     li: function ListItemComponent({ children, ...rest }) {
-      // Wrap task items so clicking anywhere on the line toggles the source.
       if (!onTaskToggle) {
         return <li {...rest}>{children}</li>;
       }
@@ -139,7 +146,6 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
         <li
           {...rest}
           onClick={(e) => {
-            // Only respond to clicks directly on the line (not on links etc.)
             const target = e.target as HTMLElement;
             if (target.closest("a, code, pre")) return;
             onTaskToggle(getLineIndex(rest.node));
@@ -160,18 +166,52 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
 
 // ─── Inline transforms ───────────────────────────────────────────────────────
 
+const NAMED_COLORS = new Set([
+  "red","blue","green","yellow","orange","purple","pink","brown","black","white",
+  "gray","grey","cyan","magenta","lime","navy","teal","maroon","olive","silver",
+  "gold","coral","violet","indigo","crimson","turquoise","salmon","plum","khaki",
+  "tan","azure","ivory","beige","wheat","lavender","mint","skyblue","tomato",
+  "orangered","hotpink","darkred","darkblue","darkgreen","darkorange",
+]);
+const COLOR_RE = /(#[0-9a-fA-F]{3,8}\b)|(oklch\([^)]+\))|(rgba?\([^)]+\))|(hsla?\([^)]+\))/;
+
+function parseColorLiteral(text: string): string | null {
+  const trimmed = text.trim();
+  const match = trimmed.match(COLOR_RE);
+  if (match) return match[0];
+  if (NAMED_COLORS.has(trimmed.toLowerCase())) return trimmed.toLowerCase();
+  return null;
+}
+
+function ColorSwatch({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block size-3 rounded border border-border align-middle mx-0.5 shrink-0"
+      style={{ backgroundColor: color }}
+      title={color}
+    />
+  );
+}
+
 function InlineCode({ text }: { text: string }) {
-  // `[[Cmd]]` → kbd chip
+  const color = parseColorLiteral(text);
   const kbdMatch = /^\[\[([^\]]+)\]\]$/.exec(text);
   if (kbdMatch) return <KbdChip label={kbdMatch[1]} />;
 
-  // `@kind/name` → mention chip
   const mentionMatch = /^@([a-z]+)\/([\w-]+)$/.exec(text);
   if (mentionMatch) return <MentionChip kind={mentionMatch[1]} name={mentionMatch[2]} />;
 
-  // `#tag` → tag chip
   const tagMatch = /^#([\w-]+)$/.exec(text);
   if (tagMatch) return <TagChip tag={tagMatch[1]} />;
+
+  if (color) {
+    return (
+      <code className="rounded-sm bg-muted px-1 font-mono text-[12px] inline-flex items-center gap-0.5">
+        <ColorSwatch color={color} />
+        {text}
+      </code>
+    );
+  }
 
   return (
     <code className="rounded-sm bg-muted px-1 py-0.5 font-mono text-[12px]">
@@ -182,11 +222,10 @@ function InlineCode({ text }: { text: string }) {
 
 // ─── Headings with anchor links ──────────────────────────────────────────────
 
-function HeadingTag({ level, children, ...rest }: { level: number; children?: React.ReactNode } & Record<string, unknown>) {
-  // Reuse react-markdown's auto-generated id (it slugifies children if a
-  // custom `id` is not passed via rehype). We add an `#` link that appears
-  // on hover.
-  const id = (rest as { id?: string }).id;
+function HeadingTag({ level, children }: { level: number; children?: React.ReactNode } & Record<string, unknown>) {
+  let headingText = "";
+  collectText(children, (s) => (headingText += s));
+  const id = headingText ? slugify(headingText) : undefined;
   const inner = (
     <>
       {children}
@@ -202,14 +241,8 @@ function HeadingTag({ level, children, ...rest }: { level: number; children?: Re
     </>
   );
   const className = "scroll-mt-12";
-  switch (level) {
-    case 1: return <h1 id={id} className={className}>{inner}</h1>;
-    case 2: return <h2 id={id} className={className}>{inner}</h2>;
-    case 3: return <h3 id={id} className={className}>{inner}</h3>;
-    case 4: return <h4 id={id} className={className}>{inner}</h4>;
-    case 5: return <h5 id={id} className={className}>{inner}</h5>;
-    case 6: return <h6 id={id} className={className}>{inner}</h6>;
-  }
+  const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+  return <Tag id={id} className={className}>{inner}</Tag>;
 }
 
 // ─── Callouts ────────────────────────────────────────────────────────────────
@@ -228,8 +261,6 @@ const CALLOUT_META: Record<CalloutVariant, { icon: React.ComponentType<{ size?: 
 };
 
 function extractCalloutVariant(children: React.ReactNode): CalloutVariant | null {
-  // react-markdown passes the blockquote's children — typically a <p> whose
-  // text content starts with `[!TYPE]`. We do a shallow string match.
   let text = "";
   collectText(children, (s) => (text += s));
   const m = CALLOUT_RE.exec(text);
@@ -255,8 +286,6 @@ function collectText(node: React.ReactNode, sink: (s: string) => void): void {
 function Callout({ variant, children }: { variant: CalloutVariant; children: React.ReactNode }) {
   const meta = CALLOUT_META[variant];
   const Icon = meta.icon;
-  // Strip the leading `[!TYPE]` marker from the first paragraph so the body
-  // reads naturally.
   const stripped = stripCalloutMarker(children);
   return (
     <aside
@@ -265,9 +294,11 @@ function Callout({ variant, children }: { variant: CalloutVariant; children: Rea
         meta.className,
       )}
     >
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider opacity-90 mb-1">
+      <div className="mb-1 flex items-center gap-1.5">
         <Icon size={11} />
-        {meta.label}
+        <span className="text-[11px] font-semibold uppercase tracking-wider opacity-90">
+          {meta.label}
+        </span>
       </div>
       <div className="text-[13px] leading-relaxed [&>p]:m-0">{stripped}</div>
     </aside>
@@ -288,9 +319,6 @@ function stripCalloutMarker(children: React.ReactNode): React.ReactNode {
 
 // ─── Task toggle helper ─────────────────────────────────────────────────────
 
-// `rest.node` is the hast element passed by react-markdown. We use the
-// `sourceLine` field if present (it is, when `remark-rehype` is wired up),
-// otherwise fall back to walking for the line text.
 function getLineIndex(node: unknown): number {
   if (node && typeof node === "object" && "position" in node) {
     const position = (node as { position?: { start?: { line?: number } } }).position;

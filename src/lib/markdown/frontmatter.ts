@@ -105,7 +105,10 @@ export function parseFrontmatter(source: string): ParsedPlan {
   }
 
   const yamlText = lines.slice(1, closingIdx).join("\n");
-  const body = lines.slice(closingIdx + 1).join("\n").replace(/^\s*\n/, "");
+  // Keep the blank line after `---` so body line indices match source line indices.
+  // toggleTaskInSource computes absoluteLine = fmEnd + 1 + bodyLine, which
+  // accounts for this separator line — stripping it would shift every task by 1.
+  const body = lines.slice(closingIdx + 1).join("\n");
 
   let parsed: unknown;
   try {

@@ -1,6 +1,12 @@
 import { MessageList, ChatInput } from "@/components/chat";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
+import type { Message, Provider } from "@/lib/ipc";
+import { Allotment } from "allotment";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { PromptInspector } from "@/components/PromptInspector";
+import { PaneHeader } from "@/components/ui/pane-header";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 interface PlannerChatProps {
   messages: ChatMessage[];
@@ -38,6 +44,14 @@ interface PlannerChatProps {
   canTools: boolean;
 
   onStopChat: () => void;
+
+  // Prompt Inspector
+  inspectorMessages: Message[];
+  model: string;
+  host: string;
+  provider: Provider;
+  showInspector: boolean;
+  onToggleInspector: () => void;
 }
 
 export function PlannerChat({
@@ -71,46 +85,74 @@ export function PlannerChat({
   onToggleTools,
   canTools,
   onStopChat,
+  inspectorMessages,
+  model,
+  host,
+  provider,
+  showInspector,
+  onToggleInspector,
 }: PlannerChatProps) {
+  const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("plans-inspector", 3, [true, true, showInspector]);
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        thinkingContent={thinkingContent}
-        pendingPermissions={pendingPermissions}
-        onApplyCode={onApplyCode}
-        onRegenerate={onRegenerate}
-        onDeleteFrom={onDeleteFrom}
-        onResolvePermission={onResolvePermission}
-      />
-      <div className="shrink-0 border-t border-border px-3 pb-3 pt-2">
-        <ChatInput
-          value={input}
-          onChange={onChangeInput}
-          onSend={onSend}
-          disabled={isStreaming}
-          attachments={attachments}
-          onAddAttachment={onAddAttachment}
-          onRemoveAttachment={onRemoveAttachment}
-          mentions={mentions}
-          onAddMention={onAddMention}
-          onRemoveMention={onRemoveMention}
-          projectPath={projectPath}
-          placeholder={placeholder}
-          thinkEnabled={thinkEnabled}
-          onToggleThink={onToggleThink}
-          thinkLevel={thinkLevel}
-          onSetThinkLevel={onSetThinkLevel}
-          isGptOssFamily={isGptOssFamily}
-          canThink={canThink}
-          canVision={canVision}
-          toolsEnabled={toolsEnabled}
-          onToggleTools={onToggleTools}
-          canTools={canTools}
-          onStop={isStreaming ? onStopChat : undefined}
-        />
-      </div>
-    </div>
+    <Allotment vertical ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes} onVisibleChange={(_i, v) => { if (!v) onToggleInspector(); }}>
+      <Allotment.Pane minSize={200}>
+        <div className="flex h-full flex-col overflow-hidden">
+          <MessageList
+            messages={messages}
+            isStreaming={isStreaming}
+            thinkingContent={thinkingContent}
+            pendingPermissions={pendingPermissions}
+            onApplyCode={onApplyCode}
+            onRegenerate={onRegenerate}
+            onDeleteFrom={onDeleteFrom}
+            onResolvePermission={onResolvePermission}
+          />
+          <div className="shrink-0 border-t border-border px-3 pb-3 pt-2">
+            <ChatInput
+              value={input}
+              onChange={onChangeInput}
+              onSend={onSend}
+              disabled={isStreaming}
+              attachments={attachments}
+              onAddAttachment={onAddAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+              mentions={mentions}
+              onAddMention={onAddMention}
+              onRemoveMention={onRemoveMention}
+              projectPath={projectPath}
+              placeholder={placeholder}
+              thinkEnabled={thinkEnabled}
+              onToggleThink={onToggleThink}
+              thinkLevel={thinkLevel}
+              onSetThinkLevel={onSetThinkLevel}
+              isGptOssFamily={isGptOssFamily}
+              canThink={canThink}
+              canVision={canVision}
+              toolsEnabled={toolsEnabled}
+              onToggleTools={onToggleTools}
+              canTools={canTools}
+              onStop={isStreaming ? onStopChat : undefined}
+            />
+          </div>
+        </div>
+      </Allotment.Pane>
+      <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
+        <PaneHeader onClick={onToggleInspector}>
+          <span className="text-xs font-medium flex-1">Inspector</span>
+          {showInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        </PaneHeader>
+      </Allotment.Pane>
+      <Allotment.Pane visible={showInspector} preferredSize={240} minSize={160} snap>
+        {showInspector && (
+          <PromptInspector
+            model={model}
+            messages={inspectorMessages}
+            host={host}
+            provider={provider}
+          />
+        )}
+      </Allotment.Pane>
+    </Allotment>
   );
 }

@@ -16,6 +16,7 @@ import {
   SCREENS_TOOL_FILTER_DEFAULT,
   COMPONENTS_TOOL_FILTER_DEFAULT,
   DESIGN_TOOL_FILTER_DEFAULT,
+  PLANS_TOOL_FILTER_DEFAULT,
 } from "@/lib/agentToolDefaults";
 
 interface AgentsTabProps {
@@ -23,13 +24,14 @@ interface AgentsTabProps {
   setSettings: (patch: Partial<Settings>) => Promise<void>;
 }
 
-type PanelKey = "wizard" | "screens" | "components" | "themes";
+type PanelKey = "wizard" | "screens" | "components" | "themes" | "plans";
 
 const AGENTS: { label: string; panelKey: PanelKey }[] = [
   { label: "Wizard",     panelKey: "wizard" },
   { label: "Screens",    panelKey: "screens" },
   { label: "Components", panelKey: "components" },
   { label: "Design",     panelKey: "themes" },
+  { label: "Plans",      panelKey: "plans" },
 ];
 
 const PANEL_DEFAULTS: Record<PanelKey, string[]> = {
@@ -37,6 +39,7 @@ const PANEL_DEFAULTS: Record<PanelKey, string[]> = {
   screens:    SCREENS_TOOL_FILTER_DEFAULT,
   components: COMPONENTS_TOOL_FILTER_DEFAULT,
   themes:     DESIGN_TOOL_FILTER_DEFAULT,
+  plans:      PLANS_TOOL_FILTER_DEFAULT,
 };
 
 const PANEL_MAX_TOOL_CALLS_OVERRIDES = [
@@ -44,6 +47,7 @@ const PANEL_MAX_TOOL_CALLS_OVERRIDES = [
   { label: "Components", panelKey: "components" as const, placeholder: "20" },
   { label: "Screens",    panelKey: "screens" as const,    placeholder: "25" },
   { label: "Wizard",     panelKey: "wizard" as const,     placeholder: "60" },
+  { label: "Plans",      panelKey: "plans" as const,      placeholder: "20" },
 ];
 
 interface ToolGroup {
@@ -234,7 +238,7 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
                     <Fragment key={group.label}>
                       <tr className="bg-muted/20">
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
                         >
                           {group.label}

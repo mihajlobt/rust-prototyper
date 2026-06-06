@@ -15,8 +15,8 @@ export interface ProjectSettings {
 
   // Plans panel prefs
   plansMode: "write" | "split" | "read" | "focus";
-  plansOutlineOpen: boolean;
   plansChatOpen: boolean;
+  plansShowInspector: boolean;
 
   // Project configuration
   stylePreset: string;
@@ -114,8 +114,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   activePlan: null,
 
   plansMode: "split",
-  plansOutlineOpen: true,
   plansChatOpen: false,
+  plansShowInspector: false,
 
   stylePreset: "",
   applyDesignBrief: true,

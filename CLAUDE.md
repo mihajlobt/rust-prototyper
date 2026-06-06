@@ -24,11 +24,14 @@ All Rust logic lives in `src-tauri/src/lib.rs`. Frontend IPC uses `@tauri-apps/a
 
 ```
 src/
-  panels/          # 9 panels: Wizard, Screens, Components, Themes, APIs, Runner, Library, Assets (+ workflows/ for WorkflowsView)
+  panels/          # 10 panels: Wizard, Screens, Components, Themes, Plans, APIs, Runner, Library, Assets (+ workflows/ for WorkflowsView)
+  panels/plans/    # Plans sub-components: PlanEditor, PlanPreview, PlanLayout, FormatToolbar, FrontmatterHeader, PlanCommandMenu, PlannerChat, SelectionToChat, PlansPanelParts, chips, autocomplete
   workflows/       # WorkflowsView.tsx — graph execution engine
   layout/          # Header.tsx, SidebarRail.tsx
   hooks/           # useSettings.ts, useChat.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, use-mobile.ts
   lib/ipc.ts       # All invoke() wrappers — single source of truth for Rust↔TS calls
+  lib/markdown/    # frontmatter.ts, directives.ts, mentions.ts, headings.ts, strip.ts — Plans markdown utilities
+  lib/prompts/plans.ts  # Plans agent system prompt
   modals/          # SettingsModal, ProjectManagerModal, ExportModal, AddLibraryModal, PromptConfigModal, ComponentExportModal, SaveComponentModal (+ StylesEditor.tsx is a tabbed editor in Settings, not a true modal)
   components/ui/   # shadcn/ui primitives
 src-tauri/
@@ -116,6 +119,16 @@ bunx tsc --noEmit    # type-check
 - **Wayland crash**: Use `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `bun run tauri:dev`
 - **IPC timeout**: Never block async commands — use `tokio::spawn` for heavy ops
 - **v1 vs v2 imports**: Always `@tauri-apps/api/core`, never `@tauri-apps/api/tauri`
+
+## Plans panel
+
+- Files live at `projects/{id}/plans/{slug}.md`; chat history at `projects/{id}/plans/{slug}.chat.json`
+- `PlansPanel` calls `useChat` directly (same pattern as ThemesPanel). No custom hook.
+- Four modes: **focus** (editor only), **write** (editor + chat), **read** (preview + chat), **split** (editor + preview + chat). Each mode has its own `useAllotmentLayout` key so pane sizes persist independently.
+- Live preview is `react-markdown` + `remark-directive` + custom `pre`/`code`/`blockquote` renderers. Does NOT reuse the global `Markdown` component.
+- `SelectionToChat`: floating "Add to chat" button. Appears on `mouseup` (not during drag) for both editor selections (via `SelectionInfo`) and preview selections (via `window.getSelection()`).
+- `panelToolFilter` / `panelMaxToolCalls` for Plans are configurable in AgentsTab (Settings → Agents → Plans column).
+- `onResolvePermission` must update `toolAllowlist` when `decision === "always_allowed"` — see ThemesPanel pattern.
 
 ## Domain docs (read when relevant)
 

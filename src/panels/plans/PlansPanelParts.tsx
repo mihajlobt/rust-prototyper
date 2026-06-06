@@ -4,8 +4,6 @@ import {
   FileText,
   Focus,
   MessageSquare,
-  PanelRight,
-  PanelRightClose,
   Pencil,
   Search,
   Sparkles,
@@ -27,10 +25,8 @@ interface PlansToolbarProps {
   planName: string;
   savedAt: number | null;
   mode: PlanMode;
-  outlineOpen: boolean;
   chatOpen: boolean;
   onModeChange: (mode: PlanMode) => void;
-  onOutlineToggle: () => void;
   onChatToggle: () => void;
   onCommandMenu: () => void;
 }
@@ -39,10 +35,8 @@ export function PlansToolbar({
   planName,
   savedAt,
   mode,
-  outlineOpen,
   chatOpen,
   onModeChange,
-  onOutlineToggle,
   onChatToggle,
   onCommandMenu,
 }: PlansToolbarProps) {
@@ -80,20 +74,6 @@ export function PlansToolbar({
             </Button>
           </TooltipTrigger>
           <TooltipContent>{chatOpen ? "Hide agent" : "Show agent"}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={outlineOpen ? "Hide outline" : "Show outline"}
-              onClick={onOutlineToggle}
-            >
-              {outlineOpen ? <PanelRightClose size={12} /> : <PanelRight size={12} />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{outlineOpen ? "Hide outline" : "Show outline"}</TooltipContent>
         </Tooltip>
         <ToggleGroup
           type="single"

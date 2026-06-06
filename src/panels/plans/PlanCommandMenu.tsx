@@ -48,7 +48,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { stripMarkdown } from "@/lib/markdown/strip";
-import { extractHeadings, type Heading } from "./OutlineRail";
+import { extractHeadingsFlat, type PlanHeading } from "@/lib/markdown/headings";
 import { type EditorAction, type PlanEditorHandle } from "./PlanEditor";
 import { type PlanMode } from "./PlansPanelParts";
 
@@ -104,15 +104,16 @@ export function PlanCommandMenu({
   onModeChange,
   activePlan,
 }: PlanCommandMenuProps) {
-  const headings = useMemo(() => extractHeadings(source), [source]);
+  const headings = useMemo(() => extractHeadingsFlat(source), [source]);
 
   const dispatch = (action: EditorAction) => {
     editorHandle.current?.dispatch(action);
     onOpenChange(false);
   };
 
-  const gotoHeading = (h: Heading) => {
-    editorHandle.current?.dispatch({ type: "goToLine", line: h.line });
+  const gotoHeading = (h: PlanHeading) => {
+    // h.line is 0-indexed; goToLine / CodeMirror doc.line() expects 1-indexed
+    editorHandle.current?.dispatch({ type: "goToLine", line: h.line + 1 });
     onOpenChange(false);
   };
 

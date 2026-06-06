@@ -1,46 +1,44 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { Allotment } from "allotment";
-import type { Extension } from "@codemirror/state";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useChatStore } from "@/stores/chatStore";
-import { readFile, writeFile, getErrorMessage, isNotFoundError } from "@/lib/ipc";
+import { readFile, writeFile, getErrorMessage, isNotFoundError, getHostForProvider } from "@/lib/ipc";
 import { notify } from "@/hooks/useToast";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { useChat } from "@/hooks/useChat";
 import { PLANS_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
 import { getPlansSystemPrompt } from "@/lib/prompts/plans";
-import { PlanEditor, type PlanEditorHandle, type EditorAction, type SelectionInfo } from "./plans/PlanEditor";
+import { type PlanEditorHandle, type EditorAction, type SelectionInfo } from "./plans/PlanEditor";
 import { SelectionToChat } from "./plans/SelectionToChat";
-import { FormatToolbar } from "./plans/FormatToolbar";
-import { PlanPreview } from "./plans/PlanPreview";
-import { FrontmatterHeader } from "./plans/FrontmatterHeader";
-import { PlanStatusBar } from "./plans/PlanStatusBar";
-import { OutlineRail } from "./plans/OutlineRail";
+import { PlanLayout } from "./plans/PlanLayout";
 import { PlanCommandMenu } from "./plans/PlanCommandMenu";
 import { PlannerChat } from "./plans/PlannerChat";
 import { plansAutocomplete } from "./plans/autocomplete";
-import { PlansEmptyState, PlansToolbar, type PlanMode } from "./plans/PlansPanelParts";
-import { parseFrontmatter, toggleTaskInSource } from "@/lib/markdown/frontmatter";
+import { PlansEmptyState, PlansToolbar } from "./plans/PlansPanelParts";
+import { toggleTaskInSource } from "@/lib/markdown/frontmatter";
 import { listFromEntries, MENTION_KINDS, SECTION_BY_KIND, type MentionKind, type MentionOption } from "@/lib/markdown/mentions";
 import type { ToolPermissionDecision } from "@/lib/ipc";
-import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function PlansPanel() {
   const project = useAppStore((s) => s.settings.project);
+  const settings = useAppStore((s) => s.settings);
+  const planToolFilter = useAppStore((s) => s.settings.panelToolFilter.plans);
+  const planMaxToolCalls = useAppStore((s) => s.settings.panelMaxToolCalls.plans);
   const activePlan = useProjectSettingsStore((s) => s.ps.activePlan);
   const setProjectSettings = useProjectSettingsStore((s) => s.setProjectSettings);
   const plansMode = useProjectSettingsStore((s) => s.ps.plansMode);
-  const plansOutlineOpen = useProjectSettingsStore((s) => s.ps.plansOutlineOpen);
   const plansChatOpen = useProjectSettingsStore((s) => s.ps.plansChatOpen);
+  const plansShowInspector = useProjectSettingsStore((s) => s.ps.plansShowInspector);
 
   const [source, setSource] = useState("");
   const [loading, setLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [currentLine, setCurrentLine] = useState(0);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
+  // Ref (not state) so CodeMirror selection updates don't re-render PlansPanel
+  // on every mouse-drag tick. SelectionToChat reads from this ref on mouseup.
+  const selectionInfoRef = useRef<SelectionInfo | null>(null);
 
   const lastWrittenRef = useRef<string | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,10 +110,6 @@ export function PlansPanel() {
     setSource((prev) => toggleTaskInSource(prev, line));
   }, []);
 
-  const handleJump = useCallback((action: EditorAction) => {
-    editorHandle.current?.dispatch(action);
-  }, []);
-
   const extraExtensions = useMemo(
     () => [plansAutocomplete({ dispatch: editorDispatch, options: mentionOptions })],
     [editorDispatch, mentionOptions],
@@ -155,15 +149,33 @@ export function PlansPanel() {
     systemPrompt,
     outputPath: planOutputPath || undefined,
     onCodeOutput: handleAgentWrite,
-    panelToolFilter: PLANS_TOOL_FILTER_DEFAULT,
+    panelToolFilter: planToolFilter ?? PLANS_TOOL_FILTER_DEFAULT,
+    panelMaxToolCalls: planMaxToolCalls,
   });
 
   const onResolvePermission = useCallback(
-    (requestId: number, decision: ToolPermissionDecision, _toolName: string) => {
+    (requestId: number, decision: ToolPermissionDecision, toolName: string) => {
       useChatStore.getState().resolveToolPermission(chatEntityId, requestId, decision);
+      if (decision === "always_allowed" && toolName) {
+        const current = useAppStore.getState().settings.toolAllowlist;
+        if (!current.includes(toolName)) {
+          useAppStore.getState().setSettings({ toolAllowlist: [...current, toolName] });
+        }
+      }
     },
     [chatEntityId],
   );
+
+  const inspectorMessages = useMemo(() => [
+    { role: "system" as const, content: systemPrompt },
+    ...chat.messages.map((m) => ({
+      role: m.role as "user" | "assistant" | "tool",
+      content: m.content,
+      ...(m.images?.length ? { images: m.images } : {}),
+      ...(m.thinking ? { thinking: m.thinking } : {}),
+      ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((tc) => ({ function: { name: tc.tool, arguments: tc.arguments } })) } : {}),
+    })),
+  ], [systemPrompt, chat.messages]);
 
   const chatSlot = chatEntityId ? (
     <PlannerChat
@@ -183,7 +195,7 @@ export function PlansPanel() {
       mentions={chat.mentions}
       onAddMention={chat.addMention}
       onRemoveMention={chat.removeMention}
-      projectPath={chatPath}
+      projectPath={project ? `projects/${project}` : ""}
       placeholder="Describe a plan to draft, or ask the planner…"
       thinkEnabled={chat.thinkEnabled}
       onToggleThink={chat.toggleThink}
@@ -196,6 +208,12 @@ export function PlansPanel() {
       onToggleTools={chat.toggleTools}
       canTools={chat.canTools}
       onStopChat={chat.stopGeneration}
+      inspectorMessages={inspectorMessages}
+      model={settings.modelId}
+      host={getHostForProvider(settings.provider, settings.host)}
+      provider={settings.provider}
+      showInspector={plansShowInspector}
+      onToggleInspector={() => setProjectSettings({ plansShowInspector: !plansShowInspector })}
     />
   ) : null;
 
@@ -210,10 +228,8 @@ export function PlansPanel() {
           planName={activePlan}
           savedAt={savedAt}
           mode={plansMode}
-          outlineOpen={plansOutlineOpen}
           chatOpen={plansChatOpen}
           onModeChange={(mode) => setProjectSettings({ plansMode: mode })}
-          onOutlineToggle={() => setProjectSettings({ plansOutlineOpen: !plansOutlineOpen })}
           onChatToggle={() => setProjectSettings({ plansChatOpen: !plansChatOpen })}
           onCommandMenu={() => setCommandOpen(true)}
         />
@@ -228,24 +244,21 @@ export function PlansPanel() {
               onSourceChange={setSource}
               mode={plansMode}
               lineNumbers={false}
-              outlineOpen={plansOutlineOpen}
               chatOpen={plansChatOpen}
               currentLine={currentLine}
               onCursorLineChange={setCurrentLine}
-              onSelectionChange={setSelectionInfo}
+              onSelectionChange={(info) => { selectionInfoRef.current = info; }}
               extraExtensions={extraExtensions}
               editorHandle={editorHandle}
               onTaskToggle={handleTaskToggle}
-              onJump={handleJump}
               chatSlot={chatSlot}
             />
           )}
         </div>
-        <PlanStatusBar body={parseFrontmatter(source).body} />
       </div>
       <SelectionToChat
         editorHandle={editorHandle}
-        selectionInfo={selectionInfo}
+        selectionInfoRef={selectionInfoRef}
         planName={activePlan}
         planPath={planOutputPath}
         onAddMention={chat.addMention}
@@ -260,184 +273,6 @@ export function PlansPanel() {
         activePlan={activePlan}
       />
     </TooltipProvider>
-  );
-}
-
-// ─── Layout switcher ─────────────────────────────────────────────────────────
-
-interface PlanLayoutProps {
-  source: string;
-  onSourceChange: (v: string) => void;
-  mode: PlanMode;
-  lineNumbers: boolean;
-  outlineOpen: boolean;
-  chatOpen: boolean;
-  currentLine: number;
-  onCursorLineChange: (line: number) => void;
-  onSelectionChange: (info: SelectionInfo | null) => void;
-  extraExtensions: Extension[];
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
-  onTaskToggle: (line: number) => void;
-  onJump: (action: EditorAction) => void;
-  chatSlot: React.ReactNode;
-}
-
-function PlanLayout({
-  source,
-  onSourceChange,
-  mode,
-  lineNumbers,
-  outlineOpen,
-  chatOpen,
-  currentLine,
-  onCursorLineChange,
-  onSelectionChange,
-  extraExtensions,
-  editorHandle,
-  onTaskToggle,
-  onJump,
-  chatSlot,
-}: PlanLayoutProps) {
-  const parsed = useMemo(() => parseFrontmatter(source), [source]);
-  const showHeader = parsed.frontmatter !== null;
-  const sidePanelVisible = outlineOpen || chatOpen;
-
-  if (mode === "focus") {
-    return (
-      <div className="h-full overflow-y-auto">
-        <div className="mx-auto max-w-[720px] px-8 py-12">
-          <PlanEditor
-            ref={editorHandle}
-            value={source}
-            onChange={onSourceChange}
-            lineNumbers={false}
-            onCursorLineChange={onCursorLineChange}
-            onSelectionChange={onSelectionChange}
-            extraExtensions={extraExtensions}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "read") {
-    return (
-      <div className="h-full overflow-y-auto">
-        <div className="mx-auto max-w-[760px]">
-          {showHeader ? <FrontmatterHeader frontmatter={parsed.frontmatter!} body={parsed.body} /> : null}
-          <PlanPreview body={parsed.body} onTaskToggle={onTaskToggle} />
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "write") {
-    return (
-      <div className="flex h-full flex-col">
-        <FormatToolbar editorHandle={editorHandle} />
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <PlanEditor
-            ref={editorHandle}
-            value={source}
-            onChange={onSourceChange}
-            lineNumbers={lineNumbers}
-            onCursorLineChange={onCursorLineChange}
-            onSelectionChange={onSelectionChange}
-            extraExtensions={extraExtensions}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <SplitLayout
-      source={source}
-      onSourceChange={onSourceChange}
-      lineNumbers={lineNumbers}
-      sidePanelVisible={sidePanelVisible}
-      chatOpen={chatOpen}
-      currentLine={currentLine}
-      onCursorLineChange={onCursorLineChange}
-      onSelectionChange={onSelectionChange}
-      extraExtensions={extraExtensions}
-      editorHandle={editorHandle}
-      onTaskToggle={onTaskToggle}
-      onJump={onJump}
-      chatSlot={chatSlot}
-      parsed={parsed}
-    />
-  );
-}
-
-interface SplitLayoutProps {
-  source: string;
-  onSourceChange: (v: string) => void;
-  lineNumbers: boolean;
-  sidePanelVisible: boolean;
-  chatOpen: boolean;
-  currentLine: number;
-  onCursorLineChange: (line: number) => void;
-  onSelectionChange: (info: SelectionInfo | null) => void;
-  extraExtensions: Extension[];
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
-  onTaskToggle: (line: number) => void;
-  onJump: (action: EditorAction) => void;
-  chatSlot: React.ReactNode;
-  parsed: ReturnType<typeof parseFrontmatter>;
-}
-
-function SplitLayout({
-  source,
-  onSourceChange,
-  lineNumbers,
-  sidePanelVisible,
-  chatOpen,
-  currentLine,
-  onCursorLineChange,
-  onSelectionChange,
-  extraExtensions,
-  editorHandle,
-  onTaskToggle,
-  onJump,
-  chatSlot,
-  parsed,
-}: SplitLayoutProps) {
-  const { ref, onDragEnd, defaultSizes } = useAllotmentLayout(
-    "plans",
-    3,
-    [true, true, sidePanelVisible],
-  );
-  const showHeader = parsed.frontmatter !== null;
-
-  return (
-    <Allotment ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes}>
-      <Allotment.Pane>
-        <div className="flex h-full flex-col">
-          <FormatToolbar editorHandle={editorHandle} />
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <PlanEditor
-              ref={editorHandle}
-              value={source}
-              onChange={onSourceChange}
-              lineNumbers={lineNumbers}
-              onCursorLineChange={onCursorLineChange}
-              onSelectionChange={onSelectionChange}
-              extraExtensions={extraExtensions}
-            />
-          </div>
-        </div>
-      </Allotment.Pane>
-      <Allotment.Pane>
-        <div className="h-full overflow-y-auto">
-          {showHeader ? <FrontmatterHeader frontmatter={parsed.frontmatter!} body={parsed.body} /> : null}
-          <PlanPreview body={parsed.body} onTaskToggle={onTaskToggle} />
-        </div>
-      </Allotment.Pane>
-      <Allotment.Pane visible={sidePanelVisible} minSize={200} maxSize={400} preferredSize={280}>
-        {chatOpen ? chatSlot : <OutlineRail source={source} currentLine={currentLine} onJump={onJump} />}
-      </Allotment.Pane>
-    </Allotment>
   );
 }
 

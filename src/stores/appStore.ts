@@ -49,12 +49,14 @@ export interface Settings {
     components?: number;
     themes?: number;
     wizard?: number;
+    plans?: number;
   };
   panelToolFilter: {
     wizard?: string[];
     screens?: string[];
     components?: string[];
     themes?: string[];
+    plans?: string[];
   };
 }
 
