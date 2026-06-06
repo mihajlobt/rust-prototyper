@@ -65,7 +65,7 @@ pub async fn execute_tool(
         "run_tsc" => execute_run_tsc(args, project_dir, skip_policy).await,
         "run_lint" => execute_run_lint(args, project_dir, skip_policy).await,
         "run_build" => execute_run_build(args, project_dir, skip_policy).await,
-        "glob" => execute_glob(args, app_data_dir, skip_policy).await,
+        "glob" => execute_glob(args, project_dir).await,
         "grep" => execute_grep(args, app_data_dir, skip_policy).await,
         "register_screen" => execute_register_screen(args, app_data_dir, output_path).await,
         "set_active_theme" => execute_set_active_theme(args, app_data_dir, output_path).await,
@@ -755,7 +755,7 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path, skip_po
     }
 }
 
-async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path, skip_policy: bool) -> ToolExecutionResult {
+async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecutionResult {
     let parsed = match serde_json::from_value::<GlobArgs>(args.clone()) {
         Ok(p) => p,
         Err(e) => return ToolExecutionResult {
@@ -775,28 +775,38 @@ async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path, skip_policy
         };
     }
 
-    // Extract the non-glob prefix as the find base directory so recursive search works.
-    // "projects/newesttest/**/*" → base "projects/newesttest", find runs from app_data_dir.
-    let base = glob_base_dir(&parsed.pattern);
-    let escaped_base = match shlex::try_quote(base) {
-        Ok(q) => q.into_owned(),
-        Err(_) => return ToolExecutionResult {
+    let absolute_pattern = project_dir.join(&parsed.pattern);
+    let pattern_str = absolute_pattern.to_string_lossy();
+
+    let entries = match glob::glob(&pattern_str) {
+        Ok(paths) => paths,
+        Err(e) => return ToolExecutionResult {
             success: false,
-            output: format!("glob: {}", ToolError::Security("pattern contains a nul byte".into())),
+            output: format!("glob: invalid pattern: {e}"),
             written_path: None,
             written_content: None,
         },
     };
 
-    let command = format!(
-        r#"find {escaped_base} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f; echo "EXIT:$?""#
-    );
-    let raw = run_sandboxed_command(&command, app_data_dir, skip_policy).await;
-    let (body, exit_code) = extract_exit_code(&raw);
+    let mut matched: Vec<String> = Vec::new();
+    for entry in entries {
+        match entry {
+            Ok(path) => {
+                let path_str = path.to_string_lossy();
+                if path_str.contains("/node_modules/") || path_str.contains("/.git/") {
+                    continue;
+                }
+                if let Ok(relative) = path.strip_prefix(project_dir) {
+                    matched.push(relative.to_string_lossy().into_owned());
+                }
+            }
+            Err(_) => continue,
+        }
+    }
 
     ToolExecutionResult {
-        success: exit_code == Some(0),
-        output: if body.trim().is_empty() { "(no files matched)".to_string() } else { body.to_string() },
+        success: true,
+        output: if matched.is_empty() { "(no files matched)".to_string() } else { matched.join("\n") },
         written_path: None,
         written_content: None,
     }
@@ -1212,14 +1222,6 @@ async fn run_sandboxed_command(command: &str, project_dir: &Path, _skip_policy: 
 
 /// Extract the non-glob prefix directory from a glob pattern so find can use it as the base.
 /// `projects/newesttest/**/*.tsx` → `projects/newesttest`
-fn glob_base_dir(pattern: &str) -> &str {
-    let first_glob = pattern.find(['*', '?', '[']).unwrap_or(pattern.len());
-    let before_glob = &pattern[..first_glob];
-    match before_glob.rfind('/') {
-        Some(pos) => &pattern[..pos],
-        None => ".",
-    }
-}
 
 #[cfg(target_os = "linux")]
 async fn execute_bash(

@@ -254,6 +254,7 @@ const MessageListFn = ({
               onResolve={onResolveAskUserForm}
             />
           )}
+          {isStreaming && <Loader variant="loading-dots" size="sm" text="Generating" />}
           <ChatContainerScrollAnchor />
         </ChatContainerContent>
         <div className="absolute right-4 bottom-4 z-10">
@@ -425,13 +426,6 @@ const MessageBubble = memo(function MessageBubble({
       )
     }
 
-    // Generating indicator after the last pending tool (or after text chunk with no tool yet)
-    if (isStreaming && !streamingThinking.length) {
-      const lastTool = toolCalls[toolCalls.length - 1]
-      if (!lastTool || lastTool.pending) {
-        elements.push(<Loader key="generating" variant="loading-dots" size="sm" text="Generating" />)
-      }
-    }
 
     return elements
   }
