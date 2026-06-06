@@ -92,13 +92,27 @@ define_program(
 define_program(
     program="find",
     system_path=["/usr/bin/find", "/bin/find"],
-    args=[ARG_OPAQUE_VALUE],
+    options=[
+        flag("-H"), flag("-L"), flag("-P"),
+        flag("-not"), flag("-and"), flag("-or"),
+        flag("-path"), flag("-name"), flag("-iname"),
+        flag("-type"), flag("-size"), flag("-mtime"), flag("-newer"),
+        flag("-maxdepth"), flag("-mindepth"),
+        flag("-print"), flag("-print0"), flag("-f"),
+    ],
+    args=[ARG_UNVERIFIED_VARARGS],
 )
 
 define_program(
     program="grep",
     system_path=["/usr/bin/grep", "/bin/grep"],
-    args=[ARG_OPAQUE_VALUE],
+    options=[
+        flag("-r"), flag("-R"), flag("-i"), flag("-n"), flag("-l"),
+        flag("-c"), flag("-v"), flag("-E"), flag("-F"), flag("-e"), flag("-f"),
+        flag("--exclude-dir"), flag("--include"), flag("--exclude"),
+        flag("--color"), flag("-h"), flag("-H"), flag("-I"),
+    ],
+    args=[ARG_UNVERIFIED_VARARGS],
 )
 
 define_program(

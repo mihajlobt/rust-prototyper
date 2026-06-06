@@ -788,10 +788,8 @@ async fn execute_glob(args: &serde_json::Value, app_data_dir: &Path, skip_policy
         },
     };
 
-    // Run recursive find from the base directory; no -path filter needed because
-    // find already searches only within the given base.
     let command = format!(
-        r#"find {escaped_base} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f | head -200; echo "EXIT:$?""#
+        r#"find {escaped_base} -not -path '*/node_modules/*' -not -path '*/.git/*' -type f; echo "EXIT:$?""#
     );
     let raw = run_sandboxed_command(&command, app_data_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);

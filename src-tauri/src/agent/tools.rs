@@ -51,7 +51,7 @@ pub struct LintCheckArgs {
 
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct GlobArgs {
-    /// Glob pattern relative to the project root (e.g. "components/**/*.tsx", "screens/*/screen.tsx", "data/*.ts"). No ".." allowed. Returns up to 100 matching file paths.
+    /// Glob pattern relative to the project root (e.g. "components/**/*.tsx", "screens/*/screen.tsx", "data/*.ts"). No ".." allowed. Returns all matching file paths.
     pub pattern: String,
 }
 
@@ -208,7 +208,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "glob".to_string(),
-                description: "Find files matching a glob pattern in the project. Call before writing new code to discover existing components, screens, data files, or utilities. Returns up to 100 matching relative file paths.".to_string(),
+                description: "Find files matching a glob pattern in the project. Call before writing new code to discover existing components, screens, data files, or utilities. Returns all matching relative file paths.".to_string(),
                 parameters: make_schema::<GlobArgs>(),
             },
         },
@@ -216,7 +216,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "grep".to_string(),
-                description: "Search for a text or regex pattern across project files (.tsx, .ts, .css, .json). Use to find where a component is imported, how a type is defined, or whether something already exists before creating it. Returns file paths and matching lines (up to 100 results).".to_string(),
+                description: "Search for a text or regex pattern across project files (.tsx, .ts, .css, .json). Use to find where a component is imported, how a type is defined, or whether something already exists before creating it. Returns file paths and matching lines.".to_string(),
                 parameters: make_schema::<GrepArgs>(),
             },
         },
