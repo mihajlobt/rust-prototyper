@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Smartphone, Tablet, Monitor, Sun, Moon, Pencil, X, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { WizardAnnotation } from "./types"
+import { ThemeTokenPreview } from "@/panels/theme-preview/ThemeTokenPreview"
+import type { WizardAnnotation, WizardPreviewTab } from "./types"
 
 interface DraftAnnotation {
   x: number
@@ -26,6 +28,9 @@ interface WizardPreviewPaneProps {
   annotations: WizardAnnotation[]
   /** When set, navigate the preview iframe to this route path after HMR settles. */
   previewNavigatePath: string | null
+  previewTabs: WizardPreviewTab[]
+  activePreviewTabId: string | null
+  onSelectTab: (id: string) => void
   onSetDevice: (device: "desktop" | "tablet" | "mobile") => void
   onToggleDark: () => void
   onAddAnnotation: (annotation: Omit<WizardAnnotation, "id" | "createdAt">) => void
@@ -43,6 +48,9 @@ export function WizardPreviewPane({
   darkMode,
   annotations,
   previewNavigatePath,
+  previewTabs,
+  activePreviewTabId,
+  onSelectTab,
   onSetDevice,
   onToggleDark,
   onAddAnnotation,
@@ -56,6 +64,8 @@ export function WizardPreviewPane({
   const [liveRect, setLiveRect] = useState<DraftAnnotation | null>(null)
 
   const deviceWidth = DEVICE_WIDTHS[device]
+  const activeTab = previewTabs.find((t) => t.id === activePreviewTabId)
+  const isThemeTabActive = activeTab?.type === "theme"
 
   useEffect(() => {
     if (iframeRef.current) {
@@ -214,6 +224,7 @@ export function WizardPreviewPane({
           size="sm"
           variant={annotationMode ? "default" : "outline"}
           className="h-6 gap-1 px-2 text-xs"
+          disabled={isThemeTabActive}
           onClick={() => { setAnnotationMode((a) => !a); setTextPopup(null); setLiveRect(null) }}
         >
           <Pencil size={11} />
@@ -221,8 +232,20 @@ export function WizardPreviewPane({
         </Button>
       </div>
 
-      {/* Preview area with optional device width constraint */}
-      <div className="relative flex-1 overflow-auto bg-muted/20 flex justify-center">
+      {previewTabs.length > 0 && (
+        <Tabs value={activePreviewTabId ?? ""} onValueChange={onSelectTab} className="shrink-0">
+          <TabsList variant="line" className="h-8 w-full justify-start rounded-none border-b px-2">
+            {previewTabs.map((tab) => (
+              <TabsTrigger key={tab.id} value={tab.id} className="text-xs">
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+
+      {/* Preview area — hidden (not unmounted) while theme tab is active so iframeRef stays valid */}
+      <div className={cn("relative flex-1 overflow-auto bg-muted/20 flex justify-center", isThemeTabActive && "hidden")}>
         <div
           className="relative h-full"
           style={{ width: deviceWidth ? `${deviceWidth}px` : "100%" }}
@@ -303,6 +326,17 @@ export function WizardPreviewPane({
           </div>
         </div>
       </div>
+
+      {/* Theme preview — only mounts when theme tab is active */}
+      {isThemeTabActive && (
+        <div className="flex-1 overflow-auto">
+          <ThemeTokenPreview
+            css={activeTab?.themeCss ?? ""}
+            isDark={darkMode}
+            viewMode="preview"
+          />
+        </div>
+      )}
     </div>
   )
 }

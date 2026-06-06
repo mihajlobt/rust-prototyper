@@ -16,9 +16,9 @@ import { WizardPreviewPane } from "./wizard/WizardPreviewPane"
 import { WizardAnnotations } from "./wizard/WizardAnnotations"
 import { PromptInspector } from "@/components/PromptInspector"
 import { PaneHeader } from "@/components/ui/pane-header"
-import { getHostForProvider } from "@/lib/ipc"
+import { getHostForProvider, readFile } from "@/lib/ipc"
 import type { ToolPermissionDecision } from "@/lib/ipc"
-import type { WizardAnnotation } from "./wizard/types"
+import type { WizardAnnotation, WizardPreviewTab } from "./wizard/types"
 import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults"
 import { useAskUserStore } from "@/stores/askUserStore"
 import { confirm } from "@tauri-apps/plugin-dialog"
@@ -47,9 +47,13 @@ export function WizardPanel() {
 
   const [annotations, setAnnotations] = useState<WizardAnnotation[]>([])
   const [previewNavigatePath, setPreviewNavigatePath] = useState<string | null>(null)
+  const [previewTabs, setPreviewTabs] = useState<WizardPreviewTab[]>([])
+  const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null)
+  // Guards against readFile callbacks resolving after a wizard reset clears the tabs
+  const wizardSessionRef = useRef(0)
 
   const pendingThemeSlugRef = useRef<string | null>(null)
-  const pendingScreenPathRef = useRef<string | null>(null)
+  const pendingScreenRef = useRef<{ screenId: string; title: string; urlPath: string } | null>(null)
 
   const systemPrompt = useMemo((): string => {
     const schemaJson = JSON.stringify(z.toJSONSchema(designLanguageSpecSchema), null, 2)
@@ -60,22 +64,67 @@ export function WizardPanel() {
 
   const handleToolCall = useCallback((tool: string, args: Record<string, unknown>) => {
     if (tool === "set_active_theme") pendingThemeSlugRef.current = (args.theme_slug as string) || ""
-    if (tool === "register_screen") pendingScreenPathRef.current = (args.path as string) || ""
+    if (tool === "register_screen") {
+      pendingScreenRef.current = {
+        screenId: (args.screen_id as string) || "",
+        title: (args.title as string) || "",
+        urlPath: (args.path as string) || "",
+      }
+    }
   }, [])
 
   const handleToolResult = useCallback((tool: string, success: boolean, _output: string, path?: string) => {
     if (tool === "set_active_theme" && success && pendingThemeSlugRef.current) {
-      setProjectSettings({ stylePreset: pendingThemeSlugRef.current })
+      const slug = pendingThemeSlugRef.current
+      setProjectSettings({ stylePreset: slug })
       pendingThemeSlugRef.current = null
+      // useAppStore.getState() avoids stale closure — same pattern as handleResolvePermission
+      const project = useAppStore.getState().settings.project
+      const session = wizardSessionRef.current
+      readFile(`projects/${project}/themes/${slug}/theme.css`)
+        .then((css) => {
+          if (wizardSessionRef.current !== session) return
+          const tabId = `theme-${slug}`
+          setPreviewTabs((prev) => {
+            const existing = prev.find((t) => t.id === tabId)
+            if (existing) return prev.map((t) => t.id === tabId ? { ...t, themeCss: css } : t)
+            return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: slug, themeCss: css }]
+          })
+          setActivePreviewTabId(tabId)
+        })
+        .catch(() => {
+          if (wizardSessionRef.current !== session) return
+          const tabId = `theme-${slug}`
+          setPreviewTabs((prev) => {
+            if (prev.find((t) => t.id === tabId)) return prev
+            return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: slug }]
+          })
+          setActivePreviewTabId(tabId)
+        })
     }
-    if (tool === "write_file" && success && pendingScreenPathRef.current) {
+    if (tool === "write_file" && success && pendingScreenRef.current) {
       if ((path || "").endsWith("router.tsx")) {
-        const screenPath = pendingScreenPathRef.current
-        pendingScreenPathRef.current = null
-        setTimeout(() => setPreviewNavigatePath(screenPath), 1500)
+        const { screenId, title, urlPath } = pendingScreenRef.current
+        pendingScreenRef.current = null
+        const tabId = `screen-${screenId}`
+        setPreviewTabs((prev) => {
+          const existing = prev.find((t) => t.id === tabId)
+          if (existing) return prev.map((t) => t.id === tabId ? { ...t, label: title || t.label } : t)
+          return [...prev, { id: tabId, type: "screen", label: title || urlPath, urlPath }]
+        })
+        setActivePreviewTabId(tabId)
+        setTimeout(() => setPreviewNavigatePath(urlPath), 1500)
       }
     }
   }, [setProjectSettings])
+
+  const handleSelectPreviewTab = useCallback((tabId: string) => {
+    setActivePreviewTabId(tabId)
+    const tab = previewTabs.find((t) => t.id === tabId)
+    if (tab?.type === "screen" && tab.urlPath) {
+      setPreviewNavigatePath(tab.urlPath)
+    }
+  }, [previewTabs])
 
   const chat = useChat({
     entityId: wizardEntityId,
@@ -140,8 +189,11 @@ export function WizardPanel() {
     useAskUserStore.getState().clearAskUserForm()
     setAnnotations([])
     setPreviewNavigatePath(null)
+    setPreviewTabs([])
+    setActivePreviewTabId(null)
+    wizardSessionRef.current++
     pendingThemeSlugRef.current = null
-    pendingScreenPathRef.current = null
+    pendingScreenRef.current = null
   }, [chat.stopGeneration, chat.clearChat])
 
   const { ref: outerRef, onDragEnd: outerDragEnd, defaultSizes: outerSizes } = useAllotmentLayout("wizard-outer", 2)
@@ -223,6 +275,9 @@ export function WizardPanel() {
                 darkMode={ps.wizardDarkPreview}
                 annotations={annotations}
                 previewNavigatePath={previewNavigatePath}
+                previewTabs={previewTabs}
+                activePreviewTabId={activePreviewTabId}
+                onSelectTab={handleSelectPreviewTab}
                 onSetDevice={(device) => setProjectSettings({ wizardDevice: device })}
                 onToggleDark={() => setProjectSettings({ wizardDarkPreview: !ps.wizardDarkPreview })}
                 onAddAnnotation={(annotation) => setAnnotations((prev) => [...prev, { ...annotation, id: makeId(), createdAt: Date.now() }])}
