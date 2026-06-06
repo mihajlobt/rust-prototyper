@@ -138,6 +138,52 @@ export function WizardPanel() {
     }
   }, [previewTabs])
 
+  // Restore tabs from disk when the project is loaded or switched.
+  // Reads navigation.json for screen tabs and the active theme CSS for the theme tab.
+  useEffect(() => {
+    const project = settings.project
+    const session = wizardSessionRef.current
+    const stylePreset = ps.stylePreset
+
+    readFile(`projects/${project}/navigation.json`)
+      .then((raw) => {
+        if (wizardSessionRef.current !== session) return
+        const nav = JSON.parse(raw) as { screens?: Array<{ id: string; title: string; path: string }>; defaultScreen?: string }
+        const screenTabs: WizardPreviewTab[] = (nav.screens ?? []).map((screen) => ({
+          id: `screen-${screen.id}`,
+          type: "screen" as const,
+          label: screen.title || screen.id,
+          urlPath: screen.path,
+        }))
+        if (screenTabs.length === 0) return
+        setPreviewTabs((prev) => {
+          // Don't overwrite tabs that were already populated during streaming
+          if (prev.length > 0) return prev
+          return screenTabs
+        })
+        setActivePreviewTabId((prev) => {
+          if (prev) return prev
+          const defaultId = nav.defaultScreen ? `screen-${nav.defaultScreen}` : null
+          return defaultId ?? screenTabs[0].id
+        })
+      })
+      .catch(() => {})
+
+    if (stylePreset) {
+      readFile(`projects/${project}/themes/${stylePreset}/theme.css`)
+        .then((css) => {
+          if (wizardSessionRef.current !== session) return
+          const tabId = `theme-${stylePreset}`
+          setPreviewTabs((prev) => {
+            if (prev.find((tab) => tab.id === tabId)) return prev
+            return [...prev, { id: tabId, type: "theme", label: "Theme", themeSlug: stylePreset, themeCss: css }]
+          })
+        })
+        .catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.project])
+
   const chat = useChat({
     entityId: wizardEntityId,
     chatPath: `projects/${settings.project}/wizard/chat.json`,
