@@ -1,6 +1,6 @@
 [package]
 name = "prototyper"
-version = "0.1.4"
+version = "0.1.6"
 description = "Prototyper — AI-powered app generator"
 authors = ["you"]
 edition = "2021"
