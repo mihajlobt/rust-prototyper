@@ -12,7 +12,8 @@ use tokio_util::codec::Decoder;
 use tokio_util::sync::CancellationToken;
 use crate::commands::ai::{ToolPermissionDecision, ToolPermissionMode, AskUserQuestionType};
 use crate::{AppError, CompletionEvent};
-use super::{executor::{execute_tool, ToolExecutionResult}, tools::build_tools};
+use super::{executor::{execute_tool, execute_task_list, resolve_tool_search, ToolExecutionResult}, tools::build_tools};
+use super::deferred_tools::{deferred_names_in, deferred_tools_system_message, visible_tools};
 
 pub(super) const MAX_ITERATIONS: u8 = 20;
 pub(super) const MAX_WRITES: u8 = 10;
@@ -481,12 +482,24 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
         }
     }
     let all_tools = build_tools();
-    let tools: Vec<_> = if tool_filter.is_empty() {
+    let available_tools: Vec<_> = if tool_filter.is_empty() {
         all_tools
     } else {
         all_tools.into_iter().filter(|t| tool_filter.contains(&t.function.name)).collect()
     };
-    let tools_json = serde_json::to_value(&tools).expect("tools serialization should never fail");
+
+    // Tools named in DEFERRED_TOOL_NAMES start out described-but-not-loaded: the model
+    // sees their name + one-line description in a system reminder, and must call
+    // tool_search("select:<name>") to bring the full schema into `tools_json`. This keeps
+    // the per-turn schema payload smaller for panels that register many tools.
+    let deferred_names = deferred_names_in(&available_tools);
+    // Shared with the per-call futures below (tool_search runs inside that join_all and
+    // mutates this when it resolves a deferred tool by name).
+    let loaded_deferred = Arc::new(std::sync::Mutex::new(HashSet::<String>::new()));
+
+    if let Some(msg) = deferred_tools_system_message(&available_tools, &deferred_names) {
+        history.push(msg);
+    }
 
     let mut iteration: u8 = 0;
     let write_count = Arc::new(AtomicU8::new(0));
@@ -496,6 +509,16 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
             let _ = channel.send(CompletionEvent::Done { done_reason: None });
             return Ok(());
         }
+
+        // Recomputed every iteration: tool_search("select:...") mutates the shared
+        // `loaded_deferred` set from inside the previous iteration's tool-call batch
+        // (below), and `visible_tools` must reflect that mutation on this pass for the
+        // model to be able to call the newly-resolved tool.
+        let tools_json = {
+            let loaded = loaded_deferred.lock().unwrap();
+            let visible = visible_tools(&available_tools, &deferred_names, &loaded);
+            serde_json::to_value(&visible).expect("tools serialization should never fail")
+        };
 
         let tool_calls = stream_turn(
             http_client, host, api_key, model,
@@ -541,6 +564,9 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 let app_handle = app_handle.clone();
                 let http = http_client.clone();
                 let surl = searxng_url.clone();
+                let available_tools = &available_tools;
+                let deferred_names = &deferred_names;
+                let loaded_deferred = Arc::clone(&loaded_deferred);
                 async move {
                     let skip = if name == "write_file" {
                         wc.load(Ordering::SeqCst) >= write_file_limit
@@ -576,6 +602,23 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                             written_content: None,
                         });
                     }
+                    // task_list: same no-side-effect-beyond-own-bookkeeping class as ask_user/
+                    // ask_user_form — no permission gate, writes only its own sidecar JSON and
+                    // emits TodoUpdate directly (it never goes through execute_tool's ToolResult path).
+                    if name == "task_list" {
+                        return (idx, execute_task_list(&arg, &proj, &channel).await);
+                    }
+                    // tool_search: resolves against the loop's own tool catalog and mutates
+                    // loaded_deferred (shared, mutex-guarded — multiple tool_search calls can
+                    // run concurrently within the same turn). No permission gate, same
+                    // no-side-effect-on-the-project class as ask_user/task_list.
+                    if name == "tool_search" {
+                        let (result, newly_loaded) = resolve_tool_search(&arg, available_tools, deferred_names);
+                        if !newly_loaded.is_empty() {
+                            loaded_deferred.lock().unwrap().extend(newly_loaded);
+                        }
+                        return (idx, result);
+                    }
 
                     let should_gate = check_permission_gate(&name, permission_mode, &allowlist);
 
@@ -596,7 +639,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                         }
                     }
 
-                    let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj, permission_mode, &http, &surl).await;
+                    let result = execute_tool(&name, &arg, app_data_dir, output_path, &proj, permission_mode, &http, &surl, &app_handle).await;
                     if name == "write_file" && result.success {
                         wc.fetch_add(1, Ordering::SeqCst);
                     }

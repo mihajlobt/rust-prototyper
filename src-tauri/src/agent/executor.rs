@@ -3,6 +3,26 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::commands::ai::ToolPermissionMode;
 use super::tools::{WriteFileArgs, ReadFileArgs, EditFileArgs, BashArgs, TscCheckArgs, LintCheckArgs, GlobArgs, GrepArgs, RegisterScreenArgs, SetActiveThemeArgs, ValidateDesignJsonArgs, WebSearchArgs};
 
+mod web_fetch;
+use web_fetch::execute_web_fetch;
+
+mod task_list;
+// task_list is special-cased in agent_loop.rs (no permission gate, like ask_user) —
+// re-exported so the loop can call it directly without going through execute_tool.
+pub(in crate::agent) use task_list::execute_task_list;
+
+mod skill;
+use skill::execute_skill;
+
+mod tool_search;
+// tool_search is special-cased in agent_loop.rs — it needs to read the loop's full
+// available-tool list and mutate its "loaded deferred tools" state, neither of which
+// execute_tool's signature carries.
+pub(in crate::agent) use tool_search::resolve_tool_search;
+
+pub(crate) mod lsp;
+use lsp::execute_lsp;
+
 #[derive(serde::Deserialize)]
 struct SearxngResult {
     title: String,
@@ -55,6 +75,7 @@ pub async fn execute_tool(
     permission_mode: ToolPermissionMode,
     http_client: &reqwest::Client,
     searxng_url: &str,
+    app_handle: &tauri::AppHandle,
 ) -> ToolExecutionResult {
     let skip_policy = matches!(permission_mode, ToolPermissionMode::AutoAcceptAll);
     match name {
@@ -71,6 +92,9 @@ pub async fn execute_tool(
         "set_active_theme" => execute_set_active_theme(args, app_data_dir, output_path).await,
         "validate_design_json" => execute_validate_design_json(args, app_data_dir).await,
         "web_search" => execute_web_search(args, searxng_url, http_client).await,
+        "web_fetch" => execute_web_fetch(args).await,
+        "skill" => execute_skill(args, project_dir).await,
+        "lsp" => execute_lsp(args, app_handle, project_dir).await,
         _ => ToolExecutionResult {
             success: false,
             output: format!("{name}: {}", ToolError::InvalidArguments(format!("unknown tool '{name}'"))),

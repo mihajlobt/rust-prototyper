@@ -210,6 +210,14 @@ export interface FormField {
   required?: boolean
 }
 
+export type TodoStatus = "pending" | "in_progress" | "completed";
+
+export interface TodoItem {
+  content: string
+  status: TodoStatus
+  active_form: string
+}
+
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
@@ -217,6 +225,7 @@ export type CompletionEvent =
   | { event: "ToolResult"; data: { tool: string; success: boolean; output: string; path?: string; content?: string } }
   | { event: "AskUser"; data: { request_id: number; question: string; question_type: AskUserQuestionType; choices?: string[] } }
   | { event: "AskUserForm"; data: { request_id: number; title: string; fields: FormField[] } }
+  | { event: "TodoUpdate"; data: { todos: TodoItem[] } }
   | { event: "Done"; data: { done_reason?: string } | null }
   | { event: "Error"; data: { message: string } };
 

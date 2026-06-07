@@ -60,6 +60,8 @@ import { ScrollButton } from "@/components/ui/scroll-button"
 import type { ChatMessage, ToolCallRecord, ToolPermissionRecord } from "@/types/chat"
 import type { AskUserQuestionType, FormField } from "@/lib/ipc"
 import { confirm } from "@tauri-apps/plugin-dialog"
+import { useTaskListStore } from "@/stores/taskListStore"
+import { TaskListWidget } from "@/components/ui/TaskListWidget"
 
 function toolPartFromRecord(tc: ToolCallRecord, isStreaming = true): ToolPart {
   // "(no output)" from grep/filter commands ≠ error (just no match)
@@ -194,6 +196,8 @@ const MessageListFn = ({
   pendingAskUser, onResolveAskUser,
   pendingAskUserForm, onResolveAskUserForm,
 }: MessageListProps) => {
+  const todos = useTaskListStore((state) => state.todos)
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -209,6 +213,7 @@ const MessageListFn = ({
     <div className="relative flex-1 min-h-0">
       <ChatContainerRoot className="h-full">
         <ChatContainerContent className="gap-4 p-3">
+          {todos.length > 0 && <TaskListWidget todos={todos} />}
           {messages.map((msg, i) => (
             <MessageBubble
               key={`${msg.role}-${i}`}

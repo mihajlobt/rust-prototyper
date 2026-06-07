@@ -44,6 +44,7 @@ pub enum CompletionEvent {
     ToolResult { tool: String, success: bool, output: String, path: Option<String>, content: Option<String> },
     AskUser { request_id: u64, question: String, question_type: AskUserQuestionType, choices: Option<Vec<String>> },
     AskUserForm { request_id: u64, title: String, fields: Vec<FormField> },
+    TodoUpdate { todos: Vec<TodoItem> },
     Done { done_reason: Option<String> },
     Error { message: String },
 }
@@ -86,6 +87,28 @@ pub enum FormFieldType {
     Choice,
     Multiselect,
     Confirm,
+}
+
+/// Status of a single task_list entry. Shared between the `task_list` tool's
+/// JSON-schema (via JsonSchema) and the `TodoUpdate` event payload.
+#[derive(Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoStatus {
+    Pending,
+    InProgress,
+    Completed,
+}
+
+/// A single entry in a task_list call — mirrors Claude Code's TodoWrite shape.
+/// Shared between the `task_list` tool's args (via JsonSchema, see tools.rs)
+/// and the `TodoUpdate` event payload so the type is defined exactly once.
+#[derive(Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct TodoItem {
+    /// Imperative form shown while not in progress, e.g. "Run the test suite".
+    pub content: String,
+    pub status: TodoStatus,
+    /// Present-continuous form shown while in_progress, e.g. "Running the test suite".
+    pub active_form: String,
 }
 
 /// A single field definition within an ask_user_form call.

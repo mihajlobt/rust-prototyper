@@ -1,5 +1,6 @@
 use ollama_rs::generation::tools::{ToolInfo, ToolType, ToolFunctionInfo};
 use schemars::{JsonSchema, generate::SchemaSettings};
+use crate::commands::ai::TodoItem;
 
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct WriteFileArgs {
@@ -151,6 +152,73 @@ pub struct WebSearchArgs {
     pub num_results: Option<u32>,
 }
 
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct WebFetchArgs {
+    /// The URL to fetch. HTTP URLs are automatically upgraded to HTTPS.
+    pub url: String,
+    /// What to look for or extract from the page — guides what you do with the returned content.
+    pub prompt: String,
+}
+
+/// Tools whose full JSON schemas are withheld from the system prompt by default — the
+/// model sees only their name and one-line description in an `<available-deferred-tools>`
+/// block, and must call `tool_search` with `select:<name>` to load the full schema before
+/// it can call them. Keeps the per-turn schema payload smaller for panels that register
+/// many tools without losing access to any of them. `tool_search` itself is never deferred
+/// — that would make it unreachable.
+pub const DEFERRED_TOOL_NAMES: &[&str] = &["web_fetch", "skill", "task_list", "lsp"];
+
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct ToolSearchArgs {
+    /// Either `select:<name>[,<name>...]` to load specific deferred tools by exact name, or a free-text query to search tool names and descriptions by keyword.
+    pub query: String,
+    /// Maximum number of results to return for free-text queries (default 5).
+    pub max_results: Option<u32>,
+}
+
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct SkillArgs {
+    /// Name of the skill to invoke — must match a directory under .prototyper/skills/ (e.g. "scaffold-crud").
+    pub skill: String,
+    /// Arguments to substitute for $ARGUMENTS in the skill's instructions, if it uses that placeholder.
+    pub args: Option<String>,
+}
+
+#[derive(serde::Deserialize, JsonSchema)]
+pub struct TaskListArgs {
+    /// The complete, up-to-date task list — replaces any previously written list in full.
+    pub todos: Vec<TodoItem>,
+}
+
+/// Discriminated union over the four supported LSP operations. `line`/`character` are
+/// 1-based to match the numbered file listings the model already sees; `document_symbol`
+/// has no position because it lists every symbol in the whole file.
+#[derive(serde::Deserialize, JsonSchema)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum LspArgs {
+    Definition {
+        /// Project-relative path to the TypeScript/JavaScript file.
+        file_path: String,
+        /// 1-based line number.
+        line: u32,
+        /// 1-based character offset within the line.
+        character: u32,
+    },
+    References {
+        file_path: String,
+        line: u32,
+        character: u32,
+    },
+    Hover {
+        file_path: String,
+        line: u32,
+        character: u32,
+    },
+    DocumentSymbol {
+        file_path: String,
+    },
+}
+
 fn make_schema<T: JsonSchema>() -> schemars::Schema {
     let mut settings = SchemaSettings::draft07();
     settings.inline_subschemas = true;
@@ -290,6 +358,54 @@ field_type values:
                 name: "web_search".to_string(),
                 description: "Search the web via a local SearXNG instance and return titles, URLs, and snippets. Use to look up documentation, library releases, or any live information. Returns an error if SearXNG is not configured in Settings → AI.".to_string(),
                 parameters: make_schema::<WebSearchArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "web_fetch".to_string(),
+                description: "Fetches content from a URL and uses the prompt to describe what to extract from it. HTTP URLs are automatically upgraded to HTTPS. Read-only — does not modify files. Will fail for authenticated/private URLs and for URLs that resolve to private or internal network addresses.".to_string(),
+                parameters: make_schema::<WebFetchArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "tool_search".to_string(),
+                description: "Search for and load tools that aren't currently available. Some tools are not loaded into context by default to save space; this tool helps you discover and load them on demand. Use `select:<name>[,<name>...]` to load specific tools by exact name (once loaded, call them directly), or pass a free-text query to search by keyword across tool names and descriptions.".to_string(),
+                parameters: make_schema::<ToolSearchArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "skill".to_string(),
+                description: "Execute a skill — a reusable, file-based instruction bundle stored at .prototyper/skills/<name>/SKILL.md. When the user's request matches an available skill (including '/<name>' references), invoke it with this tool before responding; its returned instructions describe exactly what to do next. Pass args to fill in the skill's $ARGUMENTS placeholder.".to_string(),
+                parameters: make_schema::<SkillArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "task_list".to_string(),
+                description: r#"Write the complete task list for the current session, replacing any previous list. Use this to track progress on multi-step work.
+
+Rules:
+- Exactly ONE task may be "in_progress" at a time — finish (or explicitly drop) it before starting the next.
+- Mark a task "completed" IMMEDIATELY after finishing it. Do not batch completions.
+- Never mark a task "completed" if tests are failing, the implementation is partial, or you encountered errors you haven't resolved — keep it "in_progress" or add a new task describing what's left.
+- Completing the list is bookkeeping, not a deliverable: marking the last todo complete does not itself answer the user's request — you still need to actually deliver the result.
+
+Each item needs both `content` (imperative form, e.g. "Run the test suite") and `active_form` (present-continuous, e.g. "Running the test suite") so the UI can show the right one depending on status."#.to_string(),
+                parameters: make_schema::<TaskListArgs>(),
+            },
+        },
+        ToolInfo {
+            tool_type: ToolType::Function,
+            function: ToolFunctionInfo {
+                name: "lsp".to_string(),
+                description: "Get IDE-quality information about TypeScript/JavaScript code from a real language server — far more precise than grep for navigation. Operations: 'definition' (jump to where a symbol is defined), 'references' (find every usage), 'hover' (view a symbol's type/doc info), 'document_symbol' (list a file's outline of classes/functions/etc). `line` and `character` are 1-based, matching numbered file listings. The first call in a project spawns a `typescript-language-server` process and requires permission.".to_string(),
+                parameters: make_schema::<LspArgs>(),
             },
         },
     ]

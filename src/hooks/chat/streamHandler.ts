@@ -2,6 +2,7 @@ import type { MutableRefObject, RefObject } from "react"
 import { writeFile, type CompletionEvent } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { useAskUserStore } from "@/stores/askUserStore"
+import { useTaskListStore } from "@/stores/taskListStore"
 import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
 import { stripFences } from "./messages"
@@ -138,6 +139,8 @@ export function createStreamHandler(params: StreamHandlerParams) {
         title: msg.data.title,
         fields: msg.data.fields,
       })
+    } else if (msg.event === "TodoUpdate") {
+      useTaskListStore.getState().setTodos(msg.data.todos)
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
       // Single atomic mutation: first pending match (front-to-back) gets result + path.

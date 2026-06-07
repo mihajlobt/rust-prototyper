@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use futures::future::join_all;
@@ -13,7 +13,7 @@ use super::agent_loop::{
     check_permission_gate, request_ask_user, request_ask_user_form, request_permission,
     project_dir, setup_project_dir, MAX_ITERATIONS, MAX_WRITES, MAX_TOOL_OUTPUT_FOR_HISTORY,
 };
-use super::executor::execute_tool;
+use super::executor::{execute_tool, execute_task_list, resolve_tool_search};
 use super::tools::build_tools;
 use super::AgentLoopParams;
 
@@ -252,6 +252,9 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
     };
     let tools_json = serde_json::to_value(&tools).expect("tools serialization should never fail");
     let tools_claude = tools_to_claude_format(&tools_json);
+    // This loop never defers tool schemas (unlike run_agent_loop), so tool_search has
+    // nothing to "select:" — it's search-only here, and this set is always empty.
+    let no_deferred_tools: HashSet<String> = HashSet::new();
 
     let (system, mut messages) = extract_claude_messages(&initial_messages_json);
     let write_count = Arc::new(AtomicU8::new(0));
@@ -309,6 +312,8 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
             let http        = http_client.clone();
             let surl        = searxng_url.clone();
             let write_limit = write_file_limit;
+            let tools_ref   = &tools;
+            let no_deferred = &no_deferred_tools;
             async move {
                 if name == "write_file" && wc.load(Ordering::SeqCst) >= write_limit {
                     return (idx, crate::agent::executor::ToolExecutionResult {
@@ -331,6 +336,19 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
                         success: true, output: answers, written_path: None, written_content: None,
                     });
                 }
+                // task_list / tool_search: same no-gate, no-execute_tool treatment as in
+                // run_agent_loop (agent_loop.rs) — neither has side effects beyond their
+                // own bookkeeping. This loop never defers tool schemas (tools_claude is
+                // built once, in full, below), so tool_search here is search-only: there's
+                // nothing for `select:` to "load" and `newly_loaded` is always empty.
+                if name == "task_list" {
+                    let result = execute_task_list(&arg, &proj, &channel).await;
+                    return (idx, result);
+                }
+                if name == "tool_search" {
+                    let (result, _newly_loaded) = resolve_tool_search(&arg, tools_ref, no_deferred);
+                    return (idx, result);
+                }
 
                 let should_gate = check_permission_gate(&name, permission_mode, &allowlist);
                 if should_gate {
@@ -349,7 +367,7 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
                     }
                 }
 
-                let result = execute_tool(&name, &arg, &app_data_dir, &output_path, &proj, permission_mode, &http, &surl).await;
+                let result = execute_tool(&name, &arg, &app_data_dir, &output_path, &proj, permission_mode, &http, &surl, &app_handle).await;
                 if name == "write_file" && result.success {
                     wc.fetch_add(1, Ordering::SeqCst);
                 }

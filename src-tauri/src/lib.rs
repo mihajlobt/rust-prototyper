@@ -2,13 +2,15 @@ mod agent;
 pub mod commands;
 pub mod sandbox;
 
-use std::sync::{atomic::AtomicU16, atomic::AtomicU64, Mutex};
+use std::sync::{atomic::AtomicU16, atomic::AtomicU64, Arc, Mutex};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_shell::process::CommandChild;
 use tokio_util::sync::CancellationToken;
 
+use agent::executor::lsp::client::LspClient;
 use commands::bonsai::{BonsaiServer, BonsaiServerConfig};
 
 pub struct AppState {
@@ -29,6 +31,9 @@ pub struct AppState {
     /// Cancellation token for the in-flight Bonsai image generation request.
     /// `Some(token)` means a generation is running; cancelling it drops the HTTP connection.
     pub bonsai_generation_token: Mutex<Option<CancellationToken>>,
+    /// Long-lived `typescript-language-server` processes, one per project root, spawned
+    /// lazily by the `lsp` agent tool and reused across calls within that project.
+    pub(crate) lsp_servers: tokio::sync::Mutex<HashMap<PathBuf, Arc<LspClient>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -150,6 +155,7 @@ pub fn run() {
             bonsai_port: AtomicU16::new(0),
             bonsai_config: Mutex::new(BonsaiServerConfig::default()),
             bonsai_generation_token: Mutex::new(None),
+            lsp_servers: tokio::sync::Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::process::bun_dev,

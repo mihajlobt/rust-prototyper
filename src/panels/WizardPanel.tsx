@@ -22,6 +22,7 @@ import type { ToolPermissionDecision } from "@/lib/ipc"
 import type { WizardAnnotation, WizardPreviewTab } from "./wizard/types"
 import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults"
 import { useAskUserStore } from "@/stores/askUserStore"
+import { useTaskListStore } from "@/stores/taskListStore"
 import { confirm } from "@tauri-apps/plugin-dialog"
 
 function makeId(): string {
@@ -236,6 +237,7 @@ export function WizardPanel() {
     chat.clearChat()
     useAskUserStore.getState().clearAskUser()
     useAskUserStore.getState().clearAskUserForm()
+    useTaskListStore.getState().clearTodos()
     setAnnotations([])
     setPreviewTabs([])
     setActivePreviewTabId(null)

@@ -74,11 +74,12 @@ channel.onmessage = (msg) => {
 await generateCompletionStream(model, messages, host, apiKey, channel);
 ```
 
-`CompletionEvent` mirrors the Rust enum in `lib.rs` and includes 8 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `AskUserForm`, `Done`, `Error`.
+`CompletionEvent` mirrors the Rust enum in `lib.rs` and includes 9 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `AskUserForm`, `TodoUpdate`, `Done`, `Error`.
 
 - `AskUser` fires when the model calls `ask_user`; frontend calls `resolveAskUser()` within 180s.
 - `AskUserForm` fires when the model calls `ask_user_form`; frontend calls `resolveAskUserForm()` within 180s.
 - Both are section-agnostic: register `onAskUser`/`onAskUserForm` in `useChat` options. If no handler is registered the backend is immediately unblocked with an empty response.
+- `TodoUpdate` fires whenever the model calls `task_list`; it is fire-and-forget (no resolve call). Section-agnostic like `onAskUser`: register `onTodoUpdate` in `useChat` options — an unregistered handler is simply a no-op.
 
 ## Data persistence
 
