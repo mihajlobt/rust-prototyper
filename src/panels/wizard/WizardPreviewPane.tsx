@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Smartphone, Tablet, Monitor, Sun, Moon, Pencil, RefreshCw, Play, Square, Loader2 } from "lucide-react"
@@ -10,7 +10,7 @@ import type { WizardAnnotation, WizardPreviewTab } from "./types"
 interface WizardPreviewPaneProps {
   generatedDir: string
   device: "desktop" | "tablet" | "mobile"
-  darkMode: boolean
+  darkPreview: boolean
   annotations: WizardAnnotation[]
   /** When set, navigate the preview iframe to this route path after HMR settles. */
   previewNavigatePath: string | null
@@ -35,7 +35,7 @@ const FLOATING_TOGGLE_CLASS = "absolute top-2 right-2 z-10 h-7 bg-background/80 
 export function WizardPreviewPane({
   generatedDir,
   device,
-  darkMode,
+  darkPreview,
   annotations,
   previewNavigatePath,
   previewTabs,
@@ -62,17 +62,12 @@ export function WizardPreviewPane({
   const activeScreenTab = previewTabs.find((tab) => tab.id === activePreviewTabId)
   const currentPath = activeScreenTab ? (activeScreenTab.previewPath ?? activeScreenTab.urlPath) : null
 
-  useEffect(() => {
-    if (iframeRef.current) {
-      iframeRef.current.contentWindow?.postMessage({ type: "set-dark", value: darkMode }, "*")
-    }
-  }, [darkMode])
-
-  useEffect(() => {
-    if (!previewNavigatePath || !runnerUrl || !iframeRef.current) return
+  const iframeSrc = useMemo(() => {
+    if (!runnerUrl) return undefined
     const base = runnerUrl.replace(/\/$/, "")
-    iframeRef.current.src = `${base}${previewNavigatePath}`
-  }, [previewNavigatePath, runnerUrl])
+    const path = previewNavigatePath ?? currentPath
+    return path ? `${base}${path}?dark=${darkPreview}` : `${base}?dark=${darkPreview}`
+  }, [runnerUrl, previewNavigatePath, currentPath, darkPreview])
 
   const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement>, ref: React.RefObject<HTMLDivElement | null>) => {
     const overlay = ref.current
@@ -208,8 +203,8 @@ export function WizardPreviewPane({
         </div>
         <div className="w-px h-4 bg-border mx-1" />
 
-        <Button variant={darkMode ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={onToggleDark} title={darkMode ? "Light mode" : "Dark mode"}>
-          {darkMode ? <Moon size={12} /> : <Sun size={12} />}
+        <Button variant={darkPreview ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={onToggleDark} title={darkPreview ? "Light mode" : "Dark mode"}>
+          {darkPreview ? <Moon size={12} /> : <Sun size={12} />}
         </Button>
 
         <Button size="icon" variant="ghost" className="h-7 w-7"
@@ -253,7 +248,7 @@ export function WizardPreviewPane({
               <TabsTrigger value="gallery" className="text-xs">Gallery</TabsTrigger>
             </TabsList>
           </Tabs>
-          <ThemeTokenPreview css={themeCss ?? ""} isDark={darkMode} viewMode={designMode} />
+          <ThemeTokenPreview css={themeCss ?? ""} isDark={darkPreview} viewMode={designMode} />
           <AnnotationOverlay
             overlayRef={designOverlayRef}
             annotationMode={annotationMode}
@@ -275,7 +270,7 @@ export function WizardPreviewPane({
             {runnerUrl ? (
               <iframe
                 ref={iframeRef}
-                src={runnerUrl}
+                src={iframeSrc}
                 className="h-full w-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms"
               />

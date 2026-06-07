@@ -15,7 +15,6 @@ import type { RefObject } from "react";
 interface ComponentsPreviewToolbarProps {
   themes: FileEntry[];
   initialPreviewSrc: string | undefined;
-  iframeRef: RefObject<HTMLIFrameElement | null>;
   stoppedManuallyRef: RefObject<boolean>;
   generatedDir: string;
 }
@@ -25,7 +24,6 @@ interface ComponentsPreviewToolbarProps {
 export function ComponentsPreviewToolbar({
   themes,
   initialPreviewSrc,
-  iframeRef,
   stoppedManuallyRef,
   generatedDir,
 }: ComponentsPreviewToolbarProps) {
@@ -77,19 +75,14 @@ export function ComponentsPreviewToolbar({
       </Select>
       <div className="w-px h-4 bg-border" />
       <Button
-        variant={ps.componentsDarkPreview ? "secondary" : "ghost"}
+        variant={ps.darkPreview ? "secondary" : "ghost"}
         size="icon" className="h-7 w-7"
         onClick={() => {
-          setProjectSettings({ componentsDarkPreview: !ps.componentsDarkPreview });
-          // Also send postMessage to iframe for immediate dark mode toggle
-          iframeRef.current?.contentWindow?.postMessage(
-            { type: "set-dark", value: !ps.componentsDarkPreview },
-            "*"
-          );
+          setProjectSettings({ darkPreview: !ps.darkPreview });
         }}
-        title={ps.componentsDarkPreview ? "Light preview" : "Dark preview"}
+        title={ps.darkPreview ? "Light preview" : "Dark preview"}
       >
-        {ps.componentsDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+        {ps.darkPreview ? <Moon size={12} /> : <Sun size={12} />}
       </Button>
       <Button
         variant={ps.shadcnMode ? "secondary" : "ghost"}

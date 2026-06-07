@@ -48,7 +48,7 @@ export function ScreensPanel() {
   const screensDevice = ps.screensDevice;
   const screensShowInspector = ps.screensShowInspector;
   const screensZoom = ps.screensZoom;
-  const screensDarkPreview = ps.screensDarkPreview;
+  const screensDarkPreview = ps.darkPreview;
   const screensCodeOpen = ps.screensCodeOpen;
   const queryClient = useQueryClient();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
@@ -95,15 +95,13 @@ export function ScreensPanel() {
 
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
-  const darkAtUrlArrival = useRef(screensDarkPreview);
-  useEffect(() => { darkAtUrlArrival.current = screensDarkPreview; }, [screensDarkPreview]);
   const initialPreviewSrc = useMemo(
     () => {
       if (!runnerUrl || !screenId) return undefined;
-      const base = runnerUrl.replace(/\/$/, ""); // strip trailing slash to avoid //
-      return `${base}/${screenId}?dark=${darkAtUrlArrival.current}`;
+      const base = runnerUrl.replace(/\/$/, "");
+      return `${base}/${screenId}?dark=${screensDarkPreview}`;
     },
-    [runnerUrl, screenId]
+    [runnerUrl, screenId, screensDarkPreview]
   );
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
@@ -202,14 +200,6 @@ export function ScreensPanel() {
     ensureServer();
     return () => { cancelled = true; };
   }, [settings.project, runnerStatus, generatedDir, startRunner, ps.runnerPort, settings.iconLibrary]);
-
-  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
-
-  useEffect(() => {
-    const iframe = previewIframeRef.current;
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage({ type: "set-dark", value: screensDarkPreview }, "*");
-  }, [screensDarkPreview, runnerUrl]);
 
   // Track the live route inside the iframe — generated app posts __route-change on every navigation
   useEffect(() => {
@@ -483,7 +473,6 @@ export function ScreensPanel() {
                   themes={themes}
                   livePreviewPath={livePreviewPath}
                   initialPreviewSrc={initialPreviewSrc}
-                  iframeRef={previewIframeRef}
                   stoppedManuallyRef={stoppedManuallyRef}
                   generatedDir={generatedDir}
                 />

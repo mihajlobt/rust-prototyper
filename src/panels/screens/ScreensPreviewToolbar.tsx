@@ -10,7 +10,6 @@ interface ScreensPreviewToolbarProps {
   themes: FileEntry[];
   livePreviewPath: string | null;
   initialPreviewSrc: string | undefined;
-  iframeRef: RefObject<HTMLIFrameElement | null>;
   stoppedManuallyRef: RefObject<boolean>;
   generatedDir: string;
 }
@@ -19,7 +18,6 @@ export function ScreensPreviewToolbar({
   themes,
   livePreviewPath,
   initialPreviewSrc,
-  iframeRef,
   stoppedManuallyRef,
   generatedDir,
 }: ScreensPreviewToolbarProps) {
@@ -67,15 +65,14 @@ export function ScreensPreviewToolbar({
       </Select>
       <div className="w-px h-4 bg-border" />
       <Button
-        variant={ps.screensDarkPreview ? "secondary" : "ghost"}
+        variant={ps.darkPreview ? "secondary" : "ghost"}
         size="icon" className="h-7 w-7"
         onClick={() => {
-          setProjectSettings({ screensDarkPreview: !ps.screensDarkPreview });
-          iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: !ps.screensDarkPreview }, "*");
+          setProjectSettings({ darkPreview: !ps.darkPreview });
         }}
-        title={ps.screensDarkPreview ? "Light preview" : "Dark preview"}
+        title={ps.darkPreview ? "Light preview" : "Dark preview"}
       >
-        {ps.screensDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+        {ps.darkPreview ? <Moon size={12} /> : <Sun size={12} />}
       </Button>
       <div className="w-px h-4 bg-border" />
       <div className="flex items-center gap-1">

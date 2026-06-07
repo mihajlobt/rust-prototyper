@@ -29,11 +29,13 @@ export interface ProjectSettings {
     screens: string;
   };
 
+  // Global preview dark mode — one toggle for all panels
+  darkPreview: boolean;
+
   // Screens panel
   screensDevice: "desktop" | "tablet" | "mobile";
   screensZoom: number;
   screensShowInspector: boolean;
-  screensDarkPreview: boolean;
   screensCodeOpen: boolean;
   screensCodeTab: "editor" | "links" | "flow";
   /** Theme applied to the live screen preview only — independent of the
@@ -42,7 +44,6 @@ export interface ProjectSettings {
 
   // Components panel
   componentsDevice: "desktop" | "tablet" | "mobile";
-  componentsDarkPreview: boolean;
   componentsShowInspector: boolean;
   componentsCodeOpen: boolean;
   /** Theme applied to the live component preview only — independent of the
@@ -51,7 +52,6 @@ export interface ProjectSettings {
 
   // Themes panel
   themesDevice: "desktop" | "tablet" | "mobile";
-  themesDarkPreview: boolean;
   themesShowInspector: boolean;
   themesCodeOpen: boolean;
   themesFramework: "shadcn" | "daisy" | "bootstrap" | "generic";
@@ -62,7 +62,6 @@ export interface ProjectSettings {
   // Runner panel
   runnerDevice: "desktop" | "tablet" | "mobile";
   runnerZoom: number;
-  runnerDarkPreview: boolean;
   runnerTerminalOpen: boolean;
   runnerActiveTab: "terminal" | "logs" | "network";
   runnerEditorTabs: string[];
@@ -101,7 +100,6 @@ export interface ProjectSettings {
 
   // Wizard panel
   wizardDevice: "desktop" | "tablet" | "mobile";
-  wizardDarkPreview: boolean;
   wizardShowInspector: boolean;
 }
 
@@ -113,6 +111,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   activeWorkflow: null,
   activeApi: null,
   activePlan: null,
+
+  darkPreview: false,
 
   plansMode: "split",
   plansChatOpen: false,
@@ -129,19 +129,16 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   screensDevice: "desktop",
   screensZoom: 1,
   screensShowInspector: false,
-  screensDarkPreview: false,
   screensCodeOpen: false,
   screensCodeTab: "editor",
   screensPreviewTheme: "",
 
   componentsDevice: "desktop",
-  componentsDarkPreview: false,
   componentsShowInspector: false,
   componentsCodeOpen: false,
   componentsPreviewTheme: "",
 
   themesDevice: "desktop",
-  themesDarkPreview: false,
   themesShowInspector: false,
   themesCodeOpen: false,
   themesFramework: "shadcn",
@@ -151,7 +148,6 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
 
   runnerDevice: "desktop",
   runnerZoom: 1,
-  runnerDarkPreview: false,
   runnerTerminalOpen: true,
   runnerActiveTab: "terminal",
   runnerEditorTabs: [],
@@ -186,7 +182,6 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   assetsPreset: 0,
 
   wizardDevice: "desktop",
-  wizardDarkPreview: false,
   wizardShowInspector: false,
 };
 
@@ -264,6 +259,13 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     // Coerce legacy "ports" tab to "links"
     if ((loaded as unknown as Record<string, unknown>).screensCodeTab === "ports") {
       (loaded as unknown as Record<string, unknown>).screensCodeTab = "links";
+    }
+    // Migrate per-panel dark preview flags to unified darkPreview
+    {
+      const r = loaded as unknown as Record<string, unknown>;
+      if (r.screensDarkPreview || r.componentsDarkPreview || r.themesDarkPreview || r.runnerDarkPreview || r.wizardDarkPreview) {
+        r.darkPreview = true;
+      }
     }
     set({ projectId, ps: loaded, loaded: true });
   },

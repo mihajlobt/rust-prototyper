@@ -34,7 +34,7 @@ export function RunnerPanel() {
   const devServerStore = useDevServerStore();
   const running = devServerStore.runnerStatus === "running" || devServerStore.runnerStatus === "starting";
   const devUrl = devServerStore.runnerUrl;
-  const runnerDark = ps.runnerDarkPreview;
+  const runnerDark = ps.darkPreview;
 
   const [tabContents, setTabContents] = useState<Record<string, string>>({});
   const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
@@ -82,7 +82,22 @@ export function RunnerPanel() {
   const runningRef = useRef(running);
   useEffect(() => { runningRef.current = running; }, [running]);
 
-  // Reload iframe on HMR — dark mode is sent via postMessage, not URL param
+  const runnerDarkRef = useRef(runnerDark);
+  useEffect(() => { runnerDarkRef.current = runnerDark; }, [runnerDark]);
+
+  // Compute the iframe URL — only changes when devUrl changes (not on dark toggle).
+  // Dark mode is applied via postMessage for live toggling (avoids iframe reload).
+  // The ?dark= param ensures correct initial state on load / HMR reload.
+  const runnerIframeSrc = useMemo(
+    () => {
+      if (!devUrl) return undefined;
+      const base = devUrl.replace(/\/$/, "");
+      return `${base}?dark=${runnerDarkRef.current}`;
+    },
+    [devUrl]
+  );
+
+  // Reload iframe on HMR — dark mode is baked into the URL via ?dark= param
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       xtermRef.current?.writeln(event.line);
@@ -90,11 +105,18 @@ export function RunnerPanel() {
       setLogTick((t) => t + 1);
       if (runningRef.current && iframeRef.current && devUrl) {
         const base = devUrl.endsWith("/") ? devUrl.slice(0, -1) : devUrl;
-        iframeRef.current.src = base;
+        iframeRef.current.src = `${base}?dark=${runnerDarkRef.current}`;
       }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
   }, [devUrl]);
+
+  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: "set-dark", value: runnerDark }, "*");
+  }, [runnerDark]);
 
   // ── Tab management ──────────────────────────────────────────────────────
 
@@ -302,6 +324,7 @@ export function RunnerPanel() {
               <Allotment.Pane minSize={300}>
                 <RunnerPreview
                   devUrl={devUrl}
+                  runnerIframeSrc={runnerIframeSrc}
                   runnerDark={runnerDark}
                   runnerDevice={ps.runnerDevice}
                   runnerZoom={ps.runnerZoom}

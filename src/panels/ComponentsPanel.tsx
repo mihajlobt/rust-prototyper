@@ -84,7 +84,7 @@ export function ComponentsPanel() {
 
   const componentsShowInspector = ps.componentsShowInspector;
   const componentsDevice = ps.componentsDevice;
-  const componentsDarkPreview = ps.componentsDarkPreview;
+  const componentsDarkPreview = ps.darkPreview;
   const componentsCodeOpen = ps.componentsCodeOpen;
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const selectedTheme = ps.stylePreset;       // generation design language — drives DESIGN.md + design tokens
@@ -184,15 +184,6 @@ export function ComponentsPanel() {
       notify.error("Failed to write preview theme CSS", getErrorMessage(e));
     });
   }, [previewThemeCss, runnerStatus, generatedDir]);
-
-  // ─── Navigate iframe to component's preview route ────────────────────────────
-  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
-
-  useEffect(() => {
-    const iframe = previewIframeRef.current;
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage({ type: "set-dark", value: componentsDarkPreview }, "*");
-  }, [componentsDarkPreview, runnerUrl]);
 
   const saveCode = useCallback(async (value: string) => {
     if (!value || !selectedComponent) return;
@@ -517,7 +508,6 @@ export function ComponentsPanel() {
                 <ComponentsPreviewToolbar
                   themes={themes}
                   initialPreviewSrc={initialPreviewSrc}
-                  iframeRef={previewIframeRef}
                   stoppedManuallyRef={stoppedManuallyRef}
                   generatedDir={generatedDir}
                 />

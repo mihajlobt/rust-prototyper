@@ -47,7 +47,7 @@ export function ThemesPanel() {
   const themesDevice = ps.themesDevice;
   const themesFramework = ps.themesFramework;
   const themesDarkLightSupport = ps.themesDarkLightSupport;
-  const themesDarkPreview = ps.themesDarkPreview;
+  const themesDarkPreview = ps.darkPreview;
   const themesCodeOpen = ps.themesCodeOpen;
   const themesShowInspector = ps.themesShowInspector;
   const themesPreviewMode = ps.themesPreviewMode;
@@ -436,10 +436,10 @@ export function ThemesPanel() {
               <div className="h-full flex flex-col">
                 <ThemePreviewToolbar
                   themesDevice={themesDevice}
-                  themesDarkPreview={themesDarkPreview}
+                  darkPreview={themesDarkPreview}
                   viewMode={themesPreviewMode}
                   onSetDevice={(d) => setProjectSettings({ themesDevice: d })}
-                  onToggleDarkPreview={() => setProjectSettings({ themesDarkPreview: !themesDarkPreview })}
+                  onToggleDarkPreview={() => setProjectSettings({ darkPreview: !themesDarkPreview })}
                   onSetViewMode={(m) => setProjectSettings({ themesPreviewMode: m })}
                 />
                 <div

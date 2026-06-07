@@ -343,7 +343,7 @@ export function WizardPanel() {
               <WizardPreviewPane
                 generatedDir={`projects/${settings.project}/generated`}
                 device={projectSettings.wizardDevice}
-                darkMode={projectSettings.wizardDarkPreview}
+                 darkPreview={projectSettings.darkPreview}
                 annotations={annotations}
                 previewNavigatePath={previewNavigatePath}
                 previewTabs={previewTabs}
@@ -351,7 +351,7 @@ export function WizardPanel() {
                 themeCss={themeCss}
                 onSelectTab={handleSelectPreviewTab}
                 onSetDevice={(device) => setProjectSettings({ wizardDevice: device })}
-                onToggleDark={() => setProjectSettings({ wizardDarkPreview: !projectSettings.wizardDarkPreview })}
+                 onToggleDark={() => setProjectSettings({ darkPreview: !projectSettings.darkPreview })}
                 onAddAnnotation={(annotation) => setAnnotations((prev) => [...prev, { ...annotation, id: makeId(), createdAt: Date.now() }])}
               />
             </Allotment.Pane>

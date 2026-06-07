@@ -7,6 +7,7 @@ import type { ProjectSettings } from "@/stores/projectSettingsStore";
 
 export interface RunnerPreviewProps {
   devUrl: string | null;
+  runnerIframeSrc: string | undefined;
   runnerDark: boolean;
   runnerDevice: ProjectSettings["runnerDevice"];
   runnerZoom: number;
@@ -25,6 +26,7 @@ const deviceWidth = { desktop: "100%", tablet: "768px", mobile: "375px" } as con
  *  `iframeRef.current.src` when terminal output arrives. */
 export function RunnerPreview({
   devUrl,
+  runnerIframeSrc,
   runnerDark,
   runnerDevice,
   runnerZoom,
@@ -53,7 +55,7 @@ export function RunnerPreview({
           <Button variant={runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "desktop" })} title="Desktop"><Monitor    size={11} /></Button>
         </div>
         <div className="w-px h-3 bg-border shrink-0" />
-        <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { const next = !runnerDark; setProjectSettings({ runnerDarkPreview: next }); iframeRef.current?.contentWindow?.postMessage({ type: "set-dark", value: next }, "*"); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
+        <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { setProjectSettings({ darkPreview: !runnerDark }); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
         <div className="w-px h-3 bg-border shrink-0" />
         <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomOut}><Minus size={11} /></Button>
         <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none shrink-0" onClick={zoomReset}>{Math.round(runnerZoom * 100)}%</button>
@@ -62,7 +64,7 @@ export function RunnerPreview({
       <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
         {devUrl ? (
           <div className="h-full bg-background shadow-lg border border-border overflow-hidden" style={{ width: deviceWidth[runnerDevice], transform: `scale(${runnerZoom})`, transformOrigin: "top center" }}>
-            <iframe ref={iframeRef} src={devUrl ? devUrl.replace(/\/$/, "") : undefined} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
+            <iframe ref={iframeRef} src={runnerIframeSrc} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
           </div>
         ) : (
           <div className="flex items-center justify-center text-muted-foreground text-sm">

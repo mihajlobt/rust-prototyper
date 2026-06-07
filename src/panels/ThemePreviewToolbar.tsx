@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 interface ThemePreviewToolbarProps {
   themesDevice: "mobile" | "tablet" | "desktop";
-  themesDarkPreview: boolean;
+  darkPreview: boolean;
   viewMode: "preview" | "gallery";
   onSetDevice: (device: "mobile" | "tablet" | "desktop") => void;
   onToggleDarkPreview: () => void;
@@ -13,7 +13,7 @@ interface ThemePreviewToolbarProps {
 
 export function ThemePreviewToolbar({
   themesDevice,
-  themesDarkPreview,
+  darkPreview,
   viewMode,
   onSetDevice,
   onToggleDarkPreview,
@@ -64,13 +64,13 @@ export function ThemePreviewToolbar({
       </div>
       <div className="w-px h-4 bg-border mx-1" />
       <Button
-        variant={themesDarkPreview ? "secondary" : "ghost"}
+        variant={darkPreview ? "secondary" : "ghost"}
         size="icon"
         className="h-7 w-7"
         onClick={onToggleDarkPreview}
-        title={themesDarkPreview ? "Light preview" : "Dark preview"}
+        title={darkPreview ? "Light preview" : "Dark preview"}
       >
-        {themesDarkPreview ? <Moon size={12} /> : <Sun size={12} />}
+        {darkPreview ? <Moon size={12} /> : <Sun size={12} />}
       </Button>
     </div>
   );
