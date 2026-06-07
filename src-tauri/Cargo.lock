@@ -4730,7 +4730,7 @@ dependencies = [
 
 [[package]]
 name = "prototyper"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "agcodex-execpolicy",
  "bytes",
