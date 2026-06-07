@@ -71,6 +71,7 @@ function getActivatedTools(settings: Settings, panelKey: PanelKey): string[] {
 
 export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
   const [toolTableOpen, setToolTableOpen] = useState(false);
+  const [safetyLimitsOpen, setSafetyLimitsOpen] = useState(false);
 
   function toggle(panelKey: PanelKey, toolName: string, checked: boolean) {
     const current = getActivatedTools(settings, panelKey);
@@ -206,6 +207,59 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
             <p className="text-xs text-muted-foreground">Leave blank to use global default.</p>
           </div>
         </section>
+
+        {/* Safety Limits — collapsible */}
+        <Collapsible open={safetyLimitsOpen} onOpenChange={setSafetyLimitsOpen}>
+          <section className="space-y-2">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-left group">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Safety Limits</p>
+              <ChevronDown
+                size={13}
+                className="text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+              />
+            </CollapsibleTrigger>
+            {!safetyLimitsOpen && (
+              <p className="text-xs text-muted-foreground">
+                Configure safety limits for agent tool usage.
+              </p>
+            )}
+            <CollapsibleContent>
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-40 shrink-0">writeFileLimit</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={255}
+                    className="w-24 text-xs"
+                    value={settings.writeFileLimit}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (!isNaN(n) && n >= 1) setSettings({ writeFileLimit: n });
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">max write_file calls per session</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-40 shrink-0">toolOutputHistoryLimit</span>
+                  <Input
+                    type="number"
+                    min={1000}
+                    max={100000}
+                    step={1000}
+                    className="w-24 text-xs"
+                    value={settings.toolOutputHistoryLimit}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (!isNaN(n) && n >= 1000) setSettings({ toolOutputHistoryLimit: n });
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">max chars of tool output in history</span>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </section>
+        </Collapsible>
 
         {/* Tool Access — collapsible */}
         <Collapsible open={toolTableOpen} onOpenChange={setToolTableOpen}>

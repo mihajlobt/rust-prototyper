@@ -293,6 +293,8 @@ export async function generateCompletionStream(
   maxToolCalls?: number,
   toolFilter?: string[],
   searxngUrl?: string,
+  writeFileLimit?: number,
+  toolOutputHistoryLimit?: number,
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -310,6 +312,8 @@ export async function generateCompletionStream(
       maxToolCalls: maxToolCalls ?? null,
       toolFilter: toolFilter ?? [],
       searxngUrl: searxngUrl ?? null,
+      writeFileLimit: writeFileLimit ?? null,
+      toolOutputHistoryLimit: toolOutputHistoryLimit ?? null,
     },
     onEvent,
   });

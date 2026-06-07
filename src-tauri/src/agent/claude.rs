@@ -231,11 +231,15 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
         // unused for Claude:
         host: _, model_family: _,
         searxng_url,
+        write_file_limit,
+        tool_output_history_limit,
     } = params;
 
     let enable_thinking = matches!(think.as_ref(), Some(ThinkType::True));
 
     let max_iterations = max_tool_calls.filter(|&n| n > 0).unwrap_or(MAX_ITERATIONS);
+    let write_file_limit = write_file_limit.filter(|&n| n > 0).unwrap_or(MAX_WRITES);
+    let tool_output_history_limit = tool_output_history_limit.unwrap_or(MAX_TOOL_OUTPUT_FOR_HISTORY);
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
     setup_project_dir(&proj_dir).await;
@@ -304,11 +308,12 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
             let output_path  = output_path.to_string();
             let http        = http_client.clone();
             let surl        = searxng_url.clone();
+            let write_limit = write_file_limit;
             async move {
-                if name == "write_file" && wc.load(Ordering::SeqCst) >= MAX_WRITES {
+                if name == "write_file" && wc.load(Ordering::SeqCst) >= write_limit {
                     return (idx, crate::agent::executor::ToolExecutionResult {
                         success: false,
-                        output: format!("write_file: limit of {MAX_WRITES} writes reached"),
+                        output: format!("write_file: limit of {write_limit} writes reached"),
                         written_path: None,
                         written_content: None,
                     });
@@ -375,8 +380,8 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
                 content: res.written_content.clone(),
             });
 
-            let history_output = if res.output.len() > MAX_TOOL_OUTPUT_FOR_HISTORY {
-                let truncated: String = res.output.chars().take(MAX_TOOL_OUTPUT_FOR_HISTORY).collect();
+            let history_output = if res.output.len() > tool_output_history_limit {
+                let truncated: String = res.output.chars().take(tool_output_history_limit).collect();
                 format!("{}\n... (output truncated, {} characters total)", truncated, res.output.len())
             } else {
                 res.output.clone()

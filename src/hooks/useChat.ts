@@ -67,6 +67,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const toolAllowlist = useAppStore((s) => s.settings.toolAllowlist)
   const maxToolCalls = useAppStore((s) => s.settings.maxToolCalls)
   const searxngUrl  = useAppStore((s) => s.settings.searxngUrl)
+  const writeFileLimit = useAppStore((s) => s.settings.writeFileLimit)
+  const toolOutputHistoryLimit = useAppStore((s) => s.settings.toolOutputHistoryLimit)
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -235,6 +237,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         panelMaxToolCalls ?? maxToolCalls,
         panelToolFilter,
         searxngUrl || undefined,
+        writeFileLimit,
+        toolOutputHistoryLimit,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -250,6 +254,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
     panelToolFilter, panelMaxToolCalls, searxngUrl,
+    writeFileLimit, toolOutputHistoryLimit,
   ])
 
   const clearChat = useCallback(() => {

@@ -450,14 +450,20 @@ pub struct AgentLoopParams<'a> {
     pub tool_filter: HashSet<String>,
     /// SearXNG base URL for the web_search tool (e.g. "http://localhost:8080"). Empty = disabled.
     pub searxng_url: String,
+    /// Override for MAX_WRITES. None falls back to compiled default.
+    pub write_file_limit: Option<u8>,
+    /// Override for MAX_TOOL_OUTPUT_FOR_HISTORY. None falls back to compiled default.
+    pub tool_output_history_limit: Option<usize>,
 }
 
 pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError> {
     if params.provider == "claude" {
         return super::claude::run_agent_loop_claude(params).await;
     }
-    let AgentLoopParams { provider: _, http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter, searxng_url } = params;
+    let AgentLoopParams { provider: _, http_client, host, api_key, model, model_family, initial_messages_json, think, app_data_dir, output_path, channel, cancel_token, app_handle, permission_mode, tool_allowlist, max_tool_calls, tool_filter, searxng_url, write_file_limit, tool_output_history_limit } = params;
     let max_iterations = max_tool_calls.filter(|&n| n > 0).unwrap_or(MAX_ITERATIONS);
+    let write_file_limit = write_file_limit.filter(|&n| n > 0).unwrap_or(MAX_WRITES);
+    let tool_output_history_limit = tool_output_history_limit.unwrap_or(MAX_TOOL_OUTPUT_FOR_HISTORY);
     let proj_dir = project_dir(app_data_dir, output_path);
     let _ = tokio::fs::create_dir_all(&proj_dir).await;
     setup_project_dir(&proj_dir).await;
@@ -537,12 +543,12 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 let surl = searxng_url.clone();
                 async move {
                     let skip = if name == "write_file" {
-                        wc.load(Ordering::SeqCst) >= MAX_WRITES
+                        wc.load(Ordering::SeqCst) >= write_file_limit
                     } else {
                         false
                     };
                     if skip {
-                        let output = format!("write_file: limit of {MAX_WRITES} writes reached. Use read_file or bash to continue verifying.");
+                        let output = format!("write_file: limit of {write_file_limit} writes reached. Use read_file or bash to continue verifying.");
                         return (idx, ToolExecutionResult {
                             success: false,
                             output,
@@ -621,8 +627,8 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 content: res.written_content.clone(),
             });
 
-            let history_output = if res.output.len() > MAX_TOOL_OUTPUT_FOR_HISTORY {
-                let truncated: String = res.output.chars().take(MAX_TOOL_OUTPUT_FOR_HISTORY).collect();
+            let history_output = if res.output.len() > tool_output_history_limit {
+                let truncated: String = res.output.chars().take(tool_output_history_limit).collect();
                 format!("{}\n... (output truncated, {} characters total)", truncated, res.output.len())
             } else {
                 res.output.clone()

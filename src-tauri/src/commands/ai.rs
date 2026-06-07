@@ -138,6 +138,12 @@ pub struct CompletionRequest {
     /// Empty string means web_search is not configured.
     #[serde(default)]
     pub searxng_url: Option<String>,
+    /// Maximum write_file calls per session. Defaults to MAX_WRITES when absent or zero.
+    #[serde(default)]
+    pub write_file_limit: Option<u8>,
+    /// Maximum characters of tool output appended to history. Defaults to MAX_TOOL_OUTPUT_FOR_HISTORY.
+    #[serde(default)]
+    pub tool_output_history_limit: Option<usize>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -257,6 +263,8 @@ async fn generate_ollama_completion_stream(
             max_tool_calls: request.max_tool_calls,
             tool_filter,
             searxng_url: request.searxng_url.clone().unwrap_or_default(),
+            write_file_limit: request.write_file_limit,
+            tool_output_history_limit: request.tool_output_history_limit,
         }).await
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name
@@ -407,6 +415,8 @@ async fn generate_claude_completion_stream(
             max_tool_calls: request.max_tool_calls,
             tool_filter,
             searxng_url: request.searxng_url.clone().unwrap_or_default(),
+            write_file_limit: request.write_file_limit,
+            tool_output_history_limit: request.tool_output_history_limit,
         }).await
     } else {
         chat_completion_claude(http_client, &request.api_key, &request.model, &request.messages, true, Some(channel), cancel_token).await.map(|_| ())

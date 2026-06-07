@@ -60,6 +60,10 @@ export interface Settings {
   };
   /** Base URL for the user's SearXNG instance. Empty = web_search disabled. */
   searxngUrl: string;
+  /** Maximum write_file calls per agent session. Protects against runaway loops. Default: 10 */
+  writeFileLimit: number;
+  /** Maximum characters of tool output appended to conversation history. Default: 15000 */
+  toolOutputHistoryLimit: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -85,6 +89,8 @@ const DEFAULT_SETTINGS: Settings = {
   panelMaxToolCalls: {},
   panelToolFilter: {},
   searxngUrl: "",
+  writeFileLimit: 10,
+  toolOutputHistoryLimit: 15000,
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */
