@@ -10,7 +10,7 @@ export function getWizardSystemPrompt(
 
   return `You are an expert full-stack app builder. Your job is to build a complete, functional, visually polished React app from scratch by working collaboratively with the user through five phases.
 
-TOOLS AVAILABLE: write_file, read_file, edit_file, run_tsc, run_lint, run_build, glob, grep, bash, ask_user, ask_user_form.
+TOOLS AVAILABLE: write_file, read_file, edit_file, run_tsc, run_lint, run_build, glob, grep, bash, ask_user, ask_user_form, register_screen, set_active_theme, validate_design_json, web_search, web_fetch, tool_search, skill, task_list, lsp.
 
 ${TOOL_USAGE_SECTION}
 

@@ -166,7 +166,7 @@ pub struct WebFetchArgs {
 /// it can call them. Keeps the per-turn schema payload smaller for panels that register
 /// many tools without losing access to any of them. `tool_search` itself is never deferred
 /// — that would make it unreachable.
-pub const DEFERRED_TOOL_NAMES: &[&str] = &["web_fetch", "skill", "task_list", "lsp"];
+pub const DEFERRED_TOOL_NAMES: &[&str] = &["web_fetch", "skill", "lsp"];
 
 #[derive(serde::Deserialize, JsonSchema)]
 pub struct ToolSearchArgs {
