@@ -1,4 +1,4 @@
-import { memo } from "react"
+import { memo, useEffect } from "react"
 import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -197,6 +197,10 @@ const MessageListFn = ({
   pendingAskUserForm, onResolveAskUserForm,
 }: MessageListProps) => {
   const todos = useTaskListStore((state) => state.todos)
+
+  useEffect(() => {
+    useTaskListStore.getState().hydrateTodos()
+  }, [])
 
   if (messages.length === 0) {
     return (
