@@ -94,54 +94,61 @@ export function PlannerChat({
   onToggleInspector,
 }: PlannerChatProps) {
   const { ref, onDragEnd, defaultSizes } = useAllotmentLayout("plans-inspector", 3, [true, true, showInspector])
+  const { ref: chatInputRef, onDragEnd: chatInputOnDragEnd, defaultSizes: chatInputSizes } = useAllotmentLayout("plans-chat-input", 2)
   const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
 
   return (
     <Allotment vertical ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes} onVisibleChange={(_i, v) => { if (!v) onToggleInspector(); }}>
       <Allotment.Pane minSize={200}>
-        <div className="flex h-full flex-col overflow-hidden">
-          <MessageList
-            messages={messages}
-            isStreaming={isStreaming}
-            thinkingContent={thinkingContent}
-            pendingPermissions={pendingPermissions}
-            onApplyCode={onApplyCode}
-            onRegenerate={onRegenerate}
-            onDeleteFrom={onDeleteFrom}
-            onResolvePermission={onResolvePermission}
-            pendingAskUser={pendingAskUser}
-            onResolveAskUser={clearAskUser}
-            pendingAskUserForm={pendingAskUserForm}
-            onResolveAskUserForm={clearAskUserForm}
-          />
-          <div className="shrink-0 border-t border-border px-3 pb-3 pt-2">
-            <ChatInput
-              value={input}
-              onChange={onChangeInput}
-              onSend={onSend}
-              disabled={isStreaming}
-              attachments={attachments}
-              onAddAttachment={onAddAttachment}
-              onRemoveAttachment={onRemoveAttachment}
-              mentions={mentions}
-              onAddMention={onAddMention}
-              onRemoveMention={onRemoveMention}
-              projectPath={projectPath}
-              placeholder={placeholder}
-              thinkEnabled={thinkEnabled}
-              onToggleThink={onToggleThink}
-              thinkLevel={thinkLevel}
-              onSetThinkLevel={onSetThinkLevel}
-              isGptOssFamily={isGptOssFamily}
-              canThink={canThink}
-              canVision={canVision}
-              toolsEnabled={toolsEnabled}
-              onToggleTools={onToggleTools}
-              canTools={canTools}
-              onStop={isStreaming ? onStopChat : undefined}
-            />
-          </div>
-        </div>
+        <Allotment vertical ref={chatInputRef} onDragEnd={chatInputOnDragEnd} defaultSizes={chatInputSizes}>
+          <Allotment.Pane minSize={80}>
+            <div className="h-full flex flex-col">
+              <MessageList
+                messages={messages}
+                isStreaming={isStreaming}
+                thinkingContent={thinkingContent}
+                pendingPermissions={pendingPermissions}
+                onApplyCode={onApplyCode}
+                onRegenerate={onRegenerate}
+                onDeleteFrom={onDeleteFrom}
+                onResolvePermission={onResolvePermission}
+                pendingAskUser={pendingAskUser}
+                onResolveAskUser={clearAskUser}
+                pendingAskUserForm={pendingAskUserForm}
+                onResolveAskUserForm={clearAskUserForm}
+              />
+            </div>
+          </Allotment.Pane>
+          <Allotment.Pane minSize={120} maxSize={400} preferredSize={180}>
+            <div className="chat-input-pane">
+              <ChatInput
+                value={input}
+                onChange={onChangeInput}
+                onSend={onSend}
+                disabled={isStreaming}
+                attachments={attachments}
+                onAddAttachment={onAddAttachment}
+                onRemoveAttachment={onRemoveAttachment}
+                mentions={mentions}
+                onAddMention={onAddMention}
+                onRemoveMention={onRemoveMention}
+                projectPath={projectPath}
+                placeholder={placeholder}
+                thinkEnabled={thinkEnabled}
+                onToggleThink={onToggleThink}
+                thinkLevel={thinkLevel}
+                onSetThinkLevel={onSetThinkLevel}
+                isGptOssFamily={isGptOssFamily}
+                canThink={canThink}
+                canVision={canVision}
+                toolsEnabled={toolsEnabled}
+                onToggleTools={onToggleTools}
+                canTools={canTools}
+                onStop={isStreaming ? onStopChat : undefined}
+              />
+            </div>
+          </Allotment.Pane>
+        </Allotment>
       </Allotment.Pane>
       <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
         <PaneHeader onClick={onToggleInspector}>

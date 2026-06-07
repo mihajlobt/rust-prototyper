@@ -1,9 +1,11 @@
 import { useCallback, type ReactNode } from "react";
 import { Download, FolderUp, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Allotment } from "allotment";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAskUserStore } from "@/stores/askUserStore";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
@@ -103,6 +105,7 @@ export function ComponentsChatPanel({
   headerActions,
 }: ChatPanelProps) {
   const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
+  const { ref: chatRef, onDragEnd: chatOnDragEnd, defaultSizes: chatSizes } = useAllotmentLayout("components-chat-input", 2)
   const handleClear = useCallback(async () => {
     const ok = await confirm("Clear all chat messages?", { title: "Clear Chat", kind: "warning" });
     if (ok) onClearChat();
@@ -162,47 +165,55 @@ export function ComponentsChatPanel({
         )}
       </div>
 
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        thinkingContent={thinkingContent}
-        pendingPermissions={pendingPermissions}
-        onApplyCode={onApplyCode}
-        onRegenerate={onRegenerate}
-        onDeleteFrom={onDeleteFrom}
-        onResolvePermission={onResolvePermission}
-        pendingAskUser={pendingAskUser}
-        onResolveAskUser={clearAskUser}
-        pendingAskUserForm={pendingAskUserForm}
-        onResolveAskUserForm={clearAskUserForm}
-      />
-      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-        {contextToolbar}
-        <ChatInput
-          value={input}
-          onChange={onChangeInput}
-          onSend={onSend}
-          disabled={isStreaming}
-          attachments={attachments}
-          onAddAttachment={onAddAttachment}
-          onRemoveAttachment={onRemoveAttachment}
-          mentions={mentions}
-          onAddMention={onAddMention}
-          onRemoveMention={onRemoveMention}
-          projectPath={projectPath}
-          thinkEnabled={thinkEnabled}
-          onToggleThink={onToggleThink}
-          thinkLevel={thinkLevel}
-          onSetThinkLevel={onSetThinkLevel}
-          isGptOssFamily={isGptOssFamily}
-          canThink={canThink}
-          canVision={canVision}
-          toolsEnabled={toolsEnabled}
-          onToggleTools={onToggleTools}
-          canTools={canTools}
-          onStop={onStop}
-        />
-      </div>
+      <Allotment vertical ref={chatRef} onDragEnd={chatOnDragEnd} defaultSizes={chatSizes}>
+        <Allotment.Pane minSize={80}>
+          <div className="h-full flex flex-col">
+            <MessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              thinkingContent={thinkingContent}
+              pendingPermissions={pendingPermissions}
+              onApplyCode={onApplyCode}
+              onRegenerate={onRegenerate}
+              onDeleteFrom={onDeleteFrom}
+              onResolvePermission={onResolvePermission}
+              pendingAskUser={pendingAskUser}
+              onResolveAskUser={clearAskUser}
+              pendingAskUserForm={pendingAskUserForm}
+              onResolveAskUserForm={clearAskUserForm}
+            />
+          </div>
+        </Allotment.Pane>
+        <Allotment.Pane minSize={120} maxSize={400} preferredSize={180}>
+          <div className="chat-input-pane">
+            {contextToolbar && <div className="shrink-0">{contextToolbar}</div>}
+            <ChatInput
+              value={input}
+              onChange={onChangeInput}
+              onSend={onSend}
+              disabled={isStreaming}
+              attachments={attachments}
+              onAddAttachment={onAddAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+              mentions={mentions}
+              onAddMention={onAddMention}
+              onRemoveMention={onRemoveMention}
+              projectPath={projectPath}
+              thinkEnabled={thinkEnabled}
+              onToggleThink={onToggleThink}
+              thinkLevel={thinkLevel}
+              onSetThinkLevel={onSetThinkLevel}
+              isGptOssFamily={isGptOssFamily}
+              canThink={canThink}
+              canVision={canVision}
+              toolsEnabled={toolsEnabled}
+              onToggleTools={onToggleTools}
+              canTools={canTools}
+              onStop={onStop}
+            />
+          </div>
+        </Allotment.Pane>
+      </Allotment>
     </div>
   );
 }

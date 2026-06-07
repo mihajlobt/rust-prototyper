@@ -58,3 +58,7 @@ skills/
 skills-lock.json
 .tmp/
 backup/
+
+# Local SearXNG test config (the AITab "Create default config" button
+# scaffolds this under appDataDir, but a dev-mode copy may live here too)
+.searxng/

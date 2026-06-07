@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Server, Cloud, Zap, Bot, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Server, Cloud, Zap, Bot, Search, CheckCircle2, XCircle, FileCheck2 } from "lucide-react";
 import type { Settings } from "@/hooks/useSettings";
-import { invoke } from "@tauri-apps/api/core";
+import { setupSearxngConfig, testSearxngConnection } from "@/lib/ipc";
 
 interface AITabProps {
   settings: Settings;
@@ -13,16 +13,32 @@ interface AITabProps {
 
 export function AITab({ settings, setSettings }: AITabProps) {
   const [searxngStatus, setSearxngStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+  const [searxngConfigPath, setSearxngConfigPath] = useState<string | null>(null);
+  const [configStatus, setConfigStatus] = useState<"idle" | "creating" | "ok" | "fail">("idle");
+  const [configError, setConfigError] = useState<string | null>(null);
 
   async function testSearxng() {
     const url = (settings.searxngUrl ?? "").trim();
     if (!url) return;
     setSearxngStatus("testing");
     try {
-      await invoke("test_searxng_connection", { url });
+      await testSearxngConnection(url);
       setSearxngStatus("ok");
     } catch {
       setSearxngStatus("fail");
+    }
+  }
+
+  async function createSearxngConfig() {
+    setConfigStatus("creating");
+    setConfigError(null);
+    try {
+      const path = await setupSearxngConfig();
+      setSearxngConfigPath(path);
+      setConfigStatus("ok");
+    } catch (e) {
+      setConfigError(String(e));
+      setConfigStatus("fail");
     }
   }
 
@@ -102,9 +118,38 @@ export function AITab({ settings, setSettings }: AITabProps) {
             <p className="text-[11px] text-muted-foreground">
               Enables the <span className="font-mono">web_search</span> agent tool. Enable per-panel in Settings → Agents.
             </p>
-            <p className="text-[11px] text-muted-foreground font-mono bg-muted rounded px-2 py-1 select-all">
-              docker run -d -p 8080:8080 -e BASE_URL=/ searxng/searxng
-            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs shrink-0"
+                disabled={configStatus === "creating"}
+                onClick={createSearxngConfig}
+              >
+                {configStatus === "ok" ? <FileCheck2 size={12} className="text-green-500" /> : null}
+                {configStatus === "creating" ? "Creating…" : configStatus === "ok" ? "Config created" : "Create default config"}
+              </Button>
+              {configStatus === "fail" && configError && (
+                <span className="text-[11px] text-destructive truncate" title={configError}>{configError}</span>
+              )}
+            </div>
+            {searxngConfigPath && (
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  Mount this path into SearXNG's <span className="font-mono">/etc/searxng</span> when starting the container:
+                </p>
+                <p className="text-[11px] text-muted-foreground font-mono bg-muted rounded px-2 py-1 select-all whitespace-pre">
+{searxngConfigPath}
+                </p>
+                <p className="text-[11px] text-muted-foreground">docker run:</p>
+                <p className="text-[11px] text-muted-foreground font-mono bg-muted rounded px-2 py-1 select-all whitespace-pre">
+{`docker run -d -p 8080:8080 -e BASE_URL=/ \\
+  -v ${searxngConfigPath}:/etc/searxng:rw \\
+  --name searxng --restart=unless-stopped \\
+  searxng/searxng`}
+                </p>
+              </>
+            )}
           </div>
         </section>
       </div>

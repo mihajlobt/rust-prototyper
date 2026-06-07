@@ -182,11 +182,9 @@
     @apply border-b border-border flex items-center shrink-0;
   }
 
-  /* Chat input textarea */
-  .chat-textarea {
-    @apply w-full resize-none bg-transparent px-3 pt-2.5 pb-1;
-    @apply text-sm text-foreground placeholder:text-muted-foreground;
-    @apply focus:outline-none disabled:opacity-50;
+  /* Chat input pane — bottom Allotment pane wrapping a toolbar + ChatInput. */
+  .chat-input-pane {
+    @apply h-full flex flex-col px-3 pb-3 pt-2 border-t border-border gap-2;
   }
 }
 

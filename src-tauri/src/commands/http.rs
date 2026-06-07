@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use tauri::{AppHandle, Manager};
-use crate::{AppState, AppError};
+use crate::{AppState, AppError, app_data_dir};
 
 fn is_private_url(url: &str) -> bool {
     let lower = url.to_lowercase();
@@ -94,4 +94,33 @@ pub async fn test_searxng_connection(url: String, app: AppHandle) -> Result<bool
     } else {
         Err(format!("HTTP {} — JSON format may not be enabled in SearXNG settings.yml", resp.status().as_u16()))
     }
+}
+
+/// Write a minimal SearXNG settings.yml under `<app_data_dir>/.searxng/`
+/// with `use_default_settings: true` and `search.formats: [html, json]` enabled.
+///
+/// This is the released-app equivalent of the user manually creating
+/// `~/.searxng/settings.yml` — putting the config under the app data dir
+/// keeps it co-located with the app, and lets the UI show the exact path
+/// so the user can mount it into the SearXNG docker container.
+///
+/// Returns the absolute path to the written file.
+#[tauri::command]
+pub async fn setup_searxng_config(app: AppHandle) -> Result<String, String> {
+    let base = app_data_dir(&app).map_err(|e| e.to_string())?;
+    let dir = base.join(".searxng");
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
+    let path = dir.join("settings.yml");
+    let content = "use_default_settings: true\n\
+                   \n\
+                   search:\n  \
+                   formats:\n    \
+                   - html\n    \
+                   - json\n";
+    tokio::fs::write(&path, content)
+        .await
+        .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+    Ok(path.to_string_lossy().to_string())
 }

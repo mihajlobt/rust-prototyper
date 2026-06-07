@@ -1,8 +1,9 @@
-import { useRef, useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
+import { useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
 import { Send, Square, ImageIcon, Brain, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Textarea } from "@/components/ui/textarea"
 import { readFile } from "@/lib/ipc"
 import { MentionPicker, type PickerItem } from "./MentionPicker"
 import { AttachmentChip } from "./AttachmentChip"
@@ -47,18 +48,11 @@ export function ChatInput({
   canThink, canVision, toolsEnabled, onToggleTools, canTools, onStop,
   projectPath, placeholder = "Ask anything… type @ to reference assets",
 }: ChatInputProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
   function handleChange(text: string) {
     onChange(text)
-    // Auto-resize
-    const el = textareaRef.current
-    if (el) {
-      el.style.height = "auto"
-      el.style.height = `${Math.min(el.scrollHeight, 160)}px`
-    }
     // Mention detection
     const lastAt = text.lastIndexOf("@")
     if (lastAt !== -1) {
@@ -137,7 +131,7 @@ export function ChatInput({
   const hasChips = attachments.length > 0 || mentions.length > 0
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       {mentionQuery !== null && (
         <MentionPicker
           query={mentionQuery}
@@ -148,14 +142,14 @@ export function ChatInput({
       )}
 
       <div
-        className={`rounded-lg border transition-colors ${isDragOver ? "border-accent bg-accent/5" : "border-border bg-background"}`}
+        className={`h-full flex flex-col rounded-lg border p-2 transition-colors ${isDragOver ? "border-accent bg-accent/5" : "border-border bg-background"}`}
         onDragOver={handleDragOver}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
       >
         {/* Chips row */}
         {hasChips && (
-          <div className="flex flex-wrap gap-1 border-b border-border px-2 pt-2 pb-1.5">
+          <div className="flex flex-wrap gap-1 border-b border-border px-2 pt-2 pb-1.5 shrink-0">
             {mentions.map((m) => (
               <MentionChip key={m.id} asset={m} onRemove={() => onRemoveMention(m.id)} />
             ))}
@@ -166,21 +160,18 @@ export function ChatInput({
         )}
 
         {/* Textarea */}
-        <textarea
-          ref={textareaRef}
+        <Textarea
           value={value}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
-          rows={1}
-          className="chat-textarea"
-          style={{ minHeight: 36, maxHeight: 160 }}
+          className="flex-1 min-h-0 resize-none border-0 text-sm focus-visible:ring-0"
         />
 
         {/* Actions row */}
-        <div className="flex items-center justify-between px-2 pb-2">
+        <div className="flex items-center justify-between py-2 shrink-0">
           <div className="flex items-center gap-1">
             <TooltipProvider>
               {isGptOssFamily ? (

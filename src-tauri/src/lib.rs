@@ -173,6 +173,7 @@ pub fn run() {
             commands::fs::reveal_in_explorer,
             commands::http::http_request,
             commands::http::test_searxng_connection,
+            commands::http::setup_searxng_config,
             commands::ai::generate_completion,
             commands::ai::generate_completion_stream,
             commands::ai::stop_generation_stream,

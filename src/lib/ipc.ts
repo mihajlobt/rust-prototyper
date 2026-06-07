@@ -128,6 +128,19 @@ export async function httpRequest(
   return invoke("http_request", { method, url, headers, body });
 }
 
+/** Test a SearXNG instance by hitting its JSON search endpoint.
+ *  Returns true on success; throws with a human-readable message otherwise. */
+export async function testSearxngConnection(url: string): Promise<boolean> {
+  return invoke<boolean>("test_searxng_connection", { url });
+}
+
+/** Write a minimal SearXNG settings.yml under `<appDataDir>/.searxng/`
+ *  with `use_default_settings: true` and `search.formats: [html, json]`
+ *  enabled. Returns the absolute path to the written file. */
+export async function setupSearxngConfig(): Promise<string> {
+  return invoke<string>("setup_searxng_config");
+}
+
 // ─── AI Generation ───
 
 export interface Message {

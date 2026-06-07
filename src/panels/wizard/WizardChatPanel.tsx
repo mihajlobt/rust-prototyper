@@ -1,7 +1,9 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Allotment } from "allotment";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAskUserStore } from "@/stores/askUserStore";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import type { ChatMessage, MentionAsset, AttachmentFile, ToolPermissionRecord } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
 
@@ -72,6 +74,7 @@ export function WizardChatPanel({
   canTools,
 }: WizardChatPanelProps) {
   const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
+  const { ref: chatRef, onDragEnd: chatOnDragEnd, defaultSizes: chatSizes } = useAllotmentLayout("wizard-chat-input", 2)
   return (
     <div className="h-full flex flex-col bg-card">
       <div className="panel-toolbar h-10 px-3 gap-2">
@@ -94,51 +97,58 @@ export function WizardChatPanel({
         </Button>
       </div>
 
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        thinkingContent={thinkingContent}
-        pendingPermissions={pendingPermissions}
-        onRegenerate={onRegenerate}
-        onDeleteFrom={onDeleteFrom}
-        onResolvePermission={onResolvePermission}
-        pendingAskUser={pendingAskUser}
-        onResolveAskUser={clearAskUser}
-        pendingAskUserForm={pendingAskUserForm}
-        onResolveAskUserForm={clearAskUserForm}
-      />
-
-      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0">
-        <ChatInput
-          value={input}
-          onChange={onChangeInput}
-          onSend={onSend}
-          disabled={isStreaming}
-          attachments={attachments}
-          onAddAttachment={onAddAttachment}
-          onRemoveAttachment={onRemoveAttachment}
-          mentions={mentions}
-          onAddMention={onAddMention}
-          onRemoveMention={onRemoveMention}
-          projectPath={projectPath}
-          thinkEnabled={thinkEnabled}
-          onToggleThink={onToggleThink}
-          thinkLevel={thinkLevel}
-          onSetThinkLevel={onSetThinkLevel}
-          isGptOssFamily={isGptOssFamily}
-          canThink={canThink}
-          canVision={canVision}
-          toolsEnabled={toolsEnabled}
-          onToggleTools={onToggleTools}
-          canTools={canTools}
-          onStop={isStreaming ? onStop : undefined}
-          placeholder={
-            messages.length === 0
-              ? "Describe the app you want to build…"
-              : "Ask for changes…"
-          }
-        />
-      </div>
+      <Allotment vertical ref={chatRef} onDragEnd={chatOnDragEnd} defaultSizes={chatSizes}>
+        <Allotment.Pane minSize={80}>
+          <div className="h-full flex flex-col">
+            <MessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              thinkingContent={thinkingContent}
+              pendingPermissions={pendingPermissions}
+              onRegenerate={onRegenerate}
+              onDeleteFrom={onDeleteFrom}
+              onResolvePermission={onResolvePermission}
+              pendingAskUser={pendingAskUser}
+              onResolveAskUser={clearAskUser}
+              pendingAskUserForm={pendingAskUserForm}
+              onResolveAskUserForm={clearAskUserForm}
+            />
+          </div>
+        </Allotment.Pane>
+        <Allotment.Pane minSize={120} maxSize={400} preferredSize={180}>
+          <div className="chat-input-pane">
+            <ChatInput
+              value={input}
+              onChange={onChangeInput}
+              onSend={onSend}
+              disabled={isStreaming}
+              attachments={attachments}
+              onAddAttachment={onAddAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+              mentions={mentions}
+              onAddMention={onAddMention}
+              onRemoveMention={onRemoveMention}
+              projectPath={projectPath}
+              thinkEnabled={thinkEnabled}
+              onToggleThink={onToggleThink}
+              thinkLevel={thinkLevel}
+              onSetThinkLevel={onSetThinkLevel}
+              isGptOssFamily={isGptOssFamily}
+              canThink={canThink}
+              canVision={canVision}
+              toolsEnabled={toolsEnabled}
+              onToggleTools={onToggleTools}
+              canTools={canTools}
+              onStop={isStreaming ? onStop : undefined}
+              placeholder={
+                messages.length === 0
+                  ? "Describe the app you want to build…"
+                  : "Ask for changes…"
+              }
+            />
+          </div>
+        </Allotment.Pane>
+      </Allotment>
     </div>
   );
 }

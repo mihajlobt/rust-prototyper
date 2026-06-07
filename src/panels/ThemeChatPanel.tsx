@@ -1,5 +1,6 @@
 import { Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Allotment } from "allotment";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAskUserStore } from "@/stores/askUserStore";
+import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
 import type { DesignBriefTemplate } from "@/lib/prompts";
@@ -102,90 +104,99 @@ export function ThemeChatPanel({
   selectedSeed,
 }: ThemeChatPanelProps) {
   const { pendingAskUser, clearAskUser, pendingAskUserForm, clearAskUserForm } = useAskUserStore()
+  const { ref: chatRef, onDragEnd: chatOnDragEnd, defaultSizes: chatSizes } = useAllotmentLayout("theme-chat-input", 2)
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <MessageList
-        messages={messages}
-        isStreaming={isStreaming}
-        thinkingContent={thinkingContent}
-        pendingPermissions={pendingPermissions}
-        onApplyCode={onApplyCode}
-        onRegenerate={onRegenerate}
-        onDeleteFrom={onDeleteFrom}
-        onResolvePermission={onResolvePermission}
-        pendingAskUser={pendingAskUser}
-        onResolveAskUser={clearAskUser}
-        pendingAskUserForm={pendingAskUserForm}
-        onResolveAskUserForm={clearAskUserForm}
-      />
-      <div className="px-3 pb-3 pt-2 border-t border-border shrink-0 space-y-2">
-        <div className="flex items-center gap-1.5">
-          {designActive && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant={selectedSeed ? "secondary" : "outline"} size="sm" className="h-7 text-[11px] gap-1 px-2 shrink-0">
-                  <Palette size={11} />
-                  {selectedSeed ? selectedSeed.name : "Seed"}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuRadioGroup value={archetypeName} onValueChange={onSetArchetypeName}>
-                  <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
-                  {allSeeds.map((seed) => (
-                    <DropdownMenuRadioItem key={seed.name} value={seed.name} className="text-xs">
-                      {seed.name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <div className="flex-1" />
-          <Button
-            variant={cssActive ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-[11px] px-1.5"
-            onClick={onToggleCss}
-            disabled={isStreaming}
-          >
-            CSS
-          </Button>
-          <Button
-            variant={designActive ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-[11px] px-1.5"
-            onClick={onToggleDesign}
-            disabled={isStreaming}
-          >
-            Design
-          </Button>
-        </div>
-        <ChatInput
-          value={input}
-          onChange={onChangeInput}
-          onSend={onSend}
-          disabled={isStreaming}
-          attachments={attachments}
-          onAddAttachment={onAddAttachment}
-          onRemoveAttachment={onRemoveAttachment}
-          mentions={mentions}
-          onAddMention={onAddMention}
-          onRemoveMention={onRemoveMention}
-          projectPath={projectPath}
-          placeholder={placeholder}
-          thinkEnabled={thinkEnabled}
-          onToggleThink={onToggleThink}
-          thinkLevel={thinkLevel}
-          onSetThinkLevel={onSetThinkLevel}
-          isGptOssFamily={isGptOssFamily}
-          canThink={canThink}
-          canVision={canVision}
-          toolsEnabled={toolsEnabled}
-          onToggleTools={onToggleTools}
-          canTools={canTools}
-          onStop={isStreaming ? onStopChat : undefined}
-        />
-      </div>
+      <Allotment vertical ref={chatRef} onDragEnd={chatOnDragEnd} defaultSizes={chatSizes}>
+        <Allotment.Pane minSize={80}>
+          <div className="h-full flex flex-col">
+            <MessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              thinkingContent={thinkingContent}
+              pendingPermissions={pendingPermissions}
+              onApplyCode={onApplyCode}
+              onRegenerate={onRegenerate}
+              onDeleteFrom={onDeleteFrom}
+              onResolvePermission={onResolvePermission}
+              pendingAskUser={pendingAskUser}
+              onResolveAskUser={clearAskUser}
+              pendingAskUserForm={pendingAskUserForm}
+              onResolveAskUserForm={clearAskUserForm}
+            />
+          </div>
+        </Allotment.Pane>
+        <Allotment.Pane minSize={120} maxSize={400} preferredSize={180}>
+          <div className="chat-input-pane">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {designActive && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant={selectedSeed ? "secondary" : "outline"} size="sm" className="h-7 text-[11px] gap-1 px-2 shrink-0">
+                      <Palette size={11} />
+                      {selectedSeed ? selectedSeed.name : "Seed"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuRadioGroup value={archetypeName} onValueChange={onSetArchetypeName}>
+                      <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+                      {allSeeds.map((seed) => (
+                        <DropdownMenuRadioItem key={seed.name} value={seed.name} className="text-xs">
+                          {seed.name}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              <div className="flex-1" />
+              <Button
+                variant={cssActive ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 text-[11px] px-1.5"
+                onClick={onToggleCss}
+                disabled={isStreaming}
+              >
+                CSS
+              </Button>
+              <Button
+                variant={designActive ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 text-[11px] px-1.5"
+                onClick={onToggleDesign}
+                disabled={isStreaming}
+              >
+                Design
+              </Button>
+            </div>
+            <ChatInput
+              value={input}
+              onChange={onChangeInput}
+              onSend={onSend}
+              disabled={isStreaming}
+              attachments={attachments}
+              onAddAttachment={onAddAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+              mentions={mentions}
+              onAddMention={onAddMention}
+              onRemoveMention={onRemoveMention}
+              projectPath={projectPath}
+              placeholder={placeholder}
+              thinkEnabled={thinkEnabled}
+              onToggleThink={onToggleThink}
+              thinkLevel={thinkLevel}
+              onSetThinkLevel={onSetThinkLevel}
+              isGptOssFamily={isGptOssFamily}
+              canThink={canThink}
+              canVision={canVision}
+              toolsEnabled={toolsEnabled}
+              onToggleTools={onToggleTools}
+              canTools={canTools}
+              onStop={isStreaming ? onStopChat : undefined}
+            />
+          </div>
+        </Allotment.Pane>
+      </Allotment>
     </div>
   );
 }
