@@ -17,6 +17,8 @@ Implementation plans for specific features or refactors.
 
 - **[Native Context Menu]({{ '/plans/context-menu/' | relative_url }})** — proposal to replace the shadcn/ui `ContextMenu` with Tauri v2's native menu API in the Runner panel
 - **[Shared Chat]({{ '/plans/shared-chat/' | relative_url }})** — *Implemented.* The plan that produced `useChat`, `chatStore`, and the shared chat components now used across Wizard, Screens, Components, Themes, and Plans
+- **[Tool Permission System]({{ '/plans/tool-permission-architecture/' | relative_url }})** — *Implemented.* Pre-implementation design proposal for the `ToolPermission` event and accept/reject cards; kept as the original design rationale and edge-case analysis
+- **[Open Agent SDK Analysis]({{ '/plans/open-agent-sdk-analysis/' | relative_url }})** — feasibility comparison of adopting `open-agent-sdk` v0.6.4 vs. the current hand-rolled agent loop
 
 ## Specs
 

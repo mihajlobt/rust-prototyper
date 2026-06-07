@@ -31,10 +31,6 @@
       url: /architecture/ai-streaming/
     - title: Chat Stream & Tool Flow
       url: /architecture/chat-flow/
-    - title: Tool Permission System
-      url: /architecture/tool-permission-architecture/
-    - title: Open Agent SDK Analysis
-      url: /architecture/open-agent-sdk-analysis/
 - title: Standards
   children:
     - title: Overview
@@ -55,3 +51,7 @@
       url: /plans/shared-chat/
     - title: Shared Chat Design
       url: /specs/shared-chat-design/
+    - title: Tool Permission System (proposal)
+      url: /plans/tool-permission-architecture/
+    - title: Open Agent SDK Analysis
+      url: /plans/open-agent-sdk-analysis/

@@ -88,7 +88,7 @@ docs/
   build.sh                 # Cloudflare's build command — copies .opencode/context/ → _context/, runs jekyll build
   index.md                 # Landing
   getting-started/         # install, quickstart, project-structure, troubleshooting + overview
-  architecture/            # frontend, backend, IPC, data persistence, AI streaming, chat-flow, tool permissions, agent SDK analysis
+  architecture/            # frontend, backend, IPC, data persistence, AI streaming, chat-flow
   standards/               # coding, design, context-system + overview
   plans/                   # Plans & Specs — point-in-time implementation plans (overview, context-menu, shared-chat)
   specs/                   # Plans & Specs — design specs (shared-chat-design)

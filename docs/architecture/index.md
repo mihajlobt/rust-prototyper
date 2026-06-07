@@ -61,5 +61,5 @@ The frontend never talks to AI providers directly — every request flows throug
 ## Existing deep-dive reports
 
 - **[Chat Stream & Tool Flow]({{ '/architecture/chat-flow/' | relative_url }})** — Mermaid sequence diagram with source references
-- **[Tool Permission System]({{ '/architecture/tool-permission-architecture/' | relative_url }})** — Cursor-style accept/reject cards
-- **[Open Agent SDK Analysis]({{ '/architecture/open-agent-sdk-analysis/' | relative_url }})** — feasibility audit of `open-agent-sdk` v0.6.4
+
+Pre-implementation proposals and feasibility analyses live in [Plans & Specs]({{ '/plans/' | relative_url }}) — see [Tool Permission System]({{ '/plans/tool-permission-architecture/' | relative_url }}) and [Open Agent SDK Analysis]({{ '/plans/open-agent-sdk-analysis/' | relative_url }}).

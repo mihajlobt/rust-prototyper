@@ -92,4 +92,4 @@ The Wizard panel registers both. Simpler panels (Screens, Components, etc.) do n
 
 - [IPC]({{ '/architecture/ipc/' | relative_url }}) — `invoke` and `Channel` in detail
 - [Chat Stream & Tool Flow]({{ '/architecture/chat-flow/' | relative_url }}) — Mermaid sequence diagram
-- [Tool Permission System]({{ '/architecture/tool-permission-architecture/' | relative_url }}) — the `ToolPermission` event deep-dive
+- [Tool Permission System (proposal)]({{ '/plans/tool-permission-architecture/' | relative_url }}) — the `ToolPermission` event design rationale

@@ -1,7 +1,7 @@
 ---
 title: Open Agent SDK Analysis — Prototyper Integration Feasibility
 layout: default
-permalink: /architecture/open-agent-sdk-analysis/
+permalink: /plans/open-agent-sdk-analysis/
 ---
 
 # Open Agent SDK Analysis — Prototyper Integration Feasibility
@@ -334,7 +334,7 @@ Prototyper solves this via its event-driven architecture:
 
 ## 3. Resolved: The Missing "Running" State Bug
 
-Tool cards used to render straight to "Completed" without ever showing a "Processing" / `input-streaming` state. The shipped fix is the simplest one: `attachToolCall` / `resolveToolCall` write straight to the Zustand store as each Channel event arrives (`src/hooks/chat/streamHandler.ts:94–96,144`), and `tool.tsx` derives the rendered card state directly from `{ pending, success }`. Real tool execution (file I/O, shell commands) takes long enough that `ToolCall` and `ToolResult` essentially never land in the same JS task, so the "running" state renders correctly.
+Tool cards used to render straight to "Completed" without ever showing a "Processing" / `input-streaming` state. The shipped fix: `attachToolCall` / `resolveToolCall` write straight to the Zustand store as each Channel event arrives (`src/hooks/chat/streamHandler.ts:94–96,144`), and `tool.tsx` derives the rendered card state directly from `{ pending, success }`.
 
 See [Chat Stream & Tool Flow → Tauri Channel Batching]({{ '/architecture/chat-flow/' | relative_url }}#tauri-channel-batching) for the verified current mechanism.
 
