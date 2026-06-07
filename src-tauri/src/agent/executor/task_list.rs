@@ -21,12 +21,12 @@ fn format_summary(todos: &[TodoItem]) -> String {
     }
     let mut out = String::from("Task list updated:\n");
     for todo in todos {
-        let marker = match todo.status {
-            TodoStatus::Pending => "[ ]",
-            TodoStatus::InProgress => "[~]",
-            TodoStatus::Completed => "[x]",
+        let (marker, label) = match todo.status {
+            TodoStatus::Pending => ("[ ]", todo.content.as_str()),
+            TodoStatus::InProgress => ("[~]", todo.active_form.as_str()),
+            TodoStatus::Completed => ("[x]", todo.content.as_str()),
         };
-        out.push_str(&format!("{marker} {}\n", todo.content));
+        out.push_str(&format!("{marker} {label}\n"));
     }
     out
 }
