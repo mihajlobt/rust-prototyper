@@ -7,7 +7,7 @@ description: Common pitfalls and their fixes
 
 # Troubleshooting
 
-The five issues that show up the most often, taken from `CLAUDE.md`'s "Common pitfalls" section. Each one names the symptom, the cause, and the fix.
+The issues that show up the most often, taken from `CLAUDE.md`'s "Common pitfalls" section plus a couple of recurring UI gotchas. Each one names the symptom, the cause, and the fix.
 
 ## White screen on launch
 

@@ -27,7 +27,7 @@ The first compile takes a couple of minutes; subsequent runs are seconds.
 
 ## First-run walkthrough
 
-When the app opens, you'll see a 9-tab header (Wizard, Screens, Components, Design, Workflows, APIs, Runner, Library, Assets). A productive first run looks like this:
+When the app opens, you'll see a 10-tab header (Wizard, Screens, Components, Design, Plans, Workflows, APIs, Assets, Runner, Library). A productive first run looks like this:
 
 1. **Open the Wizard** — click the `Wizard` tab. This is the only panel that uses `ask_user`, so it's the friendliest way to drive the model step by step.
 2. **Answer the first question** — the model will start with a short text or choice question (e.g. "What kind of app are you building?"). Type your answer and submit.
@@ -40,6 +40,7 @@ When the app opens, you'll see a 9-tab header (Wizard, Screens, Components, Desi
 - **Screens** — chat + AI generation + device preview, with an embedded flow canvas
 - **Components** — prompt → component code, live preview
 - **Design (Themes)** — prompt → CSS theme, with the same preview
+- **Plans** — markdown plan editor + chat, with live preview and four layout modes (focus / write / read / split)
 - **Workflows** — node-based graph execution (React Flow)
 - **APIs** — HTTP request/response testing
 - **Library** — searchable library of everything you've generated

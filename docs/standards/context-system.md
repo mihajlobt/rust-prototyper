@@ -7,7 +7,7 @@ description: MVI, function-based folders, navigation.md at every level
 
 # Context System
 
-The 95-file / 624KB AI context library at `.opencode/context/` is the project's shared working memory. It follows three rules:
+The 96-file / 624KB AI context library at `.opencode/context/` is the project's shared working memory. It follows three rules:
 
 1. **MVI** — Minimum Viable Information. Core concept + 3–5 bullets + minimal example + reference.
 2. **Function-based folders** — `concepts/`, `examples/`, `guides/`, `lookup/`, `errors/`.

@@ -30,8 +30,8 @@ Prototyper/
 src/
   App.tsx                  # App shell — allotment layout, view routing, dark/accent theming
   main.tsx                 # React entry point
-  layout/                  # Header (9 tabs + model picker + project + settings) + SidebarRail
-  panels/                  # 9 panels — Wizard, Screens, Components, Themes, APIs, Runner, Library, Assets
+  layout/                  # Header (10 tabs + model picker + project + settings) + SidebarRail
+  panels/                  # 10 panels — Wizard, Screens, Components, Themes, Plans, APIs, Runner, Library, Assets (+ workflows/ for WorkflowsView)
   workflows/               # WorkflowsView — React Flow graph execution engine
   hooks/                   # useSettings, useChat, useBonsai, useProjectFiles, useAllotmentLayout, ...
   lib/

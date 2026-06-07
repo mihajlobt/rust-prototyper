@@ -7,14 +7,14 @@ description: React 19 + Vite, panel structure, hooks, and state
 
 # Frontend Architecture
 
-React 19 + TypeScript + Vite, organized around 9 panels, a small set of cross-cutting hooks, and Zustand stores. All data flows through `src/lib/ipc.ts` — the single source of truth for Rust calls.
+React 19 + TypeScript + Vite, organized around 10 panels, a small set of cross-cutting hooks, and Zustand stores. All data flows through `src/lib/ipc.ts` — the single source of truth for Rust calls.
 
 ## App shell
 
 `App.tsx` is the shell. It owns:
 
 - the **allotment layout** (resizable panes) and pane-size persistence
-- **view routing** between the 9 panels
+- **view routing** between the 10 panels
 - **dark / accent theming** via CSS custom properties
 
 `main.tsx` is the React entry point — no logic.
@@ -25,7 +25,7 @@ Header (44-48px) → Project tree (left) | Active view
 
 The body uses Allotment-style resizable splits with 1px gutters. Canvas views (Workflows, Flows) pan/zoom on a dotted grid; generation views (Screens, Components, Design) put the chat left and the preview right.
 
-## 9 panels
+## 10 panels
 
 | View | Component | Purpose |
 |------|-----------|---------|
@@ -33,6 +33,7 @@ The body uses Allotment-style resizable splits with 1px gutters. Canvas views (W
 | Screens | `ScreensPanel` | Chat + AI generation + device preview (embeds flow canvas) |
 | Components | `ComponentsPanel` | Prompt → component code + live preview |
 | Design (Themes) | `ThemesPanel` | Prompt → CSS theme generation |
+| Plans | `PlansPanel` | Markdown plan editor + chat, with live preview and four layout modes (focus / write / read / split) |
 | Workflows | `WorkflowsView` | Node-based execution canvas (React Flow) |
 | APIs | `APIsPanel` | HTTP request/response testing |
 | Runner | `RunnerPanel` | File tree, terminal (xterm.js), live preview |

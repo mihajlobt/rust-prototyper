@@ -6,9 +6,11 @@ permalink: /architecture/tool-permission-architecture/
 
 # Tool Permission System — Architecture Report
 
+> **Status: Implemented.** This report was written as a pre-implementation design proposal. The system it describes — the `ToolPermission` event, `resolve_tool_permission` command, Accept/Reject/Always Allow cards, and the allowlist — has since shipped and is part of the current `CompletionEvent` protocol (see [AI Streaming]({{ '/architecture/ai-streaming/' | relative_url }}) for the live 8-variant enum and [Backend]({{ '/architecture/backend/' | relative_url }}) for the registered command). The sections below are kept as the original design rationale and edge-case analysis; some code sketches differ in minor naming details from the shipped implementation (e.g., the shipped event also carries `ToolCall { name, args, id }` rather than `{ tool, args }`).
+
 ## Executive Summary
 
-Proposed: Add a **user-gated permission system** for AI agent tool calls, matching Cursor's UX — inline cards with Accept/Reject/Always Allow. This document verifies every architectural claim against:
+Proposed (now implemented): Add a **user-gated permission system** for AI agent tool calls, matching Cursor's UX — inline cards with Accept/Reject/Always Allow. This document verifies every architectural claim against:
 
 1. **Official Tauri v2 docs** (Channel, AppHandle, Store)
 2. **Actual codebase** (agent loop, streaming handler, settings store)

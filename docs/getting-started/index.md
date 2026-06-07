@@ -26,7 +26,7 @@ Five short pages that take you from a fresh clone to a running app, with the fil
   </a>
   <a class="card" href="{{ '/getting-started/troubleshooting/' | relative_url }}">
     <div class="card-title">Troubleshooting</div>
-    <div class="card-body">The five most common pitfalls with the actual fixes.</div>
+    <div class="card-body">The most common pitfalls with the actual fixes.</div>
   </a>
 </div>
 

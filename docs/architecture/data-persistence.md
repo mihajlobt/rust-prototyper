@@ -20,6 +20,7 @@ Two mechanisms: `tauri-plugin-store` for app-level config, and the file system (
 | Workflows | `save_workflow` / `load_workflow` Rust commands | Per-project workflow directory |
 | Model presets | `save_model_presets` / `load_model_presets` | App data dir |
 | Pane sizes | `useAllotmentLayout` hook | Tauri Store |
+| Chat history | File system IPC, written by `useChat` | `{entity}/chat.json` next to the entity (e.g. `projects/{id}/plans/{slug}.chat.json`, `projects/{id}/themes/{dir}/chat.json`) |
 
 ## App-level config: Tauri Store
 
@@ -82,9 +83,21 @@ Saved via `save_model_presets` / `load_model_presets` (file system, app data dir
 
 `useAllotmentLayout` persists Allotment pane sizes via the Tauri Store, not a separate file. On mount, `defaultSizes` is restored from the stored value. On drag end, `onDragEnd` writes the new sizes.
 
+## Chat history
+
+`useChat` takes a required `chatPath` and persists every message to disk as JSON via `read_file` / `write_file` — it is **not** ephemeral. Each panel derives its own path next to the entity it's chatting about:
+
+| Panel | `chatPath` |
+|-------|------------|
+| Plans | `projects/{id}/plans/{slug}.chat.json` |
+| Themes | `projects/{id}/themes/{dir}/chat.json` |
+| Screens | derived from `screenId` |
+| Components | derived from `componentId` |
+
+`chatStore` (Zustand) holds the in-memory streaming state for the active session; `chatPath` is what survives an app restart.
+
 ## What is NOT persisted
 
-- **Chat history** — lives in `chatStore` (Zustand) and is lost on app restart. This is intentional.
 - **Per-panel UI state** (open/closed sections, selected tabs) — resets each launch.
 - **Preview annotations (Wizard)** — ephemeral by design. The shared `AnnotationOverlay` is wired on both the live preview iframe and the Design tab.
 

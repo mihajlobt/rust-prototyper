@@ -7,7 +7,7 @@ description: File size, naming, types, styling, Allotment, error handling
 
 # Coding Standards
 
-The rules every PR has to meet. Source: `coding-standards.md` (98 lines). This page reproduces the full source verbatim for reference.
+The rules every PR has to meet. Source: `coding-standards.md` (108 lines). This page reproduces the full source verbatim for reference.
 
 ## Table of contents
 
@@ -22,6 +22,7 @@ The rules every PR has to meet. Source: `coding-standards.md` (98 lines). This p
 - [Quality standards](#quality-standards)
 - [UI and styling](#ui-and-styling)
 - [Allotment (split pane library)](#allotment-split-pane-library)
+- [Agent chat panels](#agent-chat-panels)
 - [Dead code](#dead-code)
 - [Error handling](#error-handling)
 - [Assets](#assets)
@@ -96,8 +97,9 @@ The rules every PR has to meet. Source: `coding-standards.md` (98 lines). This p
 - If you need more, use one of these approaches:
   1. **Extract a component** — move the element into its own named React component.
   2. **`cva` (class-variance-authority)** — already used for shadcn/ui primitives.
-  3. **`@apply` in a CSS file** — for non-component HTML elements or repeated patterns. Add to the appropriate file in `src/styles/`.
+  3. **Reduce number of classes and do it with less**
 - When reducing class count, do NOT merge classes into a CSS class and then re-apply them alongside new Tailwind classes on the same element. If you extract to a CSS class, remove the equivalent Tailwind classes from the element — don't keep both.
+- **NEVER add a wrapper `<div>` purely to break up a long className string** (e.g. `<div className="h-full"><div className="min-h-0">` to dodge the 7-class limit). Either extract a real component, use cva, reduce the classes, or accept that the inner element genuinely needs the class. Nesting a div for layout reasons (e.g. a scrollable wrapper inside a positioned container) is fine; nesting one *only* to keep a className short is not.
 
 ## Allotment (split pane library)
 
@@ -107,6 +109,15 @@ The rules every PR has to meet. Source: `coding-standards.md` (98 lines). This p
 - **`preferredSize` is NOT reactive.** It only affects initial mount sizing and `reset()`.
 - **For collapse/expand patterns with a visible header:** Split into two `Allotment.Pane` elements — one locked-size header pane (`minSize={28} maxSize={28}`) and one content pane with `visible={isOpen}`.
 - **`useAllotmentLayout` hook** persists pane sizes via `onDragEnd` and restores them via `defaultSizes`. Pass `paneVisible` (e.g., `[true, true, isOpen]`).
+
+## Agent chat panels
+
+All panels that embed an agent chat (`useChat`) must follow these patterns:
+
+- **`panelToolFilter`**: read from `settings.panelToolFilter[panelKey]` and fall back to the `*_TOOL_FILTER_DEFAULT` constant. Never hardcode the default directly in `useChat`.
+- **`panelMaxToolCalls`**: read from `settings.panelMaxToolCalls[panelKey]`. Never omit it — if the key is not yet in the type, add it.
+- **`projectPath` in chat components**: always `projects/${project}`, never a file path like a `.chat.json` file. `MentionPicker` uses this as a directory root to enumerate screens, components, themes, APIs.
+- **`onResolvePermission`**: must handle `decision === "always_allowed"` by adding the tool to `settings.toolAllowlist`. See `ThemesPanel.handleResolvePermission` for the canonical implementation.
 
 ## Dead code
 

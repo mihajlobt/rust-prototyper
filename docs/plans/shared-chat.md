@@ -6,6 +6,8 @@ permalink: /plans/shared-chat/
 
 # Shared Chat System Implementation Plan
 
+> **Status: Implemented.** This plan has shipped — `src/hooks/useChat.ts`, `src/stores/chatStore.ts`, and the `src/components/chat/*` presentational components described below all exist and are the shared chat layer used by the Wizard, Screens, Components, Themes, and Plans panels (see [Frontend Architecture]({{ '/architecture/frontend/' | relative_url }}) and `CLAUDE.md`'s "AI streaming" section for the live API). The checkboxes below are kept unchecked as the original task breakdown for historical reference — they do not reflect outstanding work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace ad-hoc chat code across ThemesPanel, ComponentsPanel, and ScreensPanel with a shared `useChat()` hook + thin presentational components, adding thinking block parsing, full vision (image) support, `@mention` picker, and drag-drop from the Project Explorer.

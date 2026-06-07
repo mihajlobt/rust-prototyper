@@ -22,7 +22,7 @@ flowchart LR
     end
 
     subgraph Backend
-        Rust[Rust commands<br/>44 in lib.rs]
+        Rust[Rust commands<br/>48 in lib.rs]
         Agent[agent/ module<br/>loop, executor, tools]
         Sandbox[sandbox/<br/>landlock + seccomp + bwrap]
         Rust --> Agent
@@ -53,7 +53,7 @@ The frontend never talks to AI providers directly — every request flows throug
 ## Sections
 
 - **[Frontend]({{ '/architecture/frontend/' | relative_url }})** — React 19 + Vite, panel structure, hooks, state
-- **[Backend]({{ '/architecture/backend/' | relative_url }})** — all 44 Rust commands by group
+- **[Backend]({{ '/architecture/backend/' | relative_url }})** — all 48 Rust commands by group
 - **[IPC]({{ '/architecture/ipc/' | relative_url }})** — Tauri `invoke` and `Channel` patterns
 - **[Data Persistence]({{ '/architecture/data-persistence/' | relative_url }})** — settings, projects, assets, workflows
 - **[AI Streaming]({{ '/architecture/ai-streaming/' | relative_url }})** — the 8-variant `CompletionEvent` enum

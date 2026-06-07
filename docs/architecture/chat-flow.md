@@ -6,6 +6,8 @@ permalink: /architecture/chat-flow/
 
 # Chat Stream & Tool Usage Flow
 
+> **Note on staleness**: This diagram was captured at an earlier point in the agent's development, when `build_tools()` returned only `[write_file, read_file, bash]`. The agent now ships **15 tools** — `write_file`, `read_file`, `edit_file`, `run_tsc`, `run_lint`, `run_build`, `glob`, `grep`, `bash`, `ask_user`, `ask_user_form`, `register_screen`, `set_active_theme`, `validate_design_json`, `web_search` (defined in `src-tauri/src/agent/tools.rs`). The streaming/event-batching mechanics described below (Tauri Channel synchronous draining, the `pendingToolResultsRef` paint-guarantee pattern, cancellation via `CancellationToken`) remain accurate; line-number references may have drifted as the codebase has grown.
+
 A Mermaid sequence diagram mirroring the flow documented in `docs/chat-flow.html`, with source references verified against the actual implementation.
 
 ## Legend

@@ -2,14 +2,14 @@
 title: Backend Architecture
 layout: default
 permalink: /architecture/backend/
-description: All 44 Rust commands grouped by function
+description: All 48 Rust commands grouped by function
 ---
 
 # Backend Architecture
 
 All Rust logic lives in `src-tauri/src/lib.rs`. Commands are registered in `generate_handler![]`; plugin permissions (e.g., `shell:default`, `fs:default`) are declared in `capabilities/default.json`. Missing either causes silent failure at runtime.
 
-## Command groups (44 total)
+## Command groups (48 total)
 
 ### Process (10)
 
@@ -40,13 +40,15 @@ All Rust logic lives in `src-tauri/src/lib.rs`. Commands are registered in `gene
 | `create_symlink` | Create a symlink |
 | `reveal_in_explorer` | Open the OS file browser at a path |
 
-### HTTP (1)
+### HTTP (3)
 
 | Command | Purpose |
 |---------|---------|
 | `http_request` | Generic HTTP request (used by cloud AI providers) |
+| `test_searxng_connection` | Verify a configured SearXNG instance is reachable |
+| `setup_searxng_config` | Scaffold a local SearXNG `settings.yml` for the `web_search` agent tool |
 
-### AI (9)
+### AI (10)
 
 | Command | Purpose |
 |---------|---------|
@@ -56,6 +58,7 @@ All Rust logic lives in `src-tauri/src/lib.rs`. Commands are registered in `gene
 | `resolve_tool_permission` | Resolve a pending `ToolPermission` event |
 | `resolve_ask_user` | Resolve a pending `AskUser` event |
 | `resolve_ask_user_form` | Resolve a pending `AskUserForm` event |
+| `list_anthropic_models` | List models available from the configured Anthropic account |
 | `list_ollama_models` | List models available on the local Ollama server |
 | `save_model_presets` | Persist model presets |
 | `load_model_presets` | Load saved model presets |
@@ -101,7 +104,7 @@ src-tauri/src/
     process.rs           # Bun/shell spawning
     fs.rs                # File system
     http.rs              # HTTP client
-    ai.rs                # Streaming completion, tool permissions
+    ai.rs                # Streaming completion, tool permissions, Anthropic models
     ai_providers.rs      # OpenAI/Claude providers
     ai_ollama.rs         # Ollama-specific logic
     export.rs            # Project/component export

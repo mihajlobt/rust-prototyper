@@ -49,7 +49,7 @@ This site holds the **internal architecture, standards, plans, and specs** for t
   </a>
   <a class="card" href="{{ '/context/navigation/' | relative_url }}">
     <div class="card-title">Context</div>
-    <div class="card-body">The full 95-file AI context library auto-copied from <code>.opencode/context/</code>.</div>
+    <div class="card-body">The full 96-file AI context library auto-copied from <code>.opencode/context/</code>.</div>
   </a>
 </div>
 
