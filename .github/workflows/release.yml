@@ -19,8 +19,6 @@ jobs:
         include:
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
-            args: '--target x86_64-apple-darwin'
           - platform: ubuntu-22.04
             args: ''
 
@@ -34,7 +32,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -55,9 +53,9 @@ jobs:
 
             Download the installer for your platform from the assets below.
 
-            **Linux**: `.deb` (Debian/Ubuntu) or `.AppImage` (universal)
-            **macOS**: `.dmg` — arm64 for Apple Silicon, x64 for Intel
-            **Windows**: `.msi` or `.exe`
+            - **Linux** — `.deb` (Debian/Ubuntu) or `.AppImage` (universal)
+            - **macOS (Apple Silicon)** — `.dmg`
+          generateReleaseNotes: true
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
