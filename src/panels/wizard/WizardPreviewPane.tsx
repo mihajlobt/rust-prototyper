@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useMemo } from "react"
+import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Smartphone, Tablet, Monitor, Sun, Moon, Pencil, RefreshCw, Play, Square, Loader2 } from "lucide-react"
 import { useDevServerStore } from "@/lib/dev-server-manager"
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore"
 import { ThemeTokenPreview } from "@/panels/theme-preview/ThemeTokenPreview"
 import { AnnotationOverlay, type AnnotationPopupDraft, type AnnotationTextPopup } from "@/components/ui/AnnotationOverlay"
 import type { WizardAnnotation, WizardPreviewTab } from "./types"
@@ -10,16 +11,12 @@ import type { WizardAnnotation, WizardPreviewTab } from "./types"
 interface WizardPreviewPaneProps {
   generatedDir: string
   device: "desktop" | "tablet" | "mobile"
-  darkPreview: boolean
   annotations: WizardAnnotation[]
-  /** When set, navigate the preview iframe to this route path after HMR settles. */
-  previewNavigatePath: string | null
   previewTabs: WizardPreviewTab[]
   activePreviewTabId: string | null
   themeCss: string | null
   onSelectTab: (id: string) => void
   onSetDevice: (device: "desktop" | "tablet" | "mobile") => void
-  onToggleDark: () => void
   onAddAnnotation: (annotation: Omit<WizardAnnotation, "id" | "createdAt">) => void
 }
 
@@ -35,18 +32,17 @@ const FLOATING_TOGGLE_CLASS = "absolute top-2 right-2 z-10 h-7 bg-background/80 
 export function WizardPreviewPane({
   generatedDir,
   device,
-  darkPreview,
   annotations,
-  previewNavigatePath,
   previewTabs,
   activePreviewTabId,
   themeCss,
   onSelectTab,
   onSetDevice,
-  onToggleDark,
   onAddAnnotation,
 }: WizardPreviewPaneProps) {
   const { runnerStatus, runnerUrl, startRunner, stopRunner } = useDevServerStore()
+  const { ps, setProjectSettings } = useProjectSettingsStore()
+  const darkPreview = ps.darkPreview
   const [annotationMode, setAnnotationMode] = useState(false)
   const [textPopup, setTextPopup] = useState<AnnotationTextPopup | null>(null)
   const [popupText, setPopupText] = useState("")
@@ -61,13 +57,8 @@ export function WizardPreviewPane({
   const designOpen = activePreviewTabId === "design"
   const activeScreenTab = previewTabs.find((tab) => tab.id === activePreviewTabId)
   const currentPath = activeScreenTab ? (activeScreenTab.previewPath ?? activeScreenTab.urlPath) : null
-
-  const iframeSrc = useMemo(() => {
-    if (!runnerUrl) return undefined
-    const base = runnerUrl.replace(/\/$/, "")
-    const path = previewNavigatePath ?? currentPath
-    return path ? `${base}${path}?dark=${darkPreview}` : `${base}?dark=${darkPreview}`
-  }, [runnerUrl, previewNavigatePath, currentPath, darkPreview])
+  const base = runnerUrl ? runnerUrl.replace(/\/$/, "") : null
+  const iframeSrc = base ? (currentPath ? `${base}${currentPath}?dark=${darkPreview}` : `${base}?dark=${darkPreview}`) : undefined
 
   const getRelativeCoords = useCallback((e: React.MouseEvent<HTMLDivElement>, ref: React.RefObject<HTMLDivElement | null>) => {
     const overlay = ref.current
@@ -203,7 +194,7 @@ export function WizardPreviewPane({
         </div>
         <div className="w-px h-4 bg-border mx-1" />
 
-        <Button variant={darkPreview ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={onToggleDark} title={darkPreview ? "Light mode" : "Dark mode"}>
+        <Button variant={darkPreview ? "secondary" : "ghost"} size="icon" className="h-7 w-7" onClick={() => setProjectSettings({ darkPreview: !darkPreview })} title={darkPreview ? "Light mode" : "Dark mode"}>
           {darkPreview ? <Moon size={12} /> : <Sun size={12} />}
         </Button>
 
@@ -270,6 +261,7 @@ export function WizardPreviewPane({
             {runnerUrl ? (
               <iframe
                 ref={iframeRef}
+                key={`wizard-${darkPreview}`}
                 src={iframeSrc}
                 className="h-full w-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms"

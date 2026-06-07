@@ -14,7 +14,7 @@ import type { RefObject } from "react";
 
 interface ComponentsPreviewToolbarProps {
   themes: FileEntry[];
-  initialPreviewSrc: string | undefined;
+  selectedComponent: string | null;
   stoppedManuallyRef: RefObject<boolean>;
   generatedDir: string;
 }
@@ -23,7 +23,7 @@ interface ComponentsPreviewToolbarProps {
  *  shadcn toggle, and device-width switcher. */
 export function ComponentsPreviewToolbar({
   themes,
-  initialPreviewSrc,
+  selectedComponent,
   stoppedManuallyRef,
   generatedDir,
 }: ComponentsPreviewToolbarProps) {
@@ -54,9 +54,9 @@ export function ComponentsPreviewToolbar({
           <Play size={12} />
         </Button>
       )}
-      {initialPreviewSrc && runnerUrl && (
-        <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={initialPreviewSrc}>
-          {initialPreviewSrc.replace(/^http:\/\/localhost:\d+/, "")}
+      {selectedComponent && runnerUrl && (
+        <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={selectedComponent}>
+          /__preview/{selectedComponent}
         </span>
       )}
       <div className="flex-1" />

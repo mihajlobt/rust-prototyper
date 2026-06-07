@@ -1,6 +1,7 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HotspotOverlay } from "@/panels/screens/HotspotOverlay";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import type { RefObject } from "react";
 import type { Hotspot } from "@/lib/navigation";
 
@@ -8,7 +9,7 @@ interface ScreensIframePreviewProps {
   runnerStatus: "idle" | "starting" | "running" | "error";
   runnerError: string | null;
   runnerUrl: string | null;
-  initialPreviewSrc: string | undefined;
+  screenId: string | null;
   iframeRef: RefObject<HTMLIFrameElement | null>;
   hotspotsRef: RefObject<Hotspot[]>;
   hotspots: Hotspot[];
@@ -27,7 +28,7 @@ export function ScreensIframePreview({
   runnerStatus,
   runnerError,
   runnerUrl,
-  initialPreviewSrc,
+  screenId,
   iframeRef,
   hotspotsRef,
   hotspots,
@@ -41,6 +42,7 @@ export function ScreensIframePreview({
   onHotspotsChange,
   onRetry,
 }: ScreensIframePreviewProps) {
+  const darkPreview = useProjectSettingsStore((s) => s.ps.darkPreview);
   if (runnerStatus === "error") {
     return (
       <div className="flex flex-col items-center justify-center gap-2 p-4 h-full text-center">
@@ -66,11 +68,14 @@ export function ScreensIframePreview({
   }
 
   if (runnerStatus === "running" && runnerUrl) {
+    const base = runnerUrl.replace(/\/$/, "");
+    const src = screenId ? `${base}/${screenId}?dark=${darkPreview}` : `${base}?dark=${darkPreview}`;
     return (
       <div className="relative w-full h-full overflow-hidden">
         <iframe
           ref={iframeRef}
-          src={initialPreviewSrc}
+          key={`screen-${darkPreview}`}
+          src={src}
           className="w-full h-full border-0"
           sandbox="allow-scripts allow-same-origin allow-forms"
           onLoad={() => {

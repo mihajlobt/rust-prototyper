@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown, Code2 } from "lucide-react";
 import {
@@ -67,7 +67,7 @@ export function ComponentsPanel() {
 
   // Dev server state — shared runner server
   // (runnerError and stopRunner are consumed in the preview sub-components.)
-  const { runnerStatus, runnerUrl, startRunner } = useDevServerStore();
+  const { runnerStatus, startRunner } = useDevServerStore();
   const previewIframeRef = useRef<HTMLIFrameElement>(null);
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
@@ -84,24 +84,14 @@ export function ComponentsPanel() {
 
   const componentsShowInspector = ps.componentsShowInspector;
   const componentsDevice = ps.componentsDevice;
-  const componentsDarkPreview = ps.darkPreview;
   const componentsCodeOpen = ps.componentsCodeOpen;
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const selectedTheme = ps.stylePreset;       // generation design language — drives DESIGN.md + design tokens
   const [themeCss, setThemeCss] = useState("");             // theme.css for the generation design language
   const [previewThemeCss, setPreviewThemeCss] = useState(""); // theme.css for the live preview only
 
-  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
   const selectedComponent = ps.activeComponent;
   const componentId = selectedComponent;
-  const initialPreviewSrc = useMemo(
-    () => {
-      if (!runnerUrl || !selectedComponent) return undefined;
-      const base = runnerUrl.replace(/\/$/, "");
-      return `${base}/__preview/${selectedComponent}?dark=${componentsDarkPreview}`;
-    },
-    [runnerUrl, selectedComponent, componentsDarkPreview],
-  );
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("components", 2);
   const { ref: codeRef, onDragEnd: codeOnDragEnd, defaultSizes: codeDefault } = useAllotmentLayout("components-code", 3);
   const { ref: inspectorRef, onDragEnd: inspectorOnDragEnd, defaultSizes: inspectorDefault } = useAllotmentLayout("components-inspector", 3);
@@ -507,7 +497,7 @@ export function ComponentsPanel() {
               <div className="h-full flex flex-col">
                 <ComponentsPreviewToolbar
                   themes={themes}
-                  initialPreviewSrc={initialPreviewSrc}
+                  selectedComponent={selectedComponent}
                   stoppedManuallyRef={stoppedManuallyRef}
                   generatedDir={generatedDir}
                 />
@@ -518,7 +508,7 @@ export function ComponentsPanel() {
                   >
                     <ComponentsPreview
                       iframeRef={previewIframeRef}
-                      initialPreviewSrc={initialPreviewSrc}
+                      selectedComponent={selectedComponent}
                       onRetry={handleRetryPreview}
                     />
                   </div>

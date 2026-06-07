@@ -9,7 +9,7 @@ import type { RefObject } from "react";
 interface ScreensPreviewToolbarProps {
   themes: FileEntry[];
   livePreviewPath: string | null;
-  initialPreviewSrc: string | undefined;
+  screenId: string | null;
   stoppedManuallyRef: RefObject<boolean>;
   generatedDir: string;
 }
@@ -17,15 +17,14 @@ interface ScreensPreviewToolbarProps {
 export function ScreensPreviewToolbar({
   themes,
   livePreviewPath,
-  initialPreviewSrc,
+  screenId,
   stoppedManuallyRef,
   generatedDir,
 }: ScreensPreviewToolbarProps) {
   const { runnerStatus, runnerUrl, startRunner, stopRunner } = useDevServerStore();
   const { ps, setProjectSettings } = useProjectSettingsStore();
 
-  const currentPath = livePreviewPath
-    ?? (initialPreviewSrc ? new URL(initialPreviewSrc).pathname : null);
+  const currentPath = livePreviewPath ?? (screenId ? `/${screenId}` : null);
 
   return (
     <div className="panel-toolbar h-10 px-3 gap-2 bg-card">

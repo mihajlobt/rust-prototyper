@@ -48,19 +48,11 @@ export function WizardPanel() {
   const queryClient = useQueryClient()
 
   const [annotations, setAnnotations] = useState<WizardAnnotation[]>([])
-  const [previewNavigatePath, setPreviewNavigatePath] = useState<string | null>(null)
   const [previewTabs, setPreviewTabs] = useState<WizardPreviewTab[]>([])
   const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null)
   const [themeCss, setThemeCss] = useState<string | null>(null)
   // Guards against readFile callbacks resolving after a wizard reset clears the tabs
   const wizardSessionRef = useRef(0)
-  // Refs break the dep-cycle: the streaming-end effect reads latest tab state without
-  // being coupled to tab changes that would re-trigger dev server start.
-  const previewTabsRef = useRef(previewTabs)
-  previewTabsRef.current = previewTabs
-  const activePreviewTabIdRef = useRef(activePreviewTabId)
-  activePreviewTabIdRef.current = activePreviewTabId
-
   const pendingThemeSlugRef = useRef<string | null>(null)
   const pendingScreenRef = useRef<{ screenId: string; title: string; urlPath: string } | null>(null)
 
@@ -132,13 +124,7 @@ export function WizardPanel() {
 
   const handleSelectPreviewTab = useCallback((tabId: string) => {
     setActivePreviewTabId(tabId)
-    if (tabId === "design") return
-    const selectedTab = previewTabs.find((tab) => tab.id === tabId)
-    if (selectedTab?.type === "screen") {
-      const path = selectedTab.previewPath ?? selectedTab.urlPath
-      if (path) setPreviewNavigatePath(path)
-    }
-  }, [previewTabs])
+  }, [])
 
   // Restore tabs from disk when the project is loaded or switched.
   // Reads navigation.json for screen tabs and the active theme CSS for the theme tab.
@@ -208,15 +194,8 @@ export function WizardPanel() {
       hasGeneratedScaffold(projectDir).then((ready) => {
         if (ready) devServerStore.startRunner(`${projectDir}/generated`, projectSettings.runnerPort).catch(() => {})
       }).catch(() => {})
-      const activeTab = previewTabsRef.current.find((tab) => tab.id === activePreviewTabIdRef.current)
-      if (activeTab?.type === "screen") {
-        const path = activeTab.previewPath ?? activeTab.urlPath
-        if (path) setPreviewNavigatePath(path)
-      }
     }
     wasStreamingRef.current = chat.isStreaming
-  // previewTabsRef/activePreviewTabIdRef are intentionally read via refs — adding them as deps would
-  // re-trigger dev server start on every tab change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.isStreaming])
 
@@ -258,7 +237,6 @@ export function WizardPanel() {
     useAskUserStore.getState().clearAskUser()
     useAskUserStore.getState().clearAskUserForm()
     setAnnotations([])
-    setPreviewNavigatePath(null)
     setPreviewTabs([])
     setActivePreviewTabId(null)
     setThemeCss(null)
@@ -343,15 +321,12 @@ export function WizardPanel() {
               <WizardPreviewPane
                 generatedDir={`projects/${settings.project}/generated`}
                 device={projectSettings.wizardDevice}
-                 darkPreview={projectSettings.darkPreview}
                 annotations={annotations}
-                previewNavigatePath={previewNavigatePath}
                 previewTabs={previewTabs}
                 activePreviewTabId={activePreviewTabId}
                 themeCss={themeCss}
                 onSelectTab={handleSelectPreviewTab}
                 onSetDevice={(device) => setProjectSettings({ wizardDevice: device })}
-                 onToggleDark={() => setProjectSettings({ darkPreview: !projectSettings.darkPreview })}
                 onAddAnnotation={(annotation) => setAnnotations((prev) => [...prev, { ...annotation, id: makeId(), createdAt: Date.now() }])}
               />
             </Allotment.Pane>

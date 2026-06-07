@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown } from "lucide-react";
@@ -48,7 +48,6 @@ export function ScreensPanel() {
   const screensDevice = ps.screensDevice;
   const screensShowInspector = ps.screensShowInspector;
   const screensZoom = ps.screensZoom;
-  const screensDarkPreview = ps.darkPreview;
   const screensCodeOpen = ps.screensCodeOpen;
   const queryClient = useQueryClient();
   const { ref: outerRef, onDragEnd: outerOnDragEnd, defaultSizes: outerDefault } = useAllotmentLayout("screens", 2);
@@ -95,14 +94,6 @@ export function ScreensPanel() {
 
   const scaffoldAttemptedRef = useRef(false);
   const stoppedManuallyRef = useRef(false);
-  const initialPreviewSrc = useMemo(
-    () => {
-      if (!runnerUrl || !screenId) return undefined;
-      const base = runnerUrl.replace(/\/$/, "");
-      return `${base}/${screenId}?dark=${screensDarkPreview}`;
-    },
-    [runnerUrl, screenId, screensDarkPreview]
-  );
 
   const generatedDir = getGeneratedDirPath(`projects/${settings.project}`);
   const screenPath = screenId
@@ -472,7 +463,7 @@ export function ScreensPanel() {
                 <ScreensPreviewToolbar
                   themes={themes}
                   livePreviewPath={livePreviewPath}
-                  initialPreviewSrc={initialPreviewSrc}
+                  screenId={screenId}
                   stoppedManuallyRef={stoppedManuallyRef}
                   generatedDir={generatedDir}
                 />
@@ -485,7 +476,7 @@ export function ScreensPanel() {
                       runnerStatus={runnerStatus}
                       runnerError={runnerError}
                       runnerUrl={runnerUrl}
-                      initialPreviewSrc={initialPreviewSrc}
+                      screenId={screenId}
                       iframeRef={previewIframeRef}
                       hotspotsRef={hotspotsRef}
                       hotspots={hotspots}

@@ -34,7 +34,6 @@ export function RunnerPanel() {
   const devServerStore = useDevServerStore();
   const running = devServerStore.runnerStatus === "running" || devServerStore.runnerStatus === "starting";
   const devUrl = devServerStore.runnerUrl;
-  const runnerDark = ps.darkPreview;
 
   const [tabContents, setTabContents] = useState<Record<string, string>>({});
   const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
@@ -49,8 +48,7 @@ export function RunnerPanel() {
 
   const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
   const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
+  
   const activeTabPath = ps.runnerEditorActiveTabPath;
   const openTabs = useMemo(() => ps.runnerEditorTabs ?? [], [ps.runnerEditorTabs]);
 
@@ -79,44 +77,17 @@ export function RunnerPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabPath]);
 
-  const runningRef = useRef(running);
-  useEffect(() => { runningRef.current = running; }, [running]);
-
-  const runnerDarkRef = useRef(runnerDark);
-  useEffect(() => { runnerDarkRef.current = runnerDark; }, [runnerDark]);
-
-  // Compute the iframe URL — only changes when devUrl changes (not on dark toggle).
-  // Dark mode is applied via postMessage for live toggling (avoids iframe reload).
-  // The ?dark= param ensures correct initial state on load / HMR reload.
-  const runnerIframeSrc = useMemo(
-    () => {
-      if (!devUrl) return undefined;
-      const base = devUrl.replace(/\/$/, "");
-      return `${base}?dark=${runnerDarkRef.current}`;
-    },
-    [devUrl]
-  );
-
-  // Reload iframe on HMR — dark mode is baked into the URL via ?dark= param
+  // Pipe terminal output to xterm + log buffer.
+  // Iframe HMR is handled natively by Vite's HMR client inside the iframe —
+  // no manual reload needed (and it would fight with the reactive `key` prop).
   useEffect(() => {
     const unlistenPromise = onTerminalOutput((event: TerminalOutputEvent) => {
       xtermRef.current?.writeln(event.line);
       logLinesRef.current = [...logLinesRef.current, { line: event.line, source: event.source }];
       setLogTick((t) => t + 1);
-      if (runningRef.current && iframeRef.current && devUrl) {
-        const base = devUrl.endsWith("/") ? devUrl.slice(0, -1) : devUrl;
-        iframeRef.current.src = `${base}?dark=${runnerDarkRef.current}`;
-      }
     });
     return () => { unlistenPromise.then((fn) => fn()); };
-  }, [devUrl]);
-
-  // ─── Dark mode toggle → postMessage to iframe ─────────────────────────────
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage({ type: "set-dark", value: runnerDark }, "*");
-  }, [runnerDark]);
+  }, []);
 
   // ── Tab management ──────────────────────────────────────────────────────
 
@@ -268,10 +239,6 @@ export function RunnerPanel() {
     catch (e) { notify.error("Kill all failed", getErrorMessage(e)); }
   };
 
-  const handleRefreshPreview = () => {
-    if (!iframeRef.current || !devUrl) return;
-    iframeRef.current.contentWindow?.postMessage({ type: "reload" }, "*");
-  };
   const handleNewShell = async () => {
     if (!shellCommand.trim()) return;
     xtermRef.current?.writeln(`\x1b[36m> ${shellCommand}\x1b[0m`);
@@ -324,13 +291,9 @@ export function RunnerPanel() {
               <Allotment.Pane minSize={300}>
                 <RunnerPreview
                   devUrl={devUrl}
-                  runnerIframeSrc={runnerIframeSrc}
-                  runnerDark={runnerDark}
                   runnerDevice={ps.runnerDevice}
                   runnerZoom={ps.runnerZoom}
-                  iframeRef={iframeRef}
                   setProjectSettings={setProjectSettings}
-                  handleRefreshPreview={handleRefreshPreview}
                   zoomIn={zoomIn}
                   zoomOut={zoomOut}
                   zoomReset={zoomReset}

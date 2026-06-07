@@ -1,19 +1,16 @@
-import type { RefObject } from "react";
+import { useRef } from "react";
 import {
   RotateCw, Minus, Plus, Smartphone, Tablet, Monitor, Moon, Sun, Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import type { ProjectSettings } from "@/stores/projectSettingsStore";
 
 export interface RunnerPreviewProps {
   devUrl: string | null;
-  runnerIframeSrc: string | undefined;
-  runnerDark: boolean;
   runnerDevice: ProjectSettings["runnerDevice"];
   runnerZoom: number;
-  iframeRef: RefObject<HTMLIFrameElement | null>;
   setProjectSettings: (patch: Partial<ProjectSettings>) => void;
-  handleRefreshPreview: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
@@ -21,22 +18,23 @@ export interface RunnerPreviewProps {
 
 const deviceWidth = { desktop: "100%", tablet: "768px", mobile: "375px" } as const;
 
-/** Preview pane: toolbar (refresh / device / dark / zoom) + iframe.
- *  The iframe ref is owned by RunnerPanel so the HMR effect can update
- *  `iframeRef.current.src` when terminal output arrives. */
+/** Preview pane: toolbar (refresh / device / dark / zoom) + iframe. */
 export function RunnerPreview({
   devUrl,
-  runnerIframeSrc,
-  runnerDark,
   runnerDevice,
   runnerZoom,
-  iframeRef,
   setProjectSettings,
-  handleRefreshPreview,
   zoomIn,
   zoomOut,
   zoomReset,
 }: RunnerPreviewProps) {
+  const darkPreview = useProjectSettingsStore((s) => s.ps.darkPreview);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handleRefreshPreview = () => {
+    iframeRef.current?.contentWindow?.location.reload();
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="panel-toolbar h-7 px-2 gap-1 bg-card">
@@ -55,7 +53,7 @@ export function RunnerPreview({
           <Button variant={runnerDevice === "desktop" ? "secondary" : "ghost"} size="icon" className="h-5 w-5" onClick={() => setProjectSettings({ runnerDevice: "desktop" })} title="Desktop"><Monitor    size={11} /></Button>
         </div>
         <div className="w-px h-3 bg-border shrink-0" />
-        <Button variant={runnerDark ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={runnerDark ? "Switch to light" : "Switch to dark"} onClick={() => { setProjectSettings({ darkPreview: !runnerDark }); }}>{runnerDark ? <Sun size={11} /> : <Moon size={11} />}</Button>
+        <Button variant={darkPreview ? "secondary" : "ghost"} size="icon" className="h-5 w-5 shrink-0" title={darkPreview ? "Switch to light" : "Switch to dark"} onClick={() => { setProjectSettings({ darkPreview: !darkPreview }); }}>{darkPreview ? <Sun size={11} /> : <Moon size={11} />}</Button>
         <div className="w-px h-3 bg-border shrink-0" />
         <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={zoomOut}><Minus size={11} /></Button>
         <button className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer min-w-[32px] text-center select-none shrink-0" onClick={zoomReset}>{Math.round(runnerZoom * 100)}%</button>
@@ -64,7 +62,7 @@ export function RunnerPreview({
       <div className="flex-1 overflow-auto p-2 bg-muted/30 flex justify-center">
         {devUrl ? (
           <div className="h-full bg-background shadow-lg border border-border overflow-hidden" style={{ width: deviceWidth[runnerDevice], transform: `scale(${runnerZoom})`, transformOrigin: "top center" }}>
-            <iframe ref={iframeRef} src={runnerIframeSrc} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
+            <iframe ref={iframeRef} key={`runner-${darkPreview}`} src={`${devUrl.replace(/\/$/, "")}?dark=${darkPreview}`} className="w-full h-full" sandbox="allow-scripts allow-same-origin allow-forms" />
           </div>
         ) : (
           <div className="flex items-center justify-center text-muted-foreground text-sm">

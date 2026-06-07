@@ -1,17 +1,19 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDevServerStore } from "@/lib/dev-server-manager";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import type { RefObject } from "react";
 
 interface ComponentsPreviewProps {
   iframeRef: RefObject<HTMLIFrameElement | null>;
-  initialPreviewSrc: string | undefined;
+  selectedComponent: string | null;
   onRetry: () => void;
 }
 
 /** Iframe + status/error/loading/idle states for the components runner preview. */
-export function ComponentsPreview({ iframeRef, initialPreviewSrc, onRetry }: ComponentsPreviewProps) {
+export function ComponentsPreview({ iframeRef, selectedComponent, onRetry }: ComponentsPreviewProps) {
   const { runnerStatus, runnerUrl, runnerError } = useDevServerStore();
+  const darkPreview = useProjectSettingsStore((s) => s.ps.darkPreview);
 
   if (runnerStatus === "error") {
     return (
@@ -38,10 +40,20 @@ export function ComponentsPreview({ iframeRef, initialPreviewSrc, onRetry }: Com
   }
 
   if (runnerStatus === "running" && runnerUrl) {
+    if (!selectedComponent) {
+      return (
+        <div className="flex items-center justify-center text-muted-foreground text-sm h-full">
+          Select a component to preview
+        </div>
+      );
+    }
+    const base = runnerUrl.replace(/\/$/, "");
+    const src = `${base}/__preview/${selectedComponent}?dark=${darkPreview}`;
     return (
       <iframe
+        key={`comp-${darkPreview}`}
         ref={iframeRef}
-        src={initialPreviewSrc}
+        src={src}
         className="w-full h-full border-0"
         sandbox="allow-scripts allow-same-origin allow-forms"
       />
