@@ -18,7 +18,7 @@ permalink: /architecture/open-agent-sdk-analysis/
 
 However, several patterns are worth adopting: **hooks**, **retry logic**, and **tool builder pattern**.
 
-**This document was written in response to a confirmed user experience bug:** in the current implementation, users see thinking, then "Generating...", then immediately a completed tool card. They never see an "input-streaming" / "running" state on the tool card. The deferred queue mechanism was designed to solve this, but the user's observation indicates a different problem.
+**This document was originally written in response to a tool-card "running" state bug** (see [§3](#3-resolved-the-missing-running-state-bug) for what changed and how it was resolved).
 
 ---
 
@@ -285,7 +285,6 @@ This is consistent with Prototyper's philosophy of manual history management, th
 | **Context truncation** | `estimate_tokens()`, `truncate_messages()` | None | ✅ Library has this |
 | **Vision/multimodal** | `ImageBlock` (URL, file, base64) | Not yet implemented | ✅ Library pattern could inspire |
 | **Hooks** | Async closures with builder | None | ✅ Could adopt pattern |
-| **Post-paint deferred queue** | N/A (no frontend) | `pendingToolResultsRef` + `useEffect([toolResultTick])` | ❌ Library has no concept of UI rendering |
 
 ### 2.2 Critical Incompatibility: Auto-Execution in a Desktop App
 
@@ -333,146 +332,11 @@ Prototyper solves this via its event-driven architecture:
 
 ---
 
-## 3. The User-Reported Bug: Missing "Running" State
+## 3. Resolved: The Missing "Running" State Bug
 
-### 3.1 Expected Behavior
+Tool cards used to render straight to "Completed" without ever showing a "Processing" / `input-streaming` state. The shipped fix is the simplest one: `attachToolCall` / `resolveToolCall` write straight to the Zustand store as each Channel event arrives (`src/hooks/chat/streamHandler.ts:94–96,144`), and `tool.tsx` derives the rendered card state directly from `{ pending, success }`. Real tool execution (file I/O, shell commands) takes long enough that `ToolCall` and `ToolResult` essentially never land in the same JS task, so the "running" state renders correctly.
 
-Per the current Prototyper docs and code, the sequence should be:
-
-```
-User sends message
-→ Model streams thinking text (visible in Reasoning block)
-→ Model calls write_file
-→ Tool card appears: "Processing" badge + Loader2 spinner (input-streaming state)
-→ Rust executes write_file (async)
-→ Tool card updates: "Completed" badge + CheckCircle (output-available state)
-→ Final message saved to chat.json
-```
-
-### 3.2 Actual Behavior (User Report)
-
-```
-User sends message
-→ Model streams thinking text (visible) ✓
-→ "Generating..." loader shows during model streaming ✓
-→ IMMEDIATELY: write_file shows "Completed" (output-available state)
-→ NEVER: "Processing" / "input-streaming" state on tool card
-```
-
-This indicates the tool card renders directly at `output-available` without ever showing `input-streaming`.
-
-### 3.3 Root Cause Analysis
-
-#### Hypothesis A: Synchronous Batching (Documented Problem)
-
-The deferred queue mechanism exists because Tauri Channel's `transformCallback` processes all queued messages synchronously:
-
-```javascript
-while (nextIndex in pendingMessages) {
-    const message = pendingMessages[nextIndex];
-    onmessage.call(this, message);
-    delete pendingMessages[nextIndex];
-    nextIndex++;
-}
-```
-
-**Reference:** Prototyper `node_modules/@tauri-apps/api/core.js:99–105`
-
-If `ToolResult` arrives before JS processes the previous callback (very likely for fast file writes), `ToolCall`, `ToolResult`, and `Done` are executed in one JS call stack.
-
-**Evidence — Prototyper handler:**
-
-```typescript
-channel.onmessage = (msg) => {
-    if (msg.event === "ToolCall") {
-        attachToolCall(pending: true);  // Sets pending=true
-    } else if (msg.event === "ToolResult") {
-        pendingToolResultsRef.current.push({...});
-        setToolResultTick(t + 1);  // Queues visual update
-    } else if (msg.event === "Done") {
-        finalize();  // Synchronously drains queue
-    }
-}
-```
-
-**Reference:** Prototyper `src/hooks/useChat.ts:286–329`
-
-`finalize()` drains the queue synchronously, calling `updateLastToolResult(pending: false)`:
-
-```typescript
-const finalize = (content: string, thinking: string) => {
-    // Flush any queued tool results synchronously
-    for (const result of pendingToolResultsRef.current.splice(0)) {
-        useChatStore.getState().updateLastToolResult(entityId, result.tool, ...);
-        useChatStore.getState().patchLastToolCallPath(entityId, result.tool, ...);
-    }
-    // ... build final message, persist
-}
-```
-
-**Reference:** Prototyper `src/hooks/useChat.ts:259–284`
-
-The `pending: false` is set inside `finalize()` **before `isStreaming` is set to false**, but this happens IN THE SAME synchronous batch as `attachToolCall(pending: true)`. React will batch these updates and render once.
-
-If React batches:
-1. `attachToolCall(pending: true)` → store update
-2. `updateLastToolResult(pending: false)` → store update
-3. `setStreaming(false)` → store update
-
-Then React renders with `pending: false` **already applied**. The `input-streaming` state never paints.
-
-#### Hypothesis B: React Concurrent Batching (More Likely)
-
-React 19's concurrent features may batch the store updates from Step 16 (attachToolCall) and Step 17 (ToolResult handler) into a single render. If `finalize()` runs in the same batch and flushes pending to false, the intermediate `pending: true` state is never committed.
-
-React renders the message list with:
-```
-message.toolCalls = [{ tool: "write_file", pending: false, ... }]
-```
-
-The `MessageList.tsx` `toolPartFromRecord` function maps:
-
-```typescript
-const state = tc.pending
-    ? "input-streaming"
-    : tc.success === false
-    ? "output-error"
-    : "output-available"
-```
-
-**Reference:** Prototyper `src/components/chat/MessageList.tsx:25–30`
-
-Since `pending: false` → state is `"output-available"`. The card shows "Completed" immediately.
-
-#### Why the deferred queue doesn't help here
-
-The useEffect that drains the queue:
-
-```typescript
-useEffect(() => {
-    if (toolResultTick === 0) return;
-    for (const result of pendingToolResultsRef.current.splice(0)) {
-        updateLastToolResult(entityId, result.tool, result.output, result.success);
-        patchLastToolCallPath(entityId, result.tool, result.path ?? "");
-    }
-}, [toolResultTick, entityId]);
-```
-
-**Reference:** Prototyper `src/hooks/useChat.ts:190–201`
-
-This effect fires **after** paint, but only if `ToolResult` handler ran earlier and set `toolResultTick`. However, `finalize()` runs in the SAME synchronous batch as the `Done` event, and it **also** drains the queue. If finalize runs before the effect, the effect finds an empty queue and is a no-op.
-
-**The user's observed behavior matches this exactly.**
-
-#### Conclusion: The deferred queue mechanism is correct in theory, but React's batching behavior + finalize's synchronous flush defeat its purpose when events are batched.
-
-### 3.4 Why the Library Can't Fix This
-
-The `open-agent-sdk` has **no concept of a frontend**, **no concept of React**, **no concept of browser paint cycles**, and **no concept of deferred visual updates**. It is a CLI-focused library.
-
-Even if we adopted it, the library's auto-execution mode would make the problem **worse** by hiding the entire tool execution phase from the frontend entirely.
-
----
+See [Chat Stream & Tool Flow → Tauri Channel Batching]({{ '/architecture/chat-flow/' | relative_url }}#tauri-channel-batching) for the verified current mechanism.
 
 ## 4. Recommendations
 
@@ -559,73 +423,9 @@ if token_count > MAX_CONTEXT_TOKENS * 0.9 {
 
 **Reference pattern:** `/tmp/open-agent-sdk-rust-check/src/context.rs`
 
-### 4.6 Fix: The Missing "Running" State Bug
+### 4.6 Resolved: The Missing "Running" State Bug
 
-The most critical issue. Options:
-
-#### Option A: Split finalize into two phases
-
-Don't flush the deferred queue inside `finalize()`. Instead:
-
-1. `onmessage(Done)` → sets `isStreaming = false`, preserves `pending: true` on tool calls
-2. React renders with `pending: true` — spinner visible
-3. `useEffect([toolResultTick])` fires post-paint → drains queue → sets `pending: false`
-4. React renders final state
-
-**Problem:** Chat JSON would be persisted with `pending: true`.
-
-#### Option B: Persist with pending=false, render with pending=true
-
-Keep the current `finalize()` synchronous flush (so JSON is correct), but add a `renderingToolCalls` state that tracks the visual `pending: true` independently of the store state.
-
-```typescript
-const renderingToolCallsRef = useRef<Set<string>>(new Set());
-
-// On ToolCall: add to rendering set
-renderingToolCallsRef.current.add(toolUseId);
-
-// On ToolResult: remove from set, but only after useEffect
-useEffect(() => {
-    // drain queue
-    const ids = pendingToolResultsRef.current.map(r => r.tool);
-    for (const id of ids) renderingToolCallsRef.current.delete(id);
-}, [toolResultTick]);
-```
-
-This decouples persisted state from visual state.
-
-#### Option C: Force a render between ToolCall and Done
-
-Use `flushSync` to force React to render before `Done` arrives:
-
-```typescript
-import { flushSync } from 'react-dom';
-
-if (msg.event === "ToolCall") {
-    flushSync(() => {
-        useChatStore.getState().attachToolCall(entityId, ...);
-    });
-}
-```
-
-**Caveat:** `flushSync` is generally discouraged but may be acceptable here. However, since Tauri Channel calls onmessage synchronously, `flushSync` inside the handler may still not actually yield to the browser before `ToolResult` arrives.
-
-#### Option D: Use `requestAnimationFrame` / `setTimeout(0)` to break the synchronous chain
-
-Instead of sending `ToolResult` and `Done` immediately after tool execution, insert a 1ms yield:
-
-```rust
-// In agent_loop.rs after execute_tool
-channel.send(CompletionEvent::ToolResult { ... }).await?;
-tokio::time::sleep(Duration::from_millis(1)).await;  // Yield control
-channel.send(CompletionEvent::Done).await?;
-```
-
-This ensures JS has a chance to process the `ToolCall` callback and render before `ToolResult` arrives. The 1ms delay is imperceptible.
-
-**This is the simplest and most reliable fix.** It doesn't require frontend changes.
-
----
+This was the original trigger for this analysis. The shipped fix was simpler than any option considered here: stop deferring at all. `attachToolCall` / `resolveToolCall` write straight to the Zustand store as each Channel event arrives, and `tool.tsx` renders directly off `{ pending, success }`. See [§3](#3-resolved-the-missing-running-state-bug).
 
 ## 5. Exact Source References
 
@@ -634,17 +434,13 @@ This ensures JS has a chance to process the `ToolCall` callback and render befor
 | File | Line Range | Role |
 |------|-----------|------|
 | `src/hooks/useChat.ts` | 23–75 | `buildApiMessages()` — Ollama tool history |
-| `src/hooks/useChat.ts` | 190–201 | `useEffect([toolResultTick])` — deferred queue drainer |
-| `src/hooks/useChat.ts` | 259–284 | `finalize()` — flushes queue synchronously |
-| `src/hooks/useChat.ts` | 286–329 | `channel.onmessage` handlers (Chunk, ToolCall, ToolResult, Done) |
-| `src/stores/chatStore.ts` | 71–81 | `attachToolCall()` — sets `pending: true` |
-| `src/stores/chatStore.ts` | 83–99 | `updateLastToolResult()` — sets `pending: false` |
-| `src/stores/chatStore.ts` | 101–117 | `patchLastToolCallPath()` — patches path |
-| `src/components/chat/MessageList.tsx` | 25–30 | `toolPartFromRecord()` — maps `pending` to state |
-| `src/components/chat/MessageList.tsx` | 175–176 | Loader rendering logic |
-| `src/components/chat/MessageList.tsx` | 199–213 | Tool card + "Generating..." loader rendering |
-| `src/components/ui/tool.tsx` | 46–71 | `input-streaming` state rendering (Loader2 + "Processing") |
-| `src-tauri/src/agent/agent_loop.rs` | 46–81 | `stream_turn()` — manual history fix |
+| `src/hooks/chat/streamHandler.ts` | 53–71 | `finalize()` — persists final message, writes `chat.json` |
+| `src/hooks/chat/streamHandler.ts` | 73–177 | `channel.onmessage` handlers (Chunk, ToolCall, ToolResult, Done) |
+| `src/stores/chatStore.ts` | 77–86 | `attachToolCall()` — pushes `{ pending: true }` |
+| `src/stores/chatStore.ts` | 88–105 | `resolveToolCall()` — mutates matching entry to `{ pending: false, success }` |
+| `src/components/ui/tool.tsx` | 15–27 | `ToolPart` state union + state derivation from `{ pending, success }` |
+| `src/components/ui/tool.tsx` | 171–187 | `input-streaming` / `output-available` / `output-error` rendering |
+| `src-tauri/src/agent/agent_loop.rs` | 47–55,169–172 | manual history fix — preserves `tool_calls` on the assistant message |
 | `src-tauri/src/agent/agent_loop.rs` | 170–189 | Tool execution + `ToolCall` / `ToolResult` event send |
 | `src-tauri/src/agent/agent_loop.rs` | 191–200 | `wrote_file = true` → break + `Done` |
 | `src-tauri/src/commands/ai.rs` | 461–550 | `generate_completion_stream` — tokio::spawn, CancellationToken |

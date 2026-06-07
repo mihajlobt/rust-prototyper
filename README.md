@@ -197,7 +197,7 @@ src/
     globals.css             # Tailwind v4 @theme inline block + CSS custom properties
 src-tauri/
   src/
-    lib.rs                   # App setup, plugins, generate_handler![] (44 commands)
+    lib.rs                   # App setup, plugins, generate_handler![] (48 commands)
     main.rs                  # Thin passthrough to lib.rs
     commands/
       process.rs             # Bun/shell spawning, kill
@@ -217,7 +217,7 @@ src-tauri/
   Cargo.toml                 # Rust dependencies
 ```
 
-## Views (9 Panels)
+## Views (10 Panels)
 
 | View | ID | Panel Component | Description |
 |------|----|-----------------|-------------|
@@ -226,6 +226,7 @@ src-tauri/
 | Components | `components` | `ComponentsPanel` | Prompt → component code + live preview |
 | Design (Themes) | `themes` | `ThemesPanel` | Prompt → CSS theme generation |
 | Workflows | `workflows` | `WorkflowsView` | Node-based execution canvas (React Flow) |
+| Plans | `plans` | `PlansPanel` | Markdown plan/spec editor with chat-assisted authoring |
 | APIs | `apis` | `APIsPanel` | HTTP request/response testing |
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
 | Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, workflows, APIs |

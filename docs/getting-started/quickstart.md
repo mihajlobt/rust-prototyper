@@ -43,6 +43,7 @@ When the app opens, you'll see a 10-tab header (Wizard, Screens, Components, Des
 - **Plans** — markdown plan editor + chat, with live preview and four layout modes (focus / write / read / split)
 - **Workflows** — node-based graph execution (React Flow)
 - **APIs** — HTTP request/response testing
+- **Assets** — AI image generation (Bonsai server), asset gallery
 - **Library** — searchable library of everything you've generated
 
 ## Build a production binary

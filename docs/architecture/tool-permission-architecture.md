@@ -6,7 +6,7 @@ permalink: /architecture/tool-permission-architecture/
 
 # Tool Permission System — Architecture Report
 
-> **Status: Implemented.** This report was written as a pre-implementation design proposal. The system it describes — the `ToolPermission` event, `resolve_tool_permission` command, Accept/Reject/Always Allow cards, and the allowlist — has since shipped and is part of the current `CompletionEvent` protocol (see [AI Streaming]({{ '/architecture/ai-streaming/' | relative_url }}) for the live 8-variant enum and [Backend]({{ '/architecture/backend/' | relative_url }}) for the registered command). The sections below are kept as the original design rationale and edge-case analysis; some code sketches differ in minor naming details from the shipped implementation (e.g., the shipped event also carries `ToolCall { name, args, id }` rather than `{ tool, args }`).
+> **Status: Implemented.** This report was written as a pre-implementation design proposal. The system it describes — the `ToolPermission` event, `resolve_tool_permission` command, Accept/Reject/Always Allow cards, and the allowlist — has since shipped and is part of the current `CompletionEvent` protocol (see [AI Streaming]({{ '/architecture/ai-streaming/' | relative_url }}) for the live 8-variant enum and [Backend]({{ '/architecture/backend/' | relative_url }}) for the registered command). The sections below are kept as the original design rationale and edge-case analysis; the `ToolPermissionDecision` variant names below have been updated to match what shipped (`Accepted` / `Rejected` / `AlwaysAllowed` — past tense, since the variant represents a decision that has been made).
 
 ## Executive Summary
 
@@ -140,9 +140,9 @@ pub enum CompletionEvent {
 /// NEW: User's decision for a tool permission request
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum ToolPermissionDecision {
-    Accept,
-    Reject,
-    AlwaysAllow,
+    Accepted,
+    Rejected,
+    AlwaysAllowed,
 }
 
 /// NEW: Permission mode (stored in settings)
@@ -283,9 +283,9 @@ async fn request_permission(
             // Clean up on cancellation
             let mut permissions = state.pending_permissions.lock().unwrap();
             if let Some(pending) = permissions.remove(&request_id) {
-                let _ = pending.sender.send(ToolPermissionDecision::Reject);
+                let _ = pending.sender.send(ToolPermissionDecision::Rejected);
             }
-            Ok(ToolPermissionDecision::Reject)
+            Ok(ToolPermissionDecision::Rejected)
         }
     }
 }
@@ -337,7 +337,7 @@ let futures: Vec<_> = (0..tool_calls.len())
                 };
                 
                 match decision {
-                    ToolPermissionDecision::Reject => {
+                    ToolPermissionDecision::Rejected => {
                         return (idx, ToolExecutionResult {
                             success: false,
                             output: format!("User rejected {name}"),
@@ -345,13 +345,13 @@ let futures: Vec<_> = (0..tool_calls.len())
                             written_content: None,
                         });
                     }
-                    ToolPermissionDecision::AlwaysAllow => {
+                    ToolPermissionDecision::AlwaysAllowed => {
                         // Persist to allowlist (via tauri-plugin-store)
                         // This is a one-time add, not blocking the execution
                         let _ = persist_allowlist_add(&name).await;
                         // Fall through to execute
                     }
-                    ToolPermissionDecision::Accept => {
+                    ToolPermissionDecision::Accepted => {
                         // Fall through to execute
                     }
                 }
@@ -608,7 +608,7 @@ stopGeneration() -> stopRef = true -> stopGenerationRequest(requestId)
                                     -> cancel_token.cancelled() -> triggers
 ```
 
-**Resolution**: The `request_permission()` function uses `tokio::select!` with `cancel_token.cancelled()` as one branch. When `stop_generation_stream` signals the token, all pending `request_permission` calls return `ToolPermissionDecision::Reject`. The permission card can observer `isStreaming` becoming false and auto-dismiss.
+**Resolution**: The `request_permission()` function uses `tokio::select!` with `cancel_token.cancelled()` as one branch. When `stop_generation_stream` signals the token, all pending `request_permission` calls return `ToolPermissionDecision::Rejected`. The permission card can observer `isStreaming` becoming false and auto-dismiss.
 
 **Doc reference**: Tauri docs — `CancellationToken: "Signals the Rust CancellationToken which drops the HTTP connection, stopping generation at the source."`
 
@@ -627,7 +627,7 @@ stopGeneration() -> stopRef = true -> stopGenerationRequest(requestId)
 
 **Scenario**: User reloads the window while a permission card is showing.
 
-**Resolution**: The `pending_permissions` map in `AppState` expires old entries. On frontend reload, the old permission cards are lost (the frontend has no state). The backend's `request_permission()` function has a configurable timeout (e.g., 5 minutes). If the timeout fires before the user resolves it, the tool is auto-rejected with a `ToolPermissionDecision::Reject` default.
+**Resolution**: The `pending_permissions` map in `AppState` expires old entries. On frontend reload, the old permission cards are lost (the frontend has no state). The backend's `request_permission()` function has a configurable timeout (e.g., 5 minutes). If the timeout fires before the user resolves it, the tool is auto-rejected with a `ToolPermissionDecision::Rejected` default.
 
 ```rust
 // In request_permission, add timeout branch:
@@ -637,7 +637,7 @@ tokio::select! {
     _ = tokio::time::sleep(Duration::from_secs(300)) => {
         // Auto-reject after 5 minutes of inactivity
         permissions.remove(&request_id);
-        Ok(ToolPermissionDecision::Reject)
+        Ok(ToolPermissionDecision::Rejected)
     }
 }
 ```

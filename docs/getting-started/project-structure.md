@@ -17,7 +17,7 @@ Prototyper/
 ├── src-tauri/            # Rust backend (Tauri v2)
 ├── docs/                 # This Jekyll site (Cloudflare Pages)
 ├── thoughts/             # Architecture plans, research, prompts (not built)
-├── .opencode/context/    # AI context library (auto-copied into docs/_context/)
+├── .opencode/context/    # AI context library (96 files / 624KB) — browse directly, not published as a site section
 ├── CLAUDE.md             # Quick-reference architecture guide for AI assistants
 ├── README.md             # Full install, run, build, and reference
 ├── DESIGN.md             # Design language (Quiet Instrument)
@@ -43,7 +43,7 @@ src/
   components/
     ui/                    # ~50 shadcn primitives + 20 domain components (70 total)
     chat/                  # ChatInput, MessageList, MentionPicker, ...
-  stores/                  # Zustand: appStore, chatStore, projectSettingsStore, bonsaiStore, uiStore
+  stores/                  # Zustand: appStore, askUserStore, bonsaiStore, chatStore, projectSettingsStore, uiStore
   styles/globals.css       # Tailwind v4 @theme inline block + CSS custom properties
 ```
 
@@ -54,7 +54,7 @@ The `lib/ipc.ts` file is the **only** place `invoke()` is wrapped. Every Rust co
 ```
 src-tauri/
   src/
-    lib.rs                 # App setup, plugins, generate_handler![] (44 commands)
+    lib.rs                 # App setup, plugins, generate_handler![] (48 commands)
     main.rs                # Thin passthrough to lib.rs
     commands/
       process.rs           # Bun/shell spawning, kill
@@ -63,6 +63,7 @@ src-tauri/
       ai.rs                # Streaming completion, tool permissions
       ai_providers.rs      # OpenAI/Claude provider implementations
       ai_ollama.rs         # Ollama-specific logic + model listing + presets
+      bonsai/              # Local image-generation server lifecycle + asset management
       export.rs            # Project/component export
       workflows.rs         # Workflow persistence
       mod.rs
@@ -73,7 +74,7 @@ src-tauri/
   Cargo.toml                 # Rust dependencies
 ```
 
-Every Tauri command lives in `lib.rs`'s `generate_handler![]` macro. The list of all 44 commands is in [Backend]({{ '/architecture/backend/' | relative_url }}).
+Every Tauri command lives in `lib.rs`'s `generate_handler![]` macro. The list of all 48 commands is in [Backend]({{ '/architecture/backend/' | relative_url }}).
 
 ## Docs (`docs/`)
 
@@ -84,20 +85,18 @@ docs/
   _includes/sidebar.html   # Renders navigation
   _layouts/default.html    # Header, sidebar, main, footer
   assets/css/site.css      # All styling
-  build.sh                 # Copies .opencode/context/ → _context/, then jekyll build
   index.md                 # Landing
-  getting-started/         # 5 files (this section)
-  architecture/            # 10 files (4 existing + 6 new)
-  standards/               # 4 files (coding, design, context-system, index)
-  plans/                   # 2 existing files
-  specs/                   # 1 existing file
-  _context/                # Generated from .opencode/context/ (excluded from git, generated on build)
+  getting-started/         # install, quickstart, project-structure, troubleshooting + overview
+  architecture/            # frontend, backend, IPC, data persistence, AI streaming, chat-flow, tool permissions, agent SDK analysis
+  standards/               # coding, design, context-system + overview
+  plans/                   # Plans & Specs — point-in-time implementation plans (overview, context-menu, shared-chat)
+  specs/                   # Plans & Specs — design specs (shared-chat-design)
 ```
 
-The `_context/` directory is **regenerated every build** from `.opencode/context/`. Don't edit it directly.
+There is no generated `_context/` collection — an earlier attempt to publish `.opencode/context/` as a `/context/` site section never actually ran as part of the Cloudflare Pages build (the build command just runs `jekyll build`, and the copy script wasn't part of it), so the section silently 404'd. It's been removed; browse `.opencode/context/` directly in the repo instead — see [Standards → Context System]({{ '/standards/context-system/' | relative_url }}).
 
 ## What next
 
 - [Architecture → Frontend]({{ '/architecture/frontend/' | relative_url }}) — panels, hooks, state
-- [Architecture → Backend]({{ '/architecture/backend/' | relative_url }}) — all 44 commands
+- [Architecture → Backend]({{ '/architecture/backend/' | relative_url }}) — all 48 commands
 - [Architecture → Data Persistence]({{ '/architecture/data-persistence/' | relative_url }}) — where data lives

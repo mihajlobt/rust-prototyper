@@ -109,9 +109,9 @@ System fallback: `ui-sans-serif, system-ui, -apple-system, sans-serif`.
 | Token | Value | Use |
 |---|---|---|
 | `--radius` | `0.625rem` (10px) | Cards, panels, nodes, buttons |
-| `- 2px` | 8px | inputs, segmented controls |
-| `- 4px` | 6px | chips, small controls |
-| `full` | `999px` | pills, status dots, port handles |
+| `--radius-md` (`--radius - 2px`) | `8px` | Inputs, segmented controls |
+| `--radius-sm` (`--radius - 4px`) | `6px` | Chips, small controls |
+| `full` | `999px` | Pills, status dots, port handles |
 
 Consistent, soft, never sharp; never more than 10px on structural surfaces.
 
@@ -135,10 +135,10 @@ Optional **glow** (Tweaks: off / subtle / full) adds a colored halo to *running*
 |---|---|
 | fast | `120ms` — hover, color, border transitions |
 | normal | `~180ms` — drawer slide-in, reorder settle |
-| pulse | `1.1s` — running status dot |
+| pulse | `1.2s` — `pulse-dot` loader variant |
 | thinking | `1.2s` staggered — three-dot node activity |
 
-Easing: `ease-in-out` for entrances (code uses this in 19+ places — `loader.tsx`, `thinking-dot` in `globals.css`), linear for indeterminate (shimmer, edge flow, blink).
+Easing: `ease-in-out` for entrances (`loader.tsx`, `thinking-dot` in `globals.css`), linear for indeterminate (shimmer, edge flow, blink).
 
 **Conventions:** animate to communicate work (a node firing, tokens streaming, an edge pulsing), never to ornament. Dragging is transform-only at 60fps (no React on the hot path). The terminal cursor blinks; the run edge carries a traveling dot.
 

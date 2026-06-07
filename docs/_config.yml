@@ -11,11 +11,6 @@ url: https://rust-prototyper.pages.dev
 theme: null
 plugins: []
 
-collections:
-  context:
-    output: true
-    permalink: /context/:path/
-
 # Source: ./docs
 source: .
 
@@ -37,7 +32,6 @@ exclude:
   - vendor/
   - .bundle/
   - node_modules/
-  - build.sh
 
 # Don't copy these to the build
 keep_files: []
@@ -47,10 +41,5 @@ defaults:
   - scope:
       path: ""
       type: pages
-    values:
-      layout: default
-  - scope:
-      path: ""
-      type: "context"
     values:
       layout: default

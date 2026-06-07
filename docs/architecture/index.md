@@ -16,7 +16,7 @@ flowchart LR
     subgraph Frontend
         UI[React 19 + Vite<br/>port 1420]
         Hooks[hooks/<br/>useChat, useSettings, useBonsai, ...]
-        Stores[Zustand stores<br/>app, chat, projectSettings, bonsai, ui]
+        Stores[Zustand stores<br/>app, askUser, bonsai, chat, projectSettings, ui]
         UI --> Hooks
         UI --> Stores
     end

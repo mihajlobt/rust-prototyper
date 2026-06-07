@@ -142,9 +142,9 @@ use 8–12px padding, view headers 14–20px, canvases breathe with generous vir
 | Token | Value | Use |
 |---|---|---|
 | `--radius` | `0.625rem` (10px) | Cards, panels, nodes, buttons |
-| `- 2px` (8px) | inputs, segmented controls | |
-| `- 4px` (6px) | chips, small controls | |
-| `full` | `999px` | pills, status dots, port handles |
+| `--radius-md` (`--radius - 2px`) | `8px` | Inputs, segmented controls |
+| `--radius-sm` (`--radius - 4px`) | `6px` | Chips, small controls |
+| `full` | `999px` | Pills, status dots, port handles |
 
 Consistent, soft, never sharp; never more than 10px on structural surfaces.
 

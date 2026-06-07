@@ -6,9 +6,7 @@ permalink: /architecture/chat-flow/
 
 # Chat Stream & Tool Usage Flow
 
-> **Note on staleness**: This diagram was captured at an earlier point in the agent's development, when `build_tools()` returned only `[write_file, read_file, bash]`. The agent now ships **15 tools** — `write_file`, `read_file`, `edit_file`, `run_tsc`, `run_lint`, `run_build`, `glob`, `grep`, `bash`, `ask_user`, `ask_user_form`, `register_screen`, `set_active_theme`, `validate_design_json`, `web_search` (defined in `src-tauri/src/agent/tools.rs`). The streaming/event-batching mechanics described below (Tauri Channel synchronous draining, the `pendingToolResultsRef` paint-guarantee pattern, cancellation via `CancellationToken`) remain accurate; line-number references may have drifted as the codebase has grown.
-
-A Mermaid sequence diagram mirroring the flow documented in `docs/chat-flow.html`, with source references verified against the actual implementation.
+A Mermaid sequence diagram of one user-message → tool-call → response cycle, with every step verified against the current implementation. The example walks through a `write_file` call because it's the simplest single-tool case to follow — the agent actually has 15 tools available (see `src-tauri/src/agent/tools.rs`); the same Channel/streaming/direct-store-write mechanics apply regardless of which one the model picks.
 
 ## Legend
 
@@ -19,9 +17,7 @@ A Mermaid sequence diagram mirroring the flow documented in `docs/chat-flow.html
 | 🟠 | Tool call |
 | 🔴 | Tool result |
 | 🟣 | Browser paint |
-| 🟡 | useEffect (post-paint) |
 | ⚪ | Finalization |
-| ⚫ | Synchronous batch (critical) |
 
 ---
 
@@ -66,7 +62,7 @@ sequenceDiagram
     %% ════════════════════════════════════════════════════════
     RS->>RS: run_agent_loop()
     activate RS
-    RS->>RS: build_tools() → [write_file, read_file, bash]
+    RS->>RS: build_tools() → 15 ToolInfo defs (tools.rs:160)
     RS->>RS: stream_turn() — iteration 0
     Note right of RS: src-tauri/src/agent/agent_loop.rs:118–124
     RS->>OA: POST /api/chat<br/>stream: true · tools · think?
@@ -94,73 +90,55 @@ sequenceDiagram
     OA-->>RS: done=true · tool_calls=[write_file]
     RS->>RS: assistant_msg.tool_calls = tool_calls
     RS->>RS: push assistant_msg to history
-    Note right of RS: agent_loop.rs:76–81
+    Note right of RS: agent_loop.rs:47–55,169–172
 
     %% ════════════════════════════════════════════════════════
     %% PHASE 5 — TOOL EXECUTION
     %% ════════════════════════════════════════════════════════
     RS->>IPC: send(ToolCall { tool, args })
     RS->>RS: execute_tool("write_file")
-    Note right of RS: ⚠ Ignores model path; uses caller output_path<br/>src-tauri/src/agent/executor.rs:33–89
+    Note right of RS: Model-given path wins if present, sandboxed to project_dir<br/>(rejects "..", falls back to caller output_path)<br/>src-tauri/src/agent/executor.rs:99-145
     RS->>RS: tokio::fs::write(project_dir, content)
     RS->>IPC: send(ToolResult { tool, success, output, path, content })
-    Note right of RS: agent_loop.rs:170–189
-    RS->>RS: wrote_file = true · break
+    RS->>RS: wrote_file = true . break
     RS->>RS: history.push(tool result)
     RS->>IPC: send(Done)
     deactivate RS
 
     %% ════════════════════════════════════════════════════════
-    %% PHASE 6 — SYNCHRONOUS BATCH (critical)
+    %% PHASE 6 — STORE WRITES
     %% ════════════════════════════════════════════════════════
-    Note over IPC: ⚠ Tauri Channel while-loop<br/>core.js:99–105<br/>processes queued events<br/>synchronously in ONE JS task
+    Note over IPC: Tauri Channel while-loop (core.js:99-105) drains<br/>ToolCall to ToolResult to Done synchronously in ONE JS task.<br/>attachToolCall/resolveToolCall write straight to Zustand as each event arrives.
 
     activate R
     IPC->>R: onmessage(ToolCall)
-    R->>R: attachToolCall(pending: true)
-    Note right of R: src/stores/chatStore.ts:71
-    R->>R: Zustand schedules render
+    R->>R: attachToolCall(entityId, tool, "", args)<br/>pushes { tool, arguments, pending: true } onto toolCalls[]
+    Note right of R: src/stores/chatStore.ts:77-86<br/>src/hooks/chat/streamHandler.ts:94-96
 
     IPC->>R: onmessage(ToolResult)
-    R->>R: toolWritten = true · cancel rAF
-    R->>R: onOutput(stripFences(content))
-    R->>R: pendingToolResultsRef.push({...})
-    R->>R: setToolResultTick(n+1)
-    Note right of R: src/hooks/useChat.ts:310–321
+    R->>R: resolveToolCall(entityId, tool, output, success, path)<br/>finds first pending entry matching tool, sets<br/>{ result, success, pending: false, path }
+    Note right of R: Front-to-back search assumes ToolCall/ToolResult<br/>arrive in matching index order (chatStore.ts:88-105)
+    R->>R: if write_file/edit_file succeeded:<br/>onCodeOutput(content) . onToolWrite(path, content)
+    Note right of R: src/hooks/chat/streamHandler.ts:141-159
 
     IPC->>R: onmessage(Done)
-    R->>R: finalize()
-    R->>R: flush queue · build finalMessage
-    R->>R: setMessages · setStreaming(false)
-    R->>R: writeFile(chat.json)
-    Note right of R: src/hooks/useChat.ts:259–284,322–323
+    R->>R: finalize(content, thinking)<br/>setMessages . setStreaming(false) . writeFile(chat.json)
+    Note right of R: src/hooks/chat/streamHandler.ts:53-71,160-172
     deactivate R
 
     %% ════════════════════════════════════════════════════════
-    %% PHASE 7 — REACT RENDER: SPINNER FRAME
+    %% PHASE 7 — RENDER
     %% ════════════════════════════════════════════════════════
-    R->>B: React flushes batched updates
+    R->>B: Zustand notifies subscribers, React re-renders
     activate B
-    R->>B: render Tool card · state="input-streaming"
-    Note right of B: 🟣 PAINT — spinner visible<br/>Loader2 + "Processing" badge<br/>src/components/ui/tool.tsx:46–71
+    R->>B: render Tool card . state derives from { pending, success }
+    Note right of B: PAINT - pending: true gives "input-streaming" (spinner)<br/>pending: false, success: true gives "output-available"<br/>pending: false, success: false gives "output-error"<br/>src/components/ui/tool.tsx:15-27,171-187
     deactivate B
-
-    %% ════════════════════════════════════════════════════════
-    %% PHASE 8 — POST-PAINT useEffect — MARK COMPLETE
-    %% ════════════════════════════════════════════════════════
-    R->>R: useEffect([toolResultTick]) fires
-    Note right of R: 🟡 Post-paint guarantee<br/>react.dev/reference/react/useEffect<br/>Spinner guaranteed ≥1 frame before completion
-    R->>R: drain queue → updateLastToolResult(pending: false)
-    R->>R: patchLastToolCallPath(path)
-    Note right of R: src/hooks/useChat.ts:190–201
-    R->>B: render Tool card · state="output-available"
-    Note right of B: 🟣 PAINT — completed state<br/>CheckCircle + "Completed" badge
 
     %% ════════════════════════════════════════════════════════
     %% MULTI-TURN CONTINUATION
     %% ════════════════════════════════════════════════════════
-    Note over RS: If wrote_file == false:<br/>rebuild request(vec![]) · stream_turn() again<br/>MAX_ITERATIONS = 10
-    Note right of RS: agent_loop.rs:140–212
+    Note over RS: If wrote_file == false:<br/>rebuild request(vec![]) . stream_turn() again<br/>MAX_ITERATIONS = 20 (agent_loop.rs:17)
 ```
 
 ---
@@ -170,30 +148,24 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> idle: Initial state
-    idle --> input_streaming: onmessage(ToolCall)<br/>attachToolCall(pending:true)
+    idle --> input_streaming: onmessage(ToolCall)<br/>attachToolCall(...)<br/>pushes { pending: true }
 
-    input_streaming --> output_available: useEffect drains queue<br/>updateLastToolResult(pending:false)
-    input_streaming --> output_error: Tool execution failed<br/>success=false
+    input_streaming --> output_available: onmessage(ToolResult)<br/>resolveToolCall(... success: true)<br/>mutates entry in place: { pending: false, success: true }
+    input_streaming --> output_error: onmessage(ToolResult)<br/>resolveToolCall(... success: false)<br/>{ pending: false, success: false }
 
     output_available --> [*]: Render complete
     output_error --> [*]: Render complete
-
-    note right of input_streaming
-        PAINT guarantee: useEffect fires AFTER
-        browser has painted spinner for ≥1 frame.
-        Without this deferred queue, React would batch
-        ToolCall+ToolResult+Done and the spinner would
-        never become visible.
-    end note
 ```
+
+`tool.tsx` derives the rendered state directly from `{ pending, success }` on each `toolCalls[]` entry — there's no separate UI-state field to keep in sync (`tool.tsx:15–27,171–187`).
 
 ---
 
 ## Verified Implementation Details
 
-### Tauri Channel Batching (`core.js:99–105`)
+### Tauri Channel Batching
 
-The `@tauri-apps/api/core.js` Channel class queues out-of-order messages and drains them synchronously:
+The `@tauri-apps/api/core.js` Channel class queues out-of-order messages and drains them synchronously (`core.js:99–105`, transpiled output — matches the Tauri v2 IPC source):
 
 ```javascript
 while (nextIndex in pendingMessages) {
@@ -204,9 +176,7 @@ while (nextIndex in pendingMessages) {
 }
 ```
 
-If Rust sends **ToolCall → ToolResult → Done** in rapid succession, all three `onmessage` handlers execute in a single uninterruptible JS task. No React render can paint between them. The `pendingToolResultsRef` + `useEffect` mechanism breaks this synchronous chain by deferring the visual store update until after the browser has painted.
-
-**Source verification:** Line 99 of `node_modules/@tauri-apps/api/core.js` (transpiled output, matches Tauri v2 IPC source).
+If Rust sends **ToolCall → ToolResult → Done** in rapid succession, all three `onmessage` handlers can run in one uninterruptible JS task. `attachToolCall` and `resolveToolCall` write straight to the Zustand store as each event arrives (`streamHandler.ts:94–96,144`), and `tool.tsx` derives the rendered card state directly from `{ pending, success }` — see [Tool Card State Machine](#tool-card-state-machine) above.
 
 ### Tokio `CancellationToken` + `tokio::select!`
 
@@ -218,15 +188,15 @@ Cancellation is cooperative. The `CancellationToken` is cloned: one copy stored 
 
 ### ollama-rs History Helper Limitation
 
-`send_chat_messages_with_history_stream` accumulates text content and pushes `ChatMessage::assistant(content)` — it does **not** preserve `tool_calls` in the assistant history entry. Without the manual fix at `agent_loop.rs:76–81`, multi-turn tool conversations break because Ollama receives a `tool` role message with no prior `tool_calls` in the assistant message.
+`send_chat_messages_with_history_stream` accumulates text content and pushes `ChatMessage::assistant(content)` — it does **not** preserve `tool_calls` in the assistant history entry. Without the manual fix at `agent_loop.rs:47–55,169–172`, multi-turn tool conversations break because Ollama receives a `tool` role message with no prior `tool_calls` in the assistant message.
 
-### Write-File Path Hard-Coding
+### Write-File Path Resolution
 
-`execute_write_file` intentionally ignores the model-provided filename and uses the caller's `output_path` parameter (`executor.rs:51`). This prevents path-traversal attacks (the model hallucinates paths like `"../../../etc/passwd"`). A `..` guard is also present. Parent directories are auto-created via `tokio::fs::create_dir_all`.
+`execute_write_file` (`executor.rs:99–145`) prefers the model-given path when the model supplies one: it's resolved against `project_dir`, rejected if it contains a `..` segment or resolves outside `project_dir`, and falls back to the caller's `output_path` parameter only when the model didn't provide a usable path. This sandboxes against path-traversal (the model hallucinating something like `"../../../etc/passwd"`) while still letting the model name and place the file it's writing. Parent directories are auto-created via `tokio::fs::create_dir_all`.
 
 ### Two Ollama Paths
 
-`generate_ollama_completion_stream` branches at `ai.rs:209`:
+`generate_ollama_completion_stream` (`ai.rs:229`) branches on `output_path` at line 237:
 
 - **`output_path` present** → agent loop path via `ollama-rs` (tool calling, manages its own history)
 - **`output_path` null** → direct HTTP path (`reqwest` + raw JSON). Used when model capabilities don't include tools. The direct path builds JSON manually via `messages_to_ollama_json` to support the `tool_name` field, which ollama-rs `ChatMessage` lacks.
@@ -237,8 +207,9 @@ Cancellation is cooperative. The `CancellationToken` is cloned: one copy stored 
 
 | File | Role |
 |------|------|
-| `src/hooks/useChat.ts` | Main React hook: event handlers, deferred queue, finalize |
-| `src/stores/chatStore.ts` | Zustand store: `attachToolCall`, `updateLastToolResult`, `patchLastToolCallPath` |
+| `src/hooks/useChat.ts` | Main React hook: sends messages, owns streaming state |
+| `src/hooks/chat/streamHandler.ts` | `createStreamHandler`: Channel `onmessage` handlers, `finalize` |
+| `src/stores/chatStore.ts` | Zustand store: `attachToolCall`, `resolveToolCall` |
 | `src/lib/ipc.ts` | `generateCompletionStream` wrapper, `CompletionEvent` type |
 | `src-tauri/src/commands/ai.rs` | `CompletionEvent` enum, command registration, Ollama provider branching |
 | `src-tauri/src/agent/agent_loop.rs` | `run_agent_loop`, `stream_turn`, manual history fix |

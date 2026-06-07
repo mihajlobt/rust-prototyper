@@ -134,5 +134,5 @@ import { invoke } from '@tauri-apps/api/tauri'; // v1, breaks on v2
 ## What next
 
 - [AI Streaming]({{ '/architecture/ai-streaming/' | relative_url }}) — the 8-variant event enum
-- [Backend]({{ '/architecture/backend/' | relative_url }}) — all 44 commands
+- [Backend]({{ '/architecture/backend/' | relative_url }}) — all 48 commands
 - [Chat Stream & Tool Flow]({{ '/architecture/chat-flow/' | relative_url }}) — the full sequence diagram
