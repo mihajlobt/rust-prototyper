@@ -45,14 +45,14 @@
       url: /standards/design/
     - title: Context System
       url: /standards/context-system/
-- title: Plans
+- title: Plans & Specs
   children:
+    - title: Overview
+      url: /plans/
     - title: Native Context Menu
       url: /plans/context-menu/
     - title: Shared Chat
       url: /plans/shared-chat/
-- title: Specs
-  children:
     - title: Shared Chat Design
       url: /specs/shared-chat-design/
 - title: Context

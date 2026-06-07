@@ -51,6 +51,10 @@ This site holds the **internal architecture, standards, plans, and specs** for t
     <div class="card-title">Context</div>
     <div class="card-body">The full 96-file AI context library auto-copied from <code>.opencode/context/</code>.</div>
   </a>
+  <a class="card" href="{{ '/plans/' | relative_url }}">
+    <div class="card-title">Plans & Specs</div>
+    <div class="card-body">Point-in-time implementation plans and design specs — historical record, kept separate from the living docs above.</div>
+  </a>
 </div>
 
 ---
