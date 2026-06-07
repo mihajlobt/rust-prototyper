@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react"
 import { Component, Palette, Monitor, Plug, FileText } from "lucide-react"
 import { readFile } from "@/lib/ipc"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import type { MentionAsset } from "@/types/chat"
 
 // PickerItem extends MentionAsset (minus code) with optional fields:
@@ -26,11 +34,18 @@ interface MentionPickerProps {
   projectPath: string
   onSelect: (item: PickerItem) => void
   onClose: () => void
+  /** Called when picker closes to strip the @ trigger from the textarea value */
+  onChangeText: (text: string) => void
+  textareaValue: string
 }
 
-export function MentionPicker({ query, projectPath, onSelect, onClose }: MentionPickerProps) {
+export function MentionPicker({ query, projectPath, onSelect, onClose, onChangeText, textareaValue }: MentionPickerProps) {
   const [assets, setAssets] = useState<PickerItem[]>([])
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [open, setOpen] = useState(true)
+
+  useEffect(() => {
+    setOpen(true)
+  }, [query])
 
   useEffect(() => {
     loadProjectAssets(projectPath).then(setAssets)
@@ -40,81 +55,87 @@ export function MentionPicker({ query, projectPath, onSelect, onClose }: Mention
     a.name.toLowerCase().includes(query.toLowerCase())
   )
 
-  useEffect(() => { setActiveIndex(0) }, [query])
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault()
-        setActiveIndex((i) => Math.min(i + 1, filtered.length - 1))
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault()
-        setActiveIndex((i) => Math.max(i - 1, 0))
-      } else if (e.key === "Enter") {
-        e.preventDefault()
-        const item = filtered[activeIndex]
-        if (item) onSelect(item)
-      } else if (e.key === "Escape") {
-        onClose()
-      }
+  function handleSelect(item: PickerItem) {
+    // Remove @trigger from textarea before handing off to ChatInput
+    const lastAt = textareaValue.lastIndexOf("@")
+    if (lastAt !== -1) {
+      onChangeText(textareaValue.slice(0, lastAt))
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [filtered, activeIndex, onSelect, onClose])
+    onSelect(item)
+  }
 
-  if (filtered.length === 0) return null
+  function handleClose() {
+    setOpen(false)
+    onClose()
+    // Remove the @ trigger from textarea value
+    const lastAt = textareaValue.lastIndexOf("@")
+    if (lastAt !== -1) {
+      onChangeText(textareaValue.slice(0, lastAt))
+    }
+  }
 
   return (
-    <div className="absolute bottom-full mb-1 left-0 z-50 w-72 rounded-md border border-border bg-popover shadow-lg">
-      <ScrollArea className="h-48">
-        <div className="p-1">
-          {filtered.map((asset, i) => (
-            <button
-              key={asset.id}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-accent/10 rounded ${
-                i === activeIndex ? "bg-accent/10" : ""
-              }`}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                onSelect(asset)
-              }}
-            >
-              <span className="text-muted-foreground shrink-0">{TYPE_ICONS[asset.type]}</span>
+    <Popover open={open} onOpenChange={(o) => !o && handleClose()}>
+      {/* Invisible trigger — positioning anchor only */}
+      <PopoverTrigger asChild>
+        <div className="absolute bottom-full left-0" />
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={4}
+        className="w-72 p-0"
+      >
+        <Command>
+          <CommandInput placeholder="Search assets..." autoFocus />
+          <CommandList>
+            <CommandEmpty>No results.</CommandEmpty>
+            <CommandGroup>
+              {filtered.map((asset) => (
+                <CommandItem
+                  key={asset.id}
+                  value={asset.id}
+                  onSelect={() => handleSelect(asset)}
+                  className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer"
+                >
+                  <span className="text-muted-foreground shrink-0">{TYPE_ICONS[asset.type]}</span>
 
-              <div className="flex-1 min-w-0 text-left">
-                <div className="font-medium truncate leading-tight">{asset.name}</div>
-                {asset.description && (
-                  <div className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.description}</div>
-                )}
-              </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="font-medium truncate leading-tight">{asset.name}</div>
+                    {asset.description && (
+                      <div className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.description}</div>
+                    )}
+                  </div>
 
-              {/* Theme palette swatches */}
-              {asset.palette && asset.palette.length > 0 && (
-                <div className="flex gap-0.5 shrink-0">
-                  {asset.palette.map((color, ci) => (
-                    <span
-                      key={ci}
-                      className="w-3 h-3 rounded-sm inline-block border border-border/30"
-                      style={{ background: color }}
-                    />
-                  ))}
-                </div>
-              )}
+                  {/* Theme palette swatches */}
+                  {asset.palette && asset.palette.length > 0 && (
+                    <div className="flex gap-0.5 shrink-0">
+                      {asset.palette.map((color, ci) => (
+                        <span
+                          key={ci}
+                          className="w-3 h-3 rounded-sm inline-block border border-border/30"
+                          style={{ background: color }}
+                        />
+                      ))}
+                    </div>
+                  )}
 
-              {/* API method badge */}
-              {asset.type === "api" && asset.description && (
-                <span className={[
-                  "shrink-0 text-[9px] font-bold px-1 py-0.5 rounded",
-                  asset.description.startsWith("POST") ? "bg-blue-500/10 text-blue-600" : "bg-green-500/10 text-green-600",
-                ].join(" ")}>
-                  {asset.description.split(" ")[0]}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </ScrollArea>
-    </div>
+                  {/* API method badge */}
+                  {asset.type === "api" && asset.description && (
+                    <span className={[
+                      "shrink-0 text-[9px] font-bold px-1 py-0.5 rounded",
+                      asset.description.startsWith("POST") ? "bg-blue-500/10 text-blue-600" : "bg-green-500/10 text-green-600",
+                    ].join(" ")}>
+                      {asset.description.split(" ")[0]}
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }
 

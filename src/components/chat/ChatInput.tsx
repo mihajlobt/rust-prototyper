@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
+import { useState, useRef, type DragEvent, type ClipboardEvent, type KeyboardEvent } from "react"
 import { Send, Square, ImageIcon, Brain, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -50,6 +50,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   function handleChange(text: string) {
     onChange(text)
@@ -136,8 +137,10 @@ export function ChatInput({
         <MentionPicker
           query={mentionQuery}
           projectPath={projectPath}
+          textareaValue={value}
           onSelect={(item) => handleMentionSelect(item)}
-          onClose={() => setMentionQuery(null)}
+          onClose={() => { setMentionQuery(null); textareaRef.current?.focus() }}
+          onChangeText={onChange}
         />
       )}
 
@@ -161,6 +164,7 @@ export function ChatInput({
 
         {/* Textarea */}
         <Textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
