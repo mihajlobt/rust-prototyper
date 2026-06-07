@@ -85,6 +85,7 @@ docs/
   _includes/sidebar.html   # Renders navigation
   _layouts/default.html    # Header, sidebar, main, footer
   assets/css/site.css      # All styling
+  build.sh                 # Cloudflare's build command — copies .opencode/context/ → _context/, runs jekyll build
   index.md                 # Landing
   getting-started/         # install, quickstart, project-structure, troubleshooting + overview
   architecture/            # frontend, backend, IPC, data persistence, AI streaming, chat-flow, tool permissions, agent SDK analysis
@@ -93,7 +94,7 @@ docs/
   specs/                   # Plans & Specs — design specs (shared-chat-design)
 ```
 
-There is no generated `_context/` collection — an earlier attempt to publish `.opencode/context/` as a `/context/` site section never actually ran as part of the Cloudflare Pages build (the build command just runs `jekyll build`, and the copy script wasn't part of it), so the section silently 404'd. It's been removed; browse `.opencode/context/` directly in the repo instead — see [Standards → Context System]({{ '/standards/context-system/' | relative_url }}).
+`build.sh` copies `.opencode/context/*.md` into a `_context/` Jekyll collection and runs the actual build — but the copy injects no front matter, so Jekyll treats those files as static assets rather than collection documents and never generates pages at `/context/...`. The `/context/` site section was removed from the navigation for this reason; browse `.opencode/context/` directly in the repo instead — see [Standards → Context System]({{ '/standards/context-system/' | relative_url }}).
 
 ## What next
 
