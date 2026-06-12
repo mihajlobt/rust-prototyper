@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Folder, Plus, Trash2, Loader2, Layout, Box, Palette, Workflow, Globe, CheckCircle2 } from "lucide-react";
-import { readDir, createDir, writeFile, deleteDir, readFile, getErrorMessage } from "@/lib/ipc";
+import { readDir, createDir, writeFile, deleteDir, readFile, runShellCommandCapture, getErrorMessage } from "@/lib/ipc";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useSettings } from "@/hooks/useSettings";
 import { scaffoldGenerated } from "@/lib/scaffold";
@@ -18,6 +18,8 @@ import { designLanguageSpecSchema } from "@/lib/design/spec";
 import * as z from "zod/v4";
 import { notify } from "@/hooks/useToast";
 import { withScaffoldNotifications } from "@/lib/scaffold-notifications";
+import { initRepo } from "@/lib/git/repo";
+import { commit } from "@/lib/git/commit";
 
 interface ProjectMeta {
   id: string;
@@ -138,6 +140,15 @@ export function ProjectManagerModal() {
       // withScaffoldNotifications shows the error toast
     } finally {
       setScaffolding(false);
+    }
+
+    try {
+      const generatedPath = `${projectPath}/generated`;
+      await initRepo(generatedPath);
+      await runShellCommandCapture(generatedPath, "git add -A");
+      await commit(generatedPath, "Initial project scaffold");
+    } catch (e) {
+      notify.error("Git init failed", getErrorMessage(e));
     }
 
     setNewProjectName("");

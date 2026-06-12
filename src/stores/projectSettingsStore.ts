@@ -68,6 +68,7 @@ export interface ProjectSettings {
   runnerEditorActiveTabPath: string | null;
   runnerExpandedDirs: string[];
   runnerRequestedFile: string | null;
+  runnerRequestedDiffTab: string | null;
 
   // APIs panel — persistent editor state
   apisName: string;
@@ -154,6 +155,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerEditorActiveTabPath: null,
   runnerExpandedDirs: [],
   runnerRequestedFile: null,
+  runnerRequestedDiffTab: null,
 
   apisName: "",
   apisMethod: "GET",
@@ -235,6 +237,7 @@ interface ProjectSettingsStore {
   openApi: (id: string) => void;
   openPlan: (name: string) => void;
   openRunnerFile: (path: string) => void;
+  openRunnerDiffTab: (tabId: string) => void;
 }
 
 export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get) => ({
@@ -291,4 +294,5 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
   openApi:        (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
   openPlan:       (name) => get().setProjectSettings({ activeView: "plans",      activePlan: name }),
   openRunnerFile: (path) => get().setProjectSettings({ activeView: "runner",     runnerRequestedFile: path }),
+  openRunnerDiffTab: (tabId) => get().setProjectSettings({ activeView: "runner", runnerRequestedDiffTab: tabId }),
 }));

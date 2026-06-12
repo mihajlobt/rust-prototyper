@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Allotment } from "allotment";
+import type { EditorView } from "@codemirror/view";
 import { onTerminalOutput, type TerminalOutputEvent } from "@/lib/ipc";
 import type { XTerminalHandle } from "@/components/XTerminal";
+import { useFileAtHead } from "@/hooks/useGitStatus";
+import { gitGutterEffect, computeGutterChanges } from "@/lib/git/gutter";
+import { isDiffTab } from "@/lib/git/diffTabs";
 import {
   Play, Square, Wrench, Package, PackagePlus, Loader2,
 } from "lucide-react";
@@ -52,6 +56,14 @@ export function RunnerPanel() {
   const activeTabPath = ps.runnerEditorActiveTabPath;
   const openTabs = useMemo(() => ps.runnerEditorTabs ?? [], [ps.runnerEditorTabs]);
 
+  // ── Git diff gutters ────────────────────────────────────────────────────
+  const editorViewRef = useRef<EditorView | null>(null);
+  const generatedPrefix = `${generatedDir}/`;
+  const activeRelPath = activeTabPath?.startsWith(generatedPrefix)
+    ? activeTabPath.slice(generatedPrefix.length)
+    : null;
+  const headContentQuery = useFileAtHead(settings.project, activeRelPath);
+
   // Bump fileTreeRefreshKey so SidebarFilesTab reloads after tab-bar file mutations
   const refreshFiles = useCallback(() => {
     useUIStore.setState((s) => ({ fileTreeRefreshKey: s.fileTreeRefreshKey + 1 }));
@@ -67,8 +79,18 @@ export function RunnerPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ps.runnerRequestedFile]);
 
+  // Open a git diff tab requested by the sidebar Git tab
   useEffect(() => {
-    if (activeTabPath && !tabContents[activeTabPath]) {
+    const requested = ps.runnerRequestedDiffTab;
+    if (!requested) return;
+    openTab(requested);
+    setProjectSettings({ runnerRequestedDiffTab: null });
+    // openTab is defined below and stable; including it would create a circular dep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ps.runnerRequestedDiffTab]);
+
+  useEffect(() => {
+    if (activeTabPath && !isDiffTab(activeTabPath) && !tabContents[activeTabPath]) {
       readFile(activeTabPath).then((content) => {
         setTabContents((prev) => ({ ...prev, [activeTabPath]: content }));
       }).catch((e) => { if (!isNotFoundError(e)) notify.error("Failed to load file", e.message); });
@@ -94,6 +116,7 @@ export function RunnerPanel() {
   const openTab = useCallback(async (path: string) => {
     const newTabs = openTabs.includes(path) ? openTabs : [...openTabs, path];
     setProjectSettings({ runnerEditorTabs: newTabs, runnerEditorActiveTabPath: path });
+    if (isDiffTab(path)) return;
     if (!tabContents[path]) {
       try {
         const content = await readFile(path);
@@ -145,7 +168,7 @@ export function RunnerPanel() {
   }, [activeTabPath]);
 
   const handleSaveFile = useCallback(async () => {
-    if (!activeTabPath) return;
+    if (!activeTabPath || isDiffTab(activeTabPath)) return;
     const content = tabContents[activeTabPath] ?? "";
     try {
       await writeFile(activeTabPath, content);
@@ -154,6 +177,16 @@ export function RunnerPanel() {
   }, [activeTabPath, tabContents]);
 
   const handleEditorBlur = useCallback(() => { handleSaveFile(); }, [handleSaveFile]);
+
+  // Recompute inline diff gutters whenever the HEAD content or the active tab's content changes
+  useEffect(() => {
+    const view = editorViewRef.current;
+    if (!view) return;
+    const headContent = headContentQuery.data;
+    const currentContent = activeTabPath ? tabContents[activeTabPath] ?? "" : "";
+    const changes = headContent !== undefined ? computeGutterChanges(headContent, currentContent) : [];
+    view.dispatch({ effects: gitGutterEffect.of(changes) });
+  }, [headContentQuery.data, activeTabPath, tabContents]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -285,6 +318,7 @@ export function RunnerPanel() {
                   handleDeleteFile={handleDeleteFile}
                   revealInExplorer={revealInExplorer}
                   reorderTabs={reorderTabs}
+                  editorViewRef={editorViewRef}
                 />
               </Allotment.Pane>
 

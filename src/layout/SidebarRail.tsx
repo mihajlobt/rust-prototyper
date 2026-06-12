@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Plus, RefreshCw, LayoutGrid, FolderOpen, MessagesSquare } from "lucide-react";
+import { Plus, RefreshCw, LayoutGrid, FolderOpen, MessagesSquare, GitBranch } from "lucide-react";
 import { SidebarFilesTab } from "@/components/sidebar/SidebarFilesTab";
 import { SidebarChatsTab } from "@/components/sidebar/SidebarChatsTab";
+import { SidebarGitTab } from "@/components/sidebar/git/SidebarGitTab";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ import { notify } from "@/hooks/useToast";
 import { ProjectExplorer, SECTION_NAMES, SECTION_TREE_PATH } from "@/components/ProjectExplorer";
 import type { SectionName } from "@/components/ProjectExplorer";
 
-type SidebarTab = "project" | "files" | "chats";
+type SidebarTab = "project" | "files" | "chats" | "git";
 
 export function SidebarRail() {
   const { settings } = useAppStore();
@@ -278,6 +279,7 @@ export function SidebarRail() {
     { id: "project", icon: LayoutGrid,      color: "text-violet-500", title: "Project" },
     { id: "files",   icon: FolderOpen,      color: "text-sky-500",    title: "Files" },
     { id: "chats",   icon: MessagesSquare,  color: "text-emerald-500", title: "Chats" },
+    { id: "git",     icon: GitBranch,       color: "text-orange-500", title: "Git" },
   ];
 
   return (
@@ -314,6 +316,12 @@ export function SidebarRail() {
       {activeTab === "chats" && (
         <div className="flex-1 overflow-hidden">
           <SidebarChatsTab />
+        </div>
+      )}
+
+      {activeTab === "git" && (
+        <div className="flex-1 overflow-hidden">
+          <SidebarGitTab />
         </div>
       )}
 

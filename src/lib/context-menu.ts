@@ -139,3 +139,30 @@ export function createTabActions(config: {
     { id: "delete", label: "Delete", action: config.onDelete },
   ];
 }
+
+/** Convenience: create actions for a git diff tab's context menu (no file ops). */
+export function createDiffTabActions(config: {
+  onClose: () => void;
+  onCloseOthers: () => void;
+  onCloseToRight: () => void;
+  onCloseAll: () => void;
+  canCloseOthers?: boolean;
+  canCloseToRight?: boolean;
+}): MenuAction[] {
+  return [
+    { id: "close", label: "Close", action: config.onClose },
+    {
+      id: "close-others",
+      label: "Close Others",
+      enabled: config.canCloseOthers ?? true,
+      action: config.onCloseOthers,
+    },
+    {
+      id: "close-to-right",
+      label: "Close to the Right",
+      enabled: config.canCloseToRight ?? true,
+      action: config.onCloseToRight,
+    },
+    { id: "close-all", label: "Close All", action: config.onCloseAll },
+  ];
+}

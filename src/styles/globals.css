@@ -478,3 +478,22 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Git diff gutter — inline editor markers for changes vs HEAD */
+.cm-git-gutter {
+  width: 4px;
+  min-width: 4px;
+}
+.cm-git-gutter-marker {
+  width: 4px;
+  height: 100%;
+}
+.cm-git-gutter-add {
+  background-color: var(--color-green-500, #22c55e);
+}
+.cm-git-gutter-modify {
+  background-color: var(--color-amber-500, #f59e0b);
+}
+.cm-git-gutter-remove {
+  background-color: var(--color-red-500, #ef4444);
+}

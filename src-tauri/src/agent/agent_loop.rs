@@ -88,6 +88,29 @@ struct StreamMessage {
     tool_calls: Vec<serde_json::Value>,
 }
 
+/// Normalize the tool list to OpenAI-compatible wire format.
+///
+/// `ollama_rs::ToolInfo` serializes `ToolType::Function` as `"type": "Function"`
+/// (PascalCase). Ollama tolerates it, but hosted OpenAI-compatible providers
+/// reject it with "Unsupported tool type". Rewrite to lowercase before sending.
+fn normalize_tools_for_request(tools: &serde_json::Value) -> serde_json::Value {
+    let arr = match tools.as_array() {
+        Some(a) => a,
+        None => return tools.clone(),
+    };
+    serde_json::Value::Array(arr.iter().map(|t| {
+        let mut normalized = t.clone();
+        if let Some(obj) = normalized.as_object_mut() {
+            if let Some(type_val) = obj.get_mut("type") {
+                if let Some(s) = type_val.as_str() {
+                    *type_val = serde_json::Value::String(s.to_ascii_lowercase());
+                }
+            }
+        }
+        normalized
+    }).collect())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn stream_turn(
     http_client: &reqwest::Client,
@@ -104,7 +127,7 @@ async fn stream_turn(
         "model": model,
         "messages": history,
         "stream": true,
-        "tools": tools_json,
+        "tools": normalize_tools_for_request(tools_json),
     });
 
     if let Some(tt) = think {

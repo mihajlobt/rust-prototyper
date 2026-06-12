@@ -18,3 +18,15 @@ export const projectKeys = {
     ["project", project, "tree", section] as const,
   library: (project: string) => ["project", project, "library"] as const,
 };
+
+export const gitKeys = {
+  isRepo: (project: string) => ["git", project, "isRepo"] as const,
+  status: (project: string) => ["git", project, "status"] as const,
+  log: (project: string, limit: number) => ["git", project, "log", limit] as const,
+  diff: (project: string, path: string, staged: boolean) =>
+    ["git", project, "diff", path, staged] as const,
+  commitDiff: (project: string, hash: string) =>
+    ["git", project, "commit", hash] as const,
+  fileAtHead: (project: string, path: string) =>
+    ["git", project, "head", path] as const,
+};

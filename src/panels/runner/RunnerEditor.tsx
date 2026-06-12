@@ -1,12 +1,17 @@
 import { useState, useRef, useCallback } from "react";
-import { X, FileCode, Save } from "lucide-react";
+import { X, FileCode, Save, FileDiff } from "lucide-react";
 import type { MouseEvent } from "react";
+import type { EditorView } from "@codemirror/view";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
-import { showContextMenu, createTabActions } from "@/lib/context-menu";
+import { showContextMenu, createTabActions, createDiffTabActions } from "@/lib/context-menu";
+import { gitGutterExtension } from "@/lib/git/gutter";
+import { isDiffTab, parseDiffTab, diffTabLabel } from "@/lib/git/diffTabs";
+import { DiffTabView } from "@/panels/runner/DiffTabView";
+import { useAppStore } from "@/stores/appStore";
 
 export interface RunnerEditorProps {
   openTabs: string[];
@@ -25,6 +30,8 @@ export interface RunnerEditorProps {
   handleDeleteFile: (path: string) => void;
   revealInExplorer: (path: string) => void;
   reorderTabs: (newOrder: string[]) => void;
+  /** Receives the underlying CodeMirror EditorView so RunnerPanel can dispatch git gutter updates. */
+  editorViewRef?: React.MutableRefObject<EditorView | null>;
 }
 
 /** Tab bar + CodeMirror editor body for the Runner panel.
@@ -47,7 +54,9 @@ export function RunnerEditor({
   handleDeleteFile,
   revealInExplorer,
   reorderTabs,
+  editorViewRef,
 }: RunnerEditorProps) {
+  const { settings } = useAppStore();
   // State for the opacity effect only — not read in drag handlers (would be stale)
   const [dragFromPath, setDragFromPath] = useState<string | null>(null);
   // Refs ensure drag handlers always read the latest values without stale closures
@@ -166,7 +175,8 @@ export function RunnerEditor({
             />
 
             {openTabs.map((path, tabIndex) => {
-              const name = path.split("/").pop() ?? path;
+              const diffParams = parseDiffTab(path);
+              const name = diffParams ? diffTabLabel(diffParams) : path.split("/").pop() ?? path;
               const isActive = path === activeTabPath;
               const isDirty = dirtyTabs.has(path);
               const isLast = tabIndex === openTabs.length - 1;
@@ -183,6 +193,21 @@ export function RunnerEditor({
                   onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    if (diffParams) {
+                      showContextMenu(
+                        createDiffTabActions({
+                          onClose: () => closeTab(path),
+                          onCloseOthers: () => closeOtherTabs(path),
+                          onCloseToRight: () => closeTabsToRight(path),
+                          onCloseAll: closeAllTabs,
+                          canCloseOthers: openTabs.length > 1,
+                          canCloseToRight: !isLast,
+                        }),
+                        e.clientX,
+                        e.clientY,
+                      );
+                      return;
+                    }
                     showContextMenu(
                       createTabActions({
                         onSave: handleSaveFile,
@@ -209,7 +234,11 @@ export function RunnerEditor({
                     isBeingDragged ? "opacity-40" : "",
                   ].join(" ")}
                 >
-                  {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                  {diffParams ? (
+                    <FileDiff size={11} className="shrink-0 text-orange-500" />
+                  ) : isDirty ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                  ) : null}
                   <span className="truncate">{name}</span>
                   <span
                     className="shrink-0 flex items-center justify-center w-3.5 h-3.5 rounded-sm opacity-50 hover:opacity-100 hover:bg-muted cursor-pointer"
@@ -222,7 +251,7 @@ export function RunnerEditor({
             })}
           </div>
 
-          {activeTabPath && (
+          {activeTabPath && !isDiffTab(activeTabPath) && (
             <TooltipProvider delayDuration={400}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -239,12 +268,20 @@ export function RunnerEditor({
 
       {activeTabPath ? (
         <div className="flex-1 overflow-hidden">
-          <CodeMirrorEditor
-            value={tabContents[activeTabPath] ?? ""}
-            onChange={handleContentChange}
-            onBlur={handleEditorBlur}
-            filename={activeTabPath}
-          />
+          {(() => {
+            const diffParams = parseDiffTab(activeTabPath);
+            if (diffParams) return <DiffTabView project={settings.project} params={diffParams} />;
+            return (
+              <CodeMirrorEditor
+                value={tabContents[activeTabPath] ?? ""}
+                onChange={handleContentChange}
+                onBlur={handleEditorBlur}
+                filename={activeTabPath}
+                viewRef={editorViewRef}
+                extraExtensions={gitGutterExtension}
+              />
+            );
+          })()}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
