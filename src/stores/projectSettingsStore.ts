@@ -63,6 +63,7 @@ export interface ProjectSettings {
   runnerDevice: "desktop" | "tablet" | "mobile";
   runnerZoom: number;
   runnerTerminalOpen: boolean;
+  runnerPreviewOpen: boolean;
   runnerActiveTab: "terminal" | "logs" | "network";
   runnerEditorTabs: string[];
   runnerEditorActiveTabPath: string | null;
@@ -150,6 +151,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerDevice: "desktop",
   runnerZoom: 1,
   runnerTerminalOpen: true,
+  runnerPreviewOpen: true,
   runnerActiveTab: "terminal",
   runnerEditorTabs: [],
   runnerEditorActiveTabPath: null,

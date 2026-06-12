@@ -7,7 +7,7 @@ import { useFileAtHead } from "@/hooks/useGitStatus";
 import { gitGutterEffect, computeGutterChanges } from "@/lib/git/gutter";
 import { isDiffTab } from "@/lib/git/diffTabs";
 import {
-  Play, Square, Wrench, Package, PackagePlus, Loader2,
+  Play, Square, Wrench, Package, PackagePlus, Loader2, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +51,7 @@ export function RunnerPanel() {
   const [renameTo, setRenameTo] = useState("");
 
   const { ref: verticalRef, onDragEnd: verticalOnDragEnd, defaultSizes: verticalDefault } = useAllotmentLayout("runner-terminal", 3);
-  const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2);
+  const { ref: editorRef, onDragEnd: editorOnDragEnd, defaultSizes: editorDefault } = useAllotmentLayout("runner-editor", 2, [true, ps.runnerPreviewOpen]);
   
   const activeTabPath = ps.runnerEditorActiveTabPath;
   const openTabs = useMemo(() => ps.runnerEditorTabs ?? [], [ps.runnerEditorTabs]);
@@ -294,12 +294,21 @@ export function RunnerPanel() {
         <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleInstall}><Package size={10} />Install</Button>
         <AddLibraryModal trigger={<Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2"><PackagePlus size={10} />Library</Button>} />
         <Button variant="outline" size="sm" className="gap-1 h-6 text-[11px] px-2" onClick={handleKillAll}><Square size={10} />Kill All</Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 ml-auto"
+          onClick={() => setProjectSettings({ runnerPreviewOpen: !ps.runnerPreviewOpen })}
+          title={ps.runnerPreviewOpen ? "Hide preview" : "Show preview"}
+        >
+          {ps.runnerPreviewOpen ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />}
+        </Button>
       </div>
 
       <div className="flex-1 overflow-hidden">
         <Allotment vertical ref={verticalRef} onDragEnd={verticalOnDragEnd} defaultSizes={verticalDefault} className="h-full" onVisibleChange={(_i, v) => setProjectSettings({ runnerTerminalOpen: v })}>
           <Allotment.Pane>
-            <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault}>
+            <Allotment ref={editorRef} onDragEnd={editorOnDragEnd} defaultSizes={editorDefault} onVisibleChange={(i, v) => { if (i === 1) setProjectSettings({ runnerPreviewOpen: v }); }}>
               <Allotment.Pane minSize={200}>
                 <RunnerEditor
                   openTabs={openTabs}
@@ -322,7 +331,7 @@ export function RunnerPanel() {
                 />
               </Allotment.Pane>
 
-              <Allotment.Pane minSize={300}>
+              <Allotment.Pane minSize={300} visible={ps.runnerPreviewOpen} snap>
                 <RunnerPreview
                   devUrl={devUrl}
                   runnerDevice={ps.runnerDevice}
