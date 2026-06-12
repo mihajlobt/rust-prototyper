@@ -199,7 +199,7 @@ export function WizardPreviewPane({
         </Button>
 
         <Button size="icon" variant="ghost" className="h-7 w-7"
-          onClick={() => { iframeRef.current?.contentWindow?.location.reload() }}
+          onClick={() => { const el = iframeRef.current; if (el) el.src = el.src; }}
           title="Refresh preview"
         >
           <RefreshCw size={12} />

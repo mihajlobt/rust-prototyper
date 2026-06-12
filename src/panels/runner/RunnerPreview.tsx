@@ -32,7 +32,8 @@ export function RunnerPreview({
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const handleRefreshPreview = () => {
-    iframeRef.current?.contentWindow?.location.reload();
+    const el = iframeRef.current;
+    if (el) el.src = el.src;
   };
 
   return (
