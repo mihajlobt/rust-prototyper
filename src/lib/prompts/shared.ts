@@ -125,6 +125,18 @@ IMPORTANT WORKFLOW:
 When asked to UPDATE an existing file, you MUST first read_file to see the current code,
 then use edit_file to make targeted changes. Only use write_file when creating a brand-new file.`;
 
+/** Git usage note for the `bash` tool — appended to prompts for panels that have `bash` available. */
+export function gitUsageNote(generatedRoot: string): string {
+  return `
+
+GIT — the generated app at ${generatedRoot}/ is (usually) a git repository:
+- Use the bash tool with "git -C ${generatedRoot} <command>" for status/diff/log/add/commit etc.
+- Read-only commands (status, diff, log, show, branch) are safe to run anytime for context.
+- Mutating commands (add, commit, push, pull, restore, reset) prompt the user for approval — only run them when the user has asked for a git action (e.g. "commit this").
+- Do NOT use the "--" path separator (e.g. "git diff -- src/App.tsx") — it is rejected. Pass paths directly: "git diff src/App.tsx".
+- Example commit: git -C ${generatedRoot} commit -m "message"`;
+}
+
 export function outputFilePathSection(outputPath: string): string {
   const parts = outputPath.split("/");
   const projectRoot = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
@@ -148,7 +160,8 @@ PATH CONVENTIONS — all file paths are relative to the app data root:
 - Generated app root: ${generatedRoot}/src/
 - glob and grep return paths relative to the PROJECT ROOT (e.g. "generated/src/pages/home.tsx")
 - read_file, write_file, and edit_file require paths from the APP DATA ROOT (e.g. "${projectRoot}/generated/src/pages/home.tsx")
-- When using a path from glob/grep with read_file: prepend "${projectRoot}/" to it.`;
+- When using a path from glob/grep with read_file: prepend "${projectRoot}/" to it.
+${gitUsageNote(generatedRoot)}`;
 }
 
 // ─── Shadcn component catalog (used by shadcn-mode prompts) ──────────────────

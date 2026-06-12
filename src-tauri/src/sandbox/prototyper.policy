@@ -145,6 +145,33 @@ define_program(
 )
 
 define_program(
+    program="git",
+    system_path=["/usr/bin/git", "/bin/git"],
+    # Note: the literal token "--" (path separator) is rejected by execpolicy
+    # (DoubleDashNotSupportedYet), so commands like `git diff -- <path>` or
+    # `git checkout -- <path>` must omit it: `git diff <path>`.
+    options=[
+        flag("--porcelain"), flag("-z"), flag("--branch"),
+        flag("--cached"), flag("--staged"),
+        flag("-a"), flag("--all"), flag("-A"),
+        flag("-v"), flag("--verbose"),
+        flag("--oneline"), flag("--short"),
+        flag("-b"),
+        flag("-f"), flag("--force"),
+        flag("-u"), flag("--set-upstream"),
+        flag("-q"), flag("--quiet"),
+        flag("--abbrev-ref"), flag("--is-inside-work-tree"), flag("--show-toplevel"),
+        opt("-C", ARG_OPAQUE_VALUE),
+        opt("-c", ARG_OPAQUE_VALUE),
+        opt("-m", ARG_OPAQUE_VALUE),
+        opt("-F", ARG_OPAQUE_VALUE),
+        opt("-n", ARG_OPAQUE_VALUE),
+        opt("--pretty", ARG_OPAQUE_VALUE),
+    ],
+    args=[ARG_UNVERIFIED_VARARGS],
+)
+
+define_program(
     program="bunx",
     system_path=["/usr/bin/bunx"],
     args=[ARG_UNVERIFIED_VARARGS],

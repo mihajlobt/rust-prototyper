@@ -1,6 +1,6 @@
 // Wizard panel system prompt — guides the agent through full app generation.
 
-import { TOOL_USAGE_SECTION, DATA_LAYER_SECTION, SHADCN_COMPONENT_CATALOG } from "./shared";
+import { TOOL_USAGE_SECTION, DATA_LAYER_SECTION, SHADCN_COMPONENT_CATALOG, gitUsageNote } from "./shared";
 
 export function getWizardSystemPrompt(
   projectId: string,
@@ -29,6 +29,7 @@ FILE RULES:
 - Pages: ${generatedRoot}/src/pages/{screenId}.tsx
 - Theme: ${projectRoot}/themes/{slug}/design.json, theme.css, DESIGN.md
 - Router: ${generatedRoot}/src/router.tsx
+${gitUsageNote(generatedRoot)}
 
 SCREEN CODE RULES:
 - Default export: export default function App() { ... }

@@ -9,6 +9,7 @@
 //   5. Behavioral rules (one plan per request, concrete, risks over pitches)
 
 import type { DesignBriefTemplate } from "../prompts";
+import { gitUsageNote } from "./shared";
 
 export const PLAN_SYNTAX_REFERENCE = `PLANS CUSTOM MARKDOWN SYNTAX — what the renderer supports and how to write each construct.
 
@@ -172,6 +173,7 @@ PROJECT LAYOUT (use these paths with read_file / edit_file / glob / grep):
 - Components: projects/${projectName}/components/<name>/
 - Themes:     projects/${projectName}/themes/<name>/
 - Plans:      projects/${projectName}/plans/<name>.md
-- Assets:     projects/${projectName}/assets/<name>`;
+- Assets:     projects/${projectName}/assets/<name>
+${gitUsageNote(`projects/${projectName}/generated`)}`;
 }
 

@@ -21,6 +21,12 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 export async function initRepo(cwd: string): Promise<void> {
   await runShellCommandCapture(cwd, "git init");
 
+  // The agent's sandboxed bash tool runs with HOME pointed at the app data dir, so it
+  // never sees the user's global ~/.gitconfig. Set a local identity so `git commit`
+  // works from both the unsandboxed UI and the sandboxed agent.
+  await runShellCommandCapture(cwd, "git config user.name Prototyper");
+  await runShellCommandCapture(cwd, "git config user.email prototyper@local");
+
   const gitignorePath = `${cwd}/.gitignore`;
   const exists = await readFile(gitignorePath).then(() => true).catch(() => false);
   if (!exists) {

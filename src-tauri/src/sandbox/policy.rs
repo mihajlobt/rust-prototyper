@@ -101,3 +101,36 @@ fn detect_shell_injection(command: &str) -> bool {
     }
     false
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn git_commands_are_allowed() {
+        validate_command("git -C projects/foo/generated status --porcelain --branch -z")
+            .expect("git status should be allowed");
+        validate_command("git -C projects/foo/generated diff --cached")
+            .expect("git diff should be allowed");
+        validate_command("git -C projects/foo/generated diff src/App.tsx")
+            .expect("git diff <path> (no --) should be allowed");
+        validate_command("git -C projects/foo/generated commit -m \"msg\"")
+            .expect("git commit should be allowed");
+        validate_command("git -C projects/foo/generated push").expect("git push should be allowed");
+        validate_command("git -C projects/foo/generated log -n 10 --oneline")
+            .expect("git log should be allowed");
+        validate_command("git -C projects/foo/generated config user.email prototyper@local")
+            .expect("git config should be allowed");
+    }
+
+    #[test]
+    fn git_diff_with_double_dash_is_rejected() {
+        // execpolicy hardcodes a rejection of the literal "--" token
+        // (Error::DoubleDashNotSupportedYet) before any flag matching, regardless
+        // of declared options. The agent must pass paths directly (`git diff <path>`).
+        validate_command("git -C projects/foo/generated diff -- src/App.tsx")
+            .expect_err("`--` separator should be rejected by execpolicy");
+        validate_command("git -C projects/foo/generated diff src/App.tsx")
+            .expect("git diff <path> without -- should be allowed");
+    }
+}

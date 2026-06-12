@@ -295,7 +295,7 @@ pub fn build_tools() -> Vec<ToolInfo> {
             tool_type: ToolType::Function,
             function: ToolFunctionInfo {
                 name: "bash".to_string(),
-                description: "Run a shell command in the sandboxed project root (30s timeout, bwrap+landlock isolated). Use for ls/find/grep/cat to inspect the filesystem. Sandbox blocks network access and privilege escalation. Prefer specialized tools: run_tsc, run_lint, run_build, read_file.".to_string(),
+                description: "Run a shell command in the sandboxed app data root (30s timeout, bwrap+landlock isolated). Use for ls/find/grep/cat to inspect the filesystem, or `git -C <project>/generated <command>` for git status/diff/log/add/commit. Sandbox blocks privilege escalation; network is allowed (needed for bun install and git fetch/pull/push). Prefer specialized tools for non-git work: run_tsc, run_lint, run_build, read_file.".to_string(),
                 parameters: make_schema::<BashArgs>(),
             },
         },

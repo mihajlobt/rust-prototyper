@@ -28,7 +28,7 @@ export const DESIGN_TOOL_FILTER_DEFAULT = [
 ];
 
 export const PLANS_TOOL_FILTER_DEFAULT = [
-  "read_file", "glob", "grep", "write_file", "edit_file",
+  "read_file", "glob", "grep", "write_file", "edit_file", "bash",
   "ask_user", "ask_user_form",
   ...GENERIC_AGENT_TOOLS,
 ];
