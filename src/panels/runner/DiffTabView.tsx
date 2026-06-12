@@ -43,7 +43,7 @@ export function DiffTabView({ project, params }: DiffTabViewProps) {
           </>
         )}
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0 overflow-hidden">
         {query.isLoading ? (
           <div className="p-4 text-center text-xs text-muted-foreground">Loading diff…</div>
         ) : (
