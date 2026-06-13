@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { X, FileCode, Save, FileDiff, Rows3, Columns2 } from "lucide-react";
+import { X, FileCode, Save, FileDiff, Rows3, Columns2, XCircle } from "lucide-react";
 import type { MouseEvent } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ export interface RunnerEditorProps {
   diffViewMode: DiffViewMode;
   onDiffViewModeChange: (mode: DiffViewMode) => void;
   onCloseDiff: (diffId: string) => void;
+  onCloseAllDiffs: () => void;
   openTab: (path: string) => void;
   closeTab: (path: string, e?: MouseEvent) => void;
   closeOtherTabs: (path: string) => void;
@@ -51,6 +52,7 @@ export function RunnerEditor({
   diffViewMode,
   onDiffViewModeChange,
   onCloseDiff,
+  onCloseAllDiffs,
   openTab,
   closeTab,
   closeOtherTabs,
@@ -236,10 +238,10 @@ export function RunnerEditor({
                     );
                   }}
                   className={[
-                    "flex items-center gap-1.5 px-3 text-[11px] border-r border-border shrink-0 max-w-[160px] transition-colors select-none",
+                    "flex items-center gap-1.5 px-3 text-[11px] shrink-0 max-w-[160px] transition-colors select-none",
                     isActive
                       ? "bg-background text-foreground border-b-2 border-b-primary -mb-px"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border-r border-border",
                     isBeingDragged ? "opacity-40" : "",
                   ].join(" ")}
                 >
@@ -266,28 +268,23 @@ export function RunnerEditor({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant={diffViewMode === "unified" ? "secondary" : "ghost"}
+                      variant="ghost"
                       size="icon"
                       className="h-6 w-6"
-                      onClick={() => onDiffViewModeChange("unified")}
+                      onClick={() => onDiffViewModeChange(diffViewMode === "unified" ? "split" : "unified")}
                     >
-                      <Rows3 size={11} />
+                      {diffViewMode === "unified" ? <Rows3 size={11} /> : <Columns2 size={11} />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Unified view</TooltipContent>
+                  <TooltipContent>{diffViewMode === "unified" ? "Switch to side-by-side view" : "Switch to unified view"}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant={diffViewMode === "split" ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => onDiffViewModeChange("split")}
-                    >
-                      <Columns2 size={11} />
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCloseAllDiffs}>
+                      <XCircle size={11} />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Side-by-side view</TooltipContent>
+                  <TooltipContent>Close all diffs</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>

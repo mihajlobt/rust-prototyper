@@ -166,6 +166,10 @@ export function RunnerPanel() {
     setProjectSettings({ runnerOpenDiffs: (ps.runnerOpenDiffs ?? []).filter((d) => d !== diffId) });
   }, [ps.runnerOpenDiffs, setProjectSettings]);
 
+  const closeAllDiffs = useCallback(() => {
+    setProjectSettings({ runnerOpenDiffs: [] });
+  }, [setProjectSettings]);
+
   const setDiffViewMode = useCallback((mode: DiffViewMode) => {
     setProjectSettings({ runnerDiffViewMode: mode });
   }, [setProjectSettings]);
@@ -328,6 +332,7 @@ export function RunnerPanel() {
                   diffViewMode={ps.runnerDiffViewMode}
                   onDiffViewModeChange={setDiffViewMode}
                   onCloseDiff={closeDiff}
+                  onCloseAllDiffs={closeAllDiffs}
                   openTab={openTab}
                   closeTab={closeTab}
                   closeOtherTabs={closeOtherTabs}

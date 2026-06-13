@@ -54,9 +54,11 @@ export function DiffAccordionItem({ project, params, viewMode, onClose }: DiffAc
             {isFile ? (
               <>
                 <span className="font-mono truncate min-w-0">{params.path}</span>
-                <Badge variant="outline" className="shrink-0">
-                  {params.untracked ? "Untracked" : params.staged ? "Staged" : "Changes"}
-                </Badge>
+                {(params.untracked || params.staged) && (
+                  <Badge variant="outline" className="shrink-0">
+                    {params.untracked ? "Untracked" : "Staged"}
+                  </Badge>
+                )}
               </>
             ) : (
               <>
