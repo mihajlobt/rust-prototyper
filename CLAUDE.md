@@ -24,7 +24,10 @@ All Rust logic lives in `src-tauri/src/lib.rs`. Frontend IPC uses `@tauri-apps/a
 
 ```
 src/
-  panels/          # 10 panels: Wizard, Screens, Components, Themes, Plans, APIs, Runner, Library, Assets (+ workflows/ for WorkflowsView)
+  panels/          # 7 panels: Create, Plans, Workflows, APIs, Assets, Runner, Library (+ workflows/ for WorkflowsView)
+  panels/create/   # CreatePanel — merged Wizard/Screens/Components/Design sub-modes (segmented control)
+  panels/create/modes/  # WizardMode, ScreensMode, ComponentsMode, ThemesMode (+ screens/ sub-components) — one mounted at a time
+  panels/theme-preview/ # ThemeTokenPreview + token preview pieces — shared by CreatePreviewPane (Design tab) and ThemesMode
   panels/plans/    # Plans sub-components: PlanEditor, PlanPreview, PlanLayout, FormatToolbar, FrontmatterHeader, PlanCommandMenu, PlannerChat, SelectionToChat, PlansPanelParts, chips, autocomplete
   workflows/       # WorkflowsView.tsx — graph execution engine
   layout/          # Header.tsx, SidebarRail.tsx
@@ -98,7 +101,7 @@ Tailwind v4 + shadcn/ui. Tokens in `src/styles/globals.css` (`@theme inline` blo
 
 Global shortcuts use `window.addEventListener('keydown', ...)` in `useEffect`:
 
-- `Ctrl+S` — save file (ComponentsPanel, RunnerPanel)
+- `Ctrl+S` — save file (ComponentsMode inside CreatePanel, RunnerPanel)
 - `Ctrl+Z` / `Ctrl+Shift+Z` — undo/redo (WorkflowsView)
 
 ## Package manager
@@ -124,12 +127,12 @@ bunx tsc --noEmit    # type-check
 ## Plans panel
 
 - Files live at `projects/{id}/plans/{slug}.md`; chat history at `projects/{id}/plans/{slug}.chat.json`
-- `PlansPanel` calls `useChat` directly (same pattern as ThemesPanel). No custom hook.
+- `PlansPanel` calls `useChat` directly (same pattern as WizardMode, ScreensMode, ComponentsMode, ThemesMode inside CreatePanel). No custom hook.
 - Four modes: **focus** (editor only), **write** (editor + chat), **read** (preview + chat), **split** (editor + preview + chat). Each mode has its own `useAllotmentLayout` key so pane sizes persist independently.
 - Live preview is `react-markdown` + `remark-directive` + custom `pre`/`code`/`blockquote` renderers. Does NOT reuse the global `Markdown` component.
 - `SelectionToChat`: floating "Add to chat" button. Appears on `mouseup` (not during drag) for both editor selections (via `SelectionInfo`) and preview selections (via `window.getSelection()`).
 - `panelToolFilter` / `panelMaxToolCalls` for Plans are configurable in AgentsTab (Settings → Agents → Plans column).
-- `onResolvePermission` must update `toolAllowlist` when `decision === "always_allowed"` — see ThemesPanel pattern.
+- `onResolvePermission` must update `toolAllowlist` when `decision === "always_allowed"` — see ThemesMode pattern (inside CreatePanel).
 
 ## Domain docs (read when relevant)
 

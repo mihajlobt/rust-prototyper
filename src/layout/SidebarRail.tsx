@@ -31,7 +31,7 @@ type SidebarTab = "project" | "files" | "chats" | "git";
 
 export function SidebarRail() {
   const { settings } = useAppStore();
-  const { setProjectSettings, openComponent, openScreen, openTheme, openWorkflow, openApi, openPlan } = useProjectSettingsStore();
+  const { setProjectSettings, openCreate, openWorkflow, openApi, openPlan } = useProjectSettingsStore();
   const [activeTab, setActiveTab] = useState<SidebarTab>("project");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newItemType, setNewItemType] = useState("screen");
@@ -69,9 +69,9 @@ export function SidebarRail() {
   };
 
   const handleSelectAsset = (section: SectionName, name: string) => {
-    if (section === "screens") openScreen(name);
-    else if (section === "components") openComponent(name);
-    else if (section === "themes") openTheme(name);
+    if (section === "screens") openCreate("screens", name);
+    else if (section === "components") openCreate("components", name);
+    else if (section === "themes") openCreate("themes", name);
     else if (section === "workflows") openWorkflow(name);
     else if (section === "apis") openApi(name.replace(/\.json$/, ""));
     else if (section === "plans") openPlan(name.replace(/\.md$/, ""));
@@ -94,7 +94,8 @@ export function SidebarRail() {
 
   // Map item type to the section name. All section names match their
   // filesystem paths (projects/{id}/{name}), so the same string drives both
-  // the query key and the on-disk layout.
+  // the query key and the on-disk layout. "wizard" is project-level and has
+  // no tree — it's not in this map.
   const typeToSection: Record<string, SectionName> = {
     screen: "screens",
     component: "components",
@@ -106,11 +107,16 @@ export function SidebarRail() {
 
   // --- Create ---
   const handleCreate = async () => {
-    if (!newItemName.trim()) return;
+    if (newItemType !== "wizard" && !newItemName.trim()) return;
     setCreating(true);
     const id = newItemName.toLowerCase().replace(/\s+/g, "-");
     try {
       switch (newItemType) {
+        case "wizard": {
+          // Wizard is project-level — no file to create, just open the merged
+          // Create panel in wizard mode. The user can chat from there.
+          break;
+        }
         case "screen": {
           const fnName = id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
           await createDir(`${base}/screens/${id}`);
@@ -156,6 +162,13 @@ export function SidebarRail() {
           await writeFile(`${plansDir}/${id}.md`, initialContent);
           break;
         }
+      }
+      // Wizard is project-level — no tree to invalidate, no section to select.
+      if (newItemType === "wizard") {
+        openCreate("wizard", null);
+        setShowNewDialog(false);
+        setNewItemName("");
+        return;
       }
       const section = typeToSection[newItemType];
       invalidateSection(section);
@@ -378,6 +391,7 @@ export function SidebarRail() {
             <Select value={newItemType} onValueChange={setNewItemType}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent position="popper" side="bottom">
+                <SelectItem value="wizard">Wizard</SelectItem>
                 <SelectItem value="screen">Screen</SelectItem>
                 <SelectItem value="component">Component</SelectItem>
                 <SelectItem value="theme">Theme</SelectItem>
@@ -386,14 +400,20 @@ export function SidebarRail() {
                 <SelectItem value="plan">Plan</SelectItem>
               </SelectContent>
             </Select>
-            <Input
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              placeholder="Name..."
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              autoFocus
-            />
-            <Button className="w-full" onClick={handleCreate} disabled={creating || !newItemName.trim()}>
+            {newItemType !== "wizard" && (
+              <Input
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                placeholder="Name..."
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                autoFocus
+              />
+            )}
+            <Button
+              className="w-full"
+              onClick={handleCreate}
+              disabled={creating || (newItemType !== "wizard" && !newItemName.trim())}
+            >
               {creating ? "Creating…" : "Create"}
             </Button>
           </div>

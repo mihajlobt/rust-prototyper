@@ -89,7 +89,7 @@ async function loadChatFile(path: string): Promise<ChatMessage[] | null> {
 
 export function SidebarChatsTab() {
   const { settings } = useAppStore();
-  const { setProjectSettings, openScreen, openComponent, openTheme, openPlan } = useProjectSettingsStore();
+  const { openCreate, openPlan } = useProjectSettingsStore();
   const base = `projects/${settings.project}`;
   const archivePath = `${base}/chats-archive.json`;
 
@@ -204,10 +204,10 @@ export function SidebarChatsTab() {
 
   const handleNavigate = (entry: ChatEntry) => {
     switch (entry.panel) {
-      case "wizard":     setProjectSettings({ activeView: "wizard" }); break;
-      case "screens":    openScreen(entry.entityId); break;
-      case "components": openComponent(entry.entityId); break;
-      case "themes":     openTheme(entry.entityId); break;
+      case "wizard":     openCreate("wizard", null); break;
+      case "screens":    openCreate("screens", entry.entityId); break;
+      case "components": openCreate("components", entry.entityId); break;
+      case "themes":     openCreate("themes", entry.entityId); break;
       case "plans":      openPlan(entry.entityId); break;
     }
   };

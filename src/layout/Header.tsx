@@ -1,14 +1,11 @@
 import {
-  LayoutGrid,
-  Box,
-  Palette,
   GitBranch,
   Play,
   BookOpen,
   Terminal,
   PanelLeft,
   Image,
-  Wand2,
+  Sparkles,
   FileText,
 } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
@@ -20,10 +17,7 @@ import { ModelOptionsPopover } from "@/components/ModelOptionsPopover";
 import { Button } from "@/components/ui/button";
 
 const tabs = [
-  { id: "wizard", label: "Wizard", icon: Wand2 },
-  { id: "screens", label: "Screens", icon: LayoutGrid },
-  { id: "components", label: "Components", icon: Box },
-  { id: "themes", label: "Design", icon: Palette },
+  { id: "create", label: "Create", icon: Sparkles },
   { id: "plans", label: "Plans", icon: FileText },
   { id: "workflows", label: "Workflows", icon: GitBranch },
   { id: "apis", label: "APIs", icon: Terminal },

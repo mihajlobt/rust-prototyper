@@ -40,11 +40,10 @@ interface UIState {
   // Workflows panel
   workflowsShowPanel: boolean;
 
-  // Generation-context selections, keyed by projectId
-  screensGenContext: Record<string, PanelGenContext>;
-  componentsGenContext: Record<string, PanelGenContext>;
-  setScreensGenContext: (projectId: string, patch: Partial<PanelGenContext>) => void;
-  setComponentsGenContext: (projectId: string, patch: Partial<PanelGenContext>) => void;
+  // Generation-context selections for the merged Create panel, keyed by projectId.
+  // Session-only — survives panel remounts but resets on app restart or project switch.
+  createGenContext: Record<string, PanelGenContext>;
+  setCreateGenContext: (projectId: string, patch: Partial<PanelGenContext>) => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -60,20 +59,12 @@ export const useUIStore = create<UIState>()((set) => ({
 
   workflowsShowPanel: false,
 
-  screensGenContext: {},
-  componentsGenContext: {},
-  setScreensGenContext: (projectId, patch) =>
+  createGenContext: {},
+  setCreateGenContext: (projectId, patch) =>
     set((s) => ({
-      screensGenContext: {
-        ...s.screensGenContext,
-        [projectId]: { ...(s.screensGenContext[projectId] ?? EMPTY_GEN_CONTEXT), ...patch },
-      },
-    })),
-  setComponentsGenContext: (projectId, patch) =>
-    set((s) => ({
-      componentsGenContext: {
-        ...s.componentsGenContext,
-        [projectId]: { ...(s.componentsGenContext[projectId] ?? EMPTY_GEN_CONTEXT), ...patch },
+      createGenContext: {
+        ...s.createGenContext,
+        [projectId]: { ...(s.createGenContext[projectId] ?? EMPTY_GEN_CONTEXT), ...patch },
       },
     })),
 }));

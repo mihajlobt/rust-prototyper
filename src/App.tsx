@@ -3,15 +3,12 @@ import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import { Header } from "./layout/Header";
 import { SidebarRail } from "./layout/SidebarRail";
-import { ScreensPanel } from "./panels/ScreensPanel";
-import { ComponentsPanel } from "./panels/ComponentsPanel";
-import { ThemesPanel } from "./panels/ThemesPanel";
+import { CreatePanel } from "./panels/CreatePanel";
 import { APIsPanel } from "./panels/APIsPanel";
 import { RunnerPanel } from "./panels/RunnerPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { AssetsPanel } from "./panels/AssetsPanel";
 import { WorkflowsView } from "./workflows/WorkflowsView";
-import { WizardPanel } from "./panels/WizardPanel";
 import { PlansPanel } from "./panels/PlansPanel";
 import { useAppStore } from "./stores/appStore";
 import { useProjectSettingsStore } from "./stores/projectSettingsStore";
@@ -100,10 +97,7 @@ export default function App() {
             </Allotment.Pane>
             <Allotment.Pane>
               <ErrorBoundary>
-                {ps.activeView === "wizard"     && <WizardPanel />}
-                {ps.activeView === "screens"    && <ScreensPanel />}
-                {ps.activeView === "components" && <ComponentsPanel />}
-                {ps.activeView === "themes"     && <ThemesPanel />}
+                {ps.activeView === "create"     && <CreatePanel />}
                 {ps.activeView === "plans"      && <PlansPanel />}
                 <div style={{ display: ps.activeView === "workflows" ? "contents" : "none" }}>
                   <WorkflowsView />

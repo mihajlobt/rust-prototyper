@@ -3,6 +3,11 @@ import { load } from "@tauri-apps/plugin-store";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type CreateMode = "wizard" | "screens" | "components" | "themes";
+
+const isCreateMode = (s: string): s is CreateMode =>
+  s === "wizard" || s === "screens" || s === "components" || s === "themes";
+
 export interface ProjectSettings {
   // Navigation — which item is open in each panel
   activeView: string;
@@ -13,6 +18,9 @@ export interface ProjectSettings {
   activeApi: string | null;
   activePlan: string | null;
 
+  /** Sub-mode of the merged Create panel. */
+  createMode: CreateMode;
+
   // Plans panel prefs
   plansMode: "write" | "split" | "read" | "focus";
   plansChatOpen: boolean;
@@ -20,9 +28,6 @@ export interface ProjectSettings {
 
   // Project configuration
   stylePreset: string;
-  /** When true, the active design language's DESIGN.md is auto-injected as the brief
-   *  for screen/component generation. Toggled off to remove it. */
-  applyDesignBrief: boolean;
   directories: {
     themes: string;
     components: string;
@@ -32,32 +37,23 @@ export interface ProjectSettings {
   // Global preview dark mode — one toggle for all panels
   darkPreview: boolean;
 
-  // Screens panel
-  screensDevice: "desktop" | "tablet" | "mobile";
-  screensZoom: number;
-  screensShowInspector: boolean;
-  screensCodeOpen: boolean;
-  screensCodeTab: "editor" | "links" | "flow";
-  /** Theme applied to the live screen preview only — independent of the
-   *  generation design language (stylePreset). */
-  screensPreviewTheme: string;
+  // Create panel — shared per-mode state
+  createDevice: "desktop" | "tablet" | "mobile";
+  createZoom: number;
+  createShowInspector: boolean;
+  createCodeOpen: boolean;
+  createCodeTab: "editor" | "links" | "flow";
+  /** Themes-only code tab. The third tab's value is the string "guidelines" —
+   *  the visible label is "Design" but the stored value matches the original
+   *  ThemeCodeTabs.tsx:13 typing. */
+  createCodeTab2: "css" | "tokens" | "guidelines";
+  /** Theme applied to the live preview only — independent of the generation
+   *  design language (stylePreset). */
+  createPreviewTheme: string;
 
-  // Components panel
-  componentsDevice: "desktop" | "tablet" | "mobile";
-  componentsShowInspector: boolean;
-  componentsCodeOpen: boolean;
-  /** Theme applied to the live component preview only — independent of the
-   *  generation design language (stylePreset). */
-  componentsPreviewTheme: string;
-
-  // Themes panel
-  themesDevice: "desktop" | "tablet" | "mobile";
-  themesShowInspector: boolean;
-  themesCodeOpen: boolean;
-  themesFramework: "shadcn" | "daisy" | "bootstrap" | "generic";
-  themesDarkLightSupport: boolean;
-  themesGenerationMode: "css" | "design";
-  themesPreviewMode: "preview" | "gallery";
+  // Create panel — themes-only state
+  createGenerationMode: "css" | "design";
+  createPreviewMode: "preview" | "gallery";
 
   // Runner panel
   runnerDevice: "desktop" | "tablet" | "mobile";
@@ -70,6 +66,7 @@ export interface ProjectSettings {
   runnerExpandedDirs: string[];
   runnerRequestedFile: string | null;
   runnerRequestedDiffTab: string | null;
+  runnerPort: number;
 
   // APIs panel — persistent editor state
   apisName: string;
@@ -89,24 +86,17 @@ export interface ProjectSettings {
   apisShowInspector: boolean;
   apisSidebarTab: "collection" | "keys";
 
-  // Component preview
-  shadcnMode: boolean;
-  runnerPort: number;
-
   // Assets panel
   assetsViewMode: "list" | "grid";
   assetsShowLog: boolean;
   assetsSortOrder: "newest" | "oldest" | "largest" | "smallest" | "name";
   assetsSteps: number;
   assetsPreset: number;
-
-  // Wizard panel
-  wizardDevice: "desktop" | "tablet" | "mobile";
-  wizardShowInspector: boolean;
 }
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
-  activeView: "screens",
+  activeView: "create",
+  createMode: "screens",
   activeComponent: null,
   activeScreen: null,
   activeTheme: null,
@@ -121,32 +111,22 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   plansShowInspector: false,
 
   stylePreset: "",
-  applyDesignBrief: true,
   directories: {
     themes: "src/styles/themes",
     components: "src/components",
     screens: "src/screens",
   },
 
-  screensDevice: "desktop",
-  screensZoom: 1,
-  screensShowInspector: false,
-  screensCodeOpen: false,
-  screensCodeTab: "editor",
-  screensPreviewTheme: "",
+  createDevice: "desktop",
+  createZoom: 1,
+  createShowInspector: false,
+  createCodeOpen: false,
+  createCodeTab: "editor",
+  createCodeTab2: "css",
+  createPreviewTheme: "",
 
-  componentsDevice: "desktop",
-  componentsShowInspector: false,
-  componentsCodeOpen: false,
-  componentsPreviewTheme: "",
-
-  themesDevice: "desktop",
-  themesShowInspector: false,
-  themesCodeOpen: false,
-  themesFramework: "shadcn",
-  themesDarkLightSupport: true,
-  themesGenerationMode: "design",
-  themesPreviewMode: "preview",
+  createGenerationMode: "design",
+  createPreviewMode: "preview",
 
   runnerDevice: "desktop",
   runnerZoom: 1,
@@ -158,6 +138,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerExpandedDirs: [],
   runnerRequestedFile: null,
   runnerRequestedDiffTab: null,
+  runnerPort: 5174,
 
   apisName: "",
   apisMethod: "GET",
@@ -176,17 +157,11 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   apisShowInspector: false,
   apisSidebarTab: "collection",
 
-  shadcnMode: true,
-  runnerPort: 5174,
-
   assetsViewMode: "list",
   assetsShowLog: true,
   assetsSortOrder: "newest",
   assetsSteps: 4,
   assetsPreset: 0,
-
-  wizardDevice: "desktop",
-  wizardShowInspector: false,
 };
 
 // ─── Store handle cache — one open handle per project ─────────────────────────
@@ -195,9 +170,7 @@ const storeCache = new Map<string, Awaited<ReturnType<typeof load>>>();
 
 async function getStore(projectId: string) {
   if (!storeCache.has(projectId)) {
-    const store = await load(`project-${projectId}.json`, {
-      defaults: DEFAULT_PROJECT_SETTINGS as unknown as Record<string, unknown>,
-    });
+    const store = await load(`project-${projectId}.json`);
     storeCache.set(projectId, store);
   }
   return storeCache.get(projectId)!;
@@ -231,10 +204,10 @@ interface ProjectSettingsStore {
    */
   setProjectSettings: (patch: Partial<ProjectSettings>) => void;
 
-  // Navigation helpers
-  openComponent: (name: string) => void;
-  openScreen: (name: string) => void;
-  openTheme: (name: string) => void;
+  /** Switch to the Create panel and (optionally) select an item. */
+  openCreate: (mode: CreateMode, itemName: string | null) => void;
+
+  // Navigation helpers (per-panel)
   openWorkflow: (name: string) => void;
   openApi: (id: string) => void;
   openPlan: (name: string) => void;
@@ -251,26 +224,25 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     if (!projectId) return;
     const store = await getStore(projectId);
     const entries = await store.entries<unknown>();
-    const loaded = { ...DEFAULT_PROJECT_SETTINGS };
+    // Start from defaults, then overlay disk values for any key declared
+    // on the new ProjectSettings. Old keys present on disk
+    // (wizardDevice, screensCodeTab, themesFramework, shadcnMode, etc.) are
+    // extra JSON keys and are silently ignored — they are not a code path.
+    const loaded: ProjectSettings = { ...DEFAULT_PROJECT_SETTINGS };
     for (const [key, value] of entries) {
-      if (key in loaded) {
-        (loaded as unknown as Record<string, unknown>)[key] = value;
+      // `Object.prototype.hasOwnProperty.call` checks a key is declared on the
+      // default object without using a cast. The assignment goes through a
+      // typed Partial<ProjectSettings> accumulator.
+      if (Object.prototype.hasOwnProperty.call(DEFAULT_PROJECT_SETTINGS, key)) {
+        Reflect.set(loaded, key, value);
       }
     }
-    // Coerce legacy "both" generation mode to "design"
-    if ((loaded as unknown as Record<string, unknown>).themesGenerationMode === "both") {
-      (loaded as unknown as Record<string, unknown>).themesGenerationMode = "design";
-    }
-    // Coerce legacy "ports" tab to "links"
-    if ((loaded as unknown as Record<string, unknown>).screensCodeTab === "ports") {
-      (loaded as unknown as Record<string, unknown>).screensCodeTab = "links";
-    }
-    // Migrate per-panel dark preview flags to unified darkPreview
-    {
-      const r = loaded as unknown as Record<string, unknown>;
-      if (r.screensDarkPreview || r.componentsDarkPreview || r.themesDarkPreview || r.runnerDarkPreview || r.wizardDarkPreview) {
-        r.darkPreview = true;
-      }
+    // One-shot: if a pre-merge settings.json has activeView set to one of the
+    // four legacy Create sub-mode values, snap the user into the merged panel
+    // on the right sub-mode. No-op on every subsequent load.
+    if (isCreateMode(loaded.activeView)) {
+      loaded.createMode = loaded.activeView;
+      loaded.activeView = "create";
     }
     set({ projectId, ps: loaded, loaded: true });
   },
@@ -289,9 +261,15 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     }).catch(console.error);
   },
 
-  openComponent:  (name) => get().setProjectSettings({ activeView: "components", activeComponent: name }),
-  openScreen:     (name) => get().setProjectSettings({ activeView: "screens",    activeScreen: name }),
-  openTheme:      (name) => get().setProjectSettings({ activeView: "themes",     activeTheme: name }),
+  openCreate: (mode, itemName) => {
+    const patch: Partial<ProjectSettings> = { activeView: "create", createMode: mode };
+    if (mode === "screens" && itemName)    patch.activeScreen    = itemName;
+    if (mode === "components" && itemName) patch.activeComponent = itemName;
+    if (mode === "themes" && itemName)     patch.activeTheme     = itemName;
+    // Wizard ignores itemName — wizard is project-level, no per-entity selection.
+    get().setProjectSettings(patch);
+  },
+
   openWorkflow:   (name) => get().setProjectSettings({ activeView: "workflows",  activeWorkflow: name }),
   openApi:        (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
   openPlan:       (name) => get().setProjectSettings({ activeView: "plans",      activePlan: name }),

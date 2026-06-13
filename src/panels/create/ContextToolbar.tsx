@@ -1,32 +1,62 @@
+// Unified Design/Brief/APIs/Components context toolbar (per plan §2.6),
+// replacing the deleted ScreensContextToolbar and components/ContextToolbar.
+// Renders above the chat input. Design Brief and APIs are always available;
+// the Design (theme) dropdown appears once the project has themes, and the
+// Components dropdown is gated behind `showComponents` (Screens only).
+
+import { useMemo } from "react";
 import { Palette, Plug, Puzzle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger,
-  DropdownMenuSeparator, DropdownMenuLabel,
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DESIGN_BRIEF_TEMPLATES, type DesignBriefTemplate } from "@/lib/prompts";
-import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
+import { useFlatProjectTree } from "@/hooks/useProjectFiles";
+import { useFileWatcher } from "./FileWatcher";
+import { DESIGN_BRIEF_TEMPLATES, type DesignBriefTemplate } from "@/lib/prompts";
 import { useSettings } from "@/hooks/useSettings";
-import type { FileEntry } from "@/lib/ipc";
 
-interface CtxApi { id: string; name: string; method: string; url: string; proxyPath: string }
-interface CtxComponent { id: string; name: string }
-
-interface ScreensContextToolbarProps {
-  themes: FileEntry[];
-  ctxApis: CtxApi[];
-  ctxComponents: CtxComponent[];
+interface ContextApi {
+  id: string;
+  name: string;
+  method: string;
 }
 
-export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: ScreensContextToolbarProps) {
-  const { settings } = useAppStore();
+interface ContextToolbarProps {
+  projectId: string;
+  /** Render the Components dropdown (Screens only). */
+  showComponents?: boolean;
+}
+
+export function ContextToolbar({ projectId, showComponents }: ContextToolbarProps) {
   const { ps, setProjectSettings } = useProjectSettingsStore();
   const { settings: globalSettings } = useSettings();
-  const genContext = useUIStore((s) => s.screensGenContext[settings.project] ?? EMPTY_GEN_CONTEXT);
-  const setGenContext = useUIStore((s) => s.setScreensGenContext);
+  const genContext = useUIStore((s) => s.createGenContext[projectId] ?? EMPTY_GEN_CONTEXT);
+  const setGenContext = useUIStore((s) => s.setCreateGenContext);
+
+  const { data: themeEntries } = useFlatProjectTree(projectId, "themes");
+  const themes = (themeEntries ?? []).filter((t) => t.is_dir);
+
+  const { data: componentEntries } = useFlatProjectTree(projectId, "components");
+  const ctxComponents = useMemo(
+    () => (componentEntries ?? [])
+      .filter((e) => e.is_dir)
+      .map((e) => ({ id: e.name, name: e.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) })),
+    [componentEntries],
+  );
+
+  const { data: apisJson } = useFileWatcher(projectId, `projects/${projectId}/apis/apis.json`);
+  const ctxApis = useMemo<ContextApi[]>(() => {
+    if (!apisJson) return [];
+    try {
+      const apis = JSON.parse(apisJson) as Array<{ id: string; name: string; method: string }>;
+      return apis.map((a) => ({ id: a.id, name: a.name, method: a.method }));
+    } catch {
+      return [];
+    }
+  }, [apisJson]);
 
   const ctxSelectedApiIds = genContext.apiIds;
   const ctxSelectedComponentIds = genContext.componentIds;
@@ -42,8 +72,6 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
     })),
   ];
 
-  if (ctxApis.length === 0 && ctxComponents.length === 0 && themes.length === 0) return null;
-
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {themes.length > 0 && (
@@ -55,7 +83,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuRadioGroup value={ps.stylePreset} onValueChange={(v) => setProjectSettings({ stylePreset: v, applyDesignBrief: true })}>
+            <DropdownMenuRadioGroup value={ps.stylePreset} onValueChange={(v) => setProjectSettings({ stylePreset: v })}>
               <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
               {themes.map((t) => (
                 <DropdownMenuRadioItem key={t.name} value={t.name} className="text-xs">{t.name}</DropdownMenuRadioItem>
@@ -74,7 +102,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
               <span
                 className="ml-0.5 text-muted-foreground hover:text-foreground"
                 onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); setGenContext(settings.project, { brief: null }); }}
+                onClick={(e) => { e.stopPropagation(); setGenContext(projectId, { brief: null }); }}
               >×</span>
             )}
           </Button>
@@ -82,7 +110,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
         <DropdownMenuContent align="start" className="w-72">
           <DropdownMenuRadioGroup
             value={ctxSelectedBrief?.name ?? ""}
-            onValueChange={(v) => { const brief = allBriefs.find((b) => b.name === v) ?? null; setGenContext(settings.project, { brief }); }}
+            onValueChange={(v) => { const brief = allBriefs.find((b) => b.name === v) ?? null; setGenContext(projectId, { brief }); }}
           >
             <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">Built-in</DropdownMenuLabel>
             {DESIGN_BRIEF_TEMPLATES.map((brief) => (
@@ -127,7 +155,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
               <DropdownMenuCheckboxItem
                 key={api.id}
                 checked={ctxSelectedApiIds.includes(api.id)}
-                onCheckedChange={(checked) => setGenContext(settings.project, {
+                onCheckedChange={(checked) => setGenContext(projectId, {
                   apiIds: checked ? [...ctxSelectedApiIds, api.id] : ctxSelectedApiIds.filter((id) => id !== api.id),
                 })}
                 className="text-xs"
@@ -140,7 +168,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
         </DropdownMenu>
       )}
 
-      {ctxComponents.length > 0 && (
+      {showComponents && ctxComponents.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant={ctxSelectedComponentIds.length > 0 ? "secondary" : "outline"} size="sm" className="h-6 text-[11px] gap-1 px-2">
@@ -153,7 +181,7 @@ export function ScreensContextToolbar({ themes, ctxApis, ctxComponents }: Screen
               <DropdownMenuCheckboxItem
                 key={comp.id}
                 checked={ctxSelectedComponentIds.includes(comp.id)}
-                onCheckedChange={(checked) => setGenContext(settings.project, {
+                onCheckedChange={(checked) => setGenContext(projectId, {
                   componentIds: checked ? [...ctxSelectedComponentIds, comp.id] : ctxSelectedComponentIds.filter((id) => id !== comp.id),
                 })}
                 className="text-xs"

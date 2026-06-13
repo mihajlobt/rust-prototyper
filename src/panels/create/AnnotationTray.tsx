@@ -1,26 +1,30 @@
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { cn } from "@/lib/utils"
-import { MapPin, RectangleHorizontal, Trash2, CheckCheck, Send } from "lucide-react"
-import type { WizardAnnotation } from "./types"
+// Inlined from the deleted src/panels/wizard/WizardAnnotations.tsx (per plan
+// §2.6). Renders the annotation list below the chat panel with send-to-AI
+// functionality. Used only by WizardMode.
 
-interface WizardAnnotationsProps {
-  annotations: WizardAnnotation[]
-  onRemove: (id: string) => void
-  onResolve: (id: string) => void
-  onSendToAi: () => void
-  canSend: boolean
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+import { MapPin, RectangleHorizontal, Trash2, CheckCheck, Send } from "lucide-react";
+import type { Annotation } from "@/components/ui/AnnotationOverlay";
+
+interface AnnotationTrayProps {
+  annotations: Annotation[];
+  onRemove: (id: string) => void;
+  onResolve: (id: string) => void;
+  onSendToAi: () => void;
+  canSend: boolean;
 }
 
-export function WizardAnnotations({
+export function AnnotationTray({
   annotations,
   onRemove,
   onResolve,
   onSendToAi,
   canSend,
-}: WizardAnnotationsProps) {
-  const open = annotations.filter((a) => !a.resolved)
-  const resolved = annotations.filter((a) => a.resolved)
+}: AnnotationTrayProps) {
+  const open = annotations.filter((a) => !a.resolved);
+  const resolved = annotations.filter((a) => a.resolved);
 
   if (annotations.length === 0) {
     return (
@@ -29,7 +33,7 @@ export function WizardAnnotations({
           Enable annotation mode above, then click or drag on the preview to leave feedback for the AI.
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -87,15 +91,15 @@ export function WizardAnnotations({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 interface AnnotationRowProps {
-  annotation: WizardAnnotation
-  index: number
-  onRemove: (id: string) => void
-  onResolve: (id: string) => void
-  dimmed?: boolean
+  annotation: Annotation;
+  index: number;
+  onRemove: (id: string) => void;
+  onResolve: (id: string) => void;
+  dimmed?: boolean;
 }
 
 function AnnotationRow({ annotation, index, onRemove, onResolve, dimmed }: AnnotationRowProps) {
@@ -142,5 +146,5 @@ function AnnotationRow({ annotation, index, onRemove, onResolve, dimmed }: Annot
         </div>
       )}
     </div>
-  )
+  );
 }

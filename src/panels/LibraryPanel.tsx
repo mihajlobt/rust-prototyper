@@ -22,7 +22,7 @@ import type { LibraryItem, ItemType, SortKey, ViewMode, RowActions } from "@/pan
 
 export function LibraryPanel() {
   const { settings } = useAppStore();
-  const { openComponent, openScreen, openTheme, openApi, openWorkflow } = useProjectSettingsStore();
+  const { openCreate, openApi, openWorkflow } = useProjectSettingsStore();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -101,9 +101,9 @@ export function LibraryPanel() {
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   const openItem = (item: LibraryItem) => {
-    if (item.type === "component") openComponent(item.id);
-    else if (item.type === "screen") openScreen(item.id);
-    else if (item.type === "theme") openTheme(item.id);
+    if (item.type === "component") openCreate("components", item.id);
+    else if (item.type === "screen") openCreate("screens", item.id);
+    else if (item.type === "theme") openCreate("themes", item.id);
     else if (item.type === "api") openApi(item.id);
     else if (item.type === "workflow") openWorkflow(item.id);
   };

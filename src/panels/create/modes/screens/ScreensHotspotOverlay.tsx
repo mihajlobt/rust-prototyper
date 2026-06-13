@@ -1,9 +1,13 @@
+// Port of src/panels/screens/HotspotOverlay.tsx — renders hotspot rectangles
+// + popovers over the preview iframe. Passed to CreatePreviewPane via
+// `renderScreenOverlay` and only mounted when the Links code tab is active.
+
 import { ArrowRight, Trash2 } from "lucide-react";
+import type { RefObject } from "react";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { removeHotspot, syncGeneratedRouter, type Hotspot } from "@/lib/navigation";
-import type { RefObject } from "react";
 
-interface HotspotOverlayProps {
+interface ScreensHotspotOverlayProps {
   hotspots: Hotspot[];
   selectedHotspotId: string | null;
   onSelectHotspot: (id: string | null) => void;
@@ -15,7 +19,7 @@ interface HotspotOverlayProps {
   onHotspotsChange: (hotspots: Hotspot[]) => void;
 }
 
-export function HotspotOverlay({
+export function ScreensHotspotOverlay({
   hotspots,
   selectedHotspotId,
   onSelectHotspot,
@@ -25,7 +29,7 @@ export function HotspotOverlay({
   projectDir,
   iframeRef,
   onHotspotsChange,
-}: HotspotOverlayProps) {
+}: ScreensHotspotOverlayProps) {
   const iframeWidth = iframeRef.current?.clientWidth ?? 0;
 
   return (

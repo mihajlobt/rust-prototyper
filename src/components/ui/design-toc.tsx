@@ -1,6 +1,7 @@
-import { memo, useMemo, useState } from "react"
+import { Children, isValidElement, memo, useMemo, useState, type ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
 import { marked } from "marked"
+import type { Components } from "react-markdown"
 
 interface TocHeading {
   id: string
@@ -25,7 +26,7 @@ function extractHeadings(markdown: string): TocHeading[] {
   for (const token of tokens) {
     if (token.type !== "heading") continue
     const raw = token.raw
-    let text = raw.replace(/^#+\s*/, "").replace(/\s*\{#[\w-]+\}\s*$/, "").trim()
+    const text = raw.replace(/^#+\s*/, "").replace(/\s*\{#[\w-]+\}\s*$/, "").trim()
     if (!text) continue
     const level = token.depth
     const id = slugify(text)
@@ -98,6 +99,25 @@ const TocNode = memo(function TocNode({ heading, depth }: { heading: TocHeading;
     </li>
   )
 })
+
+// Recurse through inline markup (e.g. `## **Bold** title`) so the derived heading id
+// matches slugify's input, which is computed from the raw markdown heading text.
+function extractTextContent(children: ReactNode): string {
+  if (typeof children === "string" || typeof children === "number") return String(children)
+  if (Array.isArray(children)) return children.map(extractTextContent).join("")
+  if (isValidElement<{ children?: ReactNode }>(children)) {
+    return Children.toArray(children.props.children).map(extractTextContent).join("")
+  }
+  return ""
+}
+
+// react-markdown `components` override that gives h1/h2/h3 elements an
+// `id={slugify(text)}` so DesignToc's anchor links can scroll to them.
+export const markdownHeadingComponents: Partial<Components> = {
+  h1: ({ children, ...props }) => <h1 id={slugify(extractTextContent(children))} {...props}>{children}</h1>,
+  h2: ({ children, ...props }) => <h2 id={slugify(extractTextContent(children))} {...props}>{children}</h2>,
+  h3: ({ children, ...props }) => <h3 id={slugify(extractTextContent(children))} {...props}>{children}</h3>,
+}
 
 export const DesignToc = memo(function DesignToc({ markdown }: { markdown: string }) {
   const headings = useMemo(() => extractHeadings(markdown), [markdown])

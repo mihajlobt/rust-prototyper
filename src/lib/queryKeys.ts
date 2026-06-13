@@ -16,6 +16,8 @@ export const projectKeys = {
   workflows: (project: string) => ["project", project, "workflows"] as const,
   tree: (project: string, section: string) =>
     ["project", project, "tree", section] as const,
+  file: (project: string, path: string) =>
+    ["project", project, "file", path] as const,
   library: (project: string) => ["project", project, "library"] as const,
 };
 

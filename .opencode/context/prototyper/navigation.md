@@ -49,10 +49,7 @@ Frontend (React 19 + Vite, port 1420) ←IPC→ Rust backend (Tauri v2)
 | Panel | Code | Context |
 |-------|------|---------|
 | **Assets** | `src/panels/AssetsPanel.tsx` | `panels/assets/concepts/assets-panel.md` |
-| Wizard | `src/panels/WizardPanel.tsx` | (see `project-intelligence/domain.md`) |
-| Screens | `src/panels/ScreensPanel.tsx` | (see `project-intelligence/domain.md`) |
-| Components | `src/panels/ComponentsPanel.tsx` | (see `project-intelligence/domain.md`) |
-| Themes | `src/panels/ThemesPanel.tsx` | (see `project-intelligence/domain.md`) |
+| **Create** | `src/panels/CreatePanel.tsx` + `src/panels/create/modes/{Wizard,Screens,Components,Themes}Mode.tsx` | Merged Wizard/Screens/Components/Design sub-modes via segmented control (see `project-intelligence/domain.md`) |
 | APIs | `src/panels/ApisPanel.tsx` | (see `project-intelligence/domain.md`) |
 | Runner | `src/panels/RunnerPanel.tsx` | (see `project-intelligence/domain.md`) |
 | Library | `src/panels/LibraryPanel.tsx` | (see `project-intelligence/domain.md`) |

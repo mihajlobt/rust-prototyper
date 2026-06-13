@@ -204,7 +204,7 @@ interface FlowsViewProps {
 
 function FlowsViewInner({ screenIds }: FlowsViewProps) {
   const { settings } = useAppStore();
-  const { setProjectSettings } = useProjectSettingsStore();
+  const { setProjectSettings, openCreate } = useProjectSettingsStore();
   const projectDir = `projects/${settings.project}`;
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ScreenNode>([]);
@@ -251,9 +251,9 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
 
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: ScreenNode) => {
-      setProjectSettings({ activeView: "screens", activeScreen: node.id });
+      openCreate("screens", node.id);
     },
-    [setProjectSettings]
+    [openCreate]
   );
 
   const onNodeDragStop = useCallback(
@@ -280,7 +280,7 @@ function FlowsViewInner({ screenIds }: FlowsViewProps) {
 
   const actions = useMemo<FlowsActions>(
     () => ({
-      openScreen: (id) => setProjectSettings({ activeView: "screens", activeScreen: id }),
+      openScreen: (id) => openCreate("screens", id),
       setDefaultScreen: async (id) => {
         try {
           const nav = await loadNavigation(projectDir);
