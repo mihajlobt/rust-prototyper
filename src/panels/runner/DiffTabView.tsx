@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useGitDiff, useCommitDiff } from "@/hooks/useGitStatus";
@@ -24,7 +25,7 @@ export function DiffTabView({ project, params }: DiffTabViewProps) {
 
   const query = isFile ? fileDiffQuery : commitDiffQuery;
   const diffText = query.data ?? "";
-  const files = diffText ? parseUnifiedDiff(diffText) : [];
+  const files = useMemo(() => (diffText ? parseUnifiedDiff(diffText) : []), [diffText]);
 
   return (
     <div className="h-full flex flex-col">

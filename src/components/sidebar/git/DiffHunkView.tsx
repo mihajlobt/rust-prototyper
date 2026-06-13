@@ -1,13 +1,11 @@
 import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { DiffHunkCodeMirror } from "./DiffHunkCodeMirror";
 import type { DiffFile } from "@/lib/git/types";
 
 interface DiffHunkViewProps {
   files: DiffFile[];
 }
-
-const PREFIX: Record<string, string> = { add: "+", remove: "-", context: " " };
 
 function diffStats(file: DiffFile): { additions: number; deletions: number } {
   let additions = 0;
@@ -54,20 +52,8 @@ export function DiffHunkView({ files }: DiffHunkViewProps) {
             ) : (
               file.hunks.map((hunk, hi) => (
                 <div key={hi}>
-                  <div className="px-2 py-0.5 text-muted-foreground/70 text-[10px]">{hunk.header}</div>
-                  {hunk.lines.map((line, li) => (
-                    <div
-                      key={li}
-                      className={cn(
-                        "px-2 whitespace-pre-wrap break-all",
-                        line.type === "add" && "bg-green-500/10 text-green-700 dark:text-green-400",
-                        line.type === "remove" && "bg-red-500/10 text-red-700 dark:text-red-400",
-                        line.type === "meta" && "text-muted-foreground/60 italic"
-                      )}
-                    >
-                      {line.type === "meta" ? line.content : `${PREFIX[line.type]}${line.content}`}
-                    </div>
-                  ))}
+                  <div className="px-2 py-0.5 text-muted-foreground/70 text-[10px] bg-muted/30">{hunk.header}</div>
+                  <DiffHunkCodeMirror hunk={hunk} filePath={file.newPath || file.oldPath} />
                 </div>
               ))
             )}

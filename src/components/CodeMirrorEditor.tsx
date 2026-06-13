@@ -54,6 +54,11 @@ export function getLanguageFromPath(path: string): string {
   return EXT_TO_MODE[ext] ?? "javascript";
 }
 
+/** Resolves a CodeMirror language extension from a file path's extension. */
+export function getLanguageExtension(path: string): Extension | undefined {
+  return MODE_TO_EXT[getLanguageFromPath(path)];
+}
+
 const shellExtension = StreamLanguage.define(shellMode);
 
 const MODE_TO_EXT: Record<string, Extension> = {
