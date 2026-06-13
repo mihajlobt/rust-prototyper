@@ -2,6 +2,18 @@ import { runShellCommandCapture, readFile } from "@/lib/ipc";
 import { quotePath } from "./shellQuote";
 import type { DiffFile, DiffHunk, DiffHunkLine } from "./types";
 
+export function diffStats(file: DiffFile): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  for (const hunk of file.hunks) {
+    for (const line of hunk.lines) {
+      if (line.type === "add") additions++;
+      else if (line.type === "remove") deletions++;
+    }
+  }
+  return { additions, deletions };
+}
+
 const NOT_FOUND_MARKERS = ["fatal:", "does not exist", "exists on disk, but not in"];
 
 /** Diff of unstaged changes for a single tracked file (working tree vs index). */
@@ -49,11 +61,54 @@ export function extractCommitSubject(showOutput: string): string {
   return messageLine ?? "";
 }
 
-/** Content of `relPath` at HEAD, or "" if the file is new (not yet tracked). */
-export async function getFileAtHead(cwd: string, relPath: string): Promise<string> {
-  const output = await runShellCommandCapture(cwd, `git show HEAD:${quotePath(relPath)}`);
+/** Content of `relPath` at `ref` (e.g. "HEAD", a commit hash, or "<hash>^"), or "" if it doesn't exist there. */
+export async function getFileAtRef(cwd: string, ref: string, relPath: string): Promise<string> {
+  const output = await runShellCommandCapture(cwd, `git show ${ref}:${quotePath(relPath)}`);
   if (NOT_FOUND_MARKERS.some((marker) => output.includes(marker))) return "";
   return output;
+}
+
+/** Content of `relPath` at HEAD, or "" if the file is new (not yet tracked). */
+export async function getFileAtHead(cwd: string, relPath: string): Promise<string> {
+  return getFileAtRef(cwd, "HEAD", relPath);
+}
+
+/** Content of `relPath` in the index (staging area), or "" if it isn't staged. */
+export async function getFileAtIndex(cwd: string, relPath: string): Promise<string> {
+  return getFileAtRef(cwd, "", relPath);
+}
+
+/** Before/after content for an unstaged-changes diff (working tree vs index). */
+export async function getUnstagedFileContent(
+  cwd: string,
+  path: string,
+  untracked: boolean
+): Promise<{ original: string; modified: string }> {
+  const [modified, original] = await Promise.all([
+    readFile(`${cwd}/${path}`).catch(() => ""),
+    untracked ? Promise.resolve("") : getFileAtIndex(cwd, path),
+  ]);
+  return { original, modified };
+}
+
+/** Before/after content for a staged-changes diff (index vs HEAD). */
+export async function getStagedFileContent(cwd: string, path: string): Promise<{ original: string; modified: string }> {
+  const [original, modified] = await Promise.all([getFileAtHead(cwd, path), getFileAtIndex(cwd, path)]);
+  return { original, modified };
+}
+
+/** Before/after content for a single file within a commit diff (parent vs commit). */
+export async function getCommitFileContent(
+  cwd: string,
+  hash: string,
+  oldPath: string,
+  newPath: string
+): Promise<{ original: string; modified: string }> {
+  const [original, modified] = await Promise.all([
+    getFileAtRef(cwd, `${hash}^`, oldPath),
+    getFileAtRef(cwd, hash, newPath),
+  ]);
+  return { original, modified };
 }
 
 const HUNK_HEADER_RE = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;

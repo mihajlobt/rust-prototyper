@@ -1,7 +1,6 @@
-/** Encodes git diff views as synthetic "tab paths" so they can live alongside
- *  regular file tabs in the Runner editor's tab bar. */
-
 const PREFIX = "git-diff:";
+
+export const MAIN_DIFF_TAB_ID = `${PREFIX}changes`;
 
 export interface FileDiffTabParams {
   kind: "file";
@@ -18,7 +17,7 @@ export interface CommitDiffTabParams {
 export type DiffTabParams = FileDiffTabParams | CommitDiffTabParams;
 
 export function isDiffTab(tabPath: string): boolean {
-  return tabPath.startsWith(PREFIX);
+  return tabPath === MAIN_DIFF_TAB_ID;
 }
 
 export function makeFileDiffTabId(path: string, staged: boolean, untracked: boolean): string {
@@ -41,10 +40,4 @@ export function parseDiffTab(tabPath: string): DiffTabParams | null {
     return { kind: "commit", hash: rest.slice("commit:".length) };
   }
   return null;
-}
-
-/** Short label for the tab bar — filename or short commit hash. */
-export function diffTabLabel(params: DiffTabParams): string {
-  if (params.kind === "file") return params.path.split("/").pop() ?? params.path;
-  return params.hash.slice(0, 7);
 }

@@ -498,47 +498,12 @@
   background-color: var(--color-red-500, #ef4444);
 }
 
-/* Unified diff view (Runner diff tabs) — GitHub/VS Code-style line gutters
-   and add/remove backgrounds, rendered via CodeMirror for correct
-   indentation and syntax highlighting. */
-.cm-diff-gutter {
-  padding: 0 6px;
-  font-size: 11px;
-  color: var(--muted-foreground);
-  user-select: none;
+/* Match the red fill @codemirror/merge applies to removed text, without the underline. */
+.cm-merge-b .cm-changedText {
+  background-color: color-mix(in srgb, var(--color-green-500, #22c55e) 25%, transparent) !important;
+  background-image: none !important;
 }
-.cm-diff-gutter-old,
-.cm-diff-gutter-new {
-  text-align: right;
-}
-.cm-diff-gutter-marker {
-  padding: 0 4px;
-  text-align: center;
-}
-.cm-diff-linenum {
-  opacity: 0.6;
-}
-.cm-diff-marker-add {
-  color: var(--color-green-600, #16a34a);
-  font-weight: 600;
-}
-.cm-diff-marker-remove {
-  color: var(--color-red-600, #dc2626);
-  font-weight: 600;
-}
-.cm-diff-line-add {
-  background-color: color-mix(in srgb, var(--color-green-500, #22c55e) 12%, transparent);
-}
-.cm-diff-line-remove {
-  background-color: color-mix(in srgb, var(--color-red-500, #ef4444) 12%, transparent);
-}
-.cm-diff-gutter-add {
-  background-color: color-mix(in srgb, var(--color-green-500, #22c55e) 20%, transparent);
-}
-.cm-diff-gutter-remove {
-  background-color: color-mix(in srgb, var(--color-red-500, #ef4444) 20%, transparent);
-}
-.cm-diff-line-meta {
-  font-style: italic;
-  opacity: 0.6;
+.cm-merge-a .cm-changedText,
+.cm-deletedChunk .cm-deletedText {
+  background-image: none !important;
 }

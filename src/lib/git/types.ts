@@ -45,3 +45,11 @@ export interface DiffFile {
   binary: boolean;
   hunks: DiffHunk[];
 }
+
+/** Identifies which before/after content a diff view should fetch. */
+export type DiffContentSource =
+  | { kind: "file"; path: string; staged: boolean; untracked: boolean }
+  | { kind: "commit"; hash: string };
+
+/** "unified" shows inline +/- changes in one editor; "split" shows before/after side-by-side. */
+export type DiffViewMode = "unified" | "split";

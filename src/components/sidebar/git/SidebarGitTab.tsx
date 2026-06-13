@@ -17,7 +17,7 @@ type View = "changes" | "history";
 export function SidebarGitTab() {
   const { settings } = useAppStore();
   const project = settings.project;
-  const openRunnerDiffTab = useProjectSettingsStore((s) => s.openRunnerDiffTab);
+  const openRunnerDiff = useProjectSettingsStore((s) => s.openRunnerDiff);
 
   const [view, setView] = useState<View>("changes");
 
@@ -79,7 +79,7 @@ export function SidebarGitTab() {
               title="Staged Changes"
               items={stagedItems}
               staged
-              onFileClick={(item) => openRunnerDiffTab(makeFileDiffTabId(item.file.path, true, false))}
+              onFileClick={(item) => openRunnerDiff(makeFileDiffTabId(item.file.path, true, false))}
               onUnstageFile={(path) => unstageFile.mutate(path)}
               onUnstageAll={stagedItems.length > 0 ? () => unstageAll.mutate() : undefined}
             />
@@ -87,7 +87,7 @@ export function SidebarGitTab() {
               title="Changes"
               items={unstagedItems}
               staged={false}
-              onFileClick={(item) => openRunnerDiffTab(makeFileDiffTabId(item.file.path, false, item.isUntracked))}
+              onFileClick={(item) => openRunnerDiff(makeFileDiffTabId(item.file.path, false, item.isUntracked))}
               onStageFile={(path) => stageFile.mutate(path)}
               onDiscardFile={handleDiscard}
               onStageAll={unstagedItems.length > 0 ? () => stageAll.mutate() : undefined}

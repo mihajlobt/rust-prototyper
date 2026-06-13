@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { X, FileCode, Save, FileDiff } from "lucide-react";
+import { X, FileCode, Save, FileDiff, Rows3, Columns2 } from "lucide-react";
 import type { MouseEvent } from "react";
 import type { EditorView } from "@codemirror/view";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,20 @@ import {
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { showContextMenu, createTabActions, createDiffTabActions } from "@/lib/context-menu";
 import { gitGutterExtension } from "@/lib/git/gutter";
-import { isDiffTab, parseDiffTab, diffTabLabel } from "@/lib/git/diffTabs";
-import { DiffTabView } from "@/panels/runner/DiffTabView";
+import { isDiffTab, MAIN_DIFF_TAB_ID } from "@/lib/git/diffTabs";
+import { DiffAccordionView } from "@/panels/runner/DiffAccordionView";
 import { useAppStore } from "@/stores/appStore";
+import type { DiffViewMode } from "@/lib/git/types";
 
 export interface RunnerEditorProps {
   openTabs: string[];
   activeTabPath: string | null;
   tabContents: Record<string, string>;
   dirtyTabs: Set<string>;
+  openDiffs: string[];
+  diffViewMode: DiffViewMode;
+  onDiffViewModeChange: (mode: DiffViewMode) => void;
+  onCloseDiff: (diffId: string) => void;
   openTab: (path: string) => void;
   closeTab: (path: string, e?: MouseEvent) => void;
   closeOtherTabs: (path: string) => void;
@@ -42,6 +47,10 @@ export function RunnerEditor({
   activeTabPath,
   tabContents,
   dirtyTabs,
+  openDiffs,
+  diffViewMode,
+  onDiffViewModeChange,
+  onCloseDiff,
   openTab,
   closeTab,
   closeOtherTabs,
@@ -175,8 +184,8 @@ export function RunnerEditor({
             />
 
             {openTabs.map((path, tabIndex) => {
-              const diffParams = parseDiffTab(path);
-              const name = diffParams ? diffTabLabel(diffParams) : path.split("/").pop() ?? path;
+              const isDiff = isDiffTab(path);
+              const name = isDiff ? "Changes" : path.split("/").pop() ?? path;
               const isActive = path === activeTabPath;
               const isDirty = dirtyTabs.has(path);
               const isLast = tabIndex === openTabs.length - 1;
@@ -193,7 +202,7 @@ export function RunnerEditor({
                   onAuxClick={(e) => { if (e.button === 1) closeTab(path, e); }}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    if (diffParams) {
+                    if (isDiff) {
                       showContextMenu(
                         createDiffTabActions({
                           onClose: () => closeTab(path),
@@ -234,7 +243,7 @@ export function RunnerEditor({
                     isBeingDragged ? "opacity-40" : "",
                   ].join(" ")}
                 >
-                  {diffParams ? (
+                  {isDiff ? (
                     <FileDiff size={11} className="shrink-0 text-orange-500" />
                   ) : isDirty ? (
                     <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
@@ -250,6 +259,39 @@ export function RunnerEditor({
               );
             })}
           </div>
+
+          {activeTabPath && isDiffTab(activeTabPath) && (
+            <TooltipProvider delayDuration={400}>
+              <div className="flex items-center gap-0.5 my-auto mx-1 shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={diffViewMode === "unified" ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onDiffViewModeChange("unified")}
+                    >
+                      <Rows3 size={11} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Unified view</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={diffViewMode === "split" ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onDiffViewModeChange("split")}
+                    >
+                      <Columns2 size={11} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Side-by-side view</TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
+          )}
 
           {activeTabPath && !isDiffTab(activeTabPath) && (
             <TooltipProvider delayDuration={400}>
@@ -268,20 +310,18 @@ export function RunnerEditor({
 
       {activeTabPath ? (
         <div className="flex-1 overflow-hidden">
-          {(() => {
-            const diffParams = parseDiffTab(activeTabPath);
-            if (diffParams) return <DiffTabView project={settings.project} params={diffParams} />;
-            return (
-              <CodeMirrorEditor
-                value={tabContents[activeTabPath] ?? ""}
-                onChange={handleContentChange}
-                onBlur={handleEditorBlur}
-                filename={activeTabPath}
-                viewRef={editorViewRef}
-                extraExtensions={gitGutterExtension}
-              />
-            );
-          })()}
+          {activeTabPath === MAIN_DIFF_TAB_ID ? (
+            <DiffAccordionView project={settings.project} openDiffs={openDiffs} viewMode={diffViewMode} onCloseDiff={onCloseDiff} />
+          ) : (
+            <CodeMirrorEditor
+              value={tabContents[activeTabPath] ?? ""}
+              onChange={handleContentChange}
+              onBlur={handleEditorBlur}
+              filename={activeTabPath}
+              viewRef={editorViewRef}
+              extraExtensions={gitGutterExtension}
+            />
+          )}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">

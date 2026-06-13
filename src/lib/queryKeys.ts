@@ -1,3 +1,5 @@
+import type { DiffContentSource } from "@/lib/git/types";
+
 export const projectKeys = {
   all: (project: string) => ["project", project] as const,
   components: (project: string) => ["project", project, "components"] as const,
@@ -31,4 +33,6 @@ export const gitKeys = {
     ["git", project, "commit", hash] as const,
   fileAtHead: (project: string, path: string) =>
     ["git", project, "head", path] as const,
+  diffContent: (project: string, source: DiffContentSource, oldPath: string, newPath: string) =>
+    ["git", project, "diffContent", source, oldPath, newPath] as const,
 };

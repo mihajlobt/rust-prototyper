@@ -14,7 +14,7 @@ const PAGE_SIZE = 50;
 
 export function GitHistoryView({ project }: GitHistoryViewProps) {
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const openRunnerDiffTab = useProjectSettingsStore((s) => s.openRunnerDiffTab);
+  const openRunnerDiff = useProjectSettingsStore((s) => s.openRunnerDiff);
   const logQuery = useGitLog(project, true, limit);
   const commits = logQuery.data ?? [];
 
@@ -27,7 +27,7 @@ export function GitHistoryView({ project }: GitHistoryViewProps) {
           <button
             key={c.hash}
             className="flex flex-col gap-0.5 w-full text-left px-2 py-1.5 hover:bg-accent/50 border-b border-border/50"
-            onClick={() => openRunnerDiffTab(makeCommitDiffTabId(c.hash))}
+            onClick={() => openRunnerDiff(makeCommitDiffTabId(c.hash))}
           >
             <span className="text-xs truncate">{c.subject}</span>
             <span className="text-[10px] text-muted-foreground">

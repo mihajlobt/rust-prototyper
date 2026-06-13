@@ -6,6 +6,7 @@ import type { XTerminalHandle } from "@/components/XTerminal";
 import { useFileAtHead } from "@/hooks/useGitStatus";
 import { gitGutterEffect, computeGutterChanges } from "@/lib/git/gutter";
 import { isDiffTab } from "@/lib/git/diffTabs";
+import type { DiffViewMode } from "@/lib/git/types";
 import {
   Play, Square, Wrench, Package, PackagePlus, Loader2, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
@@ -159,6 +160,14 @@ export function RunnerPanel() {
 
   const reorderTabs = useCallback((newOrder: string[]) => {
     setProjectSettings({ runnerEditorTabs: newOrder });
+  }, [setProjectSettings]);
+
+  const closeDiff = useCallback((diffId: string) => {
+    setProjectSettings({ runnerOpenDiffs: (ps.runnerOpenDiffs ?? []).filter((d) => d !== diffId) });
+  }, [ps.runnerOpenDiffs, setProjectSettings]);
+
+  const setDiffViewMode = useCallback((mode: DiffViewMode) => {
+    setProjectSettings({ runnerDiffViewMode: mode });
   }, [setProjectSettings]);
 
   const handleContentChange = useCallback((content: string) => {
@@ -315,6 +324,10 @@ export function RunnerPanel() {
                   activeTabPath={activeTabPath}
                   tabContents={tabContents}
                   dirtyTabs={dirtyTabs}
+                  openDiffs={ps.runnerOpenDiffs ?? []}
+                  diffViewMode={ps.runnerDiffViewMode}
+                  onDiffViewModeChange={setDiffViewMode}
+                  onCloseDiff={closeDiff}
                   openTab={openTab}
                   closeTab={closeTab}
                   closeOtherTabs={closeOtherTabs}

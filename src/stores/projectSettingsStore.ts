@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { load } from "@tauri-apps/plugin-store";
+import { MAIN_DIFF_TAB_ID } from "@/lib/git/diffTabs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,8 @@ export interface ProjectSettings {
   runnerExpandedDirs: string[];
   runnerRequestedFile: string | null;
   runnerRequestedDiffTab: string | null;
+  runnerOpenDiffs: string[];
+  runnerDiffViewMode: "unified" | "split";
   runnerPort: number;
 
   // APIs panel — persistent editor state
@@ -138,6 +141,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   runnerExpandedDirs: [],
   runnerRequestedFile: null,
   runnerRequestedDiffTab: null,
+  runnerOpenDiffs: [],
+  runnerDiffViewMode: "unified",
   runnerPort: 5174,
 
   apisName: "",
@@ -212,7 +217,7 @@ interface ProjectSettingsStore {
   openApi: (id: string) => void;
   openPlan: (name: string) => void;
   openRunnerFile: (path: string) => void;
-  openRunnerDiffTab: (tabId: string) => void;
+  openRunnerDiff: (diffId: string) => void;
 }
 
 export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get) => ({
@@ -274,5 +279,9 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
   openApi:        (id)   => get().setProjectSettings({ activeView: "apis",       activeApi: id }),
   openPlan:       (name) => get().setProjectSettings({ activeView: "plans",      activePlan: name }),
   openRunnerFile: (path) => get().setProjectSettings({ activeView: "runner",     runnerRequestedFile: path }),
-  openRunnerDiffTab: (tabId) => get().setProjectSettings({ activeView: "runner", runnerRequestedDiffTab: tabId }),
+  openRunnerDiff: (diffId) => {
+    const { ps } = get();
+    const runnerOpenDiffs = ps.runnerOpenDiffs.includes(diffId) ? ps.runnerOpenDiffs : [...ps.runnerOpenDiffs, diffId];
+    get().setProjectSettings({ activeView: "runner", runnerOpenDiffs, runnerRequestedDiffTab: MAIN_DIFF_TAB_ID });
+  },
 }));

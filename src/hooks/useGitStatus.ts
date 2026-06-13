@@ -3,7 +3,17 @@ import { gitKeys } from "@/lib/queryKeys";
 import { isGitRepo, gitCwd } from "@/lib/git/repo";
 import { getStatus } from "@/lib/git/status";
 import { getLog } from "@/lib/git/log";
-import { getUnstagedDiff, getStagedDiff, getUntrackedDiff, getCommitDiff, getFileAtHead } from "@/lib/git/diff";
+import {
+  getUnstagedDiff,
+  getStagedDiff,
+  getUntrackedDiff,
+  getCommitDiff,
+  getFileAtHead,
+  getUnstagedFileContent,
+  getStagedFileContent,
+  getCommitFileContent,
+} from "@/lib/git/diff";
+import type { DiffContentSource, DiffFile } from "@/lib/git/types";
 
 export function useIsGitRepo(project: string) {
   return useQuery({
@@ -60,5 +70,22 @@ export function useFileAtHead(project: string, relPath: string | null) {
     queryFn: () => getFileAtHead(gitCwd(project), relPath!),
     enabled: !!project && !!relPath,
     staleTime: 5_000,
+  });
+}
+
+/** Before/after full file content for a Runner diff tab, used by `unifiedMergeView`. */
+export function useDiffFileContent(project: string, source: DiffContentSource, file: DiffFile) {
+  return useQuery({
+    queryKey: gitKeys.diffContent(project, source, file.oldPath, file.newPath),
+    queryFn: () => {
+      const cwd = gitCwd(project);
+      if (source.kind === "commit") {
+        return getCommitFileContent(cwd, source.hash, file.oldPath, file.newPath);
+      }
+      const path = file.newPath || file.oldPath;
+      if (source.staged) return getStagedFileContent(cwd, path);
+      return getUnstagedFileContent(cwd, path, source.untracked);
+    },
+    enabled: !!project,
   });
 }
