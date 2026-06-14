@@ -32,3 +32,5 @@ export {
 export { getGeneratedMainTsx } from "./scaffold-shadcn/main-template";
 
 export { getThemePreviewTsx } from "./scaffold-shadcn/theme-preview";
+
+export { getJsxDevRuntimeShim, getJsxDevRuntimeShimTypes } from "./scaffold-shadcn/jsx-dev-runtime-template";

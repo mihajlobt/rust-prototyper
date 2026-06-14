@@ -30,6 +30,10 @@ const DEVICE_WIDTHS: Record<PreviewDevice, number | null> = {
   mobile: 375,
 };
 
+// Reserved portId for hover-highlight find-element-at requests (vs.
+// per-annotation portIds used for commit-time resolution).
+const HOVER_PORT_ID = "__hover__";
+
 export interface PreviewTab {
   id: string;
   type: "screen";
@@ -173,6 +177,47 @@ export function CreatePreviewPane({
   const internalIframeRef = useRef<HTMLIFrameElement>(null);
   const iframeRef = iframeRefProp ?? internalIframeRef;
 
+  // Resolved element info for in-flight annotation drafts, keyed by portId —
+  // populated by the iframe's `find-element-at` reply (see main-template.ts).
+  const resolvedElementsRef = useRef<Map<string, { selector: string; elementTag?: string; elementText?: string; loc?: string }>>(new Map());
+  const portIdRef = useRef(0);
+
+  // Hover highlight while in annotation mode — shows which element a click
+  // would resolve to, via the same find-element-at bridge.
+  const [hoverHighlight, setHoverHighlight] = useState<{ x: number; y: number; w: number; h: number; tag?: string; text?: string } | null>(null);
+  const hoverThrottleRef = useRef(0);
+
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data as { type?: string; portId?: string; selector?: string; elementTag?: string; elementText?: string; loc?: string; rect?: { x: number; y: number; w: number; h: number } } | null;
+      if (data?.type !== "hotspot-created" || !data.portId) return;
+      if (data.portId === HOVER_PORT_ID) {
+        const overlay = iframeOverlayRef.current;
+        if (!data.rect || !overlay) return;
+        const overlayRect = overlay.getBoundingClientRect();
+        if (overlayRect.width === 0 || overlayRect.height === 0) return;
+        setHoverHighlight({
+          x: (data.rect.x / overlayRect.width) * 100,
+          y: (data.rect.y / overlayRect.height) * 100,
+          w: (data.rect.w / overlayRect.width) * 100,
+          h: (data.rect.h / overlayRect.height) * 100,
+          tag: data.elementTag,
+          text: data.elementText,
+        });
+        return;
+      }
+      if (!data.selector) return;
+      resolvedElementsRef.current.set(data.portId, {
+        selector: data.selector,
+        elementTag: data.elementTag,
+        elementText: data.elementText,
+        loc: data.loc,
+      });
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
   const getRelativeCoords = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, ref: React.RefObject<HTMLDivElement | null>) => {
       const overlay = ref.current;
@@ -193,29 +238,52 @@ export function CreatePreviewPane({
       const coords = getRelativeCoords(e, ref);
       dragStartRef.current = coords;
       setLiveRect(null);
+      setHoverHighlight(null);
     },
     [annotationMode, textPopup, getRelativeCoords]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, ref: React.RefObject<HTMLDivElement | null>) => {
-      if (!annotationMode || !dragStartRef.current) return;
-      const current = getRelativeCoords(e, ref);
-      const start = dragStartRef.current;
-      const dx = Math.abs(current.x - start.x);
-      const dy = Math.abs(current.y - start.y);
-      if (dx > 2 || dy > 2) {
-        setLiveRect({
-          type: "region",
-          x: Math.min(start.x, current.x),
-          y: Math.min(start.y, current.y),
-          w: Math.abs(current.x - start.x),
-          h: Math.abs(current.y - start.y),
-        });
+      if (!annotationMode) return;
+
+      if (dragStartRef.current) {
+        if (hoverHighlight) setHoverHighlight(null);
+        const current = getRelativeCoords(e, ref);
+        const start = dragStartRef.current;
+        const dx = Math.abs(current.x - start.x);
+        const dy = Math.abs(current.y - start.y);
+        if (dx > 2 || dy > 2) {
+          setLiveRect({
+            type: "region",
+            x: Math.min(start.x, current.x),
+            y: Math.min(start.y, current.y),
+            w: Math.abs(current.x - start.x),
+            h: Math.abs(current.y - start.y),
+          });
+        }
+        return;
       }
+
+      // Hover highlight only applies to the iframe overlay, and is suppressed while the text popup is open.
+      if (textPopup || ref !== iframeOverlayRef || !iframeRef.current?.contentWindow) return;
+      const now = Date.now();
+      if (now - hoverThrottleRef.current < 50) return;
+      hoverThrottleRef.current = now;
+      const overlay = ref.current;
+      if (!overlay) return;
+      const rect = overlay.getBoundingClientRect();
+      iframeRef.current.contentWindow.postMessage(
+        { type: "find-element-at", x: e.clientX - rect.left, y: e.clientY - rect.top, portId: HOVER_PORT_ID },
+        "*"
+      );
     },
-    [annotationMode, getRelativeCoords]
+    [annotationMode, getRelativeCoords, hoverHighlight, textPopup, iframeOverlayRef, iframeRef]
   );
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverHighlight(null);
+  }, []);
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, ref: React.RefObject<HTMLDivElement | null>) => {
@@ -230,12 +298,14 @@ export function CreatePreviewPane({
       const rect = overlay.getBoundingClientRect();
 
       let draft: AnnotationPopupDraft;
+      let targetPx: { x: number; y: number };
       if (dx < 2 && dy < 2) {
+        targetPx = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         draft = { type: "point", x: start.x, y: start.y };
         setLiveRect(null);
         setTextPopup({
-          x: Math.max(0, Math.min(e.clientX - rect.left, rect.width - 220)),
-          y: Math.max(0, Math.min(e.clientY - rect.top + 10, rect.height - 80)),
+          x: Math.max(0, Math.min(targetPx.x, rect.width - 220)),
+          y: Math.max(0, Math.min(targetPx.y + 10, rect.height - 80)),
           draft,
         });
       } else {
@@ -249,6 +319,7 @@ export function CreatePreviewPane({
         setLiveRect(null);
         const centerX = ((draft.x + (draft.w ?? 0) / 2) / 100) * rect.width;
         const centerY = ((draft.y + (draft.h ?? 0) / 2) / 100) * rect.height;
+        targetPx = { x: centerX, y: centerY };
         setTextPopup({
           x: Math.max(0, Math.min(centerX - 100, rect.width - 220)),
           y: Math.max(0, Math.min(centerY, rect.height - 80)),
@@ -256,12 +327,27 @@ export function CreatePreviewPane({
         });
       }
       setPopupText("");
+
+      // Resolve the underlying element via the preview iframe's find-element-at
+      // bridge (main-template.ts) so the AI gets a structural selector instead
+      // of bare coordinates. Not applicable to the Design-tab token preview.
+      if (ref === iframeOverlayRef && iframeRef.current?.contentWindow) {
+        const portId = `annotation-${++portIdRef.current}`;
+        draft.portId = portId;
+        iframeRef.current.contentWindow.postMessage(
+          { type: "find-element-at", x: targetPx.x, y: targetPx.y, portId },
+          "*"
+        );
+      }
     },
-    [annotationMode, getRelativeCoords]
+    [annotationMode, getRelativeCoords, iframeOverlayRef, iframeRef]
   );
 
   const commitAnnotation = useCallback(() => {
     if (!textPopup || !popupText.trim() || !onAddAnnotation) return;
+    const portId = textPopup.draft.portId;
+    const resolved = portId ? resolvedElementsRef.current.get(portId) : undefined;
+    if (portId) resolvedElementsRef.current.delete(portId);
     onAddAnnotation({
       type: textPopup.draft.type,
       x: textPopup.draft.x,
@@ -270,6 +356,10 @@ export function CreatePreviewPane({
       h: textPopup.draft.h,
       text: popupText.trim(),
       resolved: false,
+      selector: resolved?.selector,
+      elementTag: resolved?.elementTag,
+      elementText: resolved?.elementText,
+      loc: resolved?.loc,
     });
     setTextPopup(null);
     setPopupText("");
@@ -279,6 +369,10 @@ export function CreatePreviewPane({
     setTextPopup(null);
     setLiveRect(null);
   }, []);
+
+  useEffect(() => {
+    if (!annotationMode || textPopup) setHoverHighlight(null);
+  }, [annotationMode, textPopup]);
 
   const openAnnotations = annotations.filter((a) => !a.resolved);
 
@@ -392,6 +486,7 @@ export function CreatePreviewPane({
               overlayRef={designOverlayRef}
               annotationMode={annotationMode}
               liveRect={liveRect}
+              hoverHighlight={null}
               annotations={openAnnotations}
               textPopup={textPopup}
               popupText={popupText}
@@ -432,6 +527,7 @@ export function CreatePreviewPane({
                 overlayRef={iframeOverlayRef}
                 annotationMode={annotationMode}
                 liveRect={liveRect}
+                hoverHighlight={hoverHighlight}
                 annotations={openAnnotations}
                 textPopup={textPopup}
                 popupText={popupText}
@@ -439,6 +535,7 @@ export function CreatePreviewPane({
                 onMouseDown={(e) => handleMouseDown(e, iframeOverlayRef)}
                 onMouseMove={(e) => handleMouseMove(e, iframeOverlayRef)}
                 onMouseUp={(e) => handleMouseUp(e, iframeOverlayRef)}
+                onMouseLeave={handleMouseLeave}
                 onCommit={commitAnnotation}
                 onCancelPopup={cancelPopup}
               />

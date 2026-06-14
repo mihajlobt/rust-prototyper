@@ -13,6 +13,13 @@ export interface Annotation {
   h?: number
   text: string
   resolved?: boolean
+  /** Structural CSS selector path of the targeted element (e.g. "main > section:nth-of-type(2) > button"),
+   *  resolved via the preview iframe's `find-element-at` bridge — stable across responsive resizes. */
+  selector?: string
+  elementTag?: string
+  elementText?: string
+  /** Source file location ("src/pages/library.tsx:83:11") from the data-source-loc jsxDEV shim — more useful to the model than `selector`. */
+  loc?: string
 }
 
 export interface AnnotationPopupDraft {
@@ -21,6 +28,8 @@ export interface AnnotationPopupDraft {
   type: "point" | "region"
   w?: number
   h?: number
+  /** Correlates with the `find-element-at` reply resolving `selector`/`elementTag`/`elementText`. */
+  portId?: string
 }
 
 export interface AnnotationTextPopup {
@@ -29,10 +38,20 @@ export interface AnnotationTextPopup {
   draft: AnnotationPopupDraft
 }
 
+export interface HoverHighlight {
+  x: number
+  y: number
+  w: number
+  h: number
+  tag?: string
+  text?: string
+}
+
 export interface AnnotationOverlayProps {
   overlayRef: React.RefObject<HTMLDivElement | null>
   annotationMode: boolean
   liveRect: AnnotationPopupDraft | null
+  hoverHighlight?: HoverHighlight | null
   annotations: Annotation[]
   textPopup: AnnotationTextPopup | null
   popupText: string
@@ -40,6 +59,7 @@ export interface AnnotationOverlayProps {
   onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void
   onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void
   onMouseUp: (e: React.MouseEvent<HTMLDivElement>) => void
+  onMouseLeave?: (e: React.MouseEvent<HTMLDivElement>) => void
   onCommit: () => void
   onCancelPopup: () => void
 }
@@ -48,6 +68,7 @@ export function AnnotationOverlay({
   overlayRef,
   annotationMode,
   liveRect,
+  hoverHighlight,
   annotations,
   textPopup,
   popupText,
@@ -55,6 +76,7 @@ export function AnnotationOverlay({
   onMouseDown,
   onMouseMove,
   onMouseUp,
+  onMouseLeave,
   onCommit,
   onCancelPopup,
 }: AnnotationOverlayProps) {
@@ -65,7 +87,27 @@ export function AnnotationOverlay({
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
     >
+      {!liveRect && hoverHighlight && (
+        <div
+          className="absolute border-2 border-primary/60 bg-primary/5 pointer-events-none"
+          style={{
+            left: `${hoverHighlight.x}%`,
+            top: `${hoverHighlight.y}%`,
+            width: `${hoverHighlight.w}%`,
+            height: `${hoverHighlight.h}%`,
+          }}
+        >
+          {hoverHighlight.tag && (
+            <span className="absolute -top-5 left-0 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
+              {`<${hoverHighlight.tag}>`}
+              {hoverHighlight.text ? ` "${hoverHighlight.text.slice(0, 24)}"` : ""}
+            </span>
+          )}
+        </div>
+      )}
+
       {liveRect && liveRect.type === "region" && (
         <div
           className="absolute border-2 border-primary bg-primary/10 pointer-events-none"

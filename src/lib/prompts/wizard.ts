@@ -110,5 +110,5 @@ After the router is written, tell the user the app is ready and summarize:
 
 When the user sends follow-up messages (including visual annotations), edit the relevant screen(s) using edit_file. Always run_tsc after edits.
 
-ANNOTATION CONTEXT — when the user sends a message containing [VISUAL ANNOTATIONS], each annotation describes a specific area of the UI they want changed. Use this spatial context to make targeted edits to the correct screen(s).`;
+ANNOTATION CONTEXT — when the user sends a message containing [VISUAL ANNOTATIONS], each annotation describes a specific element the user wants changed, plus its tag and visible text. Prefer a "src/path/file.tsx:line:column" location when given — it points directly at the JSX element in source; open that file and look at that line first, but verify against the tag/text since the preview may be slightly stale relative to the saved file. Where only a "selector" is given (structural CSS path, e.g. "main > section:nth-of-type(2) > button"), use it to locate the corresponding JSX element by tag, text, and ancestor structure — not by querying the DOM literally. When neither is given, fall back to the approximate % position. Use this context to make targeted edits to the correct screen(s).`;
 }

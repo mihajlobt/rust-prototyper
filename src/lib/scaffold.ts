@@ -12,6 +12,8 @@ import {
   getRouterTsx,
   getGeneratedViteConfig,
   getThemePreviewTsx,
+  getJsxDevRuntimeShim,
+  getJsxDevRuntimeShimTypes,
 } from "@/lib/scaffold-shadcn";
 
 const P = PROJECT_PATHS;
@@ -163,7 +165,12 @@ export async function scaffoldGenerated(
     createDir(`${generatedDir}/${SRC.UTILS_DIR}`),
     createDir(`${generatedDir}/${SRC.TYPES_DIR}`),
     createDir(`${generatedDir}/${SRC.STYLES_DIR}`),
+    createDir(`${generatedDir}/${SRC.DEV_DIR}`),
   ]);
+
+  // Step 9b: Write the dev-only jsxDEV shim that stamps data-source-loc onto DOM elements
+  await writeFile(`${generatedDir}/${SRC.JSX_DEV_RUNTIME_SHIM_TS}`, getJsxDevRuntimeShim());
+  await writeFile(`${generatedDir}/${SRC.JSX_DEV_RUNTIME_REAL_DTS}`, getJsxDevRuntimeShimTypes());
 
   // Step 10: Write preview-theme.css (populated at runtime by ThemesPanel)
   await writeFile(`${generatedDir}/${SRC.PREVIEW_THEME_CSS}`, "");

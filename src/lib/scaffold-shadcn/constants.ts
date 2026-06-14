@@ -28,6 +28,9 @@ export const PROJECT_PATHS = {
     SERVICES_DIR: "src/services",
     UTILS_DIR: "src/utils",
     TYPES_DIR: "src/types",
+    DEV_DIR: "src/dev",
+    JSX_DEV_RUNTIME_SHIM_TS: "src/dev/jsx-dev-runtime-shim.ts",
+    JSX_DEV_RUNTIME_REAL_DTS: "src/dev/jsx-dev-runtime-real.d.ts",
   },
 } as const;
 

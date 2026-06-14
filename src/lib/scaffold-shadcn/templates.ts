@@ -128,17 +128,26 @@ ${entries.map(([prefix, targetUrl]) => {
     : '';
 
   return `import path from "path"
+import { createRequire } from "module"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
-export default defineConfig({
+const require = createRequire(import.meta.url)
+
+export default defineConfig(({ command }) => ({
   plugins: [tailwindcss(), react()],
   resolve: {
     alias: {
+      ...(command === "serve"
+        ? {
+            "react/jsx-dev-runtime-real": require.resolve("react/jsx-dev-runtime"),
+            "react/jsx-dev-runtime": path.resolve(__dirname, "./src/dev/jsx-dev-runtime-shim.ts"),
+          }
+        : {}),
       "@": path.resolve(__dirname, "./src"),
     },
   },${proxyBlock}
-})
+}))
 `;
 }

@@ -2,16 +2,19 @@
 // §2.6). Renders the annotation list below the chat panel with send-to-AI
 // functionality. Used only by WizardMode.
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { MapPin, RectangleHorizontal, Trash2, CheckCheck, Send } from "lucide-react";
+import { MapPin, RectangleHorizontal, Trash2, CheckCheck, Pencil, Send } from "lucide-react";
 import type { Annotation } from "@/components/ui/AnnotationOverlay";
 
 interface AnnotationTrayProps {
   annotations: Annotation[];
   onRemove: (id: string) => void;
   onResolve: (id: string) => void;
+  onEdit: (id: string, text: string) => void;
   onSendToAi: () => void;
   canSend: boolean;
 }
@@ -20,6 +23,7 @@ export function AnnotationTray({
   annotations,
   onRemove,
   onResolve,
+  onEdit,
   onSendToAi,
   canSend,
 }: AnnotationTrayProps) {
@@ -52,6 +56,7 @@ export function AnnotationTray({
                   index={index + 1}
                   onRemove={onRemove}
                   onResolve={onResolve}
+                  onEdit={onEdit}
                 />
               ))}
             </>
@@ -69,6 +74,7 @@ export function AnnotationTray({
                   index={open.length + index + 1}
                   onRemove={onRemove}
                   onResolve={onResolve}
+                  onEdit={onEdit}
                   dimmed
                 />
               ))}
@@ -99,10 +105,25 @@ interface AnnotationRowProps {
   index: number;
   onRemove: (id: string) => void;
   onResolve: (id: string) => void;
+  onEdit: (id: string, text: string) => void;
   dimmed?: boolean;
 }
 
-function AnnotationRow({ annotation, index, onRemove, onResolve, dimmed }: AnnotationRowProps) {
+function AnnotationRow({ annotation, index, onRemove, onResolve, onEdit, dimmed }: AnnotationRowProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(annotation.text);
+
+  useEffect(() => {
+    if (!isEditing) setEditText(annotation.text);
+  }, [annotation.text, isEditing]);
+
+  const commitEdit = () => {
+    const trimmed = editText.trim();
+    if (trimmed && trimmed !== annotation.text) onEdit(annotation.id, trimmed);
+    else setEditText(annotation.text);
+    setIsEditing(false);
+  };
+
   return (
     <div
       className={cn(
@@ -118,33 +139,67 @@ function AnnotationRow({ annotation, index, onRemove, onResolve, dimmed }: Annot
           {annotation.type === "region"
             ? <RectangleHorizontal className="h-3 w-3" />
             : <MapPin className="h-3 w-3" />}
-          {annotation.type === "region" && annotation.w !== undefined && annotation.h !== undefined
-            ? `${annotation.x.toFixed(0)}%,${annotation.y.toFixed(0)}% → ${(annotation.x + annotation.w).toFixed(0)}%,${(annotation.y + annotation.h).toFixed(0)}%`
-            : `${annotation.x.toFixed(0)}%, ${annotation.y.toFixed(0)}%`}
+          {annotation.loc
+            ? `<${annotation.elementTag ?? "element"}>${annotation.elementText ? ` "${annotation.elementText}"` : ""} — ${annotation.loc}`
+            : annotation.selector
+              ? `<${annotation.elementTag ?? "element"}>${annotation.elementText ? ` "${annotation.elementText}"` : ""}`
+              : annotation.type === "region" && annotation.w !== undefined && annotation.h !== undefined
+                ? `${annotation.x.toFixed(0)}%,${annotation.y.toFixed(0)}% → ${(annotation.x + annotation.w).toFixed(0)}%,${(annotation.y + annotation.h).toFixed(0)}%`
+                : `${annotation.x.toFixed(0)}%, ${annotation.y.toFixed(0)}%`}
         </div>
-        <p className="leading-snug text-foreground">{annotation.text}</p>
+        {isEditing ? (
+          <Input
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            className="h-6 text-xs"
+            autoFocus
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitEdit();
+              if (e.key === "Escape") { setEditText(annotation.text); setIsEditing(false); }
+            }}
+          />
+        ) : (
+          <p
+            className="leading-snug text-foreground cursor-text"
+            onClick={() => setIsEditing(true)}
+          >
+            {annotation.text}
+          </p>
+        )}
       </div>
-      {!dimmed && (
-        <div className="flex shrink-0 flex-col gap-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
-            onClick={() => onRemove(annotation.id)}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-5 w-5 p-0 text-muted-foreground hover:text-green-600"
-            onClick={() => onResolve(annotation.id)}
-            title="Mark as resolved"
-          >
-            <CheckCheck className="h-3 w-3" />
-          </Button>
-        </div>
-      )}
+      <div className="flex shrink-0 flex-col gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+          onClick={() => setIsEditing(true)}
+          title="Edit"
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+        {!dimmed && (
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onRemove(annotation.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-5 w-5 p-0 text-muted-foreground hover:text-green-600"
+              onClick={() => onResolve(annotation.id)}
+              title="Mark as resolved"
+            >
+              <CheckCheck className="h-3 w-3" />
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -39,10 +39,14 @@ function serializeAnnotations(annotations: PreviewAnnotation[]): string {
   const open = annotations.filter((a) => !a.resolved);
   if (open.length === 0) return "";
   const lines = open.map((a, i) => {
-    if (a.type === "region" && a.w !== undefined && a.h !== undefined) {
-      return `${i + 1}. [REGION ${a.x.toFixed(0)}%,${a.y.toFixed(0)}% → ${(a.x + a.w).toFixed(0)}%,${(a.y + a.h).toFixed(0)}%] "${a.text}"`;
-    }
-    return `${i + 1}. [POINT ${a.x.toFixed(0)}%,${a.y.toFixed(0)}%] "${a.text}"`;
+    const target = a.loc
+      ? `<${a.elementTag ?? "element"}>${a.elementText ? ` "${a.elementText}"` : ""} — ${a.loc}`
+      : a.selector
+        ? `<${a.elementTag ?? "element"}>${a.elementText ? ` "${a.elementText}"` : ""} — selector: ${a.selector}`
+        : a.type === "region" && a.w !== undefined && a.h !== undefined
+          ? `region at ${a.x.toFixed(0)}%,${a.y.toFixed(0)}% → ${(a.x + a.w).toFixed(0)}%,${(a.y + a.h).toFixed(0)}%`
+          : `point at ${a.x.toFixed(0)}%,${a.y.toFixed(0)}%`;
+    return `${i + 1}. ${target} — "${a.text}"`;
   });
   return `\n\n[VISUAL ANNOTATIONS — user's feedback on the live preview]\n${lines.join("\n")}`;
 }
@@ -304,6 +308,7 @@ export function WizardMode() {
                 annotations={annotations}
                 onRemove={(id) => setAnnotations((prev) => prev.filter((a) => a.id !== id))}
                 onResolve={(id) => setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, resolved: true } : a)))}
+                onEdit={(id, text) => setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, text } : a)))}
                 onSendToAi={handleSendAnnotations}
                 canSend={!chat.isStreaming}
               />

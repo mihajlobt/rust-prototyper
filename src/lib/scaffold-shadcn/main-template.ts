@@ -121,7 +121,10 @@ window.addEventListener('message', (event) => {
       type: 'hotspot-created',
       portId,
       selector: getSelector(el),
+      elementTag: el.tagName.toLowerCase(),
+      elementText: (el.innerText || '').trim().slice(0, 50),
       rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+      loc: el.closest('[data-source-loc]')?.getAttribute('data-source-loc') ?? undefined,
     }, '*');
     return;
   }
