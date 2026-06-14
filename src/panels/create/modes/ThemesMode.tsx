@@ -343,7 +343,7 @@ export function ThemesMode() {
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setProjectSettings({ createShowInspector: !ps.createShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
-                <TokenUsageBadge model={settings.modelId} messages={chat.messages} />
+                <TokenUsageBadge model={settings.modelId} messages={chat.messages} entityId={themeEntityId} />
                 {ps.createShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>

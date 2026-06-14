@@ -6,6 +6,8 @@ interface ChatState {
   isStreaming: boolean
   thinkingContent: string
   pendingPermissions: ToolPermissionRecord[]
+  /** Estimated tokens generated so far in the in-flight turn, for live counting during streaming. */
+  liveTokenCount: number
 }
 
 interface ChatStore {
@@ -16,6 +18,7 @@ interface ChatStore {
   appendChunk: (id: string, chunk: string) => void
   setStreamingContent: (id: string, content: string) => void
   setStreamingThinking: (id: string, thinking: string) => void
+  setLiveTokenCount: (id: string, count: number) => void
   attachToolCall: (id: string, tool: string, path: string, args: Record<string, unknown>) => void
   /** Resolve the first pending tool call matching `tool` (front-to-back order matches
    *  ToolCall/ToolResult arrival order, fixing result swapping for parallel same-name tools). */
@@ -27,7 +30,7 @@ interface ChatStore {
   clearPendingPermissions: (id: string) => void
 }
 
-const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "", pendingPermissions: [] }
+const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "", pendingPermissions: [], liveTokenCount: 0 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   chats: {},
@@ -72,6 +75,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setStreamingThinking: (id, thinking) =>
     set((s) => ({
       chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), thinkingContent: thinking } },
+    })),
+
+  setLiveTokenCount: (id, count) =>
+    set((s) => ({
+      chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), liveTokenCount: count } },
     })),
 
   attachToolCall: (id, tool, path, args) =>

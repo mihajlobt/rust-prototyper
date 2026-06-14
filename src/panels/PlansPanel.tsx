@@ -178,6 +178,7 @@ export function PlansPanel() {
 
   const chatSlot = chatEntityId ? (
     <PlannerChat
+      entityId={chatEntityId}
       messages={chat.messages}
       isStreaming={chat.isStreaming}
       thinkingContent={chat.thinkingContent}

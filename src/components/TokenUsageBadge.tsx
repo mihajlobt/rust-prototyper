@@ -1,18 +1,23 @@
 import type { ChatMessage } from "@/types/chat";
 import { useModelCapabilities } from "@/hooks/useModelCapabilities";
+import { useChatStore } from "@/stores/chatStore";
 import { cn } from "@/lib/utils";
 
 interface TokenUsageBadgeProps {
   model: string;
   messages: ChatMessage[];
+  entityId: string;
 }
 
 /** Compact token usage bar shown in the Inspector pane header. */
-export function TokenUsageBadge({ model, messages }: TokenUsageBadgeProps) {
+export function TokenUsageBadge({ model, messages, entityId }: TokenUsageBadgeProps) {
   const caps = useModelCapabilities(model);
   const contextWindow = caps.contextLength ?? 8192;
+  const isStreaming = useChatStore((s) => s.chats[entityId]?.isStreaming ?? false);
+  const liveTokenCount = useChatStore((s) => s.chats[entityId]?.liveTokenCount ?? 0);
   const usage = [...messages].reverse().find((m) => m.role === "assistant" && m.usage)?.usage;
-  const tokenCount = usage ? usage.prompt_tokens + usage.completion_tokens : 0;
+  const settledCount = usage ? usage.prompt_tokens + usage.completion_tokens : 0;
+  const tokenCount = isStreaming ? settledCount + liveTokenCount : settledCount;
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
 
   return (

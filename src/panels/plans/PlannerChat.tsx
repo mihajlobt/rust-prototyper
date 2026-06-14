@@ -11,6 +11,7 @@ import { PaneHeader } from "@/components/ui/pane-header";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
 interface PlannerChatProps {
+  entityId: string;
   messages: ChatMessage[];
   isStreaming: boolean;
   thinkingContent: string;
@@ -57,6 +58,7 @@ interface PlannerChatProps {
 }
 
 export function PlannerChat({
+  entityId,
   messages,
   isStreaming,
   thinkingContent,
@@ -154,7 +156,7 @@ export function PlannerChat({
       <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
         <PaneHeader onClick={onToggleInspector}>
           <span className="text-xs font-medium flex-1">Inspector</span>
-          <TokenUsageBadge model={model} messages={messages} />
+          <TokenUsageBadge model={model} messages={messages} entityId={entityId} />
           {showInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
         </PaneHeader>
       </Allotment.Pane>

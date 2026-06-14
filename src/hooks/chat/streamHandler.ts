@@ -50,10 +50,14 @@ export function createStreamHandler(params: StreamHandlerParams) {
   let toolWritten = false
   let rafId: number | null = null
   let rafThinkingId: number | null = null
+  // Rough chars-per-token estimate for the live "counting up" display during streaming.
+  let liveTokenEstimate = 0
 
   const finalize = (content: string, thinking: string, usage?: TokenUsage) => {
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
     if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+    liveTokenEstimate = 0
+    useChatStore.getState().setLiveTokenCount(entityId, 0)
     activeRequestIdRef.current = null
     const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
     const currentLast = msgs[msgs.length - 1]
@@ -77,20 +81,24 @@ export function createStreamHandler(params: StreamHandlerParams) {
     if (msg.event === "Chunk") {
       if (msg.data.thinking) {
         thinkingAccumulated += msg.data.thinking
+        liveTokenEstimate += Math.ceil(msg.data.thinking.length / 4)
         if (rafThinkingId === null) {
           rafThinkingId = requestAnimationFrame(() => {
             rafThinkingId = null
             useChatStore.getState().setStreamingThinking(entityId, thinkingAccumulated)
+            useChatStore.getState().setLiveTokenCount(entityId, liveTokenEstimate)
           })
         }
       }
       if (msg.data.text) {
         contentAccumulated += msg.data.text
+        liveTokenEstimate += Math.ceil(msg.data.text.length / 4)
       }
       if (rafId === null) {
         rafId = requestAnimationFrame(() => {
           rafId = null
           useChatStore.getState().setStreamingContent(entityId, contentAccumulated)
+          useChatStore.getState().setLiveTokenCount(entityId, liveTokenEstimate)
         })
       }
     } else if (msg.event === "ToolCall") {
