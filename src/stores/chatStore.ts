@@ -1,5 +1,15 @@
 import { create } from "zustand"
+import type { TokenUsage } from "@/lib/ipc"
 import type { ChatMessage, StreamChunk, ToolPermissionRecord } from "@/types/chat"
+
+/** Per-session usage snapshot — persisted to `{chatPath}.session.json` so the
+ *  TokenUsageBadge has a reliable source of truth for "current context" even
+ *  when the last assistant message has no `usage` field (e.g. after Stop). */
+export interface SessionUsageSnapshot {
+  lastFinalUsage?: TokenUsage
+  liveEstimate?: number
+  updatedAt: number
+}
 
 interface ChatState {
   messages: ChatMessage[]
@@ -10,6 +20,8 @@ interface ChatState {
   liveTokenCount: number
   /** Cached compaction recap, mirrored to `*.compaction.json`. boundaryIndex is the role==="user" index it covers. */
   compaction?: { boundaryIndex: number; summary: string }
+  /** Per-session usage snapshot — mirrored to `*.session.json`. */
+  sessionUsage?: SessionUsageSnapshot
 }
 
 interface ChatStore {
@@ -21,6 +33,9 @@ interface ChatStore {
   setStreamingContent: (id: string, content: string) => void
   setStreamingThinking: (id: string, thinking: string) => void
   setLiveTokenCount: (id: string, count: number) => void
+  /** Set the per-session usage snapshot. Hydrated from session.json on mount
+   *  and updated whenever a Done event arrives or Stop is pressed. */
+  setSessionUsage: (id: string, snapshot: SessionUsageSnapshot | undefined) => void
   setCompaction: (id: string, compaction: { boundaryIndex: number; summary: string } | undefined) => void
   attachToolCall: (id: string, tool: string, path: string, args: Record<string, unknown>) => void
   /** Resolve the first pending tool call matching `tool` (front-to-back order matches
@@ -83,6 +98,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setLiveTokenCount: (id, count) =>
     set((s) => ({
       chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), liveTokenCount: count } },
+    })),
+
+  setSessionUsage: (id, snapshot) =>
+    set((s) => ({
+      chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), sessionUsage: snapshot } },
     })),
 
   setCompaction: (id, compaction) =>

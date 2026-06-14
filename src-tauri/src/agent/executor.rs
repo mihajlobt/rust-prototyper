@@ -332,12 +332,12 @@ async fn execute_read_file(
     let mut bytes_written = 0;
     let mut truncated = false;
 
-    // First pass: skip to offset
-    while let Ok(Some(_)) = reader.next_line().await {
+    // First pass: skip `start_offset` lines so the next read is the offset line.
+    // start_offset=0 (user wants line 1) → no lines skipped.
+    // start_offset=4 (user wants line 5) → 4 lines skipped.
+    while current_line_num < start_offset {
+        if reader.next_line().await.is_err() { break }
         current_line_num += 1;
-        if current_line_num > start_offset {
-            break;
-        }
     }
 
     // Second pass: collect lines up to limit

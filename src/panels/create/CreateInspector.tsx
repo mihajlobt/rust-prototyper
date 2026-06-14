@@ -4,6 +4,7 @@
 // the `visible` prop on the parent pane, not by this component — the
 // pattern preserved from WizardPanel/ScreensPanel/ComponentsPanel/ThemesPanel.
 
+import { memo, useMemo } from "react";
 import { PromptInspector } from "@/components/PromptInspector";
 import type { ChatMessage } from "@/types/chat";
 import type { Message, Provider } from "@/lib/ipc";
@@ -24,7 +25,7 @@ export interface CreateInspectorProps {
   hasTools?: boolean;
 }
 
-export function CreateInspector({
+export const CreateInspector = memo(function CreateInspector({
   systemPrompt,
   messages,
   model,
@@ -33,7 +34,9 @@ export function CreateInspector({
   think,
   hasTools,
 }: CreateInspectorProps) {
-  const inspectorMessages: Message[] = [
+  // Flattening tool calls/images for every message is O(n) — only recompute when
+  // the chat history or system prompt actually changes, not on every keystroke.
+  const inspectorMessages: Message[] = useMemo(() => [
     { role: "system", content: systemPrompt },
     ...messages.map((m) => ({
       role: m.role,
@@ -48,7 +51,7 @@ export function CreateInspector({
           }
         : {}),
     })),
-  ];
+  ], [systemPrompt, messages]);
 
   return (
     <PromptInspector
@@ -60,4 +63,4 @@ export function CreateInspector({
       hasTools={hasTools}
     />
   );
-}
+});

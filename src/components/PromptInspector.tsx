@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
@@ -46,43 +46,40 @@ function buildOllamaPayload(
   return payload;
 }
 
-export function PromptInspector({ model, messages, host, provider, think, hasTools = false }: PromptInspectorProps) {
-  const assembled = messages.map((m) => {
-    const imageNote = m.images?.length ? `\n[${m.images.length} image(s) attached]` : "";
-    return `${m.role}: ${m.content}${imageNote}`;
-  }).join("\n\n");
-
+export const PromptInspector = memo(function PromptInspector({ model, messages, host, provider, think, hasTools = false }: PromptInspectorProps) {
   const isOllama = provider.startsWith("ollama");
 
-  const ollamaPayload = buildOllamaPayload(model, messages, think, hasTools, true);
+  // Re-serializing every message into 3 payload shapes + a curl string is O(n) and
+  // expensive (images carry base64 data) — only recompute when the request actually changes.
+  const assembled = useMemo(() => messages.map((m) => {
+    const imageNote = m.images?.length ? `\n[${m.images.length} image(s) attached]` : "";
+    return `${m.role}: ${m.content}${imageNote}`;
+  }).join("\n\n"), [messages]);
 
-  const payload = isOllama
-    ? JSON.stringify(ollamaPayload, null, 2)
-    : provider === "claude"
-      ? JSON.stringify({
-          model,
-          messages: messages.map(serializeMessage),
-          max_tokens: 4096,
-          stream: true,
-        }, null, 2)
-      : JSON.stringify({
-          model,
-          messages: messages.map(serializeMessage),
-          stream: true,
-        }, null, 2);
+  const payload = useMemo(() => {
+    if (isOllama) return JSON.stringify(buildOllamaPayload(model, messages, think, hasTools, true), null, 2);
+    if (provider === "claude") {
+      return JSON.stringify({ model, messages: messages.map(serializeMessage), max_tokens: 4096, stream: true }, null, 2);
+    }
+    return JSON.stringify({ model, messages: messages.map(serializeMessage), stream: true }, null, 2);
+  }, [isOllama, provider, model, messages, think, hasTools]);
 
-  const curl = isOllama
-    ? `curl -X POST ${host}/api/chat \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(buildOllamaPayload(model, messages, think, hasTools, false))}'`
-    : provider === "claude"
-      ? `curl -X POST https://api.anthropic.com/v1/messages \\\n  -H "Content-Type: application/json" \\\n  -H "x-api-key: $ANTHROPIC_API_KEY" \\\n  -H "anthropic-version: 2023-06-01" \\\n  -d '${JSON.stringify({
-          model,
-          messages: messages.map(serializeMessage),
-          max_tokens: 4096,
-        })}'`
-      : `curl -X POST https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '${JSON.stringify({
-          model,
-          messages: messages.map(serializeMessage),
-        })}'`;
+  const curl = useMemo(() => {
+    if (isOllama) {
+      return `curl -X POST ${host}/api/chat \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(buildOllamaPayload(model, messages, think, hasTools, false))}'`;
+    }
+    if (provider === "claude") {
+      return `curl -X POST https://api.anthropic.com/v1/messages \\\n  -H "Content-Type: application/json" \\\n  -H "x-api-key: $ANTHROPIC_API_KEY" \\\n  -H "anthropic-version: 2023-06-01" \\\n  -d '${JSON.stringify({
+        model,
+        messages: messages.map(serializeMessage),
+        max_tokens: 4096,
+      })}'`;
+    }
+    return `curl -X POST https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '${JSON.stringify({
+      model,
+      messages: messages.map(serializeMessage),
+    })}'`;
+  }, [isOllama, provider, host, model, messages, think, hasTools]);
 
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
@@ -142,4 +139,4 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
       </Tabs>
     </div>
   );
-}
+});

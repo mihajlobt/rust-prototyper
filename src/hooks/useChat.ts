@@ -13,6 +13,7 @@ import {
   getErrorMessage,
   type CompletionEvent,
   type Provider,
+  type TokenUsage,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
@@ -23,6 +24,7 @@ import { createStreamHandler } from "./chat/streamHandler"
 import { dropStaleThinking } from "./chat/dropStaleThinking"
 import { dedupeMentions } from "./chat/dedupeMentions"
 import { getEffectiveContextWindow } from "./chat/contextWindow"
+import { persistSessionSnapshot } from "./chat/sessionSnapshot"
 import { generateCompactionSummary, buildCompactedMessages, findCompactionBoundary, KEEP_RECENT_TURNS } from "./chat/compactSummary"
 
 // Re-export for external consumers (ComponentsPanel, ScreensPanel).
@@ -143,6 +145,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const loadedRef = useRef<Set<string>>(new Set())
 
   const compactionPath = chatPath.replace(/\.json$/, ".compaction.json")
+  const sessionPath = chatPath.replace(/\.json$/, ".session.json")
 
   // Cold start: load from disk the first time this entityId is accessed
   useEffect(() => {
@@ -155,14 +158,15 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     readFile(chatPath)
       .then((raw) => {
         if (cancelled) return
-        // After cancelled check: StrictMode cleanup sets cancelled=true on Effect 1 so Effect 2 can retry — react.dev/reference/react/useEffect#my-effect-runs-twice-when-the-component-mounts
         loadedRef.current.add(entityId)
         try {
           const messages = JSON.parse(raw) as ChatMessage[]
           if (Array.isArray(messages) && messages.length > 0) {
             useChatStore.getState().setMessages(entityId, messages)
           }
-        } catch { /* ignore corrupt chat file */ }
+        } catch (e) {
+          notify.error("Failed to load chat", getErrorMessage(e))
+        }
       })
       .catch(() => {
         if (!cancelled) loadedRef.current.add(entityId)
@@ -182,11 +186,38 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           if (typeof compaction.boundaryIndex === "number" && typeof compaction.summary === "string") {
             useChatStore.getState().setCompaction(entityId, compaction)
           }
-        } catch { /* ignore corrupt compaction file */ }
+        } catch (e) {
+          notify.error("Failed to load compaction cache", getErrorMessage(e))
+        }
       })
       .catch(() => {})
     return () => { cancelled = true }
   }, [entityId, compactionPath])
+
+  // Cold start: hydrate the per-session usage snapshot
+  useEffect(() => {
+    if (loadedRef.current.has(entityId)) return
+    if (useChatStore.getState().chats[entityId]?.sessionUsage) return
+    let cancelled = false
+    readFile(sessionPath)
+      .then((raw) => {
+        if (cancelled) return
+        try {
+          const snapshot = JSON.parse(raw) as { lastFinalUsage?: TokenUsage; liveEstimate?: number; updatedAt?: number }
+          if (typeof snapshot.updatedAt === "number") {
+            useChatStore.getState().setSessionUsage(entityId, {
+              lastFinalUsage: snapshot.lastFinalUsage,
+              liveEstimate: snapshot.liveEstimate,
+              updatedAt: snapshot.updatedAt,
+            })
+          }
+        } catch (e) {
+          notify.error("Failed to load session cache", getErrorMessage(e))
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [entityId, sessionPath])
 
   const sendMessage = useCallback(async (textOverride?: string) => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -280,7 +311,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
-      entityId, chatPath, updatedMessages,
+      entityId, chatPath, sessionPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       onToolCallRef, onToolResultRef,
     })
@@ -309,7 +340,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       notify.error("Generation failed", getErrorMessage(e))
     }
   }, [
-    entityId, chatPath, compactionPath, systemPrompt,
+    entityId, chatPath, compactionPath, sessionPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
@@ -322,7 +353,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     useChatStore.getState().clearChat(entityId)
     writeFile(chatPath, "[]").catch(() => {})
     deleteFile(compactionPath).catch(() => {})
-  }, [entityId, chatPath, compactionPath])
+    deleteFile(sessionPath).catch(() => {})
+  }, [entityId, chatPath, compactionPath, sessionPath])
 
   const deleteFrom = useCallback((index: number) => {
     const current = useChatStore.getState().chats[entityId]?.messages ?? []
@@ -334,27 +366,37 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       useChatStore.getState().setCompaction(entityId, undefined)
       deleteFile(compactionPath).catch(() => {})
     }
-  }, [entityId, chatPath, compactionPath])
+    // If the trim removed the message that produced the last final usage,
+    // the session snapshot is stale — reset it.
+    const session = useChatStore.getState().chats[entityId]?.sessionUsage
+    if (session?.lastFinalUsage) {
+      const hasUsageAfterTrim = trimmed.some((m) => m.usage && m.usage === session.lastFinalUsage)
+      if (!hasUsageAfterTrim) {
+        useChatStore.getState().setSessionUsage(entityId, undefined)
+        deleteFile(sessionPath).catch(() => {})
+      }
+    }
+  }, [entityId, chatPath, compactionPath, sessionPath])
 
   const stopGeneration = useCallback(() => {
     ;(stopRef as MutableRefObject<boolean>).current = true
     useChatStore.getState().setStreaming(entityId, false)
     useChatStore.getState().setStreamingThinking(entityId, "")
     useChatStore.getState().clearPendingPermissions(entityId)
-    // Cancel the backend stream — signals the Rust CancellationToken which
-    // drops the HTTP connection, stopping generation at the source.
-    // Per Ollama API docs there is no /api/abort; dropping the connection
-    // is the standard cancellation pattern.
     if (activeRequestIdRef.current !== null) {
       stopGenerationRequest(activeRequestIdRef.current).catch(() => {})
       activeRequestIdRef.current = null
     }
-    // Persist partial response — finalize() won't run when stopRef is true
-    const msgs = useChatStore.getState().chats[entityId]?.messages ?? []
+    const chat = useChatStore.getState().chats[entityId]
+    const msgs = chat?.messages ?? []
     if (msgs.length > 0 && chatPath) {
       writeFile(chatPath, JSON.stringify(msgs, null, 2)).catch(() => {})
     }
-  }, [entityId, chatPath])
+    // Persist the live token estimate on stop
+    persistSessionSnapshot(entityId, sessionPath, {
+      liveEstimate: chat?.liveTokenCount ?? 0,
+    })
+  }, [entityId, chatPath, sessionPath])
 
   const regenerate = useCallback(async () => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -425,7 +467,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
-      entityId, chatPath, updatedMessages,
+      entityId, chatPath, sessionPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       onToolCallRef, onToolResultRef,
     })
@@ -454,7 +496,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       notify.error("Generation failed", getErrorMessage(e))
     }
   }, [
-    entityId, chatPath, compactionPath, systemPrompt,
+    entityId, chatPath, compactionPath, sessionPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,

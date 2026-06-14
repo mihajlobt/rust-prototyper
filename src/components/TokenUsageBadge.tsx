@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import type { ChatMessage } from "@/types/chat";
 import { useModelCapabilities } from "@/hooks/useModelCapabilities";
 import { useChatStore } from "@/stores/chatStore";
@@ -13,7 +14,7 @@ interface TokenUsageBadgeProps {
 }
 
 /** Compact token usage bar shown in the Inspector pane header. */
-export function TokenUsageBadge({ model, messages, entityId }: TokenUsageBadgeProps) {
+export const TokenUsageBadge = memo(function TokenUsageBadge({ model, messages, entityId }: TokenUsageBadgeProps) {
   const caps = useModelCapabilities(model);
   const provider = useAppStore((s) => s.settings.provider);
   const modelOptions = useAppStore((s) => s.settings.modelOptions);
@@ -22,9 +23,25 @@ export function TokenUsageBadge({ model, messages, entityId }: TokenUsageBadgePr
   );
   const isStreaming = useChatStore((s) => s.chats[entityId]?.isStreaming ?? false);
   const liveTokenCount = useChatStore((s) => s.chats[entityId]?.liveTokenCount ?? 0);
-  const usage = [...messages].reverse().find((m) => m.role === "assistant" && m.usage)?.usage;
-  const settledCount = usage ? usage.prompt_tokens + usage.completion_tokens : 0;
-  const tokenCount = isStreaming ? settledCount + liveTokenCount : settledCount;
+  const sessionUsage = useChatStore((s) => s.chats[entityId]?.sessionUsage);
+  const snapshotPrompt = sessionUsage?.lastFinalUsage?.prompt_tokens;
+  const snapshotCompletion = sessionUsage?.lastFinalUsage?.completion_tokens;
+  const snapshotSettled = snapshotPrompt != null && snapshotCompletion != null
+    ? snapshotPrompt + snapshotCompletion
+    : null;
+  // Walking the whole history to find the last usage is O(n) — only recompute when
+  // the message list actually changes, not on every keystroke-driven re-render.
+  const messageUsage = useMemo(
+    () => [...messages].reverse().find((m) => m.role === "assistant" && m.usage)?.usage,
+    [messages],
+  );
+  const messageSettled = messageUsage ? messageUsage.prompt_tokens + messageUsage.completion_tokens : null;
+  const settledCount = snapshotSettled ?? messageSettled ?? 0;
+  // Not streaming: persisted liveEstimate (from Stop/Error) still counts toward the total.
+  const effectiveLive = isStreaming
+    ? (liveTokenCount || sessionUsage?.liveEstimate || 0)
+    : (sessionUsage?.liveEstimate ?? 0);
+  const tokenCount = settledCount + effectiveLive;
   const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
 
   const usageLabel = (
@@ -58,4 +75,4 @@ export function TokenUsageBadge({ model, messages, entityId }: TokenUsageBadgePr
       ) : usageLabel}
     </div>
   );
-}
+});

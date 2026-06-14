@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   listOllamaModels,
@@ -70,24 +71,32 @@ export function useModelCapabilities(modelId: string): Capabilities {
     retry: 1,
   })
 
-  // Non-Ollama providers — return static or model-specific capabilities
-  if (!isOllama) {
-    if (provider === "claude") return claudeCaps(modelId)
-    return PROVIDER_CAPS[provider] ?? EMPTY_CAPS
-  }
+  // Memoized so the returned object keeps a stable reference across renders, which keeps
+  // callbacks depending on it (e.g. useChat's regenerate) stable too.
+  return useMemo(() => {
+    // Non-Ollama providers — return static or model-specific capabilities
+    if (!isOllama) {
+      if (provider === "claude") return claudeCaps(modelId)
+      return PROVIDER_CAPS[provider] ?? EMPTY_CAPS
+    }
 
-  // If local query has the model, use it
-  if (!localQuery.isPending && !localQuery.isError && localQuery.data) {
-    const localModel = localQuery.data.find((m) => m.id === modelId)
-    if (localModel) return toCaps(localModel)
-  }
+    // If local query has the model, use it
+    if (!localQuery.isPending && !localQuery.isError && localQuery.data) {
+      const localModel = localQuery.data.find((m) => m.id === modelId)
+      if (localModel) return toCaps(localModel)
+    }
 
-  // If model not in local list, check cloud models (for cloud-sourced models)
-  if (!cloudQuery.isPending && !cloudQuery.isError && cloudQuery.data) {
-    const cloudModel = cloudQuery.data.find((m) => m.id === modelId)
-    if (cloudModel) return toCaps(cloudModel)
-  }
+    // If model not in local list, check cloud models (for cloud-sourced models)
+    if (!cloudQuery.isPending && !cloudQuery.isError && cloudQuery.data) {
+      const cloudModel = cloudQuery.data.find((m) => m.id === modelId)
+      if (cloudModel) return toCaps(cloudModel)
+    }
 
-  // Model not in list
-  return EMPTY_CAPS
+    // Model not in list
+    return EMPTY_CAPS
+  }, [
+    isOllama, provider, modelId,
+    localQuery.isPending, localQuery.isError, localQuery.data,
+    cloudQuery.isPending, cloudQuery.isError, cloudQuery.data,
+  ])
 }

@@ -5,25 +5,14 @@ import { useAskUserStore } from "@/stores/askUserStore"
 import { useTaskListStore } from "@/stores/taskListStore"
 import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
+import { persistSessionSnapshot } from "./sessionSnapshot"
 import { stripFences } from "./messages"
-
-// ─── Factory: createStreamHandler ──────────────────────────────────────────
-//
-// Extracted to eliminate ~80 lines of duplicated channel.onmessage + finalize
-// logic between sendMessage and regenerate. Returns a bound handler that
-// closes over accumulated state.
-//
-// Tool results are written directly to Zustand in the ToolResult handler.
-// The previous pendingToolResultsRef + useEffect drain approach was intended
-// to ensure the "Processing" spinner painted for one frame before being cleared,
-// but it introduced a tab-switch bug: if the component unmounted before the
-// useEffect fired, pending:true was never cleared. Direct Zustand writes are
-// simpler and correct.
 
 export interface StreamHandlerParams {
   entityId: string
   chatPath: string
-  /** The updatedMessages array built by the caller (includes placeholder). */
+  /** Sibling of `chatPath` for per-session state (last usage, live estimate). */
+  sessionPath: string
   updatedMessages: ChatMessage[]
   stopRef: RefObject<boolean>
   activeRequestIdRef: MutableRefObject<number | null>
@@ -31,15 +20,13 @@ export interface StreamHandlerParams {
   onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
   onToolWriteRef: MutableRefObject<((path: string, content: string) => void) | undefined>
   outputPath: string | undefined
-  /** Called for every ToolCall event, before the store update. */
   onToolCallRef?: MutableRefObject<((tool: string, args: Record<string, unknown>) => void) | undefined>
-  /** Called for every ToolResult event, after the store update. */
   onToolResultRef?: MutableRefObject<((tool: string, success: boolean, output: string, path?: string) => void) | undefined>
 }
 
 export function createStreamHandler(params: StreamHandlerParams) {
   const {
-    entityId, chatPath, updatedMessages, stopRef, activeRequestIdRef,
+    entityId, chatPath, sessionPath, updatedMessages, stopRef, activeRequestIdRef,
     onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
     onToolCallRef, onToolResultRef,
   } = params
@@ -50,12 +37,12 @@ export function createStreamHandler(params: StreamHandlerParams) {
   let toolWritten = false
   let rafId: number | null = null
   let rafThinkingId: number | null = null
-  // Rough chars-per-token estimate for the live "counting up" display during streaming.
   let liveTokenEstimate = 0
 
   const finalize = (content: string, thinking: string, usage?: TokenUsage) => {
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
     if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
+    const finalLiveEstimate = liveTokenEstimate
     liveTokenEstimate = 0
     useChatStore.getState().setLiveTokenCount(entityId, 0)
     activeRequestIdRef.current = null
@@ -74,6 +61,10 @@ export function createStreamHandler(params: StreamHandlerParams) {
     useChatStore.getState().setStreaming(entityId, false)
     useChatStore.getState().setStreamingThinking(entityId, "")
     writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
+    // No usage (Error / truncated stream): carry the live estimate forward instead of dropping it.
+    persistSessionSnapshot(entityId, sessionPath, usage
+      ? { lastFinalUsage: usage, liveEstimate: 0 }
+      : { liveEstimate: finalLiveEstimate })
   }
 
   const onMessage = (msg: CompletionEvent) => {
@@ -104,7 +95,6 @@ export function createStreamHandler(params: StreamHandlerParams) {
     } else if (msg.event === "ToolCall") {
       onToolCallRef?.current?.(msg.data.tool, msg.data.args)
       useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
-      // Flush accumulated thinking/text as a chunk at tool boundary
       useChatStore.getState().addStreamChunk(entityId, {
         index: chunkIndex++,
         thinking: thinkingAccumulated,
@@ -112,7 +102,6 @@ export function createStreamHandler(params: StreamHandlerParams) {
       })
       thinkingAccumulated = ""
       contentAccumulated = ""
-      // Clear live accumulators so they don't duplicate the chunk we just stored
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
       useChatStore.getState().setStreamingContent(entityId, "")
@@ -152,7 +141,6 @@ export function createStreamHandler(params: StreamHandlerParams) {
       useTaskListStore.getState().setTodos(msg.data.todos)
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
-      // Single atomic mutation: first pending match (front-to-back) gets result + path.
       useChatStore.getState().resolveToolCall(entityId, tool, output, success, path ?? "")
       if ((tool === "write_file" || tool === "edit_file") && success) {
         if (tool === "write_file") {
@@ -172,7 +160,6 @@ export function createStreamHandler(params: StreamHandlerParams) {
     } else if (msg.event === "Done") {
       const finalThinking = thinkingAccumulated
       const finalContent = contentAccumulated
-      // Flush remaining accumulated thinking/text as final chunk
       if (thinkingAccumulated || contentAccumulated) {
         useChatStore.getState().addStreamChunk(entityId, {
           index: chunkIndex++,
