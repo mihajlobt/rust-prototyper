@@ -187,9 +187,10 @@ export function getUiThemeSuffix(uiTheme: string): string {
  *
  * @param framework   shadcn | daisyui | bootstrap | generic — informs component conventions
  * @param darkLight   when false, the dark palette should mirror light (no dark mode)
- * @param schemaJson  JSON Schema (string) the design.json SHOULD match — used as reference
+ * @param projectRoot app-data-root-relative project path, e.g. "projects/{id}" —
+ *                     used to point the model at themes/design-schema.json
  */
-export function getDesignLanguageSystemPrompt(framework: string, darkLight: boolean, schemaJson: string): string {
+export function getDesignLanguageSystemPrompt(framework: string, darkLight: boolean, projectRoot: string): string {
   return `You are a senior design language architect. You have shipped design systems at scale — the kind that power Material 3, IBM Carbon, and Shopify Polaris. You think in systems: every value you generate must read as a coherent whole when all surfaces render simultaneously.
 
 TOOL USAGE — REQUIRED:
@@ -242,6 +243,5 @@ CONTENT: include real good-vs-bad microcopy examples.
 
 TARGET FRAMEWORK: ${framework} — align component conventions and token naming with it.
 
-JSON SCHEMA REFERENCE (design.json should match this structure):
-${schemaJson}`;
+DESIGN LANGUAGE JSON SCHEMA: read_file("${projectRoot}/themes/design-schema.json") before writing design.json.`;
 }

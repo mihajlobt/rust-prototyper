@@ -12,7 +12,6 @@ import {
   ChevronUp, ChevronDown, Save, FolderUp, RefreshCw, Braces, Sliders, Palette,
   Smartphone, Tablet, Monitor, Sun, Moon, Eye, Pencil, List,
 } from "lucide-react";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,7 +28,6 @@ import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
 import { saveItemMeta } from "@/lib/item-meta";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
-import { designLanguageSpecSchema } from "@/lib/design/spec";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/appStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -184,10 +182,9 @@ export function ThemesMode() {
     ) + "\n\nGenerate both :root (light) and .dark (dark mode) variants in the same CSS block." + outputFilePathSection(themeOutputPath),
   [themeOutputPath, settings.prompts]);
 
-  const designSystemPrompt = useMemo(() => {
-    const schemaJson = JSON.stringify(z.toJSONSchema(designLanguageSpecSchema), null, 2);
-    return getDesignLanguageSystemPrompt("shadcn", true, schemaJson) + outputFilePathSection(designOutputPath);
-  }, [designOutputPath]);
+  const designSystemPrompt = useMemo(() =>
+    getDesignLanguageSystemPrompt("shadcn", true, `projects/${settings.project}`) + outputFilePathSection(designOutputPath),
+  [designOutputPath, settings.project]);
 
   const systemPrompt = designActive ? designSystemPrompt : cssSystemPrompt;
   const outputPath = designActive ? designOutputPath : themeOutputPath;
