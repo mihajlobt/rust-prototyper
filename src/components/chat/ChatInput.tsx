@@ -171,7 +171,7 @@ export function ChatInput({
           onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 min-h-0 resize-none border-0 text-sm focus-visible:ring-0"
+          className="flex-1 min-h-0 resize-none border-0 bg-transparent text-sm focus-visible:ring-0 dark:bg-transparent"
         />
 
         {/* Actions row */}
