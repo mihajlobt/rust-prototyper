@@ -5,10 +5,10 @@ import type { MentionAsset } from "@/types/chat";
 import { type PlanEditorHandle, type SelectionInfo } from "./PlanEditor";
 
 interface SelectionToChatProps {
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
   /** Ref (not state) — written by PlanEditor on every selection change without
    *  triggering a PlansPanel re-render during drag. Read here on mouseup. */
-  selectionInfoRef: React.MutableRefObject<SelectionInfo | null>;
+  selectionInfoRef: React.RefObject<SelectionInfo | null>;
   planName: string;
   planPath: string;
   onAddMention: (mention: MentionAsset) => void;

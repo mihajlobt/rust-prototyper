@@ -152,7 +152,7 @@ interface CodeMirrorEditorProps {
    * (Plans, etc.) that need to dispatch transactions from an external
    * format toolbar without re-rendering on every keystroke.
    */
-  viewRef?: React.MutableRefObject<EditorView | null>;
+  viewRef?: React.RefObject<EditorView | null>;
   /**
    * Extra CodeMirror extensions layered on top of the base set (language,
    * color picker, line wrap, blur handler). Used by panels to plug in

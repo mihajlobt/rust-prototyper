@@ -37,7 +37,7 @@ export interface RunnerEditorProps {
   revealInExplorer: (path: string) => void;
   reorderTabs: (newOrder: string[]) => void;
   /** Receives the underlying CodeMirror EditorView so RunnerPanel can dispatch git gutter updates. */
-  editorViewRef?: React.MutableRefObject<EditorView | null>;
+  editorViewRef?: React.RefObject<EditorView | null>;
 }
 
 /** Tab bar + CodeMirror editor body for the Runner panel.

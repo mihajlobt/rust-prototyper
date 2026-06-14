@@ -3,7 +3,7 @@
 // preventing React re-renders on every token. Stops emitting once the run is
 // aborted so we never apply stale patches after a stopWorkflow().
 
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { WorkflowNodeData, WorkflowNodeType } from "@/workflows/nodeTypes";
 
 export interface BatchedStatus {
@@ -15,8 +15,8 @@ export interface BatchedStatus {
 
 export interface BatchedStatusOptions {
   setNodes: Dispatch<SetStateAction<WorkflowNodeType[]>>;
-  abortRef: MutableRefObject<boolean>;
-  rafIdRef: MutableRefObject<number>;
+  abortRef: RefObject<boolean>;
+  rafIdRef: RefObject<number>;
 }
 
 export function createBatchedStatus({ setNodes, abortRef, rafIdRef }: BatchedStatusOptions): BatchedStatus {

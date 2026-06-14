@@ -27,7 +27,7 @@ interface PlanLayoutProps {
   chatOpen: boolean;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
   onTaskToggle: (line: number) => void;
   chatSlot: React.ReactNode;
 }
@@ -63,7 +63,7 @@ function FocusLayout({ source, onSourceChange, onSelectionChange, extraExtension
   onSourceChange: (v: string) => void;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
 }) {
   return (
     <div className="h-full overflow-y-auto">
@@ -89,7 +89,7 @@ function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
   lineNumbers: boolean;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
 }) {
@@ -156,7 +156,7 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
   lineNumbers: boolean;
   onSelectionChange: (info: SelectionInfo | null) => void;
   extraExtensions: Extension[];
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
   onTaskToggle: (line: number) => void;
   chatOpen: boolean;
   chatSlot: React.ReactNode;

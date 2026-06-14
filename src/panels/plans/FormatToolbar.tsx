@@ -24,7 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { type PlanEditorHandle } from "./PlanEditor";
 
 interface FormatToolbarProps {
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
 }
 
 export function FormatToolbar({ editorHandle }: FormatToolbarProps) {

@@ -56,7 +56,7 @@ interface PlanCommandMenuProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   source: string;
-  editorHandle: React.MutableRefObject<PlanEditorHandle | null>;
+  editorHandle: React.RefObject<PlanEditorHandle | null>;
   currentMode: PlanMode;
   onModeChange: (mode: PlanMode) => void;
   activePlan: string;

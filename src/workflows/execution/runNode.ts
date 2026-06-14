@@ -5,7 +5,7 @@
 // so the function is closure-free and easy to reason about.
 
 import type { Edge } from "@xyflow/react";
-import type { MutableRefObject } from "react";
+import type { RefObject } from "react";
 import {
   WORKFLOW_REQUIREMENTS_PROMPT_BASE,
   WORKFLOW_ARCHITECT_PROMPT_BASE,
@@ -42,7 +42,7 @@ export interface RunNodeSettings {
 
 export interface RunNodeContext {
   /** Set to true when the run is stopped; the node should exit promptly. */
-  abortRef: MutableRefObject<boolean>;
+  abortRef: RefObject<boolean>;
   /** Snapshot getter for the current node list (used to look up `nodeId`'s data). */
   getNodes: () => WorkflowNodeType[];
   /** Aggregate all incoming edge outputs for a node (handles sourceHandle branches). */
