@@ -177,7 +177,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
           const hookName = "use" + m.name.replace(/[^a-zA-Z0-9]+(.)?/g, (_: string, c: string) => (c ? c.toUpperCase() : "")).replace(/^./, (c: string) => c.toUpperCase())
           return `<!-- @${m.name} -->\nAPI available: ${m.name}\n${m.code}\nService hook: import { ${hookName} } from '@/services/${slug}'\nYou MUST use this hook. Do NOT use fetch() directly, useEffect for data fetching, or mock data.\n<!-- end @${m.name} -->`
         }
-        const lang = m.type === "theme" ? "css" : m.type === "file" ? "md" : "tsx"
+        const lang = m.type === "theme" ? "css" : m.type === "file" || m.type === "plan" ? "md" : "tsx"
         return `<!-- @${m.name} -->\n\`\`\`${lang}\n${m.code}\n\`\`\`\n<!-- end @${m.name} -->`
       })
       .join("\n\n")
@@ -247,7 +247,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       useChatStore.getState().setStreamingThinking(entityId, "")
       notify.error("Generation failed", getErrorMessage(e))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
@@ -357,7 +356,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     entityId, chatPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
-    toolPermissionMode, toolAllowlist, maxToolCalls, searxngUrl,
+    toolPermissionMode, toolAllowlist, maxToolCalls,
+    panelToolFilter, panelMaxToolCalls, searxngUrl,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {

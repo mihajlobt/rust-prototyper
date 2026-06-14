@@ -224,6 +224,8 @@ export interface TodoItem {
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
+  tokens_per_second?: number;
+  total_duration_ms?: number;
 }
 
 export type CompletionEvent =

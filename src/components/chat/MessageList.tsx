@@ -1,8 +1,17 @@
 import { memo, useEffect } from "react"
-import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText } from "lucide-react"
+import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText, NotebookText } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import type { TokenUsage } from "@/lib/ipc"
 import type { MentionAsset } from "@/types/chat"
+
+/** Per-message stat line: tok/s (when provided) and total duration. */
+function formatUsageStats(usage: TokenUsage): string {
+  const parts: string[] = []
+  if (usage.tokens_per_second != null) parts.push(`${usage.tokens_per_second.toFixed(1)} tok/s`)
+  if (usage.total_duration_ms != null) parts.push(`${(usage.total_duration_ms / 1000).toFixed(1)}s`)
+  return parts.join(" · ")
+}
 
 /** Icon for a mention asset type, matching ProjectExplorer colors */
 function mentionIcon(type: MentionAsset["type"]) {
@@ -12,6 +21,7 @@ function mentionIcon(type: MentionAsset["type"]) {
     case "theme": return <Palette size={13} className="shrink-0 text-pink-400" />
     case "api": return <Globe size={13} className="shrink-0 text-yellow-400" />
     case "file": return <FileText size={13} className="shrink-0 text-green-400" />
+    case "plan": return <NotebookText size={13} className="shrink-0 text-orange-400" />
   }
 }
 
@@ -21,6 +31,7 @@ const MENTION_TYPE_LABEL: Record<MentionAsset["type"], string> = {
   theme: "Theme",
   api: "API",
   file: "File",
+  plan: "Plan",
 }
 
 /** Card showing a referenced project item in a user message */
@@ -493,6 +504,11 @@ const MessageBubble = memo(function MessageBubble({
                 </MsgActionBtn>
               </MessageAction>
             )}
+            {message.usage && (message.usage.tokens_per_second != null || message.usage.total_duration_ms != null) && (
+              <span className="text-[10px] text-muted-foreground/70">
+                {formatUsageStats(message.usage)}
+              </span>
+            )}
           </MessageActions>
         )}
       </div>
@@ -503,6 +519,7 @@ const MessageBubble = memo(function MessageBubble({
   prev.message.toolCalls === next.message.toolCalls &&
   prev.message.thinking === next.message.thinking &&
   prev.message.streamChunks === next.message.streamChunks &&
+  prev.message.usage === next.message.usage &&
   prev.isStreaming === next.isStreaming &&
   prev.isLastAssistant === next.isLastAssistant &&
   prev.streamingThinking === next.streamingThinking &&

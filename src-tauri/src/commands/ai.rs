@@ -45,6 +45,8 @@ pub struct Message {
 pub struct TokenUsage {
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
+    pub tokens_per_second: Option<f64>,
+    pub total_duration_ms: Option<u64>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -369,7 +371,14 @@ async fn generate_ollama_completion_stream(
                                         }
                                         if response.done {
                                             let usage = match (response.prompt_eval_count, response.eval_count) {
-                                                (Some(prompt_tokens), Some(completion_tokens)) => Some(TokenUsage { prompt_tokens, completion_tokens }),
+                                                (Some(prompt_tokens), Some(completion_tokens)) => {
+                                                    let tokens_per_second = match response.eval_duration {
+                                                        Some(d) if d > 0 => Some(completion_tokens as f64 / (d as f64 / 1e9)),
+                                                        _ => None,
+                                                    };
+                                                    let total_duration_ms = response.total_duration.map(|d| d / 1_000_000);
+                                                    Some(TokenUsage { prompt_tokens, completion_tokens, tokens_per_second, total_duration_ms })
+                                                }
                                                 _ => None,
                                             };
                                             let _ = channel.send(CompletionEvent::Done { done_reason: response.done_reason, usage });
@@ -416,6 +425,10 @@ struct OllamaStreamChunk {
     prompt_eval_count: Option<u64>,
     #[serde(default)]
     eval_count: Option<u64>,
+    #[serde(default)]
+    eval_duration: Option<u64>,
+    #[serde(default)]
+    total_duration: Option<u64>,
 }
 
 #[derive(serde::Deserialize)]

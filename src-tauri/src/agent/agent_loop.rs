@@ -85,6 +85,10 @@ struct StreamChunk {
     /// https://docs.ollama.com/api/chat
     #[serde(default)]
     eval_count: Option<u64>,
+    #[serde(default)]
+    eval_duration: Option<u64>,
+    #[serde(default)]
+    total_duration: Option<u64>,
 }
 
 #[derive(serde::Deserialize)]
@@ -203,7 +207,12 @@ async fn stream_turn(
                                         );
                                         history.push(assistant);
                                         if let (Some(prompt), Some(completion)) = (response.prompt_eval_count, response.eval_count) {
-                                            usage = TokenUsage { prompt_tokens: prompt, completion_tokens: completion };
+                                            let tokens_per_second = match response.eval_duration {
+                                                Some(d) if d > 0 => Some(completion as f64 / (d as f64 / 1e9)),
+                                                _ => None,
+                                            };
+                                            let total_duration_ms = response.total_duration.map(|d| d / 1_000_000);
+                                            usage = TokenUsage { prompt_tokens: prompt, completion_tokens: completion, tokens_per_second, total_duration_ms };
                                         }
                                         return Ok((tool_calls, usage));
                                     }
