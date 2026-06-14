@@ -1,5 +1,7 @@
 import type { ChatMessage } from "@/types/chat"
-import { generateCompletion, type Provider } from "@/lib/ipc"
+import { generateCompletion, writeFile, getErrorMessage, type Provider } from "@/lib/ipc"
+import { useChatStore } from "@/stores/chatStore"
+import { notify } from "@/hooks/useToast"
 
 /** How many of the most recent user turns are kept uncompacted. */
 export const KEEP_RECENT_TURNS = 4
@@ -76,4 +78,51 @@ export function findCompactionBoundary(messages: ChatMessage[], keepRecentTurns:
     }
   }
   return 0
+}
+
+export interface Compaction {
+  boundaryIndex: number
+  summary: string
+}
+
+// Keyed by `${entityId}:${boundaryIndex}` so the proactive (post-Done) and
+// reactive (pre-send) compaction checks share a single in-flight request.
+const inFlight = new Map<string, Promise<Compaction>>()
+
+/** Generates (or reuses an in-flight) compaction summary, then caches it to the store and `compactionPath`. */
+export function runCompaction(
+  entityId: string,
+  compactionPath: string,
+  boundaryIndex: number,
+  messagesToSummarize: ChatMessage[],
+  modelId: string,
+  host: string,
+  apiKey: string,
+  provider: Provider,
+  toolOutputResendLimit: number,
+): Promise<Compaction> {
+  const key = `${entityId}:${boundaryIndex}`
+  let promise = inFlight.get(key)
+  if (!promise) {
+    promise = generateCompactionSummary(messagesToSummarize, modelId, host, apiKey, provider, toolOutputResendLimit)
+      .then((summary) => {
+        const compaction: Compaction = { boundaryIndex, summary }
+        // Discard if the chat was cleared/trimmed below the summarized boundary while this was in flight.
+        const messages = useChatStore.getState().chats[entityId]?.messages ?? []
+        if (messages.length >= boundaryIndex) {
+          useChatStore.getState().setCompaction(entityId, compaction)
+          writeFile(compactionPath, JSON.stringify(compaction)).catch(() => {})
+        }
+        return compaction
+      })
+      // Notify once here, on the shared promise, rather than in each caller's catch —
+      // proactive and reactive callers can both await the same in-flight promise.
+      .catch((e) => {
+        notify.error("Compaction failed", getErrorMessage(e))
+        throw e
+      })
+      .finally(() => inFlight.delete(key))
+    inFlight.set(key, promise)
+  }
+  return promise
 }

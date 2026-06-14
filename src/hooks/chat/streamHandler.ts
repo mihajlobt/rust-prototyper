@@ -1,5 +1,5 @@
-import type { MutableRefObject, RefObject } from "react"
-import { writeFile, type CompletionEvent, type TokenUsage } from "@/lib/ipc"
+import type { RefObject } from "react"
+import { writeFile, type CompletionEvent, type Provider, type TokenUsage } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { useAskUserStore } from "@/stores/askUserStore"
 import { useTaskListStore } from "@/stores/taskListStore"
@@ -7,6 +7,19 @@ import { notify } from "@/hooks/useToast"
 import type { ChatMessage } from "@/types/chat"
 import { persistSessionSnapshot } from "./sessionSnapshot"
 import { stripFences } from "./messages"
+import { findCompactionBoundary, runCompaction, KEEP_RECENT_TURNS } from "./compactSummary"
+
+/** Params for proactively pre-generating the compaction summary once a completed turn's usage crosses the threshold. */
+export interface CompactionParams {
+  threshold: number
+  contextWindow: number
+  compactionPath: string
+  modelId: string
+  host: string
+  apiKey: string
+  provider: Provider
+  toolOutputResendLimit: number
+}
 
 export interface StreamHandlerParams {
   entityId: string
@@ -15,20 +28,21 @@ export interface StreamHandlerParams {
   sessionPath: string
   updatedMessages: ChatMessage[]
   stopRef: RefObject<boolean>
-  activeRequestIdRef: MutableRefObject<number | null>
-  onOutputRef: MutableRefObject<((content: string) => void) | undefined>
-  onCodeOutputRef: MutableRefObject<((content: string) => void) | undefined>
-  onToolWriteRef: MutableRefObject<((path: string, content: string) => void) | undefined>
+  activeRequestIdRef: RefObject<number | null>
+  onOutputRef: RefObject<((content: string) => void) | undefined>
+  onCodeOutputRef: RefObject<((content: string) => void) | undefined>
+  onToolWriteRef: RefObject<((path: string, content: string) => void) | undefined>
   outputPath: string | undefined
-  onToolCallRef?: MutableRefObject<((tool: string, args: Record<string, unknown>) => void) | undefined>
-  onToolResultRef?: MutableRefObject<((tool: string, success: boolean, output: string, path?: string) => void) | undefined>
+  onToolCallRef?: RefObject<((tool: string, args: Record<string, unknown>) => void) | undefined>
+  onToolResultRef?: RefObject<((tool: string, success: boolean, output: string, path?: string) => void) | undefined>
+  compaction: CompactionParams
 }
 
 export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, sessionPath, updatedMessages, stopRef, activeRequestIdRef,
     onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
-    onToolCallRef, onToolResultRef,
+    onToolCallRef, onToolResultRef, compaction,
   } = params
 
   let contentAccumulated = ""
@@ -65,10 +79,24 @@ export function createStreamHandler(params: StreamHandlerParams) {
     persistSessionSnapshot(entityId, sessionPath, usage
       ? { lastFinalUsage: usage, liveEstimate: 0 }
       : { liveEstimate: finalLiveEstimate })
+
+    // Proactively pre-generate the compaction summary so it's cached before the next send.
+    // KEEP_RECENT_TURNS - 1 here matches KEEP_RECENT_TURNS once the next user message is appended.
+    if (usage && compaction.threshold > 0 && usage.prompt_tokens / compaction.contextWindow > compaction.threshold) {
+      const boundaryIndex = findCompactionBoundary(finalMessages, KEEP_RECENT_TURNS - 1)
+      const current = useChatStore.getState().chats[entityId]?.compaction
+      if (boundaryIndex > 0 && current?.boundaryIndex !== boundaryIndex) {
+        // User-facing notification already happens inside runCompaction.
+        runCompaction(
+          entityId, compaction.compactionPath, boundaryIndex, finalMessages.slice(0, boundaryIndex),
+          compaction.modelId, compaction.host, compaction.apiKey, compaction.provider, compaction.toolOutputResendLimit,
+        ).catch((e) => console.error("Proactive compaction failed", e))
+      }
+    }
   }
 
   const onMessage = (msg: CompletionEvent) => {
-    if ((stopRef as MutableRefObject<boolean>).current) return
+    if (stopRef.current) return
     if (msg.event === "Chunk") {
       if (msg.data.thinking) {
         thinkingAccumulated += msg.data.thinking

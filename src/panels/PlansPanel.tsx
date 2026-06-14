@@ -182,6 +182,7 @@ export function PlansPanel() {
       messages={chat.messages}
       isStreaming={chat.isStreaming}
       thinkingContent={chat.thinkingContent}
+      compaction={chat.compaction}
       pendingPermissions={chat.pendingPermissions}
       onRegenerate={chat.regenerate}
       onDeleteFrom={chat.deleteFrom}

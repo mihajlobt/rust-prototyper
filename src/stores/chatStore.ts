@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { TokenUsage } from "@/lib/ipc"
 import type { ChatMessage, StreamChunk, ToolPermissionRecord } from "@/types/chat"
+import type { Compaction } from "@/hooks/chat/compactSummary"
 
 /** Per-session usage snapshot — persisted to `{chatPath}.session.json` so the
  *  TokenUsageBadge has a reliable source of truth for "current context" even
@@ -19,7 +20,7 @@ interface ChatState {
   /** Estimated tokens generated so far in the in-flight turn, for live counting during streaming. */
   liveTokenCount: number
   /** Cached compaction recap, mirrored to `*.compaction.json`. boundaryIndex is the role==="user" index it covers. */
-  compaction?: { boundaryIndex: number; summary: string }
+  compaction?: Compaction
   /** Per-session usage snapshot — mirrored to `*.session.json`. */
   sessionUsage?: SessionUsageSnapshot
 }
@@ -36,7 +37,7 @@ interface ChatStore {
   /** Set the per-session usage snapshot. Hydrated from session.json on mount
    *  and updated whenever a Done event arrives or Stop is pressed. */
   setSessionUsage: (id: string, snapshot: SessionUsageSnapshot | undefined) => void
-  setCompaction: (id: string, compaction: { boundaryIndex: number; summary: string } | undefined) => void
+  setCompaction: (id: string, compaction: Compaction | undefined) => void
   attachToolCall: (id: string, tool: string, path: string, args: Record<string, unknown>) => void
   /** Resolve the first pending tool call matching `tool` (front-to-back order matches
    *  ToolCall/ToolResult arrival order, fixing result swapping for parallel same-name tools). */

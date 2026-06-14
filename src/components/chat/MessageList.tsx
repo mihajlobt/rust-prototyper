@@ -1,9 +1,10 @@
-import { memo, useEffect } from "react"
-import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText, NotebookText } from "lucide-react"
+import { Fragment, memo, useEffect } from "react"
+import { Copy, Code2, RefreshCw, Trash2, Sparkles, Layout, Box, Palette, Globe, FileText, NotebookText, Archive } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import type { TokenUsage } from "@/lib/ipc"
 import type { MentionAsset } from "@/types/chat"
+import type { Compaction } from "@/hooks/chat/compactSummary"
 
 /** Per-message stat line: tok/s (when provided) and total duration. */
 function formatUsageStats(usage: TokenUsage): string {
@@ -58,6 +59,20 @@ function MsgActionBtn({ className, children, ...props }: React.ButtonHTMLAttribu
     </button>
   )
 }
+/** Collapsible recap shown where older messages were summarized into the compaction. */
+function CompactionSummaryCard({ summary }: { summary: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
+      <Reasoning className="gap-1">
+        <ReasoningTrigger className="text-[11px] text-muted-foreground">
+          <Archive size={12} /> Earlier conversation compacted
+        </ReasoningTrigger>
+        <ReasoningContent markdown className="text-xs mt-1">{summary}</ReasoningContent>
+      </Reasoning>
+    </div>
+  )
+}
+
 import { Tool } from "@/components/ui/tool"
 import type { ToolPart } from "@/components/ui/tool"
 import { ToolPermissionCard, type ToolPermissionDecision } from "@/components/ui/ToolPermissionCard"
@@ -185,6 +200,8 @@ interface MessageListProps {
   messages: ChatMessage[]
   isStreaming: boolean
   thinkingContent: string
+  /** When set, messages before boundaryIndex are marked as compacted and the recap is shown at the boundary. */
+  compaction?: Compaction
   onApplyCode?: (content: string) => void
   onRegenerate?: () => void
   onDeleteFrom?: (index: number) => void
@@ -201,7 +218,7 @@ interface MessageListProps {
 }
 
 const MessageListFn = ({
-  messages, isStreaming, thinkingContent,
+  messages, isStreaming, thinkingContent, compaction,
   onApplyCode, onRegenerate, onDeleteFrom,
   pendingPermissions, onResolvePermission,
   pendingAskUser, onResolveAskUser,
@@ -230,17 +247,22 @@ const MessageListFn = ({
         <ChatContainerContent className="gap-4 p-3">
           {todos.length > 0 && <TaskListWidget todos={todos} />}
           {messages.map((msg, i) => (
-            <MessageBubble
-              key={`${msg.role}-${i}`}
-              message={msg}
-              index={i}
-              isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
-              streamingThinking={isStreaming && i === messages.length - 1 && msg.role === "assistant" ? thinkingContent : ""}
-              isLastAssistant={!isStreaming && i === messages.length - 1 && msg.role === "assistant"}
-              onApplyCode={onApplyCode}
-              onRegenerate={onRegenerate}
-              onDeleteFrom={onDeleteFrom}
-            />
+            <Fragment key={`${msg.role}-${i}`}>
+              <MessageBubble
+                message={msg}
+                index={i}
+                isStreaming={isStreaming && i === messages.length - 1 && msg.role === "assistant"}
+                streamingThinking={isStreaming && i === messages.length - 1 && msg.role === "assistant" ? thinkingContent : ""}
+                isLastAssistant={!isStreaming && i === messages.length - 1 && msg.role === "assistant"}
+                onApplyCode={onApplyCode}
+                onRegenerate={onRegenerate}
+                onDeleteFrom={onDeleteFrom}
+                isCompacted={!!compaction && i < compaction.boundaryIndex}
+              />
+              {compaction && i === compaction.boundaryIndex - 1 && (
+                <CompactionSummaryCard summary={compaction.summary} />
+              )}
+            </Fragment>
           ))}
           {pendingPermissions && pendingPermissions.length > 0 && (
             <div className="flex flex-col gap-2" data-role="permissions">
@@ -289,6 +311,7 @@ export const MessageList = memo(MessageListFn, (prev, next) =>
   prev.messages === next.messages &&
   prev.isStreaming === next.isStreaming &&
   prev.thinkingContent === next.thinkingContent &&
+  prev.compaction === next.compaction &&
   prev.pendingPermissions === next.pendingPermissions &&
   prev.pendingAskUser === next.pendingAskUser &&
   prev.pendingAskUserForm === next.pendingAskUserForm &&
@@ -309,12 +332,14 @@ interface MessageBubbleProps {
   onApplyCode?: (content: string) => void
   onRegenerate?: () => void
   onDeleteFrom?: (index: number) => void
+  isCompacted: boolean
 }
 
 const MessageBubble = memo(function MessageBubble({
   message, index, isStreaming, streamingThinking, isLastAssistant,
-  onApplyCode, onRegenerate, onDeleteFrom,
+  onApplyCode, onRegenerate, onDeleteFrom, isCompacted,
 }: MessageBubbleProps) {
+  const compactedClass = isCompacted && "opacity-60 border border-dashed border-muted-foreground/25 rounded-lg p-2"
   const content = message.content
   const hasChunks = (message.streamChunks?.length ?? 0) > 0
   const hasTools = (message.toolCalls?.length ?? 0) > 0
@@ -332,7 +357,7 @@ const MessageBubble = memo(function MessageBubble({
     // Strip injected mention context blocks from display — chips above already show them
     const displayContent = content.replace(/<!-- @[^>]+ -->\n[\s\S]*?<!-- end @[^>]+ -->\n\n?/g, "").trim()
     return (
-      <Message className="justify-end group">
+      <Message className={cn("justify-end group", compactedClass)}>
         <div className="flex flex-col items-end gap-1 max-w-[85%]">
           {hasImages && (
             <div className="flex gap-1 flex-wrap justify-end">
@@ -452,7 +477,7 @@ const MessageBubble = memo(function MessageBubble({
 
   // ── Assistant message ─────────────────────────────────────────────
   return (
-    <Message>
+    <Message className={cn(compactedClass)}>
       <MessageAvatar src="" alt="AI" fallback="AI" />
       <div className="flex flex-col gap-2 max-w-[85%]">
         {isEmpty ? (
@@ -525,5 +550,6 @@ const MessageBubble = memo(function MessageBubble({
   prev.streamingThinking === next.streamingThinking &&
   prev.onApplyCode === next.onApplyCode &&
   prev.onRegenerate === next.onRegenerate &&
-  prev.onDeleteFrom === next.onDeleteFrom
+  prev.onDeleteFrom === next.onDeleteFrom &&
+  prev.isCompacted === next.isCompacted
 )

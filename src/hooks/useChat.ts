@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type MutableRefObject, type RefObject } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { Channel } from "@tauri-apps/api/core"
 import { useChatStore } from "@/stores/chatStore"
 import { useAppStore } from "@/stores/appStore"
@@ -25,7 +25,7 @@ import { dropStaleThinking } from "./chat/dropStaleThinking"
 import { dedupeMentions } from "./chat/dedupeMentions"
 import { getEffectiveContextWindow } from "./chat/contextWindow"
 import { persistSessionSnapshot } from "./chat/sessionSnapshot"
-import { generateCompactionSummary, buildCompactedMessages, findCompactionBoundary, KEEP_RECENT_TURNS } from "./chat/compactSummary"
+import { runCompaction, buildCompactedMessages, findCompactionBoundary, KEEP_RECENT_TURNS, type Compaction } from "./chat/compactSummary"
 
 // Re-export for external consumers (ComponentsPanel, ScreensPanel).
 // The implementation lives in ./chat/think to keep this hook file small.
@@ -81,19 +81,19 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
-  const onOutputRef = useRef(onOutput) as MutableRefObject<typeof onOutput>
+  const onOutputRef = useRef(onOutput)
   useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
-  const onCodeOutputRef = useRef(onCodeOutput) as MutableRefObject<typeof onCodeOutput>
+  const onCodeOutputRef = useRef(onCodeOutput)
   useEffect(() => { onCodeOutputRef.current = onCodeOutput }, [onCodeOutput])
-  const onToolWriteRef = useRef(onToolWrite) as MutableRefObject<typeof onToolWrite>
+  const onToolWriteRef = useRef(onToolWrite)
   useEffect(() => { onToolWriteRef.current = onToolWrite }, [onToolWrite])
-  const onToolCallRef = useRef(onToolCall) as MutableRefObject<typeof onToolCall>
+  const onToolCallRef = useRef(onToolCall)
   useEffect(() => { onToolCallRef.current = onToolCall }, [onToolCall])
-  const onToolResultRef = useRef(onToolResult) as MutableRefObject<typeof onToolResult>
+  const onToolResultRef = useRef(onToolResult)
   useEffect(() => { onToolResultRef.current = onToolResult }, [onToolResult])
 
   // Shared stop flag — set to true to abort the current stream mid-flight
-  const stopRef = useRef(false) as RefObject<boolean>
+  const stopRef = useRef(false)
   // Active request ID returned by the Rust backend — used to cancel
   // the stream server-side via stopGenerationRequest
   const activeRequestIdRef = useRef<number | null>(null)
@@ -182,7 +182,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       .then((raw) => {
         if (cancelled) return
         try {
-          const compaction = JSON.parse(raw) as { boundaryIndex: number; summary: string }
+          const compaction = JSON.parse(raw) as Compaction
           if (typeof compaction.boundaryIndex === "number" && typeof compaction.summary === "string") {
             useChatStore.getState().setCompaction(entityId, compaction)
           }
@@ -280,14 +280,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     let compaction = useChatStore.getState().chats[entityId]?.compaction
     if (boundaryIndex > 0 && compaction?.boundaryIndex !== boundaryIndex) {
       try {
-        const summary = await generateCompactionSummary(
-          pipelineMessages.slice(0, boundaryIndex), modelId, resolvedHost, resolvedKey, provider as Provider, toolOutputResendLimit,
+        compaction = await runCompaction(
+          entityId, compactionPath, boundaryIndex, pipelineMessages.slice(0, boundaryIndex),
+          modelId, resolvedHost, resolvedKey, provider as Provider, toolOutputResendLimit,
         )
-        compaction = { boundaryIndex, summary }
-        useChatStore.getState().setCompaction(entityId, compaction)
-        writeFile(compactionPath, JSON.stringify(compaction)).catch(() => {})
       } catch (e) {
-        notify.error("Compaction failed", getErrorMessage(e))
+        // User-facing notification already happens inside runCompaction.
+        console.error("Compaction failed", e)
       }
     }
 
@@ -307,13 +306,17 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
-    ;(stopRef as MutableRefObject<boolean>).current = false
+    stopRef.current = false
 
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, sessionPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       onToolCallRef, onToolResultRef,
+      compaction: {
+        threshold: compactionThreshold, contextWindow, compactionPath,
+        modelId, host: resolvedHost, apiKey: resolvedKey, provider: provider as Provider, toolOutputResendLimit,
+      },
     })
     channel.onmessage = onMessage
 
@@ -379,7 +382,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   }, [entityId, chatPath, compactionPath, sessionPath])
 
   const stopGeneration = useCallback(() => {
-    ;(stopRef as MutableRefObject<boolean>).current = true
+    stopRef.current = true
     useChatStore.getState().setStreaming(entityId, false)
     useChatStore.getState().setStreamingThinking(entityId, "")
     useChatStore.getState().clearPendingPermissions(entityId)
@@ -436,14 +439,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     let compactionRegen = useChatStore.getState().chats[entityId]?.compaction
     if (boundaryIndexRegen > 0 && compactionRegen?.boundaryIndex !== boundaryIndexRegen) {
       try {
-        const summary = await generateCompactionSummary(
-          pipelineMessagesRegen.slice(0, boundaryIndexRegen), modelId, resolvedHost, resolvedKey, provider as Provider, toolOutputResendLimit,
+        compactionRegen = await runCompaction(
+          entityId, compactionPath, boundaryIndexRegen, pipelineMessagesRegen.slice(0, boundaryIndexRegen),
+          modelId, resolvedHost, resolvedKey, provider as Provider, toolOutputResendLimit,
         )
-        compactionRegen = { boundaryIndex: boundaryIndexRegen, summary }
-        useChatStore.getState().setCompaction(entityId, compactionRegen)
-        writeFile(compactionPath, JSON.stringify(compactionRegen)).catch(() => {})
       } catch (e) {
-        notify.error("Compaction failed", getErrorMessage(e))
+        // User-facing notification already happens inside runCompaction.
+        console.error("Compaction failed", e)
       }
     }
 
@@ -463,13 +465,17 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
-    ;(stopRef as MutableRefObject<boolean>).current = false
+    stopRef.current = false
 
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, sessionPath, updatedMessages,
       stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
       onToolCallRef, onToolResultRef,
+      compaction: {
+        threshold: compactionThreshold, contextWindow: contextWindowRegen, compactionPath,
+        modelId, host: resolvedHost, apiKey: resolvedKey, provider: provider as Provider, toolOutputResendLimit,
+      },
     })
     channel.onmessage = onMessage
 
@@ -527,6 +533,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   return {
     messages: chat.messages,
+    compaction: chat.compaction,
     isStreaming: chat.isStreaming,
     thinkingContent: chat.thinkingContent,
     pendingPermissions: chat.pendingPermissions,

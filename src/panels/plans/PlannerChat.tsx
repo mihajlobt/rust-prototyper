@@ -1,5 +1,6 @@
 import { MessageList, ChatInput } from "@/components/chat";
 import { useAskUserStore } from "@/stores/askUserStore";
+import type { Compaction } from "@/hooks/chat/compactSummary";
 import type { ChatMessage, ToolPermissionRecord, MentionAsset, AttachmentFile } from "@/types/chat";
 import type { ToolPermissionDecision } from "@/lib/ipc";
 import type { Message, Provider } from "@/lib/ipc";
@@ -15,6 +16,7 @@ interface PlannerChatProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   thinkingContent: string;
+  compaction?: Compaction;
   pendingPermissions: ToolPermissionRecord[];
   onApplyCode?: (content: string) => void;
   onRegenerate: () => void;
@@ -62,6 +64,7 @@ export function PlannerChat({
   messages,
   isStreaming,
   thinkingContent,
+  compaction,
   pendingPermissions,
   onApplyCode,
   onRegenerate,
@@ -110,6 +113,7 @@ export function PlannerChat({
                 messages={messages}
                 isStreaming={isStreaming}
                 thinkingContent={thinkingContent}
+                compaction={compaction}
                 pendingPermissions={pendingPermissions}
                 onApplyCode={onApplyCode}
                 onRegenerate={onRegenerate}
