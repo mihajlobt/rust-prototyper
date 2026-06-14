@@ -97,7 +97,7 @@ pub fn resolve_cwd(app: &AppHandle, raw: &str) -> Result<std::path::PathBuf, App
 }
 
 // Re-exported at crate root so agent module can use `crate::CompletionEvent`
-pub use commands::ai::CompletionEvent;
+pub use commands::ai::{CompletionEvent, TokenUsage};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

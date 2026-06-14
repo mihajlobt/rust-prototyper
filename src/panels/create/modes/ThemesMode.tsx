@@ -23,6 +23,7 @@ import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { Markdown } from "@/components/ui/markdown";
 import { DesignToc, markdownHeadingComponents } from "@/components/ui/design-toc";
 import { PaneHeader } from "@/components/ui/pane-header";
+import { TokenUsageBadge } from "@/components/TokenUsageBadge";
 import { writeFile, readFile, createDir, getHostForProvider, getErrorMessage, type ToolPermissionDecision } from "@/lib/ipc";
 import { queryClient } from "@/lib/queryClient";
 import { projectKeys } from "@/lib/queryKeys";
@@ -342,6 +343,7 @@ export function ThemesMode() {
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setProjectSettings({ createShowInspector: !ps.createShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
+                <TokenUsageBadge model={settings.modelId} messages={chat.messages} />
                 {ps.createShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>

@@ -1,3 +1,5 @@
+import type { TokenUsage } from "@/lib/ipc"
+
 export interface ToolCallRecord {
   tool: string
   path: string
@@ -37,6 +39,8 @@ export interface ChatMessage {
   toolCalls?: ToolCallRecord[]
   /** Thinking/text chunks grouped by tool boundaries for cursor-like display */
   streamChunks?: StreamChunk[]
+  /** Real token usage from the most recent agent-loop turn (current context window occupancy). */
+  usage?: TokenUsage
 }
 
 export interface MentionAsset {

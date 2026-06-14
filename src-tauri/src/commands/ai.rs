@@ -35,6 +35,18 @@ pub struct Message {
     pub tool_name: Option<String>,
 }
 
+/// Token usage for the most recent agent-loop turn, reflecting current
+/// context window occupancy. Sourced from the provider's own accounting:
+/// - Claude: `usage.input_tokens` (message_start) + `usage.output_tokens` (message_delta)
+///   https://docs.anthropic.com/en/api/messages-streaming
+/// - Ollama: `prompt_eval_count` + `eval_count` on the final `done: true` chunk
+///   https://docs.ollama.com/api/chat
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+pub struct TokenUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+}
+
 #[derive(Clone, serde::Serialize)]
 #[serde(tag = "event", content = "data")]
 pub enum CompletionEvent {
@@ -45,7 +57,7 @@ pub enum CompletionEvent {
     AskUser { request_id: u64, question: String, question_type: AskUserQuestionType, choices: Option<Vec<String>> },
     AskUserForm { request_id: u64, title: String, fields: Vec<FormField> },
     TodoUpdate { todos: Vec<TodoItem> },
-    Done { done_reason: Option<String> },
+    Done { done_reason: Option<String>, usage: Option<TokenUsage> },
     Error { message: String },
 }
 
@@ -356,7 +368,11 @@ async fn generate_ollama_completion_stream(
                                             let _ = channel.send(CompletionEvent::Chunk { text, thinking });
                                         }
                                         if response.done {
-                                            let _ = channel.send(CompletionEvent::Done { done_reason: response.done_reason });
+                                            let usage = match (response.prompt_eval_count, response.eval_count) {
+                                                (Some(prompt_tokens), Some(completion_tokens)) => Some(TokenUsage { prompt_tokens, completion_tokens }),
+                                                _ => None,
+                                            };
+                                            let _ = channel.send(CompletionEvent::Done { done_reason: response.done_reason, usage });
                                             return Ok(());
                                         }
                                     }
@@ -370,7 +386,7 @@ async fn generate_ollama_completion_stream(
                         }
                         Some(Err(e)) => return Err(AppError::Http(e.to_string())),
                         None => {
-                            let _ = channel.send(CompletionEvent::Done { done_reason: None });
+                            let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: None });
                             return Ok(());
                         }
                     }
@@ -379,7 +395,7 @@ async fn generate_ollama_completion_stream(
                     // Push partial content before dropping the stream so
                     // the next turn has context if user cancels mid-generation.
                     drop(byte_stream);
-                    let _ = channel.send(CompletionEvent::Done { done_reason: None });
+                    let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: None });
                     return Ok(());
                 }
             }
@@ -388,13 +404,18 @@ async fn generate_ollama_completion_stream(
 }
 
 /// Minimal struct for deserializing the Ollama /api/chat streaming response.
-/// Only the fields we need — content, thinking, done.
+/// Only the fields we need — content, thinking, done, and (on the final
+/// chunk) token usage. https://docs.ollama.com/api/chat
 #[derive(serde::Deserialize)]
 struct OllamaStreamChunk {
     message: OllamaStreamMessage,
     done: bool,
     #[serde(default)]
     done_reason: Option<String>,
+    #[serde(default)]
+    prompt_eval_count: Option<u64>,
+    #[serde(default)]
+    eval_count: Option<u64>,
 }
 
 #[derive(serde::Deserialize)]

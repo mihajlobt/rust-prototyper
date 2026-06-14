@@ -11,7 +11,7 @@ use tauri::{ipc::Channel, Manager};
 use tokio_util::codec::Decoder;
 use tokio_util::sync::CancellationToken;
 use crate::commands::ai::{ToolPermissionDecision, ToolPermissionMode, AskUserQuestionType};
-use crate::{AppError, CompletionEvent};
+use crate::{AppError, CompletionEvent, TokenUsage};
 use super::{executor::{execute_tool, execute_task_list, resolve_tool_search, ToolExecutionResult}, tools::build_tools};
 use super::deferred_tools::{deferred_names_in, deferred_tools_system_message, visible_tools};
 
@@ -77,6 +77,14 @@ fn parse_tool_call(value: &serde_json::Value) -> Option<(String, serde_json::Val
 struct StreamChunk {
     message: StreamMessage,
     done: bool,
+    /// Present on the final chunk (`done: true`) — number of tokens in the prompt.
+    /// https://docs.ollama.com/api/chat
+    #[serde(default)]
+    prompt_eval_count: Option<u64>,
+    /// Present on the final chunk (`done: true`) — number of tokens generated.
+    /// https://docs.ollama.com/api/chat
+    #[serde(default)]
+    eval_count: Option<u64>,
 }
 
 #[derive(serde::Deserialize)]
@@ -122,7 +130,7 @@ async fn stream_turn(
     tools_json: &serde_json::Value,
     channel: &Channel<CompletionEvent>,
     cancel_token: &CancellationToken,
-) -> Result<Vec<(String, serde_json::Value)>, AppError> {
+) -> Result<(Vec<(String, serde_json::Value)>, TokenUsage), AppError> {
     let mut body = serde_json::json!({
         "model": model,
         "messages": history,
@@ -155,6 +163,7 @@ async fn stream_turn(
     let mut content_accumulated = String::new();
     let mut thinking_accumulated: Option<String> = None;
     let mut tool_calls_json: Vec<serde_json::Value> = vec![];
+    let mut usage = TokenUsage::default();
     let mut buffer = BytesMut::new();
 
     loop {
@@ -193,7 +202,10 @@ async fn stream_turn(
                                             &tool_calls_json,
                                         );
                                         history.push(assistant);
-                                        return Ok(tool_calls);
+                                        if let (Some(prompt), Some(completion)) = (response.prompt_eval_count, response.eval_count) {
+                                            usage = TokenUsage { prompt_tokens: prompt, completion_tokens: completion };
+                                        }
+                                        return Ok((tool_calls, usage));
                                     }
                                 }
                                 Ok(None) => break,
@@ -212,7 +224,7 @@ async fn stream_turn(
                             &tool_calls_json,
                         );
                         history.push(assistant);
-                        return Ok(tool_calls);
+                        return Ok((tool_calls, usage));
                     }
                 }
             }
@@ -224,7 +236,7 @@ async fn stream_turn(
                 );
                 history.push(assistant);
                 drop(byte_stream);
-                return Ok(tool_calls);
+                return Ok((tool_calls, usage));
             }
         }
     }
@@ -526,10 +538,11 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
 
     let mut iteration: u8 = 0;
     let write_count = Arc::new(AtomicU8::new(0));
+    let mut latest_usage = TokenUsage::default();
 
     loop {
         if cancel_token.is_cancelled() {
-            let _ = channel.send(CompletionEvent::Done { done_reason: None });
+            let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
             return Ok(());
         }
 
@@ -543,14 +556,15 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
             serde_json::to_value(&visible).expect("tools serialization should never fail")
         };
 
-        let tool_calls = stream_turn(
+        let (tool_calls, turn_usage) = stream_turn(
             http_client, host, api_key, model,
             &mut history, think.as_ref(), &tools_json,
             channel, cancel_token,
         ).await?;
+        latest_usage = turn_usage;
 
         if cancel_token.is_cancelled() {
-            let _ = channel.send(CompletionEvent::Done { done_reason: None });
+            let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
             return Ok(());
         }
 
@@ -705,6 +719,6 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
         iteration += 1;
     }
 
-    let _ = channel.send(CompletionEvent::Done { done_reason: None });
+    let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
     Ok(())
 }

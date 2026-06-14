@@ -7,7 +7,7 @@ use ollama_rs::generation::parameters::ThinkType;
 use tauri::ipc::Channel;
 use tokio_util::sync::CancellationToken;
 
-use crate::{AppError, CompletionEvent};
+use crate::{AppError, CompletionEvent, TokenUsage};
 use crate::commands::ai::ToolPermissionDecision;
 use super::agent_loop::{
     check_permission_gate, request_ask_user, request_ask_user_form, request_permission,
@@ -68,7 +68,7 @@ pub fn extract_claude_messages(history: &[serde_json::Value]) -> (String, Vec<se
 }
 
 /// Stream one LLM turn against the Anthropic Messages API.
-/// Returns (text, thinking, tool_calls: Vec<(name, args, tool_use_id)>, assistant_msg_for_history).
+/// Returns (text, thinking, tool_calls: Vec<(name, args, tool_use_id)>, assistant_msg_for_history, usage).
 async fn stream_turn_claude(
     client: &reqwest::Client,
     api_key: &str,
@@ -79,7 +79,7 @@ async fn stream_turn_claude(
     enable_thinking: bool,
     channel: &Channel<CompletionEvent>,
     cancel_token: &CancellationToken,
-) -> Result<(String, Option<String>, Vec<(String, serde_json::Value, String)>, serde_json::Value), AppError> {
+) -> Result<(String, Option<String>, Vec<(String, serde_json::Value, String)>, serde_json::Value, TokenUsage), AppError> {
     let max_tokens = if enable_thinking { MAX_TOKENS_THINKING } else { MAX_TOKENS };
     let mut body = serde_json::json!({
         "model": model,
@@ -123,6 +123,7 @@ async fn stream_turn_claude(
     let mut thinking_acc = String::new();
     let mut tool_calls: Vec<(String, serde_json::Value, String)> = Vec::new();
     let mut assistant_content: Vec<serde_json::Value> = Vec::new();
+    let mut usage = TokenUsage::default();
     let mut current_event = String::new();
     let mut line_buf = String::new();
     let mut byte_stream = res.bytes_stream();
@@ -142,6 +143,22 @@ async fn stream_turn_claude(
                                 } else if let Some(data) = line.strip_prefix("data: ") {
                                     let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else { continue };
                                     match current_event.as_str() {
+                                        "message_start" => {
+                                            // https://docs.anthropic.com/en/api/messages-streaming#message-start
+                                            if let Some(n) = json["message"]["usage"]["input_tokens"].as_u64() {
+                                                usage.prompt_tokens = n;
+                                            }
+                                            if let Some(n) = json["message"]["usage"]["output_tokens"].as_u64() {
+                                                usage.completion_tokens = n;
+                                            }
+                                        }
+                                        "message_delta" => {
+                                            // https://docs.anthropic.com/en/api/messages-streaming#message-delta
+                                            // `output_tokens` here is the running total for the message.
+                                            if let Some(n) = json["usage"]["output_tokens"].as_u64() {
+                                                usage.completion_tokens = n;
+                                            }
+                                        }
                                         "content_block_start" => {
                                             let idx = json["index"].as_u64().unwrap_or(0) as usize;
                                             let cb = &json["content_block"];
@@ -217,7 +234,7 @@ async fn stream_turn_claude(
 
     let assistant_msg = serde_json::json!({ "role": "assistant", "content": assistant_content });
     let thinking_opt = if thinking_acc.is_empty() { None } else { Some(thinking_acc) };
-    Ok((text_acc, thinking_opt, tool_calls, assistant_msg))
+    Ok((text_acc, thinking_opt, tool_calls, assistant_msg, usage))
 }
 
 pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), AppError> {
@@ -259,21 +276,23 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
     let (system, mut messages) = extract_claude_messages(&initial_messages_json);
     let write_count = Arc::new(AtomicU8::new(0));
     let mut iteration: u8 = 0;
+    let mut latest_usage = crate::TokenUsage::default();
 
     loop {
         if cancel_token.is_cancelled() {
-            let _ = channel.send(CompletionEvent::Done { done_reason: None });
+            let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
             return Ok(());
         }
 
-        let (_, _, tool_calls, assistant_msg) = stream_turn_claude(
+        let (_, _, tool_calls, assistant_msg, turn_usage) = stream_turn_claude(
             http_client, api_key, model,
             &system, &messages, &tools_claude,
             enable_thinking, channel, cancel_token,
         ).await?;
+        latest_usage = turn_usage;
 
         if cancel_token.is_cancelled() {
-            let _ = channel.send(CompletionEvent::Done { done_reason: None });
+            let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
             return Ok(());
         }
 
@@ -421,6 +440,6 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
         iteration += 1;
     }
 
-    let _ = channel.send(CompletionEvent::Done { done_reason: None });
+    let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
     Ok(())
 }

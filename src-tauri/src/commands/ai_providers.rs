@@ -2,7 +2,7 @@ use futures_util::StreamExt;
 use tauri::ipc::Channel;
 use tokio_util::sync::CancellationToken;
 use crate::AppError;
-use super::ai::CompletionEvent;
+use super::ai::{CompletionEvent, TokenUsage};
 
 /// Chat completion via OpenAI-compatible API (also used for compatible endpoints).
 /// When `stream` is true and `on_event` is provided, SSE chunks are forwarded
@@ -60,7 +60,7 @@ pub async fn chat_completion_openai(
                         }
                         Some(Err(e)) => return Err(AppError::Http(e.to_string())),
                         None => {
-                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
+                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None, usage: None }); }
                             return Ok(full);
                         }
                     }
@@ -69,7 +69,7 @@ pub async fn chat_completion_openai(
                     // Cancellation requested — drop the byte stream to close
                     // the HTTP connection, stopping server-side generation.
                     drop(byte_stream);
-                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
+                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None, usage: None }); }
                     return Ok(full);
                 }
             }
@@ -115,6 +115,7 @@ pub async fn chat_completion_claude(
 
     if stream {
         let mut full = String::new();
+        let mut usage = TokenUsage::default();
         let mut byte_stream = res.bytes_stream();
         loop {
             tokio::select! {
@@ -125,6 +126,24 @@ pub async fn chat_completion_claude(
                                 if !line.starts_with("data: ") { continue; }
                                 let data = &line[6..];
                                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                    match json["type"].as_str().unwrap_or("") {
+                                        // https://docs.anthropic.com/en/api/messages-streaming#message-start
+                                        "message_start" => {
+                                            if let Some(n) = json["message"]["usage"]["input_tokens"].as_u64() {
+                                                usage.prompt_tokens = n;
+                                            }
+                                            if let Some(n) = json["message"]["usage"]["output_tokens"].as_u64() {
+                                                usage.completion_tokens = n;
+                                            }
+                                        }
+                                        // https://docs.anthropic.com/en/api/messages-streaming#message-delta
+                                        "message_delta" => {
+                                            if let Some(n) = json["usage"]["output_tokens"].as_u64() {
+                                                usage.completion_tokens = n;
+                                            }
+                                        }
+                                        _ => {}
+                                    }
                                     if let Some(text) = json["delta"]["text"].as_str() {
                                         full.push_str(text);
                                         if let Some(ev) = on_event {
@@ -136,14 +155,14 @@ pub async fn chat_completion_claude(
                         }
                         Some(Err(e)) => return Err(AppError::Http(e.to_string())),
                         None => {
-                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
+                            if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None, usage: Some(usage) }); }
                             return Ok(full);
                         }
                     }
                 }
                 _ = cancel_token.cancelled() => {
                     drop(byte_stream);
-                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None }); }
+                    if let Some(ev) = on_event { let _ = ev.send(CompletionEvent::Done { done_reason: None, usage: Some(usage) }); }
                     return Ok(full);
                 }
             }

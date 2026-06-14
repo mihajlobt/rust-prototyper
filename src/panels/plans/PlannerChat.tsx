@@ -6,6 +6,7 @@ import type { Message, Provider } from "@/lib/ipc";
 import { Allotment } from "allotment";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { PromptInspector } from "@/components/PromptInspector";
+import { TokenUsageBadge } from "@/components/TokenUsageBadge";
 import { PaneHeader } from "@/components/ui/pane-header";
 import { useAllotmentLayout } from "@/hooks/useAllotmentLayout";
 
@@ -153,6 +154,7 @@ export function PlannerChat({
       <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
         <PaneHeader onClick={onToggleInspector}>
           <span className="text-xs font-medium flex-1">Inspector</span>
+          <TokenUsageBadge model={model} messages={messages} />
           {showInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
         </PaneHeader>
       </Allotment.Pane>

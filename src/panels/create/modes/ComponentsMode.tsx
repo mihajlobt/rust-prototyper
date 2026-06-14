@@ -40,6 +40,7 @@ import {
 import { COMPONENTS_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
 import { Button } from "@/components/ui/button";
 import { PaneHeader } from "@/components/ui/pane-header";
+import { TokenUsageBadge } from "@/components/TokenUsageBadge";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { SaveComponentModal } from "@/modals/SaveComponentModal";
 import { ComponentExportModal } from "@/modals/ComponentExportModal";
@@ -360,6 +361,7 @@ export function ComponentsMode() {
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setProjectSettings({ createShowInspector: !ps.createShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
+                <TokenUsageBadge model={settings.modelId} messages={chat.messages} />
                 {ps.createShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>

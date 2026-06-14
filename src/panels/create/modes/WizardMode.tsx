@@ -24,6 +24,7 @@ import { projectKeys } from "@/lib/queryKeys";
 import { WIZARD_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
 import { Button } from "@/components/ui/button";
 import { PaneHeader } from "@/components/ui/pane-header";
+import { TokenUsageBadge } from "@/components/TokenUsageBadge";
 import { CreateChatPanel } from "../CreateChatPanel";
 import { CreateInspector } from "../CreateInspector";
 import { CreatePreviewPane, type PreviewTab, type PreviewAnnotation } from "../CreatePreviewPane";
@@ -261,6 +262,7 @@ export function WizardMode() {
             <Allotment.Pane preferredSize={28} minSize={28} maxSize={28}>
               <PaneHeader onClick={() => setProjectSettings({ createShowInspector: !projectSettings.createShowInspector })}>
                 <span className="text-xs font-medium flex-1">Inspector</span>
+                <TokenUsageBadge model={settings.modelId} messages={chat.messages} />
                 {projectSettings.createShowInspector ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
               </PaneHeader>
             </Allotment.Pane>

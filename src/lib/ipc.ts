@@ -218,6 +218,14 @@ export interface TodoItem {
   active_form: string
 }
 
+/** Token usage for the most recent agent-loop turn, reflecting current context
+ *  window occupancy. Sourced from the provider's own accounting (Claude `usage`
+ *  blocks, Ollama `prompt_eval_count`/`eval_count`) — see CompletionEvent::Done in lib.rs. */
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+}
+
 export type CompletionEvent =
   | { event: "Chunk"; data: { text: string; thinking: string | null } }
   | { event: "ToolCall"; data: { tool: string; args: Record<string, unknown> } }
@@ -226,7 +234,7 @@ export type CompletionEvent =
   | { event: "AskUser"; data: { request_id: number; question: string; question_type: AskUserQuestionType; choices?: string[] } }
   | { event: "AskUserForm"; data: { request_id: number; title: string; fields: FormField[] } }
   | { event: "TodoUpdate"; data: { todos: TodoItem[] } }
-  | { event: "Done"; data: { done_reason?: string } | null }
+  | { event: "Done"; data: { done_reason?: string; usage?: TokenUsage } | null }
   | { event: "Error"; data: { message: string } };
 
 export type ToolPermissionDecision = "accepted" | "rejected" | "always_allowed";

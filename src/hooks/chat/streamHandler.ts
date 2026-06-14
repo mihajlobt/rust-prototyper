@@ -1,5 +1,5 @@
 import type { MutableRefObject, RefObject } from "react"
-import { writeFile, type CompletionEvent } from "@/lib/ipc"
+import { writeFile, type CompletionEvent, type TokenUsage } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { useAskUserStore } from "@/stores/askUserStore"
 import { useTaskListStore } from "@/stores/taskListStore"
@@ -51,7 +51,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
   let rafId: number | null = null
   let rafThinkingId: number | null = null
 
-  const finalize = (content: string, thinking: string) => {
+  const finalize = (content: string, thinking: string, usage?: TokenUsage) => {
     if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
     if (rafThinkingId !== null) { cancelAnimationFrame(rafThinkingId); rafThinkingId = null }
     activeRequestIdRef.current = null
@@ -63,6 +63,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
       ...(thinking ? { thinking } : {}),
       ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
       ...(currentLast?.streamChunks?.length ? { streamChunks: currentLast.streamChunks } : {}),
+      ...(usage ? { usage } : {}),
     }
     const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
     useChatStore.getState().setMessages(entityId, finalMessages)
@@ -171,7 +172,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
           text: contentAccumulated,
         })
       }
-      finalize(finalContent, finalThinking)
+      finalize(finalContent, finalThinking, msg.data?.usage)
       if (!toolWritten) onOutputRef.current?.(finalContent)
     } else if (msg.event === "Error") {
       finalize(`⚠ ${msg.data.message}`, "")

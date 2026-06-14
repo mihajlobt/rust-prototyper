@@ -1,12 +1,10 @@
-import { useState, useMemo } from "react";
-import { encodingForModel } from "js-tiktoken";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Copy, Eye } from "lucide-react";
+import { Copy } from "lucide-react";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import type { Provider } from "@/lib/ipc";
 import type { Message } from "@/lib/ipc";
-import { useModelCapabilities } from "@/hooks/useModelCapabilities";
 
 interface PromptInspectorProps {
   model: string;
@@ -21,20 +19,6 @@ interface PromptInspectorProps {
 
 // Agent tool names sent by the Rust agent loop
 const AGENT_TOOLS = ["write_file", "read_file", "edit_file", "run_tsc", "run_lint", "bash"];
-
-function countTokens(text: string, model: string): number {
-  try {
-    const enc = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
-    return enc.encode(text).length;
-  } catch {
-    try {
-      const enc = encodingForModel("gpt-4");
-      return enc.encode(text).length;
-    } catch {
-      return Math.ceil(text.length / 4);
-    }
-  }
-}
 
 function serializeMessage(m: Message): Record<string, unknown> {
   const result: Record<string, unknown> = { role: m.role, content: m.content };
@@ -63,15 +47,10 @@ function buildOllamaPayload(
 }
 
 export function PromptInspector({ model, messages, host, provider, think, hasTools = false }: PromptInspectorProps) {
-  const caps = useModelCapabilities(model);
-  const contextWindow = caps.contextLength ?? 8192;
-
   const assembled = messages.map((m) => {
     const imageNote = m.images?.length ? `\n[${m.images.length} image(s) attached]` : "";
     return `${m.role}: ${m.content}${imageNote}`;
   }).join("\n\n");
-  const tokenCount = useMemo(() => countTokens(assembled, model), [assembled, model]);
-  const usagePercent = Math.min(100, Math.round((tokenCount / contextWindow) * 100));
 
   const isOllama = provider.startsWith("ollama");
 
@@ -115,25 +94,6 @@ export function PromptInspector({ model, messages, host, provider, think, hasToo
 
   return (
     <div className="h-full flex flex-col">
-      <div className="panel-toolbar h-10 px-3 gap-2 bg-card">
-        <Eye size={14} />
-        <span className="text-sm font-medium">Prompt Inspector</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <div className="w-[100px] h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className={[
-                "h-full rounded-full",
-                usagePercent > 90 ? "bg-red-500" : usagePercent > 70 ? "bg-yellow-500" : "bg-green-500",
-              ].join(" ")}
-              style={{ width: `${usagePercent}%` }}
-            />
-          </div>
-          <span className="text-xs text-muted-foreground">
-            ~{tokenCount} / {contextWindow.toLocaleString()} tokens ({usagePercent}%)
-          </span>
-        </div>
-      </div>
       <Tabs defaultValue="assembled" className="flex-1 flex flex-col overflow-hidden">
         <TabsList variant="line" className="h-7">
           <TabsTrigger value="assembled" className="text-[11px]">Assembled</TabsTrigger>
