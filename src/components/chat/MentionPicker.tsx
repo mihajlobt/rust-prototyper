@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Component, Palette, Monitor, Plug, FileText } from "lucide-react"
+import { Component, Palette, Monitor, Plug, FileText, NotebookText } from "lucide-react"
 import { readFile } from "@/lib/ipc"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -27,6 +27,7 @@ const TYPE_ICONS: Record<MentionAsset["type"], React.ReactNode> = {
   screen: <Monitor size={11} />,
   api: <Plug size={11} />,
   file: <FileText size={11} />,
+  plan: <NotebookText size={11} />,
 }
 
 interface MentionPickerProps {
@@ -206,6 +207,23 @@ async function loadProjectAssets(projectPath: string): Promise<PickerItem[]> {
       })
     }
   } catch { /* no themes dir */ }
+
+  // Plans — .md files under plans/ (chat history sidecars are .chat.json, not .md)
+  try {
+    const entries = await readDir(`${projectPath}/plans`)
+    for (const e of entries) {
+      if (!e.is_dir && e.name.endsWith(".md")) {
+        const slug = e.name.replace(/\.md$/, "")
+        assets.push({
+          id: `plan-${slug}`,
+          type: "plan",
+          name: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          description: "Plan",
+          path: `${projectPath}/plans/${e.name}`,
+        })
+      }
+    }
+  } catch { /* no plans yet */ }
 
   // Markdown docs — .md files at the project root (e.g. coding-standards.md, README.md)
   try {
