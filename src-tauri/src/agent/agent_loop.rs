@@ -561,7 +561,9 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
             &mut history, think.as_ref(), &tools_json,
             channel, cancel_token,
         ).await?;
-        latest_usage = turn_usage;
+        if turn_usage.prompt_tokens > 0 || turn_usage.completion_tokens > 0 {
+            latest_usage = turn_usage;
+        }
 
         if cancel_token.is_cancelled() {
             let _ = channel.send(CompletionEvent::Done { done_reason: None, usage: Some(latest_usage) });
