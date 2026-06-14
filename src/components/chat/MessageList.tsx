@@ -59,17 +59,18 @@ function MsgActionBtn({ className, children, ...props }: React.ButtonHTMLAttribu
     </button>
   )
 }
-/** Collapsible recap shown where older messages were summarized into the compaction. */
+/** Recap shown where older messages were summarized into the compaction, rendered like a regular assistant message. */
 function CompactionSummaryCard({ summary }: { summary: string }) {
   return (
-    <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
-      <Reasoning className="gap-1">
-        <ReasoningTrigger className="text-[11px] text-muted-foreground">
+    <Message>
+      <MessageAvatar src="" alt="AI" fallback="AI" />
+      <div className="flex flex-col gap-2 max-w-[85%]">
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <Archive size={12} /> Earlier conversation compacted
-        </ReasoningTrigger>
-        <ReasoningContent markdown className="text-xs mt-1">{summary}</ReasoningContent>
-      </Reasoning>
-    </div>
+        </div>
+        <MessageContent markdown className="text-sm">{summary}</MessageContent>
+      </div>
+    </Message>
   )
 }
 
@@ -199,6 +200,8 @@ interface PendingAskUserForm {
 interface MessageListProps {
   messages: ChatMessage[]
   isStreaming: boolean
+  /** True while a compaction summary is being generated for older context. */
+  isCompacting?: boolean
   thinkingContent: string
   /** When set, messages before boundaryIndex are marked as compacted and the recap is shown at the boundary. */
   compaction?: Compaction
@@ -218,7 +221,7 @@ interface MessageListProps {
 }
 
 const MessageListFn = ({
-  messages, isStreaming, thinkingContent, compaction,
+  messages, isStreaming, isCompacting, thinkingContent, compaction,
   onApplyCode, onRegenerate, onDeleteFrom,
   pendingPermissions, onResolvePermission,
   pendingAskUser, onResolveAskUser,
@@ -296,7 +299,8 @@ const MessageListFn = ({
               onResolve={onResolveAskUserForm}
             />
           )}
-          {isStreaming && <Loader variant="loading-dots" size="sm" text="Generating" />}
+          {isCompacting && <Loader variant="loading-dots" size="sm" text="Compacting" />}
+          {isStreaming && !isCompacting && <Loader variant="loading-dots" size="sm" text="Generating" />}
           <ChatContainerScrollAnchor />
         </ChatContainerContent>
         <div className="absolute right-4 bottom-4 z-10">
@@ -310,6 +314,7 @@ const MessageListFn = ({
 export const MessageList = memo(MessageListFn, (prev, next) =>
   prev.messages === next.messages &&
   prev.isStreaming === next.isStreaming &&
+  prev.isCompacting === next.isCompacting &&
   prev.thinkingContent === next.thinkingContent &&
   prev.compaction === next.compaction &&
   prev.pendingPermissions === next.pendingPermissions &&

@@ -34,7 +34,7 @@ export { resolveThinkParam }
 // Stable reference used as fallback when entity has no chat state yet.
 // Must be module-level so the reference is constant across renders —
 // Zustand's useSyncExternalStore requires the snapshot to be cached.
-const EMPTY_CHAT = { messages: [] as ChatMessage[], isStreaming: false }
+const EMPTY_CHAT = { messages: [] as ChatMessage[], isStreaming: false, isCompacting: false }
 
 interface UseChatOptions {
   entityId: string
@@ -279,6 +279,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     let compaction = useChatStore.getState().chats[entityId]?.compaction
     if (boundaryIndex > 0 && compaction?.boundaryIndex !== boundaryIndex) {
+      useChatStore.getState().setCompacting(entityId, true)
       try {
         compaction = await runCompaction(
           entityId, compactionPath, boundaryIndex, pipelineMessages.slice(0, boundaryIndex),
@@ -287,6 +288,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       } catch (e) {
         // User-facing notification already happens inside runCompaction.
         console.error("Compaction failed", e)
+      } finally {
+        useChatStore.getState().setCompacting(entityId, false)
       }
     }
 
@@ -438,6 +441,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
     let compactionRegen = useChatStore.getState().chats[entityId]?.compaction
     if (boundaryIndexRegen > 0 && compactionRegen?.boundaryIndex !== boundaryIndexRegen) {
+      useChatStore.getState().setCompacting(entityId, true)
       try {
         compactionRegen = await runCompaction(
           entityId, compactionPath, boundaryIndexRegen, pipelineMessagesRegen.slice(0, boundaryIndexRegen),
@@ -446,6 +450,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       } catch (e) {
         // User-facing notification already happens inside runCompaction.
         console.error("Compaction failed", e)
+      } finally {
+        useChatStore.getState().setCompacting(entityId, false)
       }
     }
 
@@ -535,6 +541,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     messages: chat.messages,
     compaction: chat.compaction,
     isStreaming: chat.isStreaming,
+    isCompacting: chat.isCompacting,
     thinkingContent: chat.thinkingContent,
     pendingPermissions: chat.pendingPermissions,
     input,

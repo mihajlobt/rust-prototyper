@@ -15,6 +15,8 @@ export interface SessionUsageSnapshot {
 interface ChatState {
   messages: ChatMessage[]
   isStreaming: boolean
+  /** True while a compaction summary is being generated (blocks sending until it resolves). */
+  isCompacting: boolean
   thinkingContent: string
   pendingPermissions: ToolPermissionRecord[]
   /** Estimated tokens generated so far in the in-flight turn, for live counting during streaming. */
@@ -30,6 +32,7 @@ interface ChatStore {
   getChat: (id: string) => ChatState
   setMessages: (id: string, messages: ChatMessage[]) => void
   setStreaming: (id: string, streaming: boolean) => void
+  setCompacting: (id: string, compacting: boolean) => void
   appendChunk: (id: string, chunk: string) => void
   setStreamingContent: (id: string, content: string) => void
   setStreamingThinking: (id: string, thinking: string) => void
@@ -49,7 +52,7 @@ interface ChatStore {
   clearPendingPermissions: (id: string) => void
 }
 
-const EMPTY: ChatState = { messages: [], isStreaming: false, thinkingContent: "", pendingPermissions: [], liveTokenCount: 0 }
+const EMPTY: ChatState = { messages: [], isStreaming: false, isCompacting: false, thinkingContent: "", pendingPermissions: [], liveTokenCount: 0 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   chats: {},
@@ -64,6 +67,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setStreaming: (id, isStreaming) =>
     set((s) => ({
       chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), isStreaming } },
+    })),
+
+  setCompacting: (id, isCompacting) =>
+    set((s) => ({
+      chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), isCompacting } },
     })),
 
   // Mutates only the last assistant message — avoids full array replacement on every chunk

@@ -100,6 +100,7 @@ export function CreateChatPanel({
             <MessageList
               messages={chat.messages}
               isStreaming={chat.isStreaming}
+              isCompacting={chat.isCompacting}
               thinkingContent={chat.thinkingContent}
               compaction={chat.compaction}
               pendingPermissions={chat.pendingPermissions}

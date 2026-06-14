@@ -181,6 +181,7 @@ export function PlansPanel() {
       entityId={chatEntityId}
       messages={chat.messages}
       isStreaming={chat.isStreaming}
+      isCompacting={chat.isCompacting}
       thinkingContent={chat.thinkingContent}
       compaction={chat.compaction}
       pendingPermissions={chat.pendingPermissions}

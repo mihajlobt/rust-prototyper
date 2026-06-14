@@ -15,6 +15,7 @@ interface PlannerChatProps {
   entityId: string;
   messages: ChatMessage[];
   isStreaming: boolean;
+  isCompacting?: boolean;
   thinkingContent: string;
   compaction?: Compaction;
   pendingPermissions: ToolPermissionRecord[];
@@ -63,6 +64,7 @@ export function PlannerChat({
   entityId,
   messages,
   isStreaming,
+  isCompacting,
   thinkingContent,
   compaction,
   pendingPermissions,
@@ -112,6 +114,7 @@ export function PlannerChat({
               <MessageList
                 messages={messages}
                 isStreaming={isStreaming}
+                isCompacting={isCompacting}
                 thinkingContent={thinkingContent}
                 compaction={compaction}
                 pendingPermissions={pendingPermissions}

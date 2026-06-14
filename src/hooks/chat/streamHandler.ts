@@ -86,11 +86,14 @@ export function createStreamHandler(params: StreamHandlerParams) {
       const boundaryIndex = findCompactionBoundary(finalMessages, KEEP_RECENT_TURNS - 1)
       const current = useChatStore.getState().chats[entityId]?.compaction
       if (boundaryIndex > 0 && current?.boundaryIndex !== boundaryIndex) {
+        useChatStore.getState().setCompacting(entityId, true)
         // User-facing notification already happens inside runCompaction.
         runCompaction(
           entityId, compaction.compactionPath, boundaryIndex, finalMessages.slice(0, boundaryIndex),
           compaction.modelId, compaction.host, compaction.apiKey, compaction.provider, compaction.toolOutputResendLimit,
-        ).catch((e) => console.error("Proactive compaction failed", e))
+        )
+          .catch((e) => console.error("Proactive compaction failed", e))
+          .finally(() => useChatStore.getState().setCompacting(entityId, false))
       }
     }
   }
