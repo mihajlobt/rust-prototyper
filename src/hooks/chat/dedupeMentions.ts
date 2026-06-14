@@ -28,7 +28,7 @@ function findMentionBlocks(content: string): Array<{ name: string; start: number
     // Match the end marker only after this start marker so nested same-name
     // mentions don't prematurely close the block.
     MENTION_BLOCK_END.lastIndex = afterStart
-    let endMatch: RegExpExecArray | null = null
+    let endMatch: RegExpExecArray | null
     while ((endMatch = MENTION_BLOCK_END.exec(content)) !== null) {
       if (endMatch[1] === name) break
     }

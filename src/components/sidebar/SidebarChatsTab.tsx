@@ -333,7 +333,7 @@ function ChatEntryRow({ entry, onNavigate, onArchive, onUnarchive }: ChatEntryRo
           variant="ghost"
           size="icon"
           className="h-5 w-5 shrink-0 absolute right-2 top-2"
-          onClick={(e) => { e.stopPropagation(); onArchive ? onArchive(entry) : onUnarchive?.(entry); }}
+          onClick={(e) => { e.stopPropagation(); if (onArchive) onArchive(entry); else onUnarchive?.(entry); }}
           title={onArchive ? "Archive" : "Unarchive"}
         >
           {onArchive ? <Archive size={10} /> : <ArchiveRestore size={10} />}

@@ -136,7 +136,7 @@ export function AITab({ settings, setSettings }: AITabProps) {
             {searxngConfigPath && (
               <>
                 <p className="text-[11px] text-muted-foreground">
-                  Mount this path into SearXNG's <span className="font-mono">/etc/searxng</span> when starting the container:
+                  Mount this path into SearXNG&apos;s <span className="font-mono">/etc/searxng</span> when starting the container:
                 </p>
                 <p className="text-[11px] text-muted-foreground font-mono bg-muted rounded px-2 py-1 select-all whitespace-pre">
 {searxngConfigPath}

@@ -33,7 +33,9 @@ export function useBonsai() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable
   const startServer = useCallback(() => store.startServer(), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable
   const stopServer = useCallback(() => store.stopServer(), []);
   const generateImage = useCallback(
     (prompt: string, opts?: { width?: number; height?: number; steps?: number; seed?: number; backend?: string }) => {
@@ -50,10 +52,12 @@ export function useBonsai() {
   const refreshAssets = useCallback(() => {
     if (!project) return;
     store.listAssets(project);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable, project is the only reactive dep
   }, [project]);
   const deleteAsset = useCallback((fileName: string) => {
     if (!project) return;
     store.deleteAsset(project, fileName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable, project is the only reactive dep
   }, [project]);
 
   return {

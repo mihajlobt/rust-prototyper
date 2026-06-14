@@ -99,7 +99,6 @@ export function useScreenCode({
     })();
     return () => { cancelled = true; };
   // runnerUrl in deps so re-loading happens after scaffold completes (runnerUrl set after server starts)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenId, screenPath, runnerUrl]);
 
   return { code, setCode, handleCodeChange, handleCodeBlur, applyScreenCode };

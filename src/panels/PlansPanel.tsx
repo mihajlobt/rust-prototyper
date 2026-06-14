@@ -289,20 +289,26 @@ function useMentionOptions(project: string | undefined): MentionOption[] {
   const plans = useFlatProjectTree(project ?? "", SECTION_BY_KIND.plan);
   const themes = useFlatProjectTree(project ?? "", SECTION_BY_KIND.theme);
 
+  const screensData = screens.data;
+  const componentsData = components.data;
+  const assetsData = assets.data;
+  const plansData = plans.data;
+  const themesData = themes.data;
+
   return useMemo<MentionOption[]>(() => {
     const out: MentionOption[] = [];
     for (const kind of MENTION_KINDS) {
-      const query =
-        kind === "screen" ? screens :
-        kind === "component" ? components :
-        kind === "asset" ? assets :
-        kind === "plan" ? plans :
-        themes;
-      const entries = (query.data ?? []) as Array<{ name: string }>;
+      const data =
+        kind === "screen" ? screensData :
+        kind === "component" ? componentsData :
+        kind === "asset" ? assetsData :
+        kind === "plan" ? plansData :
+        themesData;
+      const entries = (data ?? []) as Array<{ name: string }>;
       out.push(...listFromEntries(kind, entries));
     }
     return out;
-  }, [screens.data, components.data, assets.data, plans.data, themes.data]);
+  }, [screensData, componentsData, assetsData, plansData, themesData]);
 }
 
 function projectLayoutFromOptions(options: MentionOption[]) {

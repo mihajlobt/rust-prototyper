@@ -33,7 +33,10 @@ export function RunnerPreview({
 
   const handleRefreshPreview = () => {
     const el = iframeRef.current;
-    if (el) el.src = el.src;
+    if (!el) return;
+    const src = el.src;
+    el.src = "";
+    el.src = src;
   };
 
   return (
