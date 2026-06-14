@@ -19,6 +19,8 @@ import { useModelCapabilities } from "@/hooks/useModelCapabilities"
 import { resolveThinkParam } from "./chat/think"
 import { buildApiMessages } from "./chat/messages"
 import { createStreamHandler } from "./chat/streamHandler"
+import { dropStaleThinking } from "./chat/dropStaleThinking"
+import { dedupeMentions } from "./chat/dedupeMentions"
 
 // Re-export for external consumers (ComponentsPanel, ScreensPanel).
 // The implementation lives in ./chat/think to keep this hook file small.
@@ -69,6 +71,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const searxngUrl  = useAppStore((s) => s.settings.searxngUrl)
   const writeFileLimit = useAppStore((s) => s.settings.writeFileLimit)
   const toolOutputHistoryLimit = useAppStore((s) => s.settings.toolOutputHistoryLimit)
+  const toolOutputResendLimit = useAppStore((s) => s.settings.toolOutputResendLimit)
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -204,10 +207,14 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     setMentions([])
 
     const isOllama = (provider as Provider).startsWith("ollama")
+    const pipelineMessages = updatedMessages.slice(0, -1)
+    const noStaleThinking = dropStaleThinking(pipelineMessages)
+    const dedupedMessages = dedupeMentions(noStaleThinking)
     const apiMessages = buildApiMessages(
-      updatedMessages.slice(0, -1),
+      dedupedMessages,
       systemPrompt,
       isOllama,
+      toolOutputResendLimit,
     )
 
     const resolvedHost = getHostForProvider(provider as Provider, host)
@@ -254,6 +261,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     toolPermissionMode, toolAllowlist, maxToolCalls,
     panelToolFilter, panelMaxToolCalls, searxngUrl,
     writeFileLimit, toolOutputHistoryLimit,
+    toolOutputResendLimit,
   ])
 
   const clearChat = useCallback(() => {
@@ -311,10 +319,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     useChatStore.getState().setStreamingThinking(entityId, "")
 
     const isOllamaRegen = (provider as Provider).startsWith("ollama")
+    const noStaleThinkingRegen = dropStaleThinking(updatedMessages.slice(0, -1))
+    const dedupedMessagesRegen = dedupeMentions(noStaleThinkingRegen)
     const apiMessages = buildApiMessages(
-      updatedMessages.slice(0, -1),
+      dedupedMessagesRegen,
       systemPrompt,
       isOllamaRegen,
+      toolOutputResendLimit,
     )
 
     const resolvedHost = getHostForProvider(provider as Provider, host)
@@ -344,6 +355,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         panelMaxToolCalls ?? maxToolCalls,
         panelToolFilter,
         searxngUrl || undefined,
+        writeFileLimit,
+        toolOutputHistoryLimit,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -358,6 +371,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
     panelToolFilter, panelMaxToolCalls, searxngUrl,
+    writeFileLimit, toolOutputHistoryLimit, toolOutputResendLimit,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {

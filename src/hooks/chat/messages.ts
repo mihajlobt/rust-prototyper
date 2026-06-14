@@ -19,6 +19,7 @@ export function buildApiMessages(
   messages: ChatMessage[],
   systemPrompt: string,
   isOllama: boolean,
+  toolOutputResendLimit: number,
 ): Message[] {
   const system: Message = { role: "system", content: systemPrompt }
   if (!isOllama) {
@@ -47,12 +48,17 @@ export function buildApiMessages(
           function: { name: tc.tool, arguments: tc.arguments },
         })),
       })
-      // Insert tool role messages after the assistant's tool_calls
+      // Insert tool role messages after the assistant's tool_calls.
+      // Cap resent tool results to the configured resend limit so long
+      // conversations don't retransmit unbounded tool output every turn.
       for (const tc of m.toolCalls) {
         if (tc.result !== undefined) {
+          const content = tc.result.length > toolOutputResendLimit
+            ? `${tc.result.slice(0, toolOutputResendLimit)}\n... (output truncated, ${tc.result.length} characters total)`
+            : tc.result
           result.push({
             role: "tool",
-            content: tc.result,
+            content,
             tool_name: tc.tool,
           })
         }

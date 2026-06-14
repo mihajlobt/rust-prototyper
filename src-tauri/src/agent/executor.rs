@@ -23,6 +23,34 @@ pub(in crate::agent) use tool_search::resolve_tool_search;
 pub(crate) mod lsp;
 use lsp::execute_lsp;
 
+/// Default byte cap for tool output truncation (mirrors `read_file` `MAX_BYTES`).
+pub(super) const DEFAULT_TOOL_OUTPUT_MAX_BYTES: usize = 50_000;
+/// Default line cap for tool output truncation.
+pub(super) const DEFAULT_TOOL_OUTPUT_MAX_LINES: usize = 2_000;
+
+/// Caps `output` at `max_bytes` bytes or `max_lines` lines, whichever is hit first.
+/// Uses the same truncation message format as `agent_loop.rs:721-727`.
+pub(super) fn cap_tool_output(output: &str, max_bytes: usize, max_lines: usize) -> String {
+    let mut byte_count = 0;
+    for (index, line) in output.split_inclusive('\n').enumerate() {
+        let line_count = index + 1;
+        byte_count += line.len();
+        if byte_count > max_bytes || line_count > max_lines {
+            // `truncation_point` is a sum of whole-line byte lengths, so it always
+            // falls on a UTF-8 char boundary — safe to byte-slice directly.
+            let truncation_point = byte_count - line.len();
+            let truncated = &output[..truncation_point];
+            return format!(
+                "{}\n... (output truncated, {} characters / {} lines total)",
+                truncated,
+                output.len(),
+                output.lines().count()
+            );
+        }
+    }
+    output.to_string()
+}
+
 #[derive(serde::Deserialize)]
 struct SearxngResult {
     title: String,
@@ -676,6 +704,7 @@ async fn execute_run_tsc(
         Some(code) => format!("{output_text}\nExit code: {code}"),
         None => output_text,
     };
+    let output = cap_tool_output(&output, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES);
 
     ToolExecutionResult {
         success: exit_code == Some(0),
@@ -727,9 +756,10 @@ async fn execute_run_lint(
     let (body, exit_code) = extract_exit_code(&raw);
 
     // Exit 0 = clean; 1 = lint violations; 2 = config/internal error.
+    let output = cap_tool_output(body, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES);
     ToolExecutionResult {
         success: exit_code == Some(0),
-        output: body.to_string(),
+        output,
         written_path: None,
         written_content: None,
     }
@@ -771,9 +801,10 @@ async fn execute_run_build(args: &serde_json::Value, project_dir: &Path, skip_po
     let raw = run_sandboxed_command(&command, project_dir, skip_policy).await;
     let (body, exit_code) = extract_exit_code(&raw);
 
+    let output = cap_tool_output(&body, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES);
     ToolExecutionResult {
         success: exit_code == Some(0),
-        output: body.to_string(),
+        output,
         written_path: None,
         written_content: None,
     }
@@ -842,9 +873,17 @@ async fn execute_glob(args: &serde_json::Value, project_dir: &Path) -> ToolExecu
         }
     }
 
+    let output = if matched.is_empty() {
+        "(no files matched)".to_string()
+    } else {
+        matched.join("\n")
+    };
+    let output = cap_tool_output(
+        &output, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES);
+
     ToolExecutionResult {
         success: true,
-        output: if matched.is_empty() { "(no files matched)".to_string() } else { matched.join("\n") },
+        output,
         written_path: None,
         written_content: None,
     }
@@ -900,9 +939,16 @@ async fn execute_grep(args: &serde_json::Value, app_data_dir: &Path, skip_policy
     let (body, exit_code) = extract_exit_code(&raw);
 
     // grep exits 1 when no matches found — that's not an error for our purposes.
+    let output = if body.trim().is_empty() {
+        "(no matches found)".to_string()
+    } else {
+        body.to_string()
+    };
+    let output = cap_tool_output(
+        &output, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES);
     ToolExecutionResult {
         success: exit_code == Some(0) || exit_code == Some(1),
-        output: if body.trim().is_empty() { "(no matches found)".to_string() } else { body.to_string() },
+        output,
         written_path: None,
         written_content: None,
     }
@@ -1280,7 +1326,14 @@ async fn execute_bash(
     // Do NOT apply expand_combined_flags here — the bash command is a raw shell
     // pipeline with operators (&&, |, >) that must not be re-tokenized and re-quoted.
     match crate::sandbox::execute_sandboxed(&parsed.command, app_data_dir, 30, skip_policy).await {
-        Ok(result) => result,
+        Ok(result) => ToolExecutionResult {
+            output: cap_tool_output(
+                &result.output,
+                DEFAULT_TOOL_OUTPUT_MAX_BYTES,
+                DEFAULT_TOOL_OUTPUT_MAX_LINES,
+            ),
+            ..result
+        },
         Err(crate::sandbox::SandboxError::InjectionDetected(detail)) => ToolExecutionResult {
             success: false,
             output: format!("bash: {}", ToolError::Security(detail)),
@@ -1344,9 +1397,12 @@ async fn execute_bash(
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let combined = if stderr.is_empty() { stdout } else if stdout.is_empty() { stderr } else { format!("{stdout}\n{stderr}") };
+            let output = if combined.is_empty() { "(no output)".to_string() } else { combined };
+            let output = cap_tool_output(
+                &output, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES);
             ToolExecutionResult {
                 success: out.status.success(),
-                output: if combined.is_empty() { "(no output)".to_string() } else { combined },
+                output,
                 written_path: None,
                 written_content: None,
             }
@@ -1473,9 +1529,15 @@ async fn execute_web_search(
         out.push('\n');
     }
 
+    let output = cap_tool_output(
+        &out,
+        DEFAULT_TOOL_OUTPUT_MAX_BYTES,
+        DEFAULT_TOOL_OUTPUT_MAX_LINES,
+    );
+
     ToolExecutionResult {
         success: true,
-        output: out,
+        output,
         written_path: None,
         written_content: None,
     }

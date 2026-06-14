@@ -64,6 +64,13 @@ export interface Settings {
   writeFileLimit: number;
   /** Maximum characters of tool output appended to conversation history. Default: 15000 */
   toolOutputHistoryLimit: number;
+  /**
+   * Maximum characters of a tool result kept when resending history on subsequent
+   * turns (Ollama `buildApiMessages` reconstruction). Independent of
+   * `toolOutputHistoryLimit`, which bounds the in-loop truncation for the turn the
+   * tool ran in (`agent_loop.rs` `MAX_TOOL_OUTPUT_FOR_HISTORY`).
+   */
+  toolOutputResendLimit: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -97,6 +104,7 @@ const DEFAULT_SETTINGS: Settings = {
   searxngUrl: "",
   writeFileLimit: 10,
   toolOutputHistoryLimit: 15000,
+  toolOutputResendLimit: 2000,
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

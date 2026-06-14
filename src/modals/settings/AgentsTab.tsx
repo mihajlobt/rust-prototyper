@@ -257,6 +257,22 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
                   />
                   <span className="text-xs text-muted-foreground">max chars of tool output in history</span>
                 </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-40 shrink-0">toolOutputResendLimit</span>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={100000}
+                    step={100}
+                    className="w-24 text-xs"
+                    value={settings.toolOutputResendLimit}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (!isNaN(n) && n >= 100) setSettings({ toolOutputResendLimit: n });
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">max chars of tool output on resend</span>
+                </div>
               </div>
             </CollapsibleContent>
           </section>

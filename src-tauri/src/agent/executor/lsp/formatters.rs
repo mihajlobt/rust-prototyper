@@ -7,6 +7,7 @@ use lsp_types::{
 use serde_json::Value;
 
 use super::client::uri_to_path;
+use super::super::{cap_tool_output, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES};
 
 fn display_path(uri: &str, project_dir: &Path) -> String {
     match uri_to_path(uri) {
@@ -70,7 +71,7 @@ pub(crate) fn format_locations(value: &Value, project_dir: &Path) -> String {
     for (file, lines) in &by_file {
         out.push_str(&format!("{file}:\n{}\n", lines.join("\n")));
     }
-    out
+    cap_tool_output(&out, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES)
 }
 
 fn parse_locations(value: &Value) -> Option<Vec<Location>> {
@@ -104,7 +105,12 @@ pub(crate) fn format_hover(value: &Value) -> String {
         HoverContents::Array(items) => items.into_iter().map(marked_string_text).collect::<Vec<_>>().join("\n---\n"),
         HoverContents::Markup(content) => content.value,
     };
-    if text.trim().is_empty() { "No hover information available.".to_string() } else { text }
+    let output = if text.trim().is_empty() {
+        "No hover information available.".to_string()
+    } else {
+        text
+    };
+    cap_tool_output(&output, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES)
 }
 
 fn marked_string_text(marked: MarkedString) -> String {
@@ -140,7 +146,7 @@ pub(crate) fn format_document_symbols(value: &Value) -> String {
         }
         _ => return "No symbols found.".to_string(),
     }
-    out
+    cap_tool_output(&out, DEFAULT_TOOL_OUTPUT_MAX_BYTES, DEFAULT_TOOL_OUTPUT_MAX_LINES)
 }
 
 fn push_nested_symbol(out: &mut String, symbol: &DocumentSymbol, depth: usize) {
