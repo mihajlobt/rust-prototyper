@@ -71,6 +71,8 @@ export interface Settings {
    * tool ran in (`agent_loop.rs` `MAX_TOOL_OUTPUT_FOR_HISTORY`).
    */
   toolOutputResendLimit: number;
+  /** Fraction of the effective context window that triggers an LLM summary of old messages (0 = off). Default: 0.7. */
+  compactionThreshold: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -105,6 +107,7 @@ const DEFAULT_SETTINGS: Settings = {
   writeFileLimit: 10,
   toolOutputHistoryLimit: 15000,
   toolOutputResendLimit: 2000,
+  compactionThreshold: 0.7,
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

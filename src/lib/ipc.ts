@@ -161,6 +161,7 @@ export interface OllamaModel {
   family: string;
   families: string[];
   contextLength?: number;
+  modelfileNumCtx?: number;
   /** "ollama-local" or "ollama-cloud" — set by the Rust backend based on which host was queried */
   provider: "ollama-local" | "ollama-cloud";
 }

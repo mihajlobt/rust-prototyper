@@ -273,6 +273,22 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
                   />
                   <span className="text-xs text-muted-foreground">max chars of tool output on resend</span>
                 </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-40 shrink-0">compactionThreshold</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    className="w-24 text-xs"
+                    value={settings.compactionThreshold}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (!isNaN(n) && n >= 0 && n <= 1) setSettings({ compactionThreshold: n });
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">% of context window that triggers an LLM summary of old messages (0 = off)</span>
+                </div>
               </div>
             </CollapsibleContent>
           </section>

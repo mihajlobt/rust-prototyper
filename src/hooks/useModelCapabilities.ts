@@ -13,6 +13,7 @@ type Capabilities = {
   vision: boolean
   tools: boolean
   contextLength?: number
+  modelfileNumCtx?: number
   loading: boolean
   /** Model family from Ollama API (e.g., "gptoss", "gemma4", "qwen35") */
   family?: string
@@ -40,6 +41,7 @@ function toCaps(model: OllamaModel): Capabilities {
     vision: c.includes("vision"),
     tools: c.includes("tools"),
     contextLength: model.contextLength,
+    modelfileNumCtx: model.modelfileNumCtx,
     loading: false,
     family: model.family,
   }

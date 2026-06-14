@@ -8,6 +8,8 @@ interface ChatState {
   pendingPermissions: ToolPermissionRecord[]
   /** Estimated tokens generated so far in the in-flight turn, for live counting during streaming. */
   liveTokenCount: number
+  /** Cached compaction recap, mirrored to `*.compaction.json`. boundaryIndex is the role==="user" index it covers. */
+  compaction?: { boundaryIndex: number; summary: string }
 }
 
 interface ChatStore {
@@ -19,6 +21,7 @@ interface ChatStore {
   setStreamingContent: (id: string, content: string) => void
   setStreamingThinking: (id: string, thinking: string) => void
   setLiveTokenCount: (id: string, count: number) => void
+  setCompaction: (id: string, compaction: { boundaryIndex: number; summary: string } | undefined) => void
   attachToolCall: (id: string, tool: string, path: string, args: Record<string, unknown>) => void
   /** Resolve the first pending tool call matching `tool` (front-to-back order matches
    *  ToolCall/ToolResult arrival order, fixing result swapping for parallel same-name tools). */
@@ -80,6 +83,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setLiveTokenCount: (id, count) =>
     set((s) => ({
       chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), liveTokenCount: count } },
+    })),
+
+  setCompaction: (id, compaction) =>
+    set((s) => ({
+      chats: { ...s.chats, [id]: { ...(s.chats[id] ?? EMPTY), compaction } },
     })),
 
   attachToolCall: (id, tool, path, args) =>

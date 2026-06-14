@@ -7,6 +7,7 @@ import {
   stopGenerationRequest,
   readFile,
   writeFile,
+  deleteFile,
   getHostForProvider,
   getApiKeyForProvider,
   getErrorMessage,
@@ -21,6 +22,8 @@ import { buildApiMessages } from "./chat/messages"
 import { createStreamHandler } from "./chat/streamHandler"
 import { dropStaleThinking } from "./chat/dropStaleThinking"
 import { dedupeMentions } from "./chat/dedupeMentions"
+import { getEffectiveContextWindow } from "./chat/contextWindow"
+import { generateCompactionSummary, buildCompactedMessages, findCompactionBoundary, KEEP_RECENT_TURNS } from "./chat/compactSummary"
 
 // Re-export for external consumers (ComponentsPanel, ScreensPanel).
 // The implementation lives in ./chat/think to keep this hook file small.
@@ -72,6 +75,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   const writeFileLimit = useAppStore((s) => s.settings.writeFileLimit)
   const toolOutputHistoryLimit = useAppStore((s) => s.settings.toolOutputHistoryLimit)
   const toolOutputResendLimit = useAppStore((s) => s.settings.toolOutputResendLimit)
+  const compactionThreshold = useAppStore((s) => s.settings.compactionThreshold)
 
   const chat = useChatStore((s) => s.chats[entityId] ?? EMPTY_CHAT)
 
@@ -138,10 +142,15 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   // Track which entityIds we've already loaded from disk
   const loadedRef = useRef<Set<string>>(new Set())
 
+  const compactionPath = chatPath.replace(/\.json$/, ".compaction.json")
+
   // Cold start: load from disk the first time this entityId is accessed
   useEffect(() => {
     if (loadedRef.current.has(entityId)) return
-    if (useChatStore.getState().chats[entityId]?.messages.length) return
+    if (useChatStore.getState().chats[entityId]?.messages.length) {
+      loadedRef.current.add(entityId)
+      return
+    }
     let cancelled = false
     readFile(chatPath)
       .then((raw) => {
@@ -160,6 +169,24 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       })
     return () => { cancelled = true }
   }, [entityId, chatPath])
+
+  // Cold start: hydrate the compaction cache from its sibling file
+  useEffect(() => {
+    if (loadedRef.current.has(entityId)) return
+    let cancelled = false
+    readFile(compactionPath)
+      .then((raw) => {
+        if (cancelled) return
+        try {
+          const compaction = JSON.parse(raw) as { boundaryIndex: number; summary: string }
+          if (typeof compaction.boundaryIndex === "number" && typeof compaction.summary === "string") {
+            useChatStore.getState().setCompaction(entityId, compaction)
+          }
+        } catch { /* ignore corrupt compaction file */ }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [entityId, compactionPath])
 
   const sendMessage = useCallback(async (textOverride?: string) => {
     const currentChat = useChatStore.getState().chats[entityId] ?? { messages: [], isStreaming: false }
@@ -207,8 +234,37 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     setMentions([])
 
     const isOllama = (provider as Provider).startsWith("ollama")
+    const resolvedHost = getHostForProvider(provider as Provider, host)
+    const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const pipelineMessages = updatedMessages.slice(0, -1)
-    const noStaleThinking = dropStaleThinking(pipelineMessages)
+
+    const { value: contextWindow } = getEffectiveContextWindow(
+      provider as Provider, modelOptions.numCtx, caps.modelfileNumCtx, caps.contextLength,
+    )
+    const lastUsage = [...pipelineMessages].reverse().find((m) => m.role === "assistant" && m.usage)?.usage
+    const boundaryIndex = compactionThreshold > 0 && lastUsage && lastUsage.prompt_tokens / contextWindow > compactionThreshold
+      ? findCompactionBoundary(pipelineMessages, KEEP_RECENT_TURNS)
+      : 0
+
+    let compaction = useChatStore.getState().chats[entityId]?.compaction
+    if (boundaryIndex > 0 && compaction?.boundaryIndex !== boundaryIndex) {
+      try {
+        const summary = await generateCompactionSummary(
+          pipelineMessages.slice(0, boundaryIndex), modelId, resolvedHost, resolvedKey, provider as Provider, toolOutputResendLimit,
+        )
+        compaction = { boundaryIndex, summary }
+        useChatStore.getState().setCompaction(entityId, compaction)
+        writeFile(compactionPath, JSON.stringify(compaction)).catch(() => {})
+      } catch (e) {
+        notify.error("Compaction failed", getErrorMessage(e))
+      }
+    }
+
+    const compactedMessages = boundaryIndex > 0 && compaction?.boundaryIndex === boundaryIndex
+      ? buildCompactedMessages(pipelineMessages, compaction.boundaryIndex, compaction.summary)
+      : pipelineMessages
+
+    const noStaleThinking = dropStaleThinking(compactedMessages)
     const dedupedMessages = dedupeMentions(noStaleThinking)
     const apiMessages = buildApiMessages(
       dedupedMessages,
@@ -217,8 +273,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       toolOutputResendLimit,
     )
 
-    const resolvedHost = getHostForProvider(provider as Provider, host)
-    const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
@@ -255,26 +309,32 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       notify.error("Generation failed", getErrorMessage(e))
     }
   }, [
-    entityId, chatPath, systemPrompt,
+    entityId, chatPath, compactionPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
     panelToolFilter, panelMaxToolCalls, searxngUrl,
     writeFileLimit, toolOutputHistoryLimit,
-    toolOutputResendLimit,
+    toolOutputResendLimit, compactionThreshold,
   ])
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)
     writeFile(chatPath, "[]").catch(() => {})
-  }, [entityId, chatPath])
+    deleteFile(compactionPath).catch(() => {})
+  }, [entityId, chatPath, compactionPath])
 
   const deleteFrom = useCallback((index: number) => {
     const current = useChatStore.getState().chats[entityId]?.messages ?? []
     const trimmed = current.slice(0, index)
     useChatStore.getState().setMessages(entityId, trimmed)
     writeFile(chatPath, JSON.stringify(trimmed, null, 2)).catch(() => {})
-  }, [entityId, chatPath])
+    const compaction = useChatStore.getState().chats[entityId]?.compaction
+    if (compaction && compaction.boundaryIndex > trimmed.length) {
+      useChatStore.getState().setCompaction(entityId, undefined)
+      deleteFile(compactionPath).catch(() => {})
+    }
+  }, [entityId, chatPath, compactionPath])
 
   const stopGeneration = useCallback(() => {
     ;(stopRef as MutableRefObject<boolean>).current = true
@@ -319,7 +379,37 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     useChatStore.getState().setStreamingThinking(entityId, "")
 
     const isOllamaRegen = (provider as Provider).startsWith("ollama")
-    const noStaleThinkingRegen = dropStaleThinking(updatedMessages.slice(0, -1))
+    const resolvedHost = getHostForProvider(provider as Provider, host)
+    const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
+    const pipelineMessagesRegen = updatedMessages.slice(0, -1)
+
+    const { value: contextWindowRegen } = getEffectiveContextWindow(
+      provider as Provider, modelOptions.numCtx, caps.modelfileNumCtx, caps.contextLength,
+    )
+    const lastUsageRegen = [...pipelineMessagesRegen].reverse().find((m) => m.role === "assistant" && m.usage)?.usage
+    const boundaryIndexRegen = compactionThreshold > 0 && lastUsageRegen && lastUsageRegen.prompt_tokens / contextWindowRegen > compactionThreshold
+      ? findCompactionBoundary(pipelineMessagesRegen, KEEP_RECENT_TURNS)
+      : 0
+
+    let compactionRegen = useChatStore.getState().chats[entityId]?.compaction
+    if (boundaryIndexRegen > 0 && compactionRegen?.boundaryIndex !== boundaryIndexRegen) {
+      try {
+        const summary = await generateCompactionSummary(
+          pipelineMessagesRegen.slice(0, boundaryIndexRegen), modelId, resolvedHost, resolvedKey, provider as Provider, toolOutputResendLimit,
+        )
+        compactionRegen = { boundaryIndex: boundaryIndexRegen, summary }
+        useChatStore.getState().setCompaction(entityId, compactionRegen)
+        writeFile(compactionPath, JSON.stringify(compactionRegen)).catch(() => {})
+      } catch (e) {
+        notify.error("Compaction failed", getErrorMessage(e))
+      }
+    }
+
+    const compactedMessagesRegen = boundaryIndexRegen > 0 && compactionRegen?.boundaryIndex === boundaryIndexRegen
+      ? buildCompactedMessages(pipelineMessagesRegen, compactionRegen.boundaryIndex, compactionRegen.summary)
+      : pipelineMessagesRegen
+
+    const noStaleThinkingRegen = dropStaleThinking(compactedMessagesRegen)
     const dedupedMessagesRegen = dedupeMentions(noStaleThinkingRegen)
     const apiMessages = buildApiMessages(
       dedupedMessagesRegen,
@@ -328,8 +418,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       toolOutputResendLimit,
     )
 
-    const resolvedHost = getHostForProvider(provider as Provider, host)
-    const resolvedKey = getApiKeyForProvider(provider as Provider, apiKeys)
     const useThinking = resolveThinkParam(caps, isGptOssFamily, thinkEnabled, thinkLevel)
     const effectiveOutputPath = outputPath && toolsEnabled ? outputPath : undefined
 
@@ -366,12 +454,12 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       notify.error("Generation failed", getErrorMessage(e))
     }
   }, [
-    entityId, chatPath, systemPrompt,
+    entityId, chatPath, compactionPath, systemPrompt,
     modelId, host, apiKeys, provider, modelOptions,
     thinkEnabled, thinkLevel, caps, isGptOssFamily, outputPath, toolsEnabled,
     toolPermissionMode, toolAllowlist, maxToolCalls,
     panelToolFilter, panelMaxToolCalls, searxngUrl,
-    writeFileLimit, toolOutputHistoryLimit, toolOutputResendLimit,
+    writeFileLimit, toolOutputHistoryLimit, toolOutputResendLimit, compactionThreshold,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {

@@ -44,6 +44,7 @@ pub struct OllamaModel {
     pub family: String,
     pub families: Vec<String>,
     pub context_length: Option<u64>,
+    pub modelfile_num_ctx: Option<u64>,
     pub provider: String,
 }
 
@@ -52,6 +53,22 @@ struct OllamaModelDetails {
     family: String,
     families: Vec<String>,
     context_length: Option<u64>,
+    modelfile_num_ctx: Option<u64>,
+}
+
+/// Extracts `num_ctx` from `/api/show`'s `parameters` field (Modelfile-export
+/// format: https://github.com/ollama/ollama/blob/main/docs/modelfile.mdx).
+/// `None` if absent — callers fall back to `contextLength`.
+fn parse_modelfile_num_ctx(json: &serde_json::Value) -> Option<u64> {
+    let parameters = json.get("parameters")?.as_str()?;
+    parameters.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        if parts.next()? == "num_ctx" {
+            parts.next()?.parse::<u64>().ok()
+        } else {
+            None
+        }
+    })
 }
 
 // ─── Ollama helpers ────────────────────────────────────────────────────────────
@@ -131,7 +148,8 @@ fn parse_show_response(json: &serde_json::Value) -> OllamaModelDetails {
         }
         found
     };
-    OllamaModelDetails { capabilities, family, families, context_length }
+    let modelfile_num_ctx = parse_modelfile_num_ctx(json);
+    OllamaModelDetails { capabilities, family, families, context_length, modelfile_num_ctx }
 }
 
 async fn fetch_model_details(client: &reqwest::Client, host: &str, api_key: &str, model_name: &str) -> Result<OllamaModelDetails, AppError> {
@@ -195,8 +213,8 @@ pub async fn list_ollama_models(host: String, api_key: String, app: AppHandle) -
 
     Ok(results.into_iter().map(|(name, detail_result)| {
         match detail_result {
-            Ok(d) => OllamaModel { id: name.clone(), name, capabilities: d.capabilities, family: d.family, families: d.families, context_length: d.context_length, provider: provider.clone() },
-            Err(_) => OllamaModel { id: name.clone(), name, capabilities: vec![], family: String::new(), families: vec![], context_length: None, provider: provider.clone() },
+            Ok(d) => OllamaModel { id: name.clone(), name, capabilities: d.capabilities, family: d.family, families: d.families, context_length: d.context_length, modelfile_num_ctx: d.modelfile_num_ctx, provider: provider.clone() },
+            Err(_) => OllamaModel { id: name.clone(), name, capabilities: vec![], family: String::new(), families: vec![], context_length: None, modelfile_num_ctx: None, provider: provider.clone() },
         }
     }).collect())
 }
