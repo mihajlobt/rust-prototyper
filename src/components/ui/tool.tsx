@@ -43,6 +43,21 @@ export type ToolProps = {
 
 const MAX_CONTENT_LINES = 120
 
+/** Parse the first/last "N: " line prefixes added by read_file to get the read range. */
+function parseLineRange(content: string): { start: number; end: number } | null {
+  let start: number | null = null
+  let end: number | null = null
+  for (const line of content.split("\n")) {
+    const match = line.match(/^(\s*\d+):/)
+    if (match) {
+      const n = parseInt(match[1], 10)
+      if (start === null) start = n
+      end = n
+    }
+  }
+  return start !== null && end !== null ? { start, end } : null
+}
+
 function FileContentBlock({ content }: { content: string }) {
   // Lines may be "N: code" (read_file) or plain (write_file). Both are handled.
   // Strip trailing pagination note "(Showing N lines. Use offset=M to continue.)"
@@ -187,6 +202,9 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
 
   const filePath = toolPart.fileContent?.path ?? (typeof input?.path === "string" ? input.path : undefined)
   const fileName = filePath ? filePath.split("/").pop() : undefined
+  const lineRange = toolPart.type === "read_file" && toolPart.fileContent
+    ? parseLineRange(toolPart.fileContent.content)
+    : null
   const customContent = TOOL_RENDERERS[toolPart.type]?.(toolPart) ?? null
   const useGenericBlocks = customContent === null
 
@@ -202,7 +220,10 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
               {stateIcon}
               <span className="font-mono text-sm font-medium shrink-0">{toolPart.type}</span>
               {SHOW_FILENAME_FOR.has(toolPart.type) && fileName && (
-                <span className="font-mono text-xs text-muted-foreground truncate">{fileName}</span>
+                <span className="font-mono text-xs text-muted-foreground truncate">
+                  {fileName}
+                  {lineRange && ` (L${lineRange.start}-${lineRange.end})`}
+                </span>
               )}
               {stateBadge}
             </div>

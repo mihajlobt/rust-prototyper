@@ -479,6 +479,14 @@
   }
 }
 
+/* Radix ScrollArea: `max-height` on the root doesn't constrain the viewport's
+   `height: 100%` (percentage heights need a definite containing-block height),
+   so overflow is clipped instead of scrolled. Inherit the root's computed
+   max-height onto the viewport so it actually clamps and scrollbars activate. */
+[data-radix-scroll-area-viewport] {
+  max-height: inherit;
+}
+
 /* Git diff gutter — inline editor markers for changes vs HEAD */
 .cm-git-gutter {
   width: 4px;
