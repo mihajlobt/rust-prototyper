@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { DiffFileMergeView } from "@/components/sidebar/git/DiffFileMergeView"
 import { CheckCircle, ChevronDown, Loader2, Settings, XCircle } from "lucide-react"
 import { useState } from "react"
 import type { ReactNode } from "react"
@@ -36,43 +37,6 @@ export type ToolProps = {
   toolPart: ToolPart
   defaultOpen?: boolean
   className?: string
-}
-
-// ─── Diff block ───────────────────────────────────────────────────────────────
-
-const MAX_DIFF_LINES = 80
-
-function DiffBlock({ oldString, newString }: { oldString: string; newString: string }) {
-  type DiffLine = { kind: "removed" | "added"; content: string }
-  const removedLines: DiffLine[] = oldString.split("\n").map((content) => ({ kind: "removed", content }))
-  const addedLines: DiffLine[]   = newString.split("\n").map((content) => ({ kind: "added",   content }))
-  const allLines = [...removedLines, ...addedLines]
-  const truncated = allLines.length > MAX_DIFF_LINES
-  const displayLines = truncated ? allLines.slice(0, MAX_DIFF_LINES) : allLines
-
-  return (
-    <div className="rounded border overflow-hidden font-mono text-xs">
-      {displayLines.map((line, i) => (
-        <div
-          key={i}
-          className={cn(
-            "flex gap-2 px-2 py-px whitespace-pre-wrap break-all leading-5",
-            line.kind === "removed"
-              ? "bg-red-500/10 text-red-600 dark:bg-red-500/10 dark:text-red-400"
-              : "bg-green-500/10 text-green-600 dark:bg-green-500/10 dark:text-green-400",
-          )}
-        >
-          <span className="w-3 shrink-0 select-none opacity-50">{line.kind === "removed" ? "-" : "+"}</span>
-          <span>{line.content || " "}</span>
-        </div>
-      ))}
-      {truncated && (
-        <div className="bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
-          … {allLines.length - MAX_DIFF_LINES} more lines
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ─── File content block ───────────────────────────────────────────────────────
@@ -127,8 +91,12 @@ const TOOL_RENDERERS: Partial<Record<string, ToolRenderer>> = {
   edit_file: (part) =>
     part.diff ? (
       <>
-        <ScrollArea className="max-h-96 overflow-hidden">
-          <DiffBlock oldString={part.diff.oldString} newString={part.diff.newString} />
+        <ScrollArea className="max-h-96 overflow-hidden rounded border">
+          <DiffFileMergeView
+            original={part.diff.oldString}
+            modified={part.diff.newString}
+            filePath={part.fileContent?.path ?? ""}
+          />
         </ScrollArea>
         {part.fileContent?.path && (
           <p className="text-xs text-muted-foreground font-mono truncate">{part.fileContent.path}</p>
@@ -252,14 +220,16 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
             {useGenericBlocks && input && Object.keys(input).length > 0 && (
               <div>
                 <h4 className="text-muted-foreground mb-2 text-sm font-medium">Input</h4>
-                <div className="bg-background rounded border p-2 font-mono text-sm">
-                  {Object.entries(input).map(([key, value]) => (
-                    <div key={key} className="mb-1">
-                      <span className="text-muted-foreground">{key}:</span>{" "}
-                      <span>{formatValue(value)}</span>
-                    </div>
-                  ))}
-                </div>
+                <ScrollArea className="max-h-96 overflow-hidden">
+                  <div className="bg-background rounded border p-2 font-mono text-sm">
+                    {Object.entries(input).map(([key, value]) => (
+                      <div key={key} className="mb-1 whitespace-pre-wrap break-all">
+                        <span className="text-muted-foreground">{key}:</span>{" "}
+                        <span>{formatValue(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
             )}
 
@@ -277,9 +247,11 @@ const Tool = ({ toolPart, defaultOpen = false, className }: ToolProps) => {
             {state === "output-error" && toolPart.errorText && (
               <div>
                 <h4 className="mb-2 text-sm font-medium text-red-500">Error</h4>
-                <div className="bg-background rounded border border-red-200 p-2 text-sm dark:border-red-950 dark:bg-red-900/20">
-                  {toolPart.errorText}
-                </div>
+                <ScrollArea className="max-h-96 overflow-hidden">
+                  <div className="bg-background rounded border border-red-200 p-2 text-sm whitespace-pre-wrap break-all dark:border-red-950 dark:bg-red-900/20">
+                    {toolPart.errorText}
+                  </div>
+                </ScrollArea>
               </div>
             )}
 
