@@ -26,13 +26,18 @@ interface DirectiveData {
   hProperties?: Record<string, unknown>;
 }
 
+type TextLike = { value?: string; children?: TextLike[] };
+function extractNodeText(node: TextLike): string {
+  if (typeof node.value === "string") return node.value;
+  return (node.children ?? []).map(extractNodeText).join("");
+}
+
 const ALLOWED = new Set([
   "timeline",
-  "details",
   "columns",
   "board",
   "kanban",
-  "callout", // Also a directive form, in addition to > [!TYPE] blockquotes
+  "callout",
 ]);
 
 export const remarkPlanDirectives: Plugin<[], Root> = () => {
@@ -57,12 +62,20 @@ export const remarkPlanDirectives: Plugin<[], Root> = () => {
       // bag so the preview can read them.
       const n = node as unknown as {
         attributes?: Record<string, unknown>;
-        children?: Array<{ value?: string }>;
+        children?: Array<{ type?: string; value?: string; data?: { directiveLabel?: boolean }; children?: unknown[] }>;
       };
-      const labelText = n.children
-        ?.map((c) => (typeof c.value === "string" ? c.value : ""))
-        .join("")
-        .trim();
+
+      // The [label] on a container directive becomes the first child paragraph
+      // with data.directiveLabel = true. Extract its text and remove it so it
+      // doesn't render as body content.
+      const children = n.children ?? [];
+      const labelIdx = children.findIndex((c) => c.data?.directiveLabel);
+      let labelText = "";
+      if (labelIdx >= 0) {
+        labelText = extractNodeText(children[labelIdx] as TextLike);
+        children.splice(labelIdx, 1);
+      }
+
       data.hProperties = {
         "data-directive": name,
         ...(labelText ? { "data-label": labelText } : {}),

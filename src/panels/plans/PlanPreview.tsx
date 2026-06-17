@@ -2,13 +2,13 @@
 //
 // Built directly on `react-markdown` rather than reusing the global
 // `Markdown` component because plans need:
-//   - `remark-directive` for `:::timeline` / `:::details` / `:::columns` / etc.
+//   - `remark-directive` for `:::timeline` / `:::columns` / etc.
+//   - `remark-github-alerts` for `> [!NOTE]` / `> [!WARNING]` etc. alerts.
 //   - A custom `pre`/`code` chain that:
 //       - shiki highlighting for block code (CodeBlock chain),
 //       - color swatches for inline color literals (parity with global Markdown),
 //       - chip rendering for mentions/kbd/tags.
 //   - Task checkboxes that toggle the source string via a callback.
-//   - Callout blockquotes (`> [!NOTE]`, etc.) with a custom icon + hue.
 //   - Heading anchor links + outline scroll-spy via the inline DesignToc
 //     toggle (a top-right button reveals a 2-pane Allotment with the TOC).
 
@@ -18,9 +18,11 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkDirective from "remark-directive";
+import remarkGithubAlerts from "remark-github-alerts";
+import rehypeRaw from "rehype-raw";
 import { Allotment } from "allotment";
-import { Info, Lightbulb, AlertTriangle, AlertOctagon, CheckCircle2, Scale, HelpCircle, Target, List } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { List } from "lucide-react";
+import { collectText, DirectiveDiv } from "./DirectiveBlocks";
 import { Toggle } from "@/components/ui/toggle";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
 import { DesignToc, slugify } from "@/components/ui/design-toc";
@@ -34,7 +36,6 @@ interface PlanPreviewProps {
   onTaskToggle?: (line: number) => void;
 }
 
-const CALLOUT_RE = /^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|DECISION|QUESTION|GOAL)\]/i;
 
 export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
   const components = useMemo(() => buildComponents(onTaskToggle), [onTaskToggle]);
@@ -62,7 +63,9 @@ export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
             <div className="mx-auto max-w-[760px] p-4">
               <div className="md-render prose prose-sm dark:prose-invert max-w-none">
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkDirective, remarkBreaks, remarkPlanDirectives]}
+                  remarkPlugins={[remarkGfm, remarkGithubAlerts, remarkDirective, remarkBreaks, remarkPlanDirectives]}
+                  remarkRehypeOptions={{allowDangerousHtml: true}}
+                  rehypePlugins={[rehypeRaw]}
                   components={components}
                 >
                   {body}
@@ -104,10 +107,6 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
       return <InlineCode text={text} />;
     },
     blockquote: function BlockquoteComponent({ children }) {
-      const variant = extractCalloutVariant(children);
-      if (variant) {
-        return <Callout variant={variant}>{children}</Callout>;
-      }
       return (
         <blockquote className="border-l-2 border-border pl-3 italic text-muted-foreground my-3">
           {children}
@@ -126,14 +125,13 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
         </a>
       );
     },
-    input: function CheckboxComponent({ checked, ...rest }) {
+    input: function CheckboxComponent({ checked }) {
       return (
         <input
           type="checkbox"
           checked={!!checked}
-          readOnly
-          className="mr-1.5 align-middle accent-primary cursor-pointer"
-          {...rest}
+          onChange={() => {}}
+          className="mr-1.5 align-middle accent-primary pointer-events-none"
         />
       );
     },
@@ -160,6 +158,20 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
     h4: (props) => <HeadingTag level={4} {...props} />,
     h5: (props) => <HeadingTag level={5} {...props} />,
     h6: (props) => <HeadingTag level={6} {...props} />,
+    div: DirectiveDiv,
+    details: function DetailsComponent({ children, ...props }) {
+      const arr = React.Children.toArray(children);
+      const summary = arr.find((c) => React.isValidElement(c) && (c as React.ReactElement).type === "summary");
+      const body = arr.filter((c) => !(React.isValidElement(c) && (c as React.ReactElement).type === "summary"));
+      return (
+        <details {...(props as React.HTMLAttributes<HTMLDetailsElement>)}>
+          {summary}
+          {body.length > 0 && (
+            <div className="px-3.5 py-3 [&>*:last-child]:mb-0">{body}</div>
+          )}
+        </details>
+      );
+    },
   };
 }
 
@@ -242,78 +254,6 @@ function HeadingTag({ level, children }: { level: number; children?: React.React
   const className = "scroll-mt-12";
   const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
   return <Tag id={id} className={className}>{inner}</Tag>;
-}
-
-// ─── Callouts ────────────────────────────────────────────────────────────────
-
-type CalloutVariant = "NOTE" | "TIP" | "IMPORTANT" | "WARNING" | "CAUTION" | "DECISION" | "QUESTION" | "GOAL";
-
-const CALLOUT_META: Record<CalloutVariant, { icon: React.ComponentType<{ size?: number }>; className: string; label: string }> = {
-  NOTE:      { icon: Info,          className: "border-blue-500/30 bg-blue-500/5 text-blue-100",  label: "Note" },
-  TIP:       { icon: Lightbulb,     className: "border-teal-500/30 bg-teal-500/5 text-teal-100",  label: "Tip" },
-  IMPORTANT: { icon: CheckCircle2,  className: "border-violet-500/30 bg-violet-500/5 text-violet-100", label: "Important" },
-  WARNING:   { icon: AlertTriangle, className: "border-amber-500/30 bg-amber-500/5 text-amber-100", label: "Warning" },
-  CAUTION:   { icon: AlertOctagon,  className: "border-red-500/30 bg-red-500/5 text-red-100",  label: "Caution" },
-  DECISION:  { icon: Scale,         className: "border-violet-500/30 bg-violet-500/5 text-violet-100", label: "Decision" },
-  QUESTION:  { icon: HelpCircle,    className: "border-rose-500/30 bg-rose-500/5 text-rose-100",  label: "Question" },
-  GOAL:      { icon: Target,        className: "border-teal-500/30 bg-teal-500/5 text-teal-100",  label: "Goal" },
-};
-
-function extractCalloutVariant(children: React.ReactNode): CalloutVariant | null {
-  let text = "";
-  collectText(children, (s) => (text += s));
-  const m = CALLOUT_RE.exec(text);
-  if (!m) return null;
-  return m[1].toUpperCase() as CalloutVariant;
-}
-
-function collectText(node: React.ReactNode, sink: (s: string) => void): void {
-  if (node == null || typeof node === "boolean") return;
-  if (typeof node === "string" || typeof node === "number") {
-    sink(String(node));
-    return;
-  }
-  if (Array.isArray(node)) {
-    node.forEach((c) => collectText(c, sink));
-    return;
-  }
-  if (React.isValidElement(node)) {
-    collectText((node.props as { children?: React.ReactNode }).children, sink);
-  }
-}
-
-function Callout({ variant, children }: { variant: CalloutVariant; children: React.ReactNode }) {
-  const meta = CALLOUT_META[variant];
-  const Icon = meta.icon;
-  const stripped = stripCalloutMarker(children);
-  return (
-    <aside
-      className={cn(
-        "my-3 rounded-md border px-3 py-2.5 not-prose",
-        meta.className,
-      )}
-    >
-      <div className="mb-1 flex items-center gap-1.5">
-        <Icon size={11} />
-        <span className="text-[11px] font-semibold uppercase tracking-wider opacity-90">
-          {meta.label}
-        </span>
-      </div>
-      <div className="text-[13px] leading-relaxed [&>p]:m-0">{stripped}</div>
-    </aside>
-  );
-}
-
-function stripCalloutMarker(children: React.ReactNode): React.ReactNode {
-  return React.Children.map(children, (child) => {
-    if (!React.isValidElement(child)) return child;
-    const c = child as React.ReactElement<{ children?: React.ReactNode }>;
-    if (typeof c.props.children === "string") {
-      const stripped = c.props.children.replace(/^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|DECISION|QUESTION|GOAL)\]\s*/i, "");
-      return React.cloneElement(c, { children: stripped });
-    }
-    return React.cloneElement(c, { children: stripCalloutMarker(c.props.children) });
-  });
 }
 
 // ─── Task toggle helper ─────────────────────────────────────────────────────

@@ -469,6 +469,114 @@
   text-underline-offset: 2px;
 }
 
+/* ── <details> ── */
+
+.md-render details {
+  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--card) 30%, transparent);
+}
+
+.md-render details[open] {
+  background: color-mix(in srgb, var(--card) 50%, transparent);
+}
+
+.md-render details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  border-radius: 0.375rem;
+  transition: background 150ms;
+}
+
+.md-render details > summary::-webkit-details-marker { display: none; }
+.md-render details > summary::marker { display: none; }
+
+.md-render details > summary:hover {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.md-render details[open] > summary {
+  border-bottom: 1px solid var(--border);
+  border-radius: 0.375rem 0.375rem 0 0;
+}
+
+.md-render details > summary::after {
+  content: "›";
+  font-size: 1.1rem;
+  color: var(--muted-foreground);
+  transition: transform 200ms;
+  display: inline-block;
+}
+
+.md-render details[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+
+/* ── GitHub-style alerts (remark-github-alerts) ── */
+/* Follows github-base.css conventions, scoped to .md-render, using theme tokens. */
+
+:root {
+  --color-note:      #2f81f7;
+  --color-tip:       #3fb950;
+  --color-warning:   #d29922;
+  --color-caution:   #f85149;
+  --color-important: #a371f7;
+}
+
+.md-render .markdown-alert {
+  padding: 0.5rem 1rem;
+  margin: 0.75rem 0;
+  border-left: 0.25em solid var(--border);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: color-mix(in srgb, var(--card) 40%, transparent);
+}
+
+.md-render .markdown-alert > :first-child { margin-top: 0; }
+.md-render .markdown-alert > :last-child  { margin-bottom: 0; }
+
+.md-render .markdown-alert-title {
+  display: flex;
+  font-size: 0.8rem;
+  font-weight: 600;
+  align-items: center;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.md-render .markdown-alert .octicon {
+  margin-right: 0.4rem;
+  -webkit-mask: var(--oct-icon) no-repeat center / contain;
+  mask: var(--oct-icon) no-repeat center / contain;
+  background-color: currentColor;
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  flex-shrink: 0;
+}
+
+.md-render .markdown-alert-note      { border-left-color: var(--color-note); }
+.md-render .markdown-alert-tip       { border-left-color: var(--color-tip); }
+.md-render .markdown-alert-warning   { border-left-color: var(--color-warning); }
+.md-render .markdown-alert-caution   { border-left-color: var(--color-caution); }
+.md-render .markdown-alert-important { border-left-color: var(--color-important); }
+
+.md-render .markdown-alert-note      .markdown-alert-title { color: var(--color-note); }
+.md-render .markdown-alert-tip       .markdown-alert-title { color: var(--color-tip); }
+.md-render .markdown-alert-warning   .markdown-alert-title { color: var(--color-warning); }
+.md-render .markdown-alert-caution   .markdown-alert-title { color: var(--color-caution); }
+.md-render .markdown-alert-important .markdown-alert-title { color: var(--color-important); }
+
 @media (prefers-reduced-motion: reduce) {
   .md-render *,
   .md-render *::before,
