@@ -17,16 +17,13 @@ import React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import remarkDirective from "remark-directive";
 import remarkGithubAlerts from "remark-github-alerts";
 import rehypeRaw from "rehype-raw";
 import { Allotment } from "allotment";
 import { List } from "lucide-react";
-import { collectText, DirectiveDiv } from "./DirectiveBlocks";
 import { Toggle } from "@/components/ui/toggle";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
 import { DesignToc, slugify } from "@/components/ui/design-toc";
-import { remarkPlanDirectives } from "@/lib/markdown/directives";
 import { KbdChip, MentionChip, TagChip } from "./chips";
 
 interface PlanPreviewProps {
@@ -63,7 +60,7 @@ export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
             <div className="mx-auto max-w-[760px] p-4">
               <div className="md-render prose prose-sm dark:prose-invert max-w-none">
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkGithubAlerts, remarkDirective, remarkBreaks, remarkPlanDirectives]}
+                  remarkPlugins={[remarkGfm, remarkGithubAlerts, remarkBreaks]}
                   remarkRehypeOptions={{allowDangerousHtml: true}}
                   rehypePlugins={[rehypeRaw]}
                   components={components}
@@ -158,7 +155,6 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
     h4: (props) => <HeadingTag level={4} {...props} />,
     h5: (props) => <HeadingTag level={5} {...props} />,
     h6: (props) => <HeadingTag level={6} {...props} />,
-    div: DirectiveDiv,
     details: function DetailsComponent({ children, ...props }) {
       const arr = React.Children.toArray(children);
       const summary = arr.find((c) => React.isValidElement(c) && (c as React.ReactElement).type === "summary");
@@ -229,6 +225,15 @@ function InlineCode({ text }: { text: string }) {
       {text}
     </code>
   );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function collectText(node: React.ReactNode, sink: (s: string) => void): void {
+  if (node == null || typeof node === "boolean") return;
+  if (typeof node === "string" || typeof node === "number") { sink(String(node)); return; }
+  if (Array.isArray(node)) { node.forEach((c) => collectText(c, sink)); return; }
+  if (React.isValidElement(node)) collectText((node.props as { children?: React.ReactNode }).children, sink);
 }
 
 // ─── Headings with anchor links ──────────────────────────────────────────────
