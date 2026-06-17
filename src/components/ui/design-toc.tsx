@@ -25,8 +25,7 @@ function extractHeadings(markdown: string): TocHeading[] {
 
   for (const token of tokens) {
     if (token.type !== "heading") continue
-    const raw = token.raw
-    const text = raw.replace(/^#+\s*/, "").replace(/\s*\{#[\w-]+\}\s*$/, "").trim()
+    const text = token.text.trim()
     if (!text) continue
     const level = token.depth
     const id = slugify(text)
