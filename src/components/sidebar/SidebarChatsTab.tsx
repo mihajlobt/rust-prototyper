@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { readDir, readFile, writeFile, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import { historyGet, historySet, historyListKeys, getErrorMessage } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { notify } from "@/hooks/useToast";
@@ -77,14 +77,34 @@ function extractChatMeta(messages: ChatMessage[]) {
   return { title, preview, messageCount: messages.length };
 }
 
-async function loadChatFile(path: string): Promise<ChatMessage[] | null> {
+async function loadChatFile(key: string): Promise<ChatMessage[] | null> {
   try {
-    const raw = await readFile(path);
+    const raw = await historyGet(key);
+    if (raw === null) return null;
     const messages = JSON.parse(raw) as ChatMessage[];
     return Array.isArray(messages) && messages.length > 0 ? messages : null;
   } catch {
     return null;
   }
+}
+
+const WIZARD_RE = /^(.*\/wizard)\/chat\.json$/;
+const SCREEN_RE = /^.*\/screens\/([^/]+)\/chat\.json$/;
+const COMPONENT_RE = /^.*\/components\/([^/]+)\/chat\.json$/;
+const THEME_RE = /^.*\/themes\/([^/]+)\/chat\.json$/;
+const PLAN_RE = /^.*\/plans\/([^/]+)\.chat\.json$/;
+
+function classifyKey(key: string): { panel: PanelType; entityId: string; displayName: string } | null {
+  if (WIZARD_RE.test(key)) return { panel: "wizard", entityId: "wizard", displayName: "Wizard" };
+  let m = key.match(SCREEN_RE);
+  if (m) return { panel: "screens", entityId: m[1], displayName: kebabToTitle(m[1]) };
+  m = key.match(COMPONENT_RE);
+  if (m) return { panel: "components", entityId: m[1], displayName: kebabToTitle(m[1]) };
+  m = key.match(THEME_RE);
+  if (m) return { panel: "themes", entityId: m[1], displayName: kebabToTitle(m[1]) };
+  m = key.match(PLAN_RE);
+  if (m) return { panel: "plans", entityId: m[1], displayName: kebabToTitle(m[1]) };
+  return null;
 }
 
 export function SidebarChatsTab() {
@@ -102,7 +122,8 @@ export function SidebarChatsTab() {
 
   const loadArchive = useCallback(async (): Promise<Set<string>> => {
     try {
-      const raw = await readFile(archivePath);
+      const raw = await historyGet(archivePath);
+      if (raw === null) return new Set();
       const arr = JSON.parse(raw) as string[];
       return new Set(Array.isArray(arr) ? arr : []);
     } catch {
@@ -116,65 +137,32 @@ export function SidebarChatsTab() {
       const archived = await loadArchive();
       setArchivedPaths(archived);
 
+      const keyMetas = await historyListKeys(`${base}/`);
       const results: ChatEntry[] = [];
 
-      const tryAdd = async (path: string, panel: PanelType, entityId: string, displayName: string, modifiedMs: number | null = null) => {
-        const messages = await loadChatFile(path);
-        if (!messages) return;
+      for (const { key, updated_at } of keyMetas) {
+        const classified = classifyKey(key);
+        if (!classified) continue;
+        const messages = await loadChatFile(key);
+        if (!messages) continue;
         const { title, preview, messageCount } = extractChatMeta(messages);
-        results.push({ path, panel, entityId, displayName, title, preview, messageCount, modifiedMs, archived: archived.has(path) });
-      };
-
-      // Wizard — single file; use the directory entry mtime via its parent dir scan
-      await tryAdd(`${base}/wizard/chat.json`, "wizard", "wizard", "Wizard");
-
-      // Screens
-      try {
-        const dirs = await readDir(`${base}/screens`);
-        for (const d of dirs.filter((e) => e.is_dir)) {
-          const id = d.path.split("/").pop() ?? d.name;
-          // Use mtime of the chat.json file itself by reading it via its parent dir
-          const chatFiles = await readDir(`${base}/screens/${id}`).catch(() => []);
-          const chatFile = chatFiles.find((f) => f.name === "chat.json");
-          await tryAdd(`${base}/screens/${id}/chat.json`, "screens", id, kebabToTitle(id), chatFile?.modified_ms ?? null);
-        }
-      } catch (e) { if (!isNotFoundError(e)) notify.error("Failed to load screen chats", getErrorMessage(e)); }
-
-      // Components
-      try {
-        const dirs = await readDir(`${base}/components`);
-        for (const d of dirs.filter((e) => e.is_dir)) {
-          const id = d.path.split("/").pop() ?? d.name;
-          const chatFiles = await readDir(`${base}/components/${id}`).catch(() => []);
-          const chatFile = chatFiles.find((f) => f.name === "chat.json");
-          await tryAdd(`${base}/components/${id}/chat.json`, "components", id, kebabToTitle(id), chatFile?.modified_ms ?? null);
-        }
-      } catch (e) { if (!isNotFoundError(e)) notify.error("Failed to load component chats", getErrorMessage(e)); }
-
-      // Themes
-      try {
-        const dirs = await readDir(`${base}/themes`);
-        for (const d of dirs.filter((e) => e.is_dir)) {
-          const id = d.path.split("/").pop() ?? d.name;
-          const chatFiles = await readDir(`${base}/themes/${id}`).catch(() => []);
-          const chatFile = chatFiles.find((f) => f.name === "chat.json");
-          await tryAdd(`${base}/themes/${id}/chat.json`, "themes", id, kebabToTitle(id), chatFile?.modified_ms ?? null);
-        }
-      } catch (e) { if (!isNotFoundError(e)) notify.error("Failed to load theme chats", getErrorMessage(e)); }
-
-      // Plans — *.chat.json files
-      try {
-        const files = await readDir(`${base}/plans`);
-        for (const f of files.filter((e) => !e.is_dir && e.name.endsWith(".chat.json"))) {
-          const id = (f.path.split("/").pop() ?? f.name).replace(/\.chat\.json$/, "");
-          await tryAdd(`${base}/plans/${id}.chat.json`, "plans", id, kebabToTitle(id), f.modified_ms ?? null);
-        }
-      } catch (e) { if (!isNotFoundError(e)) notify.error("Failed to load plan chats", getErrorMessage(e)); }
+        results.push({
+          path: key,
+          panel: classified.panel,
+          entityId: classified.entityId,
+          displayName: classified.displayName,
+          title, preview, messageCount,
+          modifiedMs: updated_at,
+          archived: archived.has(key),
+        });
+      }
 
       // Sort each group by modifiedMs descending
       results.sort((a, b) => (b.modifiedMs ?? 0) - (a.modifiedMs ?? 0));
 
       setEntries(results);
+    } catch (e) {
+      notify.error("Failed to load chats", getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -183,7 +171,7 @@ export function SidebarChatsTab() {
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
   const saveArchive = async (paths: Set<string>) => {
-    await writeFile(archivePath, JSON.stringify([...paths], null, 2));
+    await historySet(archivePath, JSON.stringify([...paths], null, 2));
   };
 
   const handleArchive = async (entry: ChatEntry) => {

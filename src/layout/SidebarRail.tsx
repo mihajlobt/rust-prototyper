@@ -15,7 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, getErrorMessage } from "@/lib/ipc";
+import { createDir, writeFile, readFile, deleteDir, deleteFile, renameFile, historyGet, historySet, historyDelete, getErrorMessage } from "@/lib/ipc";
 import { addScreenToNavigation, removeScreenFromNavigation, renameScreenInNavigation, syncGeneratedRouter } from "@/lib/navigation";
 import { getGeneratedDirPath } from "@/lib/scaffold-shadcn";
 import { queryClient } from "@/lib/queryClient";
@@ -120,7 +120,7 @@ export function SidebarRail() {
         case "screen": {
           const fnName = id.split("-").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join("");
           await createDir(`${base}/screens/${id}`);
-          await writeFile(`${base}/screens/${id}/chat.json`, "[]");
+          await historySet(`${base}/screens/${id}/chat.json`, "[]");
           await writeFile(`${generatedDir}/src/pages/${id}.tsx`, `export default function ${fnName}() {\n  return <div>${newItemName}</div>;\n}\n`);
           await addScreenToNavigation(base, id);
           await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });
@@ -192,6 +192,12 @@ export function SidebarRail() {
       } else {
         await deleteDir(`${base}/${section}/${name}`);
       }
+      if (section === "screens" || section === "components" || section === "themes") {
+        const chatPath = `${base}/${section}/${name}/chat.json`;
+        await historyDelete(chatPath).catch(() => {});
+        await historyDelete(chatPath.replace(/\.json$/, ".compaction.json")).catch(() => {});
+        await historyDelete(chatPath.replace(/\.json$/, ".session.json")).catch(() => {});
+      }
       if (section === "screens") {
         await deleteFile(`${generatedDir}/src/pages/${name}.tsx`).catch(() => {});
         await removeScreenFromNavigation(base, name);
@@ -248,8 +254,8 @@ export function SidebarRail() {
       if (section === "screens") {
         await createDir(`${base}/screens/${newId}`);
         const code = await readFile(`${generatedDir}/src/pages/${name}.tsx`).catch(() => "");
-        const chat = await readFile(`${base}/screens/${name}/chat.json`).catch(() => "[]");
-        await writeFile(`${base}/screens/${newId}/chat.json`, chat);
+        const chat = await historyGet(`${base}/screens/${name}/chat.json`).then((v) => v ?? "[]");
+        await historySet(`${base}/screens/${newId}/chat.json`, chat);
         await writeFile(`${generatedDir}/src/pages/${newId}.tsx`, code);
         await addScreenToNavigation(base, newId);
         await syncGeneratedRouter(base).catch((e) => { notify.error("Failed to sync navigation routes", getErrorMessage(e)); });

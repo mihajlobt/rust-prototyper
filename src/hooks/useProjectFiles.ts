@@ -4,6 +4,7 @@ import {
   readFile,
   writeFile,
   createDir,
+  historySet,
   type FileEntry,
 } from "@/lib/ipc";
 import { projectKeys } from "@/lib/queryKeys";
@@ -76,7 +77,7 @@ export function useSaveComponent() {
       await createDir(base);
       await writeFile(`${base}/component.tsx`, code);
       if (messages && messages.length > 0) {
-        await writeFile(`${base}/chat.json`, JSON.stringify(messages, null, 2));
+        await historySet(`${base}/chat.json`, JSON.stringify(messages, null, 2));
       }
       return { name };
     },

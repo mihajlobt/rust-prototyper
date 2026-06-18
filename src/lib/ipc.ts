@@ -98,6 +98,29 @@ export async function renameFile(from: string, to: string): Promise<void> {
   return invoke("rename_file", { from, to });
 }
 
+// ─── Chat History (SQLite-backed) ───
+
+export interface HistoryKeyMeta {
+  key: string;
+  updated_at: number;
+}
+
+export async function historyGet(key: string): Promise<string | null> {
+  return invoke("history_get", { key });
+}
+
+export async function historySet(key: string, value: string): Promise<void> {
+  return invoke("history_set", { key, value });
+}
+
+export async function historyDelete(key: string): Promise<void> {
+  return invoke("history_delete", { key });
+}
+
+export async function historyListKeys(prefix: string): Promise<HistoryKeyMeta[]> {
+  return invoke("history_list_keys", { prefix });
+}
+
 export async function revealInExplorer(path: string): Promise<void> {
   return invoke("reveal_in_explorer", { path });
 }

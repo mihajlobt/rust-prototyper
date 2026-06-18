@@ -43,6 +43,7 @@ dirs = "5"
 htmd = "0.5.4"
 lsp-types = "0.97.0"
 gray_matter = "0.3.2"
+rusqlite = { version = "0.31", features = ["bundled-full"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4"

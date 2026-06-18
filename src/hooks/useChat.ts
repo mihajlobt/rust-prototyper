@@ -5,9 +5,9 @@ import { useAppStore } from "@/stores/appStore"
 import {
   generateCompletionStream,
   stopGenerationRequest,
-  readFile,
-  writeFile,
-  deleteFile,
+  historyGet,
+  historySet,
+  historyDelete,
   getHostForProvider,
   getApiKeyForProvider,
   getErrorMessage,
@@ -155,10 +155,11 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       return
     }
     let cancelled = false
-    readFile(chatPath)
+    historyGet(chatPath)
       .then((raw) => {
         if (cancelled) return
         loadedRef.current.add(entityId)
+        if (raw === null) return
         try {
           const messages = JSON.parse(raw) as ChatMessage[]
           if (Array.isArray(messages) && messages.length > 0) {
@@ -178,9 +179,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   useEffect(() => {
     if (loadedRef.current.has(entityId)) return
     let cancelled = false
-    readFile(compactionPath)
+    historyGet(compactionPath)
       .then((raw) => {
-        if (cancelled) return
+        if (cancelled || raw === null) return
         try {
           const compaction = JSON.parse(raw) as Compaction
           if (typeof compaction.boundaryIndex === "number" && typeof compaction.summary === "string") {
@@ -199,9 +200,9 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     if (loadedRef.current.has(entityId)) return
     if (useChatStore.getState().chats[entityId]?.sessionUsage) return
     let cancelled = false
-    readFile(sessionPath)
+    historyGet(sessionPath)
       .then((raw) => {
-        if (cancelled) return
+        if (cancelled || raw === null) return
         try {
           const snapshot = JSON.parse(raw) as { lastFinalUsage?: TokenUsage; liveEstimate?: number; updatedAt?: number }
           if (typeof snapshot.updatedAt === "number") {
@@ -257,7 +258,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const updatedMessages: ChatMessage[] = [...currentChat.messages, userMessage, assistantPlaceholder]
 
     useChatStore.getState().setMessages(entityId, updatedMessages)
-    writeFile(chatPath, JSON.stringify(updatedMessages, null, 2)).catch(() => {})
+    historySet(chatPath, JSON.stringify(updatedMessages, null, 2)).catch(() => {})
     useChatStore.getState().setStreaming(entityId, true)
     useChatStore.getState().setStreamingThinking(entityId, "")  // Clear previous thinking
     setInput("")
@@ -357,20 +358,20 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const clearChat = useCallback(() => {
     useChatStore.getState().clearChat(entityId)
-    writeFile(chatPath, "[]").catch(() => {})
-    deleteFile(compactionPath).catch(() => {})
-    deleteFile(sessionPath).catch(() => {})
+    historySet(chatPath, "[]").catch(() => {})
+    historyDelete(compactionPath).catch(() => {})
+    historyDelete(sessionPath).catch(() => {})
   }, [entityId, chatPath, compactionPath, sessionPath])
 
   const deleteFrom = useCallback((index: number) => {
     const current = useChatStore.getState().chats[entityId]?.messages ?? []
     const trimmed = current.slice(0, index)
     useChatStore.getState().setMessages(entityId, trimmed)
-    writeFile(chatPath, JSON.stringify(trimmed, null, 2)).catch(() => {})
+    historySet(chatPath, JSON.stringify(trimmed, null, 2)).catch(() => {})
     const compaction = useChatStore.getState().chats[entityId]?.compaction
     if (compaction && compaction.boundaryIndex > trimmed.length) {
       useChatStore.getState().setCompaction(entityId, undefined)
-      deleteFile(compactionPath).catch(() => {})
+      historyDelete(compactionPath).catch(() => {})
     }
     // If the trim removed the message that produced the last final usage,
     // the session snapshot is stale — reset it.
@@ -379,7 +380,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
       const hasUsageAfterTrim = trimmed.some((m) => m.usage && m.usage === session.lastFinalUsage)
       if (!hasUsageAfterTrim) {
         useChatStore.getState().setSessionUsage(entityId, undefined)
-        deleteFile(sessionPath).catch(() => {})
+        historyDelete(sessionPath).catch(() => {})
       }
     }
   }, [entityId, chatPath, compactionPath, sessionPath])
@@ -396,7 +397,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const chat = useChatStore.getState().chats[entityId]
     const msgs = chat?.messages ?? []
     if (msgs.length > 0 && chatPath) {
-      writeFile(chatPath, JSON.stringify(msgs, null, 2)).catch(() => {})
+      historySet(chatPath, JSON.stringify(msgs, null, 2)).catch(() => {})
     }
     // Persist the live token estimate on stop
     persistSessionSnapshot(entityId, sessionPath, {
@@ -422,7 +423,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const assistantPlaceholder: ChatMessage = { role: "assistant", content: "" }
     const updatedMessages: ChatMessage[] = [...trimmed, userMsg, assistantPlaceholder]
     useChatStore.getState().setMessages(entityId, updatedMessages)
-    writeFile(chatPath, JSON.stringify(updatedMessages, null, 2)).catch(() => {})
+    historySet(chatPath, JSON.stringify(updatedMessages, null, 2)).catch(() => {})
     useChatStore.getState().setStreaming(entityId, true)
     useChatStore.getState().setStreamingThinking(entityId, "")
 

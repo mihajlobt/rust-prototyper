@@ -1,5 +1,5 @@
 import { useChatStore, type SessionUsageSnapshot } from "@/stores/chatStore"
-import { writeFile } from "@/lib/ipc"
+import { historySet } from "@/lib/ipc"
 
 /** Build a SessionUsageSnapshot from partial overrides, merging with the
  *  current store value. Persists to `sessionPath` and updates the store. */
@@ -15,6 +15,6 @@ export function persistSessionSnapshot(
     updatedAt: Date.now(),
   }
   useChatStore.getState().setSessionUsage(entityId, next)
-  writeFile(sessionPath, JSON.stringify(next, null, 2)).catch(() => {})
+  historySet(sessionPath, JSON.stringify(next, null, 2)).catch(() => {})
   return next
 }

@@ -177,6 +177,10 @@ pub fn run() {
             commands::fs::rename_file,
             commands::fs::create_symlink,
             commands::fs::reveal_in_explorer,
+            commands::history::history_get,
+            commands::history::history_set,
+            commands::history::history_delete,
+            commands::history::history_list_keys,
             commands::http::http_request,
             commands::http::test_searxng_connection,
             commands::http::setup_searxng_config,
@@ -207,7 +211,26 @@ pub fn run() {
             commands::bonsai::server::bonsai_schedule_stop,
             commands::bonsai::server::bonsai_cancel_stop,
         ])
-        .setup(|_app| Ok(()))
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            let db_dir = app_data_dir(&app_handle)?;
+            std::fs::create_dir_all(&db_dir).map_err(AppError::Io)?;
+            let conn = rusqlite::Connection::open(db_dir.join("history.db"))
+                .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+            commands::history::init_db(&conn)
+                .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+            app.manage(commands::history::HistoryDb(Mutex::new(conn)));
+
+            let migrate_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                match commands::history::migrate_legacy_files(&migrate_handle).await {
+                    Ok(n) if n > 0 => eprintln!("history migration: moved {n} legacy chat file(s) into history.db"),
+                    Ok(_) => {}
+                    Err(e) => eprintln!("history migration failed: {e}"),
+                }
+            });
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { .. } = event {
                 if let Some(state) = window.try_state::<AppState>() {

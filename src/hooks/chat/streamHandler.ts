@@ -1,5 +1,5 @@
 import type { RefObject } from "react"
-import { writeFile, type CompletionEvent, type Provider, type TokenUsage } from "@/lib/ipc"
+import { historySet, type CompletionEvent, type Provider, type TokenUsage } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { useAskUserStore } from "@/stores/askUserStore"
 import { useTaskListStore } from "@/stores/taskListStore"
@@ -74,7 +74,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
     useChatStore.getState().setMessages(entityId, finalMessages)
     useChatStore.getState().setStreaming(entityId, false)
     useChatStore.getState().setStreamingThinking(entityId, "")
-    writeFile(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
+    historySet(chatPath, JSON.stringify(finalMessages, null, 2)).catch(() => {})
     // No usage (Error / truncated stream): carry the live estimate forward instead of dropping it.
     persistSessionSnapshot(entityId, sessionPath, usage
       ? { lastFinalUsage: usage, liveEstimate: 0 }

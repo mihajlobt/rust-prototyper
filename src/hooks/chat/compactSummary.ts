@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@/types/chat"
-import { generateCompletion, writeFile, getErrorMessage, type Provider } from "@/lib/ipc"
+import { generateCompletion, historySet, getErrorMessage, type Provider } from "@/lib/ipc"
 import { useChatStore } from "@/stores/chatStore"
 import { notify } from "@/hooks/useToast"
 
@@ -111,7 +111,7 @@ export function runCompaction(
         const messages = useChatStore.getState().chats[entityId]?.messages ?? []
         if (messages.length >= boundaryIndex) {
           useChatStore.getState().setCompaction(entityId, compaction)
-          writeFile(compactionPath, JSON.stringify(compaction)).catch(() => {})
+          historySet(compactionPath, JSON.stringify(compaction)).catch(() => {})
         }
         return compaction
       })
