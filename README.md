@@ -219,6 +219,24 @@ src-tauri/
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
 | Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, workflows, APIs |
 
+## Screenshots
+
+| Create | Plans |
+|--------|-------|
+| ![Create panel](docs/screenshots/create.png) | ![Plans panel](docs/screenshots/plans.png) |
+
+| Workflows | APIs |
+|-----------|------|
+| ![Workflows panel](docs/screenshots/workflows.png) | ![APIs panel](docs/screenshots/apis.png) |
+
+| Assets | Runner |
+|--------|--------|
+| ![Assets panel](docs/screenshots/assets.png) | ![Runner panel](docs/screenshots/runner.png) |
+
+| Library | |
+|---------|---|
+| ![Library panel](docs/screenshots/library.png) | |
+
 ### Workflow Node System
 
 The Workflows view uses a 7-category node type system (defined in `nodeTypes.tsx`),
