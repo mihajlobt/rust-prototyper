@@ -5,12 +5,9 @@ A Tauri v2 desktop app for AI-assisted UI prototyping. React 19 + TypeScript fro
 ## Setup commands
 
 ```bash
-bun run tauri:dev      # auto-detects Wayland, sets WEBKIT_DISABLE_DMABUF_RENDERER=1
-bun tauri dev          # raw (may fail on Wayland with protocol error 71)
-bun tauri build        # production binaries → src-tauri/target/release/bundle/
+bun run tauri:dev      # start dev server
+bun run tauri:build    # production binaries → src-tauri/target/release/bundle/
 ```
-
-> On Wayland (CachyOS), always use `bun run tauri:dev`.
 
 ## Architecture
 
@@ -31,14 +28,14 @@ src/
   panels/plans/    # Plans sub-components: PlanEditor, PlanPreview, PlanLayout, FormatToolbar, FrontmatterHeader, PlanCommandMenu, PlannerChat, SelectionToChat, PlansPanelParts, chips, autocomplete
   workflows/       # WorkflowsView.tsx — graph execution engine
   layout/          # Header.tsx, SidebarRail.tsx
-  hooks/           # useSettings.ts, useChat.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, use-mobile.ts
+  hooks/           # useSettings.ts, useChat.ts, useBonsai.ts, useProjectFiles.ts, useModelCapabilities.ts, useAllotmentLayout.ts, useToast.ts, useScreenCode.ts, useHotspotTracking.ts, useGitStatus.ts, useGitMutations.ts, use-mobile.ts (+ chat/ subdirectory with streaming helpers)
   lib/ipc.ts       # All invoke() wrappers — single source of truth for Rust↔TS calls
-  lib/markdown/    # frontmatter.ts, directives.ts, mentions.ts, headings.ts, strip.ts — Plans markdown utilities
+  lib/markdown/    # frontmatter.ts, mentions.ts, headings.ts, strip.ts — Plans markdown utilities
   lib/prompts/plans.ts  # Plans agent system prompt
   modals/          # SettingsModal, ProjectManagerModal, ExportModal, AddLibraryModal, PromptConfigModal, ComponentExportModal, SaveComponentModal (+ StylesEditor.tsx is a tabbed editor in Settings, not a true modal)
   components/ui/   # shadcn/ui primitives
 src-tauri/
-  src/lib.rs       # All Rust commands (44 total)
+  src/lib.rs       # All Rust commands (48 total)
   capabilities/default.json   # Tauri plugin permissions
   tauri.conf.json  # Window config, CSP, devUrl (1420)
 ```
@@ -51,8 +48,8 @@ Commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permiss
 |-------|----------|
 | Process | `bun_dev`, `bun_build`, `bun_install`, `bun_install_sync`, `run_shell_command`, `run_shell_command_sync`, `run_shell_command_capture`, `kill_process`, `kill_all_processes`, `kill_port` |
 | File System | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
-| HTTP | `http_request` |
-| AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| HTTP | `http_request`, `test_searxng_connection`, `setup_searxng_config` |
+| AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_anthropic_models`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
 | Bonsai | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export | `export_project`, `export_component` |
 | Workflows | `save_workflow`, `load_workflow`, `list_workflows` |
@@ -120,7 +117,8 @@ bunx tsc --noEmit    # type-check
 - **Radix UI `ContextMenu` is uncontrolled only**: `ContextMenu.Root` does NOT accept an `open` prop. For controlled right-click menus, use `DropdownMenu.Root` with `open`/`onOpenChange` instead.
 - **White screen**: `devUrl` in `tauri.conf.json` must match Vite's port (`1420`)
 - **Command not found**: Must be in `generate_handler![]` in `lib.rs`, with plugin permissions in `capabilities/default.json`
-- **Wayland crash**: Use `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `bun run tauri:dev`
+- **AppImage build fails on Arch/CachyOS**: Use `bun run tauri:build` (sets `NO_STRIP=true`); plain `bun tauri build` fails because linuxdeploy bundles an old `strip` that can't handle `.relr.dyn` sections in newer ELF libraries
+- **Allotment `resize()` crashes**: Never call `resize()` in `useEffect` or `requestAnimationFrame`. Use the `visible` prop for show/hide; `resize()` is only safe in event handlers
 - **IPC timeout**: Never block async commands — use `tokio::spawn` for heavy ops
 - **v1 vs v2 imports**: Always `@tauri-apps/api/core`, never `@tauri-apps/api/tauri`
 
@@ -129,7 +127,7 @@ bunx tsc --noEmit    # type-check
 - Files live at `projects/{id}/plans/{slug}.md`; chat history at `projects/{id}/plans/{slug}.chat.json`
 - `PlansPanel` calls `useChat` directly (same pattern as WizardMode, ScreensMode, ComponentsMode, ThemesMode inside CreatePanel). No custom hook.
 - Four modes: **focus** (editor only), **write** (editor + chat), **read** (preview + chat), **split** (editor + preview + chat). Each mode has its own `useAllotmentLayout` key so pane sizes persist independently.
-- Live preview is `react-markdown` + `remark-directive` + custom `pre`/`code`/`blockquote` renderers. Does NOT reuse the global `Markdown` component.
+- Live preview is `react-markdown` + `remark-github-alerts` + `rehype-raw` + custom `pre`/`code`/`blockquote`/`details` renderers. Does NOT reuse the global `Markdown` component. Native `<details>` HTML is supported via rehype-raw; `> [!NOTE/TIP/WARNING/CAUTION/IMPORTANT]` alerts via remark-github-alerts.
 - `SelectionToChat`: floating "Add to chat" button. Appears on `mouseup` (not during drag) for both editor selections (via `SelectionInfo`) and preview selections (via `window.getSelection()`).
 - `panelToolFilter` / `panelMaxToolCalls` for Plans are configurable in AgentsTab (Settings → Agents → Plans column).
 - `onResolvePermission` must update `toolAllowlist` when `decision === "always_allowed"` — see ThemesMode pattern (inside CreatePanel).

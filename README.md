@@ -24,7 +24,7 @@ AI-powered UI prototyping desktop app. Built with Tauri v2 (Rust backend) + Reac
 | AI | Ollama (`ollama-rs`) + OpenAI + Claude via `reqwest` | `0.3` |
 | Forms | react-hook-form + zod + `@hookform/resolvers` | — |
 | Validation | zod | — |
-| Markdown | react-markdown + remark-gfm + remark-breaks + marked | — |
+| Markdown | react-markdown + remark-gfm + remark-breaks + remark-github-alerts + rehype-raw + marked | — |
 | Charts | recharts | — |
 | Tree | `@headless-tree/react` | — |
 | Command palette | cmdk | — |
@@ -63,17 +63,13 @@ AI-powered UI prototyping desktop app. Built with Tauri v2 (Rust backend) + Reac
 
 ```bash
 bun install              # install all dependencies
-bun run tauri:dev        # starts Vite + Tauri (auto-detects Wayland)
-# — or —
-bun tauri dev            # raw command (may fail on Wayland — see pitfalls)
+bun run tauri:dev        # start dev server
 ```
-
-> **Wayland users** (CachyOS, etc.): always use `bun run tauri:dev`. It sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically.
 
 ## Production Build
 
 ```bash
-bun tauri build          # outputs to src-tauri/target/release/bundle/
+bun run tauri:build      # outputs to src-tauri/target/release/bundle/
 ```
 
 Platform outputs: `.deb` + `.AppImage` (Linux), `.dmg` + `.app` (macOS), `.msi` + `.exe` (Windows).
@@ -85,36 +81,27 @@ src/
   App.tsx                  # App shell — allotment layout, view routing, dark/accent theming
   main.tsx                 # React entry point
   layout/
-    Header.tsx             # 9 view tabs (Wizard, Screens, Components, Design, Workflows, APIs, Assets, Runner, Library), model picker, project selector, settings
+    Header.tsx             # 7 view tabs (Create, Plans, Workflows, APIs, Assets, Runner, Library), model picker, project selector, settings
     SidebarRail.tsx        # File explorer sidebar with CRUD for screens/components/etc.
   panels/
-    ScreensPanel.tsx       # Chat + AI generation + device preview
-    ComponentsPanel.tsx   # Prompt → component code + preview
-    ThemesPanel.tsx        # Prompt → CSS theme + preview
-    FlowsView.tsx          # Flow canvas logic (embedded in ScreensPanel)
-    APIsPanel.tsx          # HTTP request/response testing
-    RunnerPanel.tsx        # File tree, terminal, live preview
-    RunnerFileTree.tsx     # Runner's file browser
-    RunnerDialogs.tsx      # Runner dialog components
-    runner/                  # 3 sub-components split out from RunnerPanel (DnD tabs, preview, terminal)
-      RunnerTerminal.tsx     # Terminal header (28px) + collapsible content (Logs/Network)
-      RunnerEditor.tsx       # Tabs + CodeMirror; vanilla HTML5 drag-to-reorder with ref-based indicator
-      RunnerPreview.tsx      # iframe + device/zoom/dark/refresh controls
-    WizardPanel.tsx        # Full-app generator: ask_user Q&A, live preview, visual annotations
-    wizard/                  # 3 sub-components for the wizard panel
-      WizardChatPanel.tsx    # Chat + inspector + ask_user input
-      WizardPreviewPane.tsx  # Cross-origin iframe with postMessage reload
-      WizardAnnotations.tsx  # Annotation list (pending/sent rows, remove/resolve, "Send to AI") — not the visual overlay
-    LibraryPanel.tsx       # Searchable library: components, themes, screens, workflows, APIs
-    AssetsPanel.tsx        # AI image generation (Bonsai), asset gallery
-    assets/
-      AssetGrid.tsx          # List/grid gallery with context menu
-      AssetPreviewLightbox.tsx  # Custom lightbox (replaces broken library)
-      BonsaiConfigPopover.tsx   # Server config popover
-    screens/                 # 4 sub-components split out from ScreensPanel
-    flows/                   # 3 sub-components for the embedded flow canvas
-    library/                 # 2 sub-components for the library browser
-    theme-preview/           # 8 theme preview widgets (ColorSwatchGrid, MotionDemos, etc.)
+    create/                  # "Create" view — segmented control switches between 4 sub-modes
+      CreatePanel.tsx
+      modes/
+        WizardMode.tsx       # Full-app generator: ask_user Q&A, live preview, visual annotations
+        ScreensMode.tsx      # Chat + AI generation + device preview (embeds FlowsView)
+        ComponentsMode.tsx   # Prompt → component code + live preview
+        ThemesMode.tsx       # Prompt → CSS theme generation
+        screens/             # Sub-components for ScreensMode
+      wizard/                # Sub-components for WizardMode
+        WizardChatPanel.tsx
+        WizardPreviewPane.tsx
+        WizardAnnotations.tsx
+    plans/                   # Plans panel sub-components
+    apis/                    # APIsPanel
+    runner/                  # RunnerPanel + RunnerTerminal, RunnerEditor, RunnerPreview
+    assets/                  # AssetsPanel + AssetGrid, AssetPreviewLightbox, BonsaiConfigPopover
+    library/                 # LibraryPanel sub-components
+    theme-preview/           # ThemeTokenPreview + token preview widgets
   workflows/
     WorkflowsView.tsx      # Visual node-based execution canvas
     useWorkflowExecution.ts
@@ -156,7 +143,10 @@ src/
     useBonsai.ts                 # Bonsai server + asset gallery lifecycle
     useScreenCode.ts             # Screen code save/load
     useHotspotTracking.ts        # Hotspot tracking
+    useGitStatus.ts              # Git status queries
+    useGitMutations.ts           # Git mutation commands
     use-mobile.ts                # Mobile breakpoint detection
+    chat/                        # Streaming helpers (compactSummary, contextWindow, dedupeMentions, etc.)
   stores/
     appStore.ts                  # Global app settings (Zustand)
     chatStore.ts                 # Chat state (Zustand)
@@ -217,20 +207,17 @@ src-tauri/
   Cargo.toml                 # Rust dependencies
 ```
 
-## Views (10 Panels)
+## Views (7 Tabs)
 
 | View | ID | Panel Component | Description |
 |------|----|-----------------|-------------|
-| Wizard | `wizard` | `WizardPanel` | Full-app generator with `ask_user` Q&A, live preview, visual annotations |
-| Screens | `screens` | `ScreensPanel` | Chat + AI generation + device preview (embeds `FlowsView`) |
-| Components | `components` | `ComponentsPanel` | Prompt → component code + live preview |
-| Design (Themes) | `themes` | `ThemesPanel` | Prompt → CSS theme generation |
-| Workflows | `workflows` | `WorkflowsView` | Node-based execution canvas (React Flow) |
+| Create | `create` | `CreatePanel` | Segmented control switching between Wizard, Screens, Components, Themes sub-modes |
 | Plans | `plans` | `PlansPanel` | Markdown plan/spec editor with chat-assisted authoring |
+| Workflows | `workflows` | `WorkflowsView` | Node-based execution canvas (React Flow) |
 | APIs | `apis` | `APIsPanel` | HTTP request/response testing |
+| Assets | `assets` | `AssetsPanel` | AI image generation (Bonsai), asset gallery |
 | Runner | `runner` | `RunnerPanel` | File tree, terminal (xterm.js), live preview |
 | Library | `library` | `LibraryPanel` | Searchable library of components, themes, screens, workflows, APIs |
-| Assets | `assets` | `AssetsPanel` | AI image generation (Bonsai), asset gallery |
 
 ### Workflow Node System
 
@@ -251,7 +238,7 @@ Run state is communicated separately via `--status-running` (blue), `--status-do
 (emerald), `--status-error` (red), `--status-paused` (gold) on the node border. See
 [DESIGN.md](DESIGN.md) for the full token system.
 
-## Rust Commands (45 total)
+## Rust Commands (48 total)
 
 All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permissions (e.g., `shell:default`, `fs:default`) must be declared in `capabilities/default.json` — missing either causes silent failure.
 
@@ -259,8 +246,8 @@ All commands must be registered in `generate_handler![]` in `lib.rs`. Plugin per
 |-------|----------|
 | Process (10) | `bun_dev`, `bun_build`, `bun_install`, `bun_install_sync`, `run_shell_command`, `run_shell_command_sync`, `run_shell_command_capture`, `kill_process`, `kill_all_processes`, `kill_port` |
 | File System (9) | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
-| HTTP (1) | `http_request` |
-| AI (9) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| HTTP (3) | `http_request`, `test_searxng_connection`, `setup_searxng_config` |
+| AI (10) | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_anthropic_models`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
 | Bonsai (11) | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export (2) | `export_project`, `export_component` |
 | Workflows (3) | `save_workflow`, `load_workflow`, `list_workflows` |
@@ -296,7 +283,7 @@ channel.onmessage = (msg) => {
 await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, ...);
 ```
 
-`CompletionEvent` mirrors the Rust enum and includes 8 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `AskUserForm`, `Done`, `Error`. Both `AskUser` and `AskUserForm` are section-agnostic — any panel can register `onAskUser`/`onAskUserForm` callbacks in `useChat`; if no handler is registered the backend is immediately unblocked. The frontend must call `resolveAskUser()` / `resolveAskUserForm()` within 180s.
+`CompletionEvent` mirrors the Rust enum and includes 9 variants: `Chunk`, `ToolCall`, `ToolPermission`, `ToolResult`, `AskUser`, `AskUserForm`, `TodoUpdate`, `Done`, `Error`. Both `AskUser` and `AskUserForm` are section-agnostic — any panel can register `onAskUser`/`onAskUserForm` callbacks in `useChat`; if no handler is registered the backend is immediately unblocked. The frontend must call `resolveAskUser()` / `resolveAskUserForm()` within 180s.
 
 ## Data Persistence
 
@@ -315,7 +302,7 @@ await generateCompletionStream(model, messages, host, apiKey, onEvent: channel, 
 ## Styling
 
 - **Tailwind CSS v4** with `@tailwindcss/vite` plugin and `@theme inline` block in `globals.css`
-- **shadcn/ui** components in `src/components/ui/` — ~50 shadcn primitives + 20 domain components (70 total), including `code-block`, `chat-container`, `message`, `file-upload`, `tool`, `ToolPermissionCard`
+- **shadcn/ui** components in `src/components/ui/` — 74 total files (shadcn primitives + domain components), including `code-block`, `chat-container`, `message`, `file-upload`, `tool`, `ToolPermissionCard`
 - **Custom CSS properties** for theming: `--primary`, `--ring`, `--sidebar-primary` (toggled from `appStore`)
 - **Dark mode**: class-based (`document.documentElement.classList.toggle("dark", ...)`)
 - **Accent color**: dynamically set via CSS custom properties from settings
@@ -333,7 +320,7 @@ Shortcuts use `window.addEventListener('keydown', ...)` in `useEffect`.
 
 ## Wizard Panel
 
-The Wizard (`WizardPanel`, view ID `wizard`) is a full-app generator that
+The Wizard (`WizardMode`, a sub-mode of the `"create"` view) is a full-app generator that
 walks the model through collaborative design. It is the only panel that
 uses the `ask_user` tool — the model can pause mid-generation and ask the
 user a `text`, `choice`, or `confirm` question, then resume based on the
@@ -395,7 +382,7 @@ bunx tsc --noEmit        # type-check
 - **Radix UI `ContextMenu` is uncontrolled only**: `ContextMenu.Root` does NOT accept an `open` prop. For controlled right-click menus, use `DropdownMenu.Root` with `open`/`onOpenChange` instead.
 - **White screen on launch**: `devUrl` in `tauri.conf.json` must match Vite's port (`1420`).
 - **Command not found**: Must be in `generate_handler![]` in `lib.rs` AND plugin permissions in `capabilities/default.json` — missing either causes silent failure.
-- **Wayland crash (protocol error 71)**: Use `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `bun run tauri:dev`.
+- **AppImage build fails on Arch/CachyOS**: Use `bun run tauri:build` (sets `NO_STRIP=true`). Plain `bun tauri build` fails because linuxdeploy's bundled `strip` can't handle `.relr.dyn` sections in newer ELF libraries.
 - **IPC timeout**: Never block async commands — use `tokio::spawn` for heavy ops.
 - **Tauri v1 vs v2 imports**: Always `@tauri-apps/api/core`, never `@tauri-apps/api/tauri`.
 - **Allotment `resize()` crashes**: Never call `resize()` in `useEffect` or `requestAnimationFrame`. Use the `visible` prop for show/hide. `resize()` is only safe in event handlers.
