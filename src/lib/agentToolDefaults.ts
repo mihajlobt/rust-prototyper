@@ -32,3 +32,8 @@ export const PLANS_TOOL_FILTER_DEFAULT = [
   "ask_user", "ask_user_form",
   ...GENERIC_AGENT_TOOLS,
 ];
+
+export const PLANS_RESEARCH_TOOL_FILTER_DEFAULT = [
+  ...PLANS_TOOL_FILTER_DEFAULT,
+  "web_search",
+];

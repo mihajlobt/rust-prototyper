@@ -623,3 +623,28 @@
 .cm-deletedChunk .cm-deletedText {
   background-image: none !important;
 }
+
+.md-render--report blockquote {
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--card);
+  padding: 0.75rem 1rem;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+}
+
+.md-render--report table {
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+}
+
+.md-render--report thead {
+  position: sticky;
+  top: 0;
+  background: var(--card);
+}
+
+.md-render--report tbody tr:nth-child(even) {
+  background: oklch(from var(--card) l c h / 0.5);
+}

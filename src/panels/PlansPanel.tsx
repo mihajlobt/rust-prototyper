@@ -6,8 +6,8 @@ import { readFile, writeFile, getErrorMessage, isNotFoundError, getHostForProvid
 import { notify } from "@/hooks/useToast";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { useChat } from "@/hooks/useChat";
-import { PLANS_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
-import { getPlansSystemPrompt } from "@/lib/prompts/plans";
+import { PLANS_TOOL_FILTER_DEFAULT, PLANS_RESEARCH_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
+import { getPlansSystemPrompt, getPlansResearchSystemPrompt } from "@/lib/prompts/plans";
 import { type PlanEditorHandle, type EditorAction, type SelectionInfo } from "./plans/PlanEditor";
 import { SelectionToChat } from "./plans/SelectionToChat";
 import { PlanLayout } from "./plans/PlanLayout";
@@ -23,13 +23,19 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 export function PlansPanel() {
   const project = useAppStore((s) => s.settings.project);
   const settings = useAppStore((s) => s.settings);
-  const planToolFilter = useAppStore((s) => s.settings.panelToolFilter.plans);
-  const planMaxToolCalls = useAppStore((s) => s.settings.panelMaxToolCalls.plans);
   const activePlan = useProjectSettingsStore((s) => s.ps.activePlan);
   const setProjectSettings = useProjectSettingsStore((s) => s.setProjectSettings);
   const plansMode = useProjectSettingsStore((s) => s.ps.plansMode);
   const plansChatOpen = useProjectSettingsStore((s) => s.ps.plansChatOpen);
   const plansShowInspector = useProjectSettingsStore((s) => s.ps.plansShowInspector);
+  const plansContentType = useProjectSettingsStore((s) => s.ps.plansContentType);
+
+  const planToolFilter = useAppStore((s) =>
+    plansContentType === "research" ? s.settings.panelToolFilter.plansResearch : s.settings.panelToolFilter.plans
+  );
+  const planMaxToolCalls = useAppStore((s) =>
+    plansContentType === "research" ? s.settings.panelMaxToolCalls.plansResearch : s.settings.panelMaxToolCalls.plans
+  );
 
   const [source, setSource] = useState("");
   const [loading, setLoading] = useState(false);
@@ -126,12 +132,10 @@ export function PlansPanel() {
   const systemPrompt = useMemo(() => {
     if (!project || !activePlan) return "";
     const inventory = projectLayoutFromOptions(mentionOptions);
-    return getPlansSystemPrompt({
-      projectName: project,
-      planName: activePlan,
-      projectLayout: inventory,
-    });
-  }, [project, activePlan, mentionOptions]);
+    return plansContentType === "research"
+      ? getPlansResearchSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory })
+      : getPlansSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory });
+  }, [project, activePlan, mentionOptions, plansContentType]);
 
   const chatEntityId = project && activePlan ? `plan:${project}:${activePlan}` : "";
   const chatPath = project && activePlan ? `projects/${project}/plans/${activePlan}.chat.json` : "";
@@ -148,7 +152,7 @@ export function PlansPanel() {
     systemPrompt,
     outputPath: planOutputPath || undefined,
     onCodeOutput: handleAgentWrite,
-    panelToolFilter: planToolFilter ?? PLANS_TOOL_FILTER_DEFAULT,
+    panelToolFilter: planToolFilter ?? (plansContentType === "research" ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
     panelMaxToolCalls: planMaxToolCalls,
   });
 
@@ -230,9 +234,11 @@ export function PlansPanel() {
           planName={activePlan}
           savedAt={savedAt}
           mode={plansMode}
+          contentType={plansContentType}
           chatOpen={plansChatOpen}
           hasMessages={chat.messages.length > 0}
           onModeChange={(mode) => setProjectSettings({ plansMode: mode })}
+          onContentTypeChange={(type) => setProjectSettings({ plansContentType: type })}
           onChatToggle={() => setProjectSettings({ plansChatOpen: !plansChatOpen })}
           onCommandMenu={() => setCommandOpen(true)}
           onClearChat={async () => {
@@ -250,6 +256,7 @@ export function PlansPanel() {
               source={source}
               onSourceChange={setSource}
               mode={plansMode}
+              reportMode={plansContentType === "research"}
               lineNumbers={false}
               chatOpen={plansChatOpen}
               onSelectionChange={(info) => { selectionInfoRef.current = info; }}

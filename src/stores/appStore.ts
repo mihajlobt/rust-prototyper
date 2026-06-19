@@ -50,6 +50,7 @@ export interface Settings {
     themes?: number;
     wizard?: number;
     plans?: number;
+    plansResearch?: number;
   };
   panelToolFilter: {
     wizard?: string[];
@@ -57,6 +58,7 @@ export interface Settings {
     components?: string[];
     themes?: string[];
     plans?: string[];
+    plansResearch?: string[];
   };
   /** Base URL for the user's SearXNG instance. Empty = web_search disabled. */
   searxngUrl: string;

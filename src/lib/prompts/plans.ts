@@ -68,13 +68,34 @@ HASHTAGS (\`#tag\`) — light metadata, not for navigation:
 #draft #api-decision
 \`\`\`
 
-DIRECTIVES (fenced \`:::\` blocks — use sparingly):
-- \`:::timeline\`   — vertical sequence of dated events
-- \`:::details\`    — collapsed content
-- \`:::columns\`    — multi-column layout
-- \`:::board\`      — kanban columns
-- \`:::kanban\`     — same as board
-- \`:::callout\`    — generic callout (prefer the \`> [!TYPE]\` syntax above)
+COLLAPSIBLE SECTIONS (native HTML, already supported):
+\`\`\`
+<details>
+<summary>Click to expand</summary>
+
+Body content — can include lists, code blocks, anything.
+
+</details>
+\`\`\`
+
+TABS — stack 2+ \<details\> blocks back-to-back (no blank prose between them) and the
+preview renders them as a tab strip instead of an accordion. Use this when content is
+naturally mutually-exclusive (e.g. "Option A" / "Option B" / "Option C"), not for
+sequential or optional-reading content (use single \<details\> for that).
+\`\`\`
+<details>
+<summary>Option A</summary>
+
+Content for option A.
+
+</details>
+<details>
+<summary>Option B</summary>
+
+Content for option B.
+
+</details>
+\`\`\`
 
 TABLES — standard GitHub-flavored markdown:
 \`\`\`
@@ -175,5 +196,52 @@ PROJECT LAYOUT (use these paths with read_file / edit_file / glob / grep):
 - Plans:      projects/${projectName}/plans/<name>.md
 - Assets:     projects/${projectName}/assets/<name>
 ${gitUsageNote(`projects/${projectName}/generated`)}`;
+}
+
+export function getPlansResearchSystemPrompt(params: {
+  projectName: string;
+  planName: string;
+  projectLayout: {
+    screens: string[];
+    components: string[];
+    themes: string[];
+    plans: string[];
+    assets: string[];
+  };
+}): string {
+  const { projectName, planName, projectLayout } = params;
+  const inventory = [
+    projectLayout.screens.length > 0 ? `Screens (${projectLayout.screens.length}): ${projectLayout.screens.join(", ")}` : "Screens: (none)",
+    projectLayout.components.length > 0 ? `Components (${projectLayout.components.length}): ${projectLayout.components.join(", ")}` : "Components: (none)",
+    projectLayout.themes.length > 0 ? `Themes (${projectLayout.themes.length}): ${projectLayout.themes.join(", ")}` : "Themes: (none)",
+    projectLayout.plans.length > 0 ? `Existing plans (${projectLayout.plans.length}): ${projectLayout.plans.join(", ")}` : "Existing plans: (none)",
+    projectLayout.assets.length > 0 ? `Assets (${projectLayout.assets.length}): ${projectLayout.assets.join(", ")}` : "Assets: (none)",
+  ].join("\n");
+
+  return `You are the research agent for the Prototyper project "${projectName}", drafting the research document "${planName}" as a markdown file under \`projects/${projectName}/plans/\`.
+
+RESEARCH PROTOCOL:
+1. Use \`web_search\` to find sources, then \`web_fetch\` to read the most relevant pages in full before citing them.
+2. Every non-obvious claim needs an inline citation — a plain Markdown link to its source, placed right after the claim.
+3. Prefer primary sources (official docs, the project repo itself via \`read_file\`/\`grep\`) over secondary summaries.
+4. If you cannot verify a claim, say so explicitly instead of presenting it as fact.
+
+${PLAN_SYNTAX_REFERENCE}
+
+DIAGRAMS — if a Mermaid diagram would clarify a flow or timeline, use only: \`flowchart\`, \`sequenceDiagram\`, \`gantt\`, \`journey\`, \`gitGraph\`, \`pie\`. Avoid \`mindmap\`, \`quadrantChart\`, \`erDiagram\`, \`timeline\`, \`sankey\` — GitHub's bundled Mermaid version lags upstream and these have a documented history of failing to render.
+
+${PLAN_PROMPT_BEHAVIOR}
+
+PROJECT INVENTORY (use these names when writing @kind/name mentions — do not invent names not in this list):
+${inventory}
+PROJECT LAYOUT (use these paths with read_file / edit_file / glob / grep):
+- Screens:    projects/${projectName}/screens/<name>/
+- Components: projects/${projectName}/components/<name>/
+- Themes:     projects/${projectName}/themes/<name>/
+- Plans:      projects/${projectName}/plans/<name>.md
+- Assets:     projects/${projectName}/assets/<name>
+${gitUsageNote(`projects/${projectName}/generated`)}
+
+When the document is ready, call \`write_file\` exactly once with \`path: projects/${projectName}/plans/${planName}.md\` and the full markdown (frontmatter + body) as \`content\` — no JSON wrapper, no surrounding code fences.`;
 }
 

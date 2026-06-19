@@ -18,6 +18,7 @@ import {
   COMPONENTS_TOOL_FILTER_DEFAULT,
   DESIGN_TOOL_FILTER_DEFAULT,
   PLANS_TOOL_FILTER_DEFAULT,
+  PLANS_RESEARCH_TOOL_FILTER_DEFAULT,
 } from "@/lib/agentToolDefaults";
 
 interface AgentsTabProps {
@@ -25,7 +26,7 @@ interface AgentsTabProps {
   setSettings: (patch: Partial<Settings>) => Promise<void>;
 }
 
-type PanelKey = "wizard" | "screens" | "components" | "themes" | "plans";
+type PanelKey = "wizard" | "screens" | "components" | "themes" | "plans" | "plansResearch";
 
 const AGENTS: { label: string; panelKey: PanelKey }[] = [
   { label: "Wizard",     panelKey: "wizard" },
@@ -33,22 +34,25 @@ const AGENTS: { label: string; panelKey: PanelKey }[] = [
   { label: "Components", panelKey: "components" },
   { label: "Design",     panelKey: "themes" },
   { label: "Plans",      panelKey: "plans" },
+  { label: "Plans (Research)", panelKey: "plansResearch" },
 ];
 
 const PANEL_DEFAULTS: Record<PanelKey, string[]> = {
-  wizard:     WIZARD_TOOL_FILTER_DEFAULT,
-  screens:    SCREENS_TOOL_FILTER_DEFAULT,
-  components: COMPONENTS_TOOL_FILTER_DEFAULT,
-  themes:     DESIGN_TOOL_FILTER_DEFAULT,
-  plans:      PLANS_TOOL_FILTER_DEFAULT,
+  wizard:        WIZARD_TOOL_FILTER_DEFAULT,
+  screens:       SCREENS_TOOL_FILTER_DEFAULT,
+  components:    COMPONENTS_TOOL_FILTER_DEFAULT,
+  themes:        DESIGN_TOOL_FILTER_DEFAULT,
+  plans:         PLANS_TOOL_FILTER_DEFAULT,
+  plansResearch: PLANS_RESEARCH_TOOL_FILTER_DEFAULT,
 };
 
 const PANEL_MAX_TOOL_CALLS_OVERRIDES = [
-  { label: "Design",     panelKey: "themes" as const,     placeholder: "12" },
-  { label: "Components", panelKey: "components" as const, placeholder: "20" },
-  { label: "Screens",    panelKey: "screens" as const,    placeholder: "25" },
-  { label: "Wizard",     panelKey: "wizard" as const,     placeholder: "60" },
-  { label: "Plans",      panelKey: "plans" as const,      placeholder: "20" },
+  { label: "Design",           panelKey: "themes" as const,        placeholder: "12" },
+  { label: "Components",       panelKey: "components" as const,    placeholder: "20" },
+  { label: "Screens",          panelKey: "screens" as const,       placeholder: "25" },
+  { label: "Wizard",           panelKey: "wizard" as const,        placeholder: "60" },
+  { label: "Plans",            panelKey: "plans" as const,         placeholder: "20" },
+  { label: "Plans (Research)",  panelKey: "plansResearch" as const, placeholder: "30" },
 ];
 
 interface ToolGroup {

@@ -23,6 +23,7 @@ interface PlanLayoutProps {
   source: string;
   onSourceChange: (v: string) => void;
   mode: "write" | "split" | "read" | "focus";
+  reportMode?: boolean;
   lineNumbers: boolean;
   chatOpen: boolean;
   onSelectionChange: (info: SelectionInfo | null) => void;
@@ -36,6 +37,7 @@ export function PlanLayout({
   source,
   onSourceChange,
   mode,
+  reportMode,
   lineNumbers,
   chatOpen,
   onSelectionChange,
@@ -48,12 +50,12 @@ export function PlanLayout({
     return <FocusLayout source={source} onSourceChange={onSourceChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} />;
   }
   if (mode === "read") {
-    return <ReadLayout source={source} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+    return <ReadLayout source={source} onTaskToggle={onTaskToggle} reportMode={reportMode} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
   if (mode === "write") {
     return <WriteLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
-  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} reportMode={reportMode} chatOpen={chatOpen} chatSlot={chatSlot} />;
 }
 
 // ─── Mode: focus (no chat) ────────────────────────────────────────────────────
@@ -124,9 +126,10 @@ function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
 
 // ─── Mode: read (preview + chat) ─────────────────────────────────────────────
 
-function ReadLayout({ source, onTaskToggle, chatOpen, chatSlot }: {
+function ReadLayout({ source, onTaskToggle, reportMode, chatOpen, chatSlot }: {
   source: string;
   onTaskToggle: (line: number) => void;
+  reportMode?: boolean;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
 }) {
@@ -139,7 +142,7 @@ function ReadLayout({ source, onTaskToggle, chatOpen, chatSlot }: {
   return (
     <Allotment ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes}>
       <Allotment.Pane>
-        <PreviewPane parsed={parsed} onTaskToggle={onTaskToggle} />
+        <PreviewPane parsed={parsed} onTaskToggle={onTaskToggle} reportMode={reportMode} />
       </Allotment.Pane>
       <Allotment.Pane visible={chatOpen} minSize={CHAT_MIN} preferredSize={CHAT_PREFERRED}>
         {chatSlot}
@@ -150,7 +153,7 @@ function ReadLayout({ source, onTaskToggle, chatOpen, chatSlot }: {
 
 // ─── Mode: split (editor + preview + chat) ───────────────────────────────────
 
-function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, chatOpen, chatSlot }: {
+function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, reportMode, chatOpen, chatSlot }: {
   source: string;
   onSourceChange: (v: string) => void;
   lineNumbers: boolean;
@@ -158,6 +161,7 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
   extraExtensions: Extension[];
   editorHandle: React.RefObject<PlanEditorHandle | null>;
   onTaskToggle: (line: number) => void;
+  reportMode?: boolean;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
 }) {
@@ -185,7 +189,7 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
         </div>
       </Allotment.Pane>
       <Allotment.Pane>
-        <PreviewPane parsed={parsed} onTaskToggle={onTaskToggle} />
+        <PreviewPane parsed={parsed} onTaskToggle={onTaskToggle} reportMode={reportMode} />
       </Allotment.Pane>
       <Allotment.Pane visible={chatOpen} minSize={CHAT_MIN} preferredSize={CHAT_PREFERRED}>
         {chatSlot}
@@ -196,15 +200,16 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
 
 // ─── Preview pane (shared by read + split modes) ─────────────────────────────
 
-function PreviewPane({ parsed, onTaskToggle }: {
+function PreviewPane({ parsed, onTaskToggle, reportMode }: {
   parsed: ReturnType<typeof parseFrontmatter>;
   onTaskToggle: (line: number) => void;
+  reportMode?: boolean;
 }) {
   return (
     <div className="flex h-full flex-col">
       {parsed.frontmatter ? <FrontmatterHeader frontmatter={parsed.frontmatter} body={parsed.body} /> : null}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <PlanPreview body={parsed.body} onTaskToggle={onTaskToggle} />
+        <PlanPreview body={parsed.body} onTaskToggle={onTaskToggle} reportMode={reportMode} />
       </div>
     </div>
   );

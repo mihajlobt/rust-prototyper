@@ -2,7 +2,6 @@
 //
 // Built directly on `react-markdown` rather than reusing the global
 // `Markdown` component because plans need:
-//   - `remark-directive` for `:::timeline` / `:::columns` / etc.
 //   - `remark-github-alerts` for `> [!NOTE]` / `> [!WARNING]` etc. alerts.
 //   - A custom `pre`/`code` chain that:
 //       - shiki highlighting for block code (CodeBlock chain),
@@ -11,6 +10,7 @@
 //   - Task checkboxes that toggle the source string via a callback.
 //   - Heading anchor links + outline scroll-spy via the inline DesignToc
 //     toggle (a top-right button reveals a 2-pane Allotment with the TOC).
+//   - Stacked `<details>` blocks rendered as tabs in Report mode (rehype-group-details).
 
 import { useMemo, useState } from "react";
 import React from "react";
@@ -19,9 +19,11 @@ import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkGithubAlerts from "remark-github-alerts";
 import rehypeRaw from "rehype-raw";
+import rehypeGroupDetails from "./rehype-group-details";
 import { Allotment } from "allotment";
-import { List } from "lucide-react";
+import { Eye, EyeOff, List } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
 import { DesignToc, slugify } from "@/components/ui/design-toc";
 import { KbdChip, MentionChip, TagChip } from "./chips";
@@ -31,24 +33,42 @@ interface PlanPreviewProps {
   /** Called when a task checkbox in the preview is toggled. Line index is
    *  relative to the body (NOT the full source), 0-indexed. */
   onTaskToggle?: (line: number) => void;
+  /** Forces the richer "Report" skin on, bypassing the in-component Eye toggle.
+   *  Used by Research content-type, which always wants the rich render. */
+  reportMode?: boolean;
 }
 
 
-export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
-  const components = useMemo(() => buildComponents(onTaskToggle), [onTaskToggle]);
+export function PlanPreview({ body, onTaskToggle, reportMode: forcedReportMode }: PlanPreviewProps) {
   const [showOutline, setShowOutline] = useState(false);
+  const [reportModeToggle, setReportModeToggle] = useState(false);
+  const reportMode = forcedReportMode ?? reportModeToggle;
+  const components = useMemo(() => buildComponents(onTaskToggle, reportMode), [onTaskToggle, reportMode]);
 
   return (
     <div className="relative h-full min-h-0">
-      <Toggle
-        pressed={showOutline}
-        onPressedChange={setShowOutline}
-        variant="outline"
-        size="sm"
-        className="absolute top-2 right-2 z-10 h-7 gap-1 text-[10px] bg-background/80 backdrop-blur shadow-sm"
-      >
-        <List size={11} /> Outline
-      </Toggle>
+      <div className="absolute top-2 right-2 z-10 flex gap-1.5">
+        {forcedReportMode === undefined && (
+          <Toggle
+            pressed={reportModeToggle}
+            onPressedChange={setReportModeToggle}
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 text-[10px] bg-background/80 backdrop-blur shadow-sm"
+          >
+            {reportModeToggle ? <Eye size={11} /> : <EyeOff size={11} />} Report
+          </Toggle>
+        )}
+        <Toggle
+          pressed={showOutline}
+          onPressedChange={setShowOutline}
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 text-[10px] bg-background/80 backdrop-blur shadow-sm"
+        >
+          <List size={11} /> Outline
+        </Toggle>
+      </div>
       <Allotment onVisibleChange={(index, visible) => { if (index === 0) setShowOutline(visible); }}>
         <Allotment.Pane visible={showOutline} minSize={120} preferredSize={200} snap>
           <div className="h-full overflow-auto border-r border-border bg-card/30 p-3">
@@ -57,12 +77,12 @@ export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
         </Allotment.Pane>
         <Allotment.Pane minSize={200}>
           <div className="h-full overflow-auto">
-            <div className="mx-auto max-w-[760px] p-4">
+            <div className={reportMode ? "mx-auto max-w-[920px] p-4 md-render--report" : "mx-auto max-w-[760px] p-4"}>
               <div className="md-render prose prose-sm dark:prose-invert max-w-none">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkGithubAlerts, remarkBreaks]}
                   remarkRehypeOptions={{allowDangerousHtml: true}}
-                  rehypePlugins={[rehypeRaw]}
+                  rehypePlugins={[rehypeRaw, rehypeGroupDetails]}
                   components={components}
                 >
                   {body}
@@ -78,7 +98,7 @@ export function PlanPreview({ body, onTaskToggle }: PlanPreviewProps) {
 
 // ─── Custom component overrides ──────────────────────────────────────────────
 
-function buildComponents(onTaskToggle?: (line: number) => void): Partial<Components> {
+function buildComponents(onTaskToggle?: (line: number) => void, reportMode = false): Partial<Components> {
   return {
     pre: function PreComponent({ children }) {
       // The same shiki handling as the global Markdown component.
@@ -168,7 +188,59 @@ function buildComponents(onTaskToggle?: (line: number) => void): Partial<Compone
         </details>
       );
     },
+    div: function DivComponent({ className, children, ...rest }) {
+      const classList = typeof className === "string" ? className.split(" ") : [];
+      if (!classList.includes("md-tabgroup")) {
+        return <div className={className} {...rest}>{children}</div>;
+      }
+      if (!reportMode) {
+        return <>{children}</>;
+      }
+      return <TabGroup>{children}</TabGroup>;
+    },
   };
+}
+
+// ─── Tab group ─────────────────────────────────────────────────────────────────
+
+function isDetailsEl(child: React.ReactNode): child is React.ReactElement {
+  return React.isValidElement(child) && typeof child.type === "string" && child.type === "details";
+}
+
+function isSummaryEl(child: React.ReactNode): child is React.ReactElement {
+  return React.isValidElement(child) && typeof child.type === "string" && child.type === "summary";
+}
+
+function TabGroup({ children }: { children?: React.ReactNode }) {
+  const items = React.Children.toArray(children)
+    .filter(isDetailsEl)
+    .map((detailsEl, index) => {
+      const detailsChildren = React.Children.toArray(
+        (detailsEl.props as { children?: React.ReactNode }).children
+      );
+      const summary = detailsChildren.find(isSummaryEl);
+      const body = detailsChildren.filter((c) => c !== summary);
+      let label = "";
+      collectText(summary, (s) => (label += s));
+      return { id: `tab-${index}`, label: label || `Tab ${index + 1}`, body };
+    });
+
+  if (items.length === 0) return null;
+
+  return (
+    <Tabs defaultValue={items[0].id} className="not-prose my-3">
+      <TabsList>
+        {items.map((item) => (
+          <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>
+        ))}
+      </TabsList>
+      {items.map((item) => (
+        <TabsContent key={item.id} value={item.id} className="prose prose-sm dark:prose-invert max-w-none">
+          {item.body}
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
 }
 
 // ─── Inline transforms ───────────────────────────────────────────────────────

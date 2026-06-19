@@ -26,6 +26,7 @@ export interface ProjectSettings {
   plansMode: "write" | "split" | "read" | "focus";
   plansChatOpen: boolean;
   plansShowInspector: boolean;
+  plansContentType: "plan" | "research";
 
   // Project configuration
   stylePreset: string;
@@ -112,6 +113,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   plansMode: "split",
   plansChatOpen: false,
   plansShowInspector: false,
+  plansContentType: "plan",
 
   stylePreset: "",
   directories: {

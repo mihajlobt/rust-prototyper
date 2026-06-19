@@ -15,6 +15,7 @@ import {
 } from "@/lib/prompts/components";
 import { getScreenNewPrompt, getScreenUpdatePrompt } from "@/lib/prompts/screens";
 import { getThemeSystemPrompt } from "@/lib/prompts/themes";
+import { getPlansResearchSystemPrompt } from "@/lib/prompts/plans";
 import {
   outputFilePathSection,
   getIconLibraryPromptSection,
@@ -164,5 +165,33 @@ describe("getThemeSystemPrompt", () => {
     const prompt = getThemeSystemPrompt("shadcn");
     expect(prompt).toContain("--background");
     expect(prompt).toContain("--primary");
+  });
+});
+
+// ─── Plans prompts ───────────────────────────────────────────────────────────
+
+describe("getPlansResearchSystemPrompt", () => {
+  const params = {
+    projectName: "demo",
+    planName: "research-doc",
+    projectLayout: { screens: [], components: [], themes: [], plans: [], assets: [] },
+  };
+
+  it("instructs the agent to search and cite sources", () => {
+    const prompt = getPlansResearchSystemPrompt(params);
+    expect(prompt.toLowerCase()).toContain("web_search");
+    expect(prompt.toLowerCase()).toMatch(/cite|citation|source/);
+  });
+
+  it("still includes the shared syntax reference (tabs, callouts, frontmatter)", () => {
+    const prompt = getPlansResearchSystemPrompt(params);
+    expect(prompt).toContain("FRONTMATTER");
+    expect(prompt).toContain("TABS");
+  });
+
+  it("restricts Mermaid diagram types to the GitHub-confirmed set", () => {
+    const prompt = getPlansResearchSystemPrompt(params);
+    expect(prompt).toMatch(/gantt/);
+    expect(prompt.toLowerCase()).toContain("avoid");
   });
 });

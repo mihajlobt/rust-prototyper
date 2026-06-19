@@ -4,9 +4,11 @@ import {
   FileText,
   Focus,
   MessageSquare,
+  NotebookText,
   Pencil,
   Search,
   Sparkles,
+  Telescope,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type PlanMode = "write" | "split" | "read" | "focus";
+export type PlanContentType = "plan" | "research";
 
 const MODES: Array<{ id: PlanMode; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "write", label: "Write", icon: Pencil },
@@ -22,13 +25,20 @@ const MODES: Array<{ id: PlanMode; label: string; icon: React.ComponentType<{ si
   { id: "focus", label: "Focus", icon: Focus },
 ];
 
+const CONTENT_TYPES: Array<{ id: PlanContentType; label: string; icon: React.ComponentType<{ size?: number }> }> = [
+  { id: "plan",     label: "Plan",     icon: NotebookText },
+  { id: "research", label: "Research", icon: Telescope },
+];
+
 interface PlansToolbarProps {
   planName: string;
   savedAt: number | null;
   mode: PlanMode;
+  contentType: PlanContentType;
   chatOpen: boolean;
   hasMessages: boolean;
   onModeChange: (mode: PlanMode) => void;
+  onContentTypeChange: (type: PlanContentType) => void;
   onChatToggle: () => void;
   onCommandMenu: () => void;
   onClearChat: () => void;
@@ -38,9 +48,11 @@ export function PlansToolbar({
   planName,
   savedAt,
   mode,
+  contentType,
   chatOpen,
   hasMessages,
   onModeChange,
+  onContentTypeChange,
   onChatToggle,
   onCommandMenu,
   onClearChat,
@@ -102,8 +114,32 @@ export function PlansToolbar({
         <div className="w-px h-4 bg-border shrink-0" />
         <ToggleGroup
           type="single"
+          value={contentType}
+          onValueChange={(next) => next && onContentTypeChange(next as PlanContentType)}
+          variant="outline"
+          size="sm"
+          spacing={0}
+        >
+          {CONTENT_TYPES.map((c) => {
+            const Icon = c.icon;
+            return (
+              <Tooltip key={c.id}>
+                <TooltipTrigger asChild>
+                  <ToggleGroupItem value={c.id} aria-label={c.label}>
+                    <Icon size={12} />
+                  </ToggleGroupItem>
+                </TooltipTrigger>
+                <TooltipContent>{c.label}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </ToggleGroup>
+        <div className="w-px h-4 bg-border shrink-0" />
+        <ToggleGroup
+          type="single"
           value={mode}
           onValueChange={(next) => next && onModeChange(next as PlanMode)}
+          variant="outline"
           size="sm"
           spacing={0}
         >
