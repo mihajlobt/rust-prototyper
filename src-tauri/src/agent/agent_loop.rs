@@ -536,6 +536,7 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
     // sees their name + one-line description in a system reminder, and must call
     // tool_search("select:<name>") to bring the full schema into `tools_json`. This keeps
     // the per-turn schema payload smaller for panels that register many tools.
+    let gate_only_clarify = available_tools.len() == 1 && available_tools[0].function.name == "ask_user_form";
     let deferred_names = deferred_names_in(&available_tools);
     // Shared with the per-call futures below (tool_search runs inside that join_all and
     // mutates this when it resolves a deferred tool by name).
@@ -725,6 +726,11 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
                 res.output.clone()
             };
             history.push(tool_result_msg(name, &history_output));
+        }
+
+        if gate_only_clarify && names.iter().any(|n| n == "ask_user_form") {
+            let _ = channel.send(CompletionEvent::Done { done_reason: Some("clarification_gate".into()), usage: Some(latest_usage) });
+            return Ok(());
         }
 
         iteration += 1;

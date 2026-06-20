@@ -44,6 +44,8 @@ interface UseChatOptions {
   outputPath?: string
   /** Called when the final text arrives from a non-tool model (Done, no write_file). */
   onOutput?: (content: string) => void
+  /** Called on every Done event with the backend's done_reason (e.g. "clarification_gate"). */
+  onDone?: (doneReason?: string) => void
   /** Called when write_file succeeds for the primary output file. Content is raw code, no fences. */
   onCodeOutput?: (content: string) => void
   /** Called for EVERY successful write_file / edit_file (path + content). Use for multi-file updates. */
@@ -64,7 +66,7 @@ interface UseChatOptions {
 
 // ─── useChat hook ──────────────────────────────────────────────────────────
 
-export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls, onToolCall, onToolResult, researchMode, researchConfig }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onDone, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls, onToolCall, onToolResult, researchMode, researchConfig }: UseChatOptions) {
   // Destructure individual settings fields instead of selecting the full
   // settings object. Zustand's shallow equality means each selector re-renders
   // only when its specific value changes. The full `settings` object was
@@ -88,6 +90,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   const onOutputRef = useRef(onOutput)
   useEffect(() => { onOutputRef.current = onOutput }, [onOutput])
+  const onDoneRef = useRef(onDone)
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
   const onCodeOutputRef = useRef(onCodeOutput)
   useEffect(() => { onCodeOutputRef.current = onCodeOutput }, [onCodeOutput])
   const onToolWriteRef = useRef(onToolWrite)
@@ -319,7 +323,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, sessionPath, updatedMessages,
-      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
+      stopRef, activeRequestIdRef, onOutputRef, onDoneRef, onCodeOutputRef, onToolWriteRef, outputPath,
       onToolCallRef, onToolResultRef,
       compaction: {
         threshold: compactionThreshold, contextWindow, compactionPath,
@@ -484,7 +488,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     const channel = new Channel<CompletionEvent>()
     const onMessage = createStreamHandler({
       entityId, chatPath, sessionPath, updatedMessages,
-      stopRef, activeRequestIdRef, onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
+      stopRef, activeRequestIdRef, onOutputRef, onDoneRef, onCodeOutputRef, onToolWriteRef, outputPath,
       onToolCallRef, onToolResultRef,
       compaction: {
         threshold: compactionThreshold, contextWindow: contextWindowRegen, compactionPath,

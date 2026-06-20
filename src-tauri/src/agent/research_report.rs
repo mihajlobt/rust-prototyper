@@ -8,6 +8,7 @@ pub struct Finding {
     pub url: String,
     pub title: String,
     pub notes: String,
+    pub image: Option<String>,
 }
 
 /// Run-level counters surfaced in the "## Research Summary" stat line.
@@ -16,6 +17,28 @@ pub struct ResearchStats {
     pub rounds: u8,
     pub queries: u32,
     pub urls_analyzed: usize,
+}
+
+pub fn inject_images(report: &str, images: &[String]) -> String {
+    if images.is_empty() {
+        return report.to_string();
+    }
+    let heading_re = regex::Regex::new(r"(?m)^## .+$").unwrap();
+    let mut out = String::with_capacity(report.len());
+    let mut last_end = 0;
+    let mut heading_count = 0;
+    let mut img_idx = 0;
+    for m in heading_re.find_iter(report) {
+        out.push_str(&report[last_end..m.end()]);
+        last_end = m.end();
+        heading_count += 1;
+        if heading_count > 1 && heading_count % 2 == 1 && img_idx < images.len() {
+            out.push_str(&format!("\n\n![]({})\n", images[img_idx]));
+            img_idx += 1;
+        }
+    }
+    out.push_str(&report[last_end..]);
+    out
 }
 
 /// Wraps the LLM's final report prose with a stats summary, a curated Sources

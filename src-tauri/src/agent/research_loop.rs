@@ -7,13 +7,23 @@ use super::research_prompts::{
     parse_queries, parse_search_results, parse_stop_decision, ResearchPlan, EXPANSION_REQUEST,
     MIN_FINAL_REPORT_WORDS,
 };
-use super::research_report::{format_research_report, Finding, ResearchStats};
+use super::research_report::{format_research_report, inject_images, Finding, ResearchStats};
 use tokio_util::sync::CancellationToken;
 
 /// How many of the most-recent findings are re-fed into synthesis each round —
 /// mirrors Odysseus's `synthesis_window` (older findings still count as sources,
 /// they just drop out of the synthesis prompt).
 const SYNTHESIS_WINDOW: usize = 10;
+
+fn split_og_image(output: &str) -> (&str, Option<String>) {
+    match output.rsplit_once("\n\n<!-- og-image: ") {
+        Some((rest, tail)) => match tail.strip_suffix(" -->") {
+            Some(url) => (rest, Some(url.to_string())),
+            None => (output, None),
+        },
+        None => (output, None),
+    }
+}
 
 fn user_msg(content: impl Into<String>) -> crate::commands::ai::Message {
     crate::commands::ai::Message {
@@ -204,10 +214,11 @@ async fn run_search_round(
                 continue;
             }
 
-            if let Ok(notes) = extract_relevant(params, query, &fetch_res.output).await {
+            let (fetch_text, image) = split_og_image(&fetch_res.output);
+            if let Ok(notes) = extract_relevant(params, query, fetch_text).await {
                 if !is_low_quality(&notes) {
                     *sources += 1;
-                    findings.push(Finding { url: url.clone(), title: title.clone(), notes });
+                    findings.push(Finding { url: url.clone(), title: title.clone(), notes, image });
                     let _ = params.channel.send(CompletionEvent::ResearchPhase {
                         phase: "fetching".into(), round, max_rounds,
                         detail: Some(url.clone()), sources: *sources,
@@ -447,6 +458,13 @@ pub async fn run_research_loop(
         write_final_report(&params, &topic, &report_body, category.as_deref()).await?
     };
 
+    let mut seen_images = std::collections::HashSet::new();
+    let images: Vec<String> = all_findings.iter()
+        .filter_map(|f| f.image.clone())
+        .filter(|url| seen_images.insert(url.clone()))
+        .collect();
+    let final_report = inject_images(&final_report, &images);
+
     let stats = ResearchStats {
         elapsed_secs: start.elapsed().as_secs_f64(),
         rounds: round,
@@ -455,9 +473,24 @@ pub async fn run_research_loop(
     };
     let formatted = format_research_report(&topic, &final_report, &stats, &all_findings, &analyzed_urls);
 
-    let _ = params.channel.send(CompletionEvent::Chunk {
-        text: formatted,
-        thinking: None,
+    let write_args = serde_json::json!({ "content": formatted });
+    let _ = params.channel.send(CompletionEvent::ToolCall { tool: "write_file".into(), args: write_args.clone() });
+    let proj_dir = project_dir(params.app_data_dir, params.output_path);
+    let write_res = execute_tool(
+        "write_file", &write_args, params.app_data_dir, params.output_path, &proj_dir,
+        params.permission_mode, params.http_client, &params.searxng_url, params.app_handle,
+    ).await;
+    let path_opt = write_res.written_path.as_ref().map(|p| {
+        p.strip_prefix(params.app_data_dir)
+            .map(|rel| rel.to_string_lossy().to_string())
+            .unwrap_or_else(|_| params.output_path.to_string())
+    });
+    let _ = params.channel.send(CompletionEvent::ToolResult {
+        tool: "write_file".into(),
+        success: write_res.success,
+        output: write_res.output,
+        path: path_opt,
+        content: write_res.written_content,
     });
 
     let _ = params.channel.send(CompletionEvent::Done {

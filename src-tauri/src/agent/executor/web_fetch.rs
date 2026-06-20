@@ -11,6 +11,26 @@ fn error_result(output: String) -> ToolExecutionResult {
     ToolExecutionResult { success: false, output, written_path: None, written_content: None }
 }
 
+fn extract_og_image(html: &str) -> Option<String> {
+    let meta_re = regex::Regex::new(r"<meta[^>]*>").ok()?;
+    let content_re = regex::Regex::new(r#"content\s*=\s*["']([^"']+)["']"#).ok()?;
+    for tag in meta_re.find_iter(html) {
+        let tag = tag.as_str();
+        if !(tag.contains("og:image") || tag.contains("twitter:image")) {
+            continue;
+        }
+        if let Some(cap) = content_re.captures(tag) {
+            let url = cap[1].trim();
+            if (url.starts_with("http://") || url.starts_with("https://"))
+                && !url.ends_with(".svg") && !url.ends_with(".ico")
+            {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// True if `ip` falls in a loopback, private, link-local, or carrier-grade-NAT range —
 /// the address classes a server-side fetcher must refuse so a malicious URL can't be
 /// used to reach the host's own network or cloud metadata endpoints (e.g. 169.254.169.254,
@@ -160,6 +180,8 @@ pub(in crate::agent) async fn execute_web_fetch(args: &serde_json::Value) -> Too
 
     let text = String::from_utf8_lossy(&bytes).into_owned();
 
+    let og_image = if content_type.contains("text/html") { extract_og_image(&text) } else { None };
+
     let body = if content_type.contains("text/html") {
         match htmd::convert(&text) {
             Ok(markdown) => markdown,
@@ -169,10 +191,12 @@ pub(in crate::agent) async fn execute_web_fetch(args: &serde_json::Value) -> Too
         text
     };
 
+    let image_suffix = og_image.map(|u| format!("\n\n<!-- og-image: {u} -->")).unwrap_or_default();
+
     ToolExecutionResult {
         success: true,
         output: format!(
-            "Fetched {url} ({} bytes{}).\nExtraction goal: {}\n\n{body}",
+            "Fetched {url} ({} bytes{}).\nExtraction goal: {}\n\n{body}{image_suffix}",
             bytes.len(),
             if content_type.is_empty() { String::new() } else { format!(", content-type: {content_type}") },
             parsed.prompt,

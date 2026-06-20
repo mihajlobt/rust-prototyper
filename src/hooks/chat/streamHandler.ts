@@ -30,6 +30,7 @@ export interface StreamHandlerParams {
   stopRef: RefObject<boolean>
   activeRequestIdRef: RefObject<number | null>
   onOutputRef: RefObject<((content: string) => void) | undefined>
+  onDoneRef: RefObject<((doneReason?: string) => void) | undefined>
   onCodeOutputRef: RefObject<((content: string) => void) | undefined>
   onToolWriteRef: RefObject<((path: string, content: string) => void) | undefined>
   outputPath: string | undefined
@@ -41,7 +42,7 @@ export interface StreamHandlerParams {
 export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, sessionPath, updatedMessages, stopRef, activeRequestIdRef,
-    onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
+    onOutputRef, onDoneRef, onCodeOutputRef, onToolWriteRef, outputPath,
     onToolCallRef, onToolResultRef,
     compaction,
   } = params
@@ -207,6 +208,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
       }
       finalize(finalContent, finalThinking, msg.data?.usage)
       if (!toolWritten) onOutputRef.current?.(finalContent)
+      onDoneRef.current?.(msg.data?.done_reason)
     } else if (msg.event === "Error") {
       finalize(`⚠ ${msg.data.message}`, "")
       notify.error("Generation failed", msg.data.message)

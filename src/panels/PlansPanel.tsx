@@ -153,12 +153,20 @@ export function PlansPanel() {
     setSource(content);
   }, []);
 
+  const sendMessageRef = useRef<(text?: string) => void>(() => {});
+  const onDone = useCallback((doneReason?: string) => {
+    if (doneReason === "clarification_gate") {
+      sendMessageRef.current("Begin the research now based on the answers above.");
+    }
+  }, []);
+
   const chat = useChat({
     entityId: chatEntityId,
     chatPath,
     systemPrompt,
     outputPath: planOutputPath || undefined,
     onCodeOutput: handleAgentWrite,
+    onDone,
     panelToolFilter: isFirstResearchTurn
       ? ["ask_user_form"]
       : planToolFilter ?? (isResearchMode ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
@@ -166,6 +174,7 @@ export function PlansPanel() {
     researchMode: isResearchMode && !isFirstResearchTurn,
   });
 
+  sendMessageRef.current = chat.sendMessage;
   priorMessageCountRef.current = chat.messages.length;
 
   const onResolvePermission = useCallback(
