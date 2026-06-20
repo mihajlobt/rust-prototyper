@@ -17,6 +17,15 @@ export interface ToolPermissionRecord {
   decision?: "accepted" | "rejected" | "always_allowed"
 }
 
+/** One ResearchPhase tick from a research-mode run, kept for the lifetime of the message. */
+export interface ResearchPhaseEntry {
+  phase: string
+  round: number
+  maxRounds: number
+  detail: string | null
+  sources: number
+}
+
 /// Groups thinking/text that arrived between tool invocations
 export interface StreamChunk {
   /** Ordered index for rendering */
@@ -41,6 +50,8 @@ export interface ChatMessage {
   streamChunks?: StreamChunk[]
   /** Real token usage from the most recent agent-loop turn (current context window occupancy). */
   usage?: TokenUsage
+  /** Research-mode progress log for this message — persisted so the card survives reload/tab-switch. */
+  researchLog?: ResearchPhaseEntry[]
 }
 
 export interface MentionAsset {

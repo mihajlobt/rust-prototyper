@@ -260,6 +260,7 @@ export type CompletionEvent =
   | { event: "AskUser"; data: { request_id: number; question: string; question_type: AskUserQuestionType; choices?: string[] } }
   | { event: "AskUserForm"; data: { request_id: number; title: string; fields: FormField[] } }
   | { event: "TodoUpdate"; data: { todos: TodoItem[] } }
+  | { event: "ResearchPhase"; data: { phase: string; round: number; max_rounds: number; detail: string | null; sources: number } }
   | { event: "Done"; data: { done_reason?: string; usage?: TokenUsage } | null }
   | { event: "Error"; data: { message: string } };
 
@@ -317,6 +318,13 @@ export type ThinkParam = boolean | "low" | "medium" | "high"
 
 export type ToolPermissionMode = "ask_every_time" | "auto_accept_read_only" | "auto_accept_all";
 
+export interface ResearchLoopConfig {
+  max_rounds?: number;
+  max_time_secs?: number;
+  min_rounds?: number;
+  max_empty_rounds?: number;
+}
+
 /** Streaming completion — emits Chunk/Done/Error/FileWritten events via Channel.
  *  Returns a request ID that can be passed to stopGenerationRequest to cancel
  *  the stream server-side. */
@@ -338,6 +346,8 @@ export async function generateCompletionStream(
   searxngUrl?: string,
   writeFileLimit?: number,
   toolOutputHistoryLimit?: number,
+  researchMode?: boolean,
+  researchConfig?: ResearchLoopConfig,
 ): Promise<number> {
   return invoke("generate_completion_stream", {
     request: {
@@ -357,6 +367,8 @@ export async function generateCompletionStream(
       searxngUrl: searxngUrl ?? null,
       writeFileLimit: writeFileLimit ?? null,
       toolOutputHistoryLimit: toolOutputHistoryLimit ?? null,
+      researchMode: researchMode ?? null,
+      researchConfig: researchConfig ?? null,
     },
     onEvent,
   });
@@ -481,6 +493,16 @@ export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return String(error);
+}
+
+// ─── Research Config ───
+
+export async function getResearchConfig(): Promise<ResearchLoopConfig> {
+  return invoke("research_get_config");
+}
+
+export async function saveResearchConfig(config: ResearchLoopConfig): Promise<void> {
+  return invoke("research_save_config", { config });
 }
 
 // ─── Safe IPC Wrappers (with toast notifications) ───

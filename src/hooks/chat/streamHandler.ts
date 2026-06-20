@@ -42,7 +42,8 @@ export function createStreamHandler(params: StreamHandlerParams) {
   const {
     entityId, chatPath, sessionPath, updatedMessages, stopRef, activeRequestIdRef,
     onOutputRef, onCodeOutputRef, onToolWriteRef, outputPath,
-    onToolCallRef, onToolResultRef, compaction,
+    onToolCallRef, onToolResultRef,
+    compaction,
   } = params
 
   let contentAccumulated = ""
@@ -68,6 +69,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
       ...(thinking ? { thinking } : {}),
       ...(currentLast?.toolCalls?.length ? { toolCalls: currentLast.toolCalls } : {}),
       ...(currentLast?.streamChunks?.length ? { streamChunks: currentLast.streamChunks } : {}),
+      ...(currentLast?.researchLog?.length ? { researchLog: currentLast.researchLog } : {}),
       ...(usage ? { usage } : {}),
     }
     const finalMessages: ChatMessage[] = [...updatedMessages.slice(0, -1), finalMessage]
@@ -170,6 +172,11 @@ export function createStreamHandler(params: StreamHandlerParams) {
       })
     } else if (msg.event === "TodoUpdate") {
       useTaskListStore.getState().setTodos(msg.data.todos)
+    } else if (msg.event === "ResearchPhase") {
+      useChatStore.getState().appendResearchPhase(entityId, {
+        phase: msg.data.phase, round: msg.data.round, maxRounds: msg.data.max_rounds,
+        detail: msg.data.detail, sources: msg.data.sources,
+      })
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
       useChatStore.getState().resolveToolCall(entityId, tool, output, success, path ?? "")

@@ -14,6 +14,7 @@ use ollama_rs::{
 };
 use tokio_util::sync::CancellationToken;
 use crate::{AppState, AppError, app_data_dir};
+use crate::agent::research_loop::{run_research_loop, ResearchLoopConfig};
 use super::ai_providers::{chat_completion_openai, chat_completion_claude};
 use super::ai_ollama::{OllamaOptions, build_ollama_client};
 
@@ -59,6 +60,11 @@ pub enum CompletionEvent {
     AskUser { request_id: u64, question: String, question_type: AskUserQuestionType, choices: Option<Vec<String>> },
     AskUserForm { request_id: u64, title: String, fields: Vec<FormField> },
     TodoUpdate { todos: Vec<TodoItem> },
+    /// Fires during a research loop to report the current sub-phase, round, and progress.
+    /// phase values: "round_start" | "searching" | "fetching" | "synthesizing" | "deciding" | "final_report"
+    /// `detail` carries the query/URL currently being worked on; `sources` is the running
+    /// count of pages successfully fetched and extracted so far.
+    ResearchPhase { phase: String, round: u8, max_rounds: u8, detail: Option<String>, sources: u32 },
     Done { done_reason: Option<String>, usage: Option<TokenUsage> },
     Error { message: String },
 }
@@ -181,6 +187,12 @@ pub struct CompletionRequest {
     /// Maximum characters of tool output appended to history. Defaults to MAX_TOOL_OUTPUT_FOR_HISTORY.
     #[serde(default)]
     pub tool_output_history_limit: Option<usize>,
+    /// If true, run the multi-turn research loop instead of the standard agent loop.
+    #[serde(default)]
+    pub research_mode: bool,
+    /// Configuration for research_mode. Ignored when research_mode is false.
+    #[serde(default)]
+    pub research_config: Option<ResearchLoopConfig>,
 }
 
 /// Convert a JSON value from the frontend think parameter to a ThinkType
@@ -269,6 +281,41 @@ pub(crate) fn messages_to_ollama_json(messages: &[Message]) -> Vec<serde_json::V
 /// Monotonically increasing counter for assigning unique request IDs.
 static NEXT_REQUEST_ID: AtomicU32 = AtomicU32::new(1);
 
+fn build_agent_loop_params<'a>(
+    request: &'a CompletionRequest,
+    app_data_dir: &'a std::path::Path,
+    output_path: &'a str,
+    channel: &'a Channel<CompletionEvent>,
+    cancel_token: &'a CancellationToken,
+    http_client: &'a reqwest::Client,
+    app_handle: &'a AppHandle,
+) -> crate::agent::AgentLoopParams<'a> {
+    let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
+    let tool_filter: std::collections::HashSet<String> = request.tool_filter.iter().cloned().collect();
+    crate::agent::AgentLoopParams {
+        provider: &request.provider,
+        http_client,
+        host: &request.host,
+        api_key: &request.api_key,
+        model: &request.model,
+        model_family: request.model_family.as_deref().unwrap_or(""),
+        initial_messages_json: messages_to_ollama_json(&request.messages),
+        think: request.think.as_ref().and_then(think_type_from_value),
+        app_data_dir,
+        output_path,
+        channel,
+        cancel_token,
+        app_handle,
+        permission_mode: request.tool_permission_mode,
+        tool_allowlist: allowlist,
+        max_tool_calls: request.max_tool_calls,
+        tool_filter,
+        searxng_url: request.searxng_url.clone().unwrap_or_default(),
+        write_file_limit: request.write_file_limit,
+        tool_output_history_limit: request.tool_output_history_limit,
+    }
+}
+
 async fn generate_ollama_completion_stream(
     request: &CompletionRequest,
     app_data_dir: &std::path::Path,
@@ -278,31 +325,17 @@ async fn generate_ollama_completion_stream(
     app_handle: &AppHandle,
 ) -> Result<(), AppError> {
     if let Some(path) = request.output_path.as_deref() {
-        let json_messages = messages_to_ollama_json(&request.messages);
-        let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
-        let tool_filter: std::collections::HashSet<String> = request.tool_filter.iter().cloned().collect();
-        crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
-            provider: &request.provider,
-            http_client,
-            host: &request.host,
-            api_key: &request.api_key,
-            model: &request.model,
-            model_family: request.model_family.as_deref().unwrap_or(""),
-            initial_messages_json: json_messages,
-            think: request.think.as_ref().and_then(think_type_from_value),
-            app_data_dir,
-            output_path: path,
-            channel,
-            cancel_token,
-            app_handle,
-            permission_mode: request.tool_permission_mode,
-            tool_allowlist: allowlist,
-            max_tool_calls: request.max_tool_calls,
-            tool_filter,
-            searxng_url: request.searxng_url.clone().unwrap_or_default(),
-            write_file_limit: request.write_file_limit,
-            tool_output_history_limit: request.tool_output_history_limit,
-        }).await
+        let params = build_agent_loop_params(request, app_data_dir, path, channel, cancel_token, http_client, app_handle);
+        if request.research_mode {
+            let config = request.research_config.clone().unwrap_or_default();
+            let system_prompt = request.messages.iter()
+                .find(|m| m.role == "system")
+                .map(|m| m.content.clone())
+                .unwrap_or_default();
+            run_research_loop(params, config, system_prompt).await
+        } else {
+            crate::agent::run_agent_loop(params).await
+        }
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name
         // in tool role messages, which ollama-rs ChatMessage doesn't support.
@@ -450,31 +483,17 @@ async fn generate_claude_completion_stream(
     app_handle: &AppHandle,
 ) -> Result<(), AppError> {
     if let Some(path) = request.output_path.as_deref() {
-        let json_messages = messages_to_ollama_json(&request.messages);
-        let allowlist: std::collections::HashSet<String> = request.tool_allowlist.iter().cloned().collect();
-        let tool_filter: std::collections::HashSet<String> = request.tool_filter.iter().cloned().collect();
-        crate::agent::run_agent_loop(crate::agent::AgentLoopParams {
-            provider: "claude",
-            http_client,
-            host: &request.host,
-            api_key: &request.api_key,
-            model: &request.model,
-            model_family: "",
-            initial_messages_json: json_messages,
-            think: request.think.as_ref().and_then(think_type_from_value),
-            app_data_dir,
-            output_path: path,
-            channel,
-            cancel_token,
-            app_handle,
-            permission_mode: request.tool_permission_mode,
-            tool_allowlist: allowlist,
-            max_tool_calls: request.max_tool_calls,
-            tool_filter,
-            searxng_url: request.searxng_url.clone().unwrap_or_default(),
-            write_file_limit: request.write_file_limit,
-            tool_output_history_limit: request.tool_output_history_limit,
-        }).await
+        let params = build_agent_loop_params(request, app_data_dir, path, channel, cancel_token, http_client, app_handle);
+        if request.research_mode {
+            let config = request.research_config.clone().unwrap_or_default();
+            let system_prompt = request.messages.iter()
+                .find(|m| m.role == "system")
+                .map(|m| m.content.clone())
+                .unwrap_or_default();
+            run_research_loop(params, config, system_prompt).await
+        } else {
+            crate::agent::run_agent_loop(params).await
+        }
     } else {
         chat_completion_claude(http_client, &request.api_key, &request.model, &request.messages, true, Some(channel), cancel_token).await.map(|_| ())
     }

@@ -14,6 +14,7 @@ import {
   type CompletionEvent,
   type Provider,
   type TokenUsage,
+  type ResearchLoopConfig,
 } from "@/lib/ipc"
 import type { ChatMessage, MentionAsset, AttachmentFile } from "@/types/chat"
 import { notify } from "@/hooks/useToast"
@@ -55,11 +56,15 @@ interface UseChatOptions {
   onToolCall?: (tool: string, args: Record<string, unknown>) => void
   /** Called for every ToolResult event after the store update. */
   onToolResult?: (tool: string, success: boolean, output: string, path?: string) => void
+  /** If true, run the multi-turn research loop. */
+  researchMode?: boolean
+  /** Config for the research loop. */
+  researchConfig?: ResearchLoopConfig
 }
 
 // ─── useChat hook ──────────────────────────────────────────────────────────
 
-export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls, onToolCall, onToolResult }: UseChatOptions) {
+export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput, onCodeOutput, onToolWrite, panelToolFilter, panelMaxToolCalls, onToolCall, onToolResult, researchMode, researchConfig }: UseChatOptions) {
   // Destructure individual settings fields instead of selecting the full
   // settings object. Zustand's shallow equality means each selector re-renders
   // only when its specific value changes. The full `settings` object was
@@ -91,7 +96,6 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
   useEffect(() => { onToolCallRef.current = onToolCall }, [onToolCall])
   const onToolResultRef = useRef(onToolResult)
   useEffect(() => { onToolResultRef.current = onToolResult }, [onToolResult])
-
   // Shared stop flag — set to true to abort the current stream mid-flight
   const stopRef = useRef(false)
   // Active request ID returned by the Rust backend — used to cancel
@@ -338,6 +342,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         searxngUrl || undefined,
         writeFileLimit,
         toolOutputHistoryLimit,
+        researchMode,
+        researchConfig,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -354,6 +360,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     panelToolFilter, panelMaxToolCalls, searxngUrl,
     writeFileLimit, toolOutputHistoryLimit,
     toolOutputResendLimit, compactionThreshold,
+    researchMode, researchConfig,
   ])
 
   const clearChat = useCallback(() => {
@@ -500,6 +507,8 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         searxngUrl || undefined,
         writeFileLimit,
         toolOutputHistoryLimit,
+        researchMode,
+        researchConfig,
       )
       activeRequestIdRef.current = requestId
     } catch (e) {
@@ -515,6 +524,7 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     toolPermissionMode, toolAllowlist, maxToolCalls,
     panelToolFilter, panelMaxToolCalls, searxngUrl,
     writeFileLimit, toolOutputHistoryLimit, toolOutputResendLimit, compactionThreshold,
+    researchMode, researchConfig,
   ])
 
   const addAttachment = useCallback((file: AttachmentFile) => {

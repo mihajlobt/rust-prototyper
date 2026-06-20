@@ -146,14 +146,17 @@ export function PlansPanel() {
     setSource(content);
   }, []);
 
+  const isResearchMode = plansContentType === "research";
+
   const chat = useChat({
     entityId: chatEntityId,
     chatPath,
     systemPrompt,
     outputPath: planOutputPath || undefined,
     onCodeOutput: handleAgentWrite,
-    panelToolFilter: planToolFilter ?? (plansContentType === "research" ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
+    panelToolFilter: planToolFilter ?? (isResearchMode ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
     panelMaxToolCalls: planMaxToolCalls,
+    researchMode: isResearchMode,
   });
 
   const onResolvePermission = useCallback(

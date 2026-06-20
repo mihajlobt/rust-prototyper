@@ -8,3 +8,4 @@ pub mod export;
 pub mod workflows;
 pub mod bonsai;
 pub mod history;
+pub mod research;

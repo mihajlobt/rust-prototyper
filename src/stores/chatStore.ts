@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import type { TokenUsage } from "@/lib/ipc"
-import type { ChatMessage, StreamChunk, ToolPermissionRecord } from "@/types/chat"
+import type { ChatMessage, ResearchPhaseEntry, StreamChunk, ToolPermissionRecord } from "@/types/chat"
 import type { Compaction } from "@/hooks/chat/compactSummary"
 
 /** Per-session usage snapshot — persisted to `{chatPath}.session.json` so the
@@ -47,6 +47,8 @@ interface ChatStore {
   resolveToolCall: (id: string, tool: string, result: string, success: boolean, path: string) => void
   clearChat: (id: string) => void
   addStreamChunk: (id: string, chunk: StreamChunk) => void
+  /** Appends one ResearchPhase tick to the last assistant message's log — persisted with the message. */
+  appendResearchPhase: (id: string, entry: ResearchPhaseEntry) => void
   attachToolPermission: (id: string, record: ToolPermissionRecord) => void
   resolveToolPermission: (id: string, requestId: number, decision: ToolPermissionRecord["decision"]) => void
   clearPendingPermissions: (id: string) => void
@@ -163,6 +165,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (last?.role === "assistant") {
         const prev = last.streamChunks ?? []
         messages[messages.length - 1] = { ...last, streamChunks: [...prev, chunk] }
+      }
+      return { chats: { ...s.chats, [id]: { ...chat, messages } } }
+    }),
+
+  appendResearchPhase: (id, entry) =>
+    set((s) => {
+      const chat = s.chats[id] ?? EMPTY
+      const messages = [...chat.messages]
+      const last = messages[messages.length - 1]
+      if (last?.role === "assistant") {
+        messages[messages.length - 1] = { ...last, researchLog: [...(last.researchLog ?? []), entry] }
       }
       return { chats: { ...s.chats, [id]: { ...chat, messages } } }
     }),

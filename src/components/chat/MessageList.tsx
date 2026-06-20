@@ -75,6 +75,7 @@ function CompactionSummaryCard({ summary }: { summary: string }) {
 }
 
 import { Tool } from "@/components/ui/tool"
+import { ResearchProgressCard } from "@/components/ui/ResearchProgressCard"
 import type { ToolPart } from "@/components/ui/tool"
 import { ToolPermissionCard, type ToolPermissionDecision } from "@/components/ui/ToolPermissionCard"
 import { AskUserCard } from "@/components/ui/AskUserCard"
@@ -348,7 +349,8 @@ const MessageBubble = memo(function MessageBubble({
   const content = message.content
   const hasChunks = (message.streamChunks?.length ?? 0) > 0
   const hasTools = (message.toolCalls?.length ?? 0) > 0
-  const isEmpty = isStreaming && content === "" && !streamingThinking && !hasChunks && !hasTools
+  const hasResearchLog = (message.researchLog?.length ?? 0) > 0
+  const isEmpty = isStreaming && content === "" && !streamingThinking && !hasChunks && !hasTools && !hasResearchLog
 
   const hasThinking = isStreaming ? streamingThinking.length > 0 : !!message.thinking
   const thinkingText = isStreaming ? streamingThinking : (message.thinking ?? "")
@@ -489,6 +491,9 @@ const MessageBubble = memo(function MessageBubble({
           <Loader variant="typing" size="sm" />
         ) : (
           <>
+            {hasResearchLog && (
+              <ResearchProgressCard log={message.researchLog!} done={!isStreaming || content.length > 0} />
+            )}
             {(hasChunks || hasTools) ? renderInterleaved() : (
               <>
                 {hasThinking && (
@@ -549,6 +554,7 @@ const MessageBubble = memo(function MessageBubble({
   prev.message.toolCalls === next.message.toolCalls &&
   prev.message.thinking === next.message.thinking &&
   prev.message.streamChunks === next.message.streamChunks &&
+  prev.message.researchLog === next.message.researchLog &&
   prev.message.usage === next.message.usage &&
   prev.isStreaming === next.isStreaming &&
   prev.isLastAssistant === next.isLastAssistant &&
