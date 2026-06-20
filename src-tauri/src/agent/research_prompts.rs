@@ -54,16 +54,20 @@ struct PlanResponse {
     success_criteria: Option<String>,
 }
 
-/// Collapses the plan LLM's JSON reply into the short plain-text form fed into
-/// every subsequent query-gen prompt. Falls back to the raw reply if it isn't JSON.
-pub fn parse_plan(reply: &str) -> String {
+pub struct ResearchPlan {
+    pub summary: String,
+    pub sub_questions: Vec<String>,
+}
+
+pub fn parse_plan(reply: &str) -> ResearchPlan {
     let cleaned = reply.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```");
     let Ok(plan) = serde_json::from_str::<PlanResponse>(cleaned.trim()) else {
-        return reply.trim().to_string();
+        return ResearchPlan { summary: reply.trim().to_string(), sub_questions: Vec::new() };
     };
+    let sub_questions = plan.sub_questions.unwrap_or_default();
     let mut parts = Vec::new();
-    if let Some(qs) = plan.sub_questions.filter(|v| !v.is_empty()) {
-        parts.push(format!("Sub-questions: {}", qs.join("; ")));
+    if !sub_questions.is_empty() {
+        parts.push(format!("Sub-questions: {}", sub_questions.join("; ")));
     }
     if let Some(topics) = plan.key_topics.filter(|v| !v.is_empty()) {
         parts.push(format!("Key topics: {}", topics.join(", ")));
@@ -71,7 +75,8 @@ pub fn parse_plan(reply: &str) -> String {
     if let Some(criteria) = plan.success_criteria {
         parts.push(format!("Success: {criteria}"));
     }
-    if parts.is_empty() { reply.trim().to_string() } else { parts.join("\n") }
+    let summary = if parts.is_empty() { reply.trim().to_string() } else { parts.join("\n") };
+    ResearchPlan { summary, sub_questions }
 }
 
 /// Valid category labels — keys of Odysseus's `CATEGORY_PROMPTS` plus the
@@ -211,19 +216,42 @@ pub fn build_synthesize_prompt(topic: &str, current_report: &str, findings_windo
     }
 }
 
-pub fn build_stop_prompt(report: &str, round: u8, max_rounds: u8) -> String {
+pub fn build_stop_prompt(report: &str, sub_questions: &[String], round: u8, max_rounds: u8) -> String {
+    let checklist = if sub_questions.is_empty() {
+        String::new()
+    } else {
+        let lines: Vec<String> = sub_questions.iter().enumerate()
+            .map(|(i, q)| format!("{}. {q}", i + 1))
+            .collect();
+        format!("\n\n**Sub-questions to verify against the report:**\n{}", lines.join("\n"))
+    };
     format!(
         "You are deciding whether a research report is comprehensive enough.\n\n\
-        **Current report:**\n{report}\n\n**Rounds completed:** {round} of {max_rounds}\n\n\
-        Based on the report so far, do we have enough information to answer the question \
-        comprehensively? Consider:\n\
-        - Are the key aspects of the question addressed?\n\
-        - Are there obvious gaps or unanswered sub-questions?\n\
-        - Is the evidence sufficient and from multiple sources?\n\n\
+        **Current report:**\n{report}{checklist}\n\n**Rounds completed:** {round} of {max_rounds}\n\n\
+        For each sub-question above, check whether the report answers it with cited evidence. \
         If rounds completed is well below the target, prefer continuing unless the report is \
         already exhaustive.\n\n\
-        Reply with ONLY \"YES\" or \"NO\" followed by a brief one-sentence reason."
+        Reply with ONLY JSON, no commentary: {{\"unanswered\": [\"...\"], \"stop\": true|false}}\n\
+        \"unanswered\" must list the exact text of any sub-question above not yet answered with \
+        evidence — leave it empty if all are covered, or if no sub-questions were given. Set \
+        \"stop\" to true only if \"unanswered\" is empty."
     )
+}
+
+#[derive(serde::Deserialize)]
+struct StopReply {
+    #[serde(default)]
+    unanswered: Vec<String>,
+    #[serde(default)]
+    stop: bool,
+}
+
+pub fn parse_stop_decision(reply: &str) -> bool {
+    let cleaned = reply.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```");
+    if let Ok(parsed) = serde_json::from_str::<StopReply>(cleaned.trim()) {
+        return parsed.stop && parsed.unanswered.is_empty();
+    }
+    reply.trim().to_uppercase().starts_with("YES")
 }
 
 pub fn build_final_report_prompt(topic: &str, report: &str, category: Option<&str>) -> String {
@@ -290,8 +318,22 @@ mod tests {
 
     #[test]
     fn parse_plan_falls_back_to_raw_on_non_json() {
-        assert_eq!(parse_plan("not json"), "not json");
+        let fallback = parse_plan("not json");
+        assert_eq!(fallback.summary, "not json");
+        assert!(fallback.sub_questions.is_empty());
+
         let json = r#"{"sub_questions": ["a?"], "key_topics": ["x"], "success_criteria": "done"}"#;
-        assert_eq!(parse_plan(json), "Sub-questions: a?\nKey topics: x\nSuccess: done");
+        let plan = parse_plan(json);
+        assert_eq!(plan.summary, "Sub-questions: a?\nKey topics: x\nSuccess: done");
+        assert_eq!(plan.sub_questions, vec!["a?".to_string()]);
+    }
+
+    #[test]
+    fn parse_stop_decision_requires_empty_unanswered() {
+        assert!(parse_stop_decision(r#"{"unanswered": [], "stop": true}"#));
+        assert!(!parse_stop_decision(r#"{"unanswered": ["gap"], "stop": true}"#));
+        assert!(!parse_stop_decision(r#"{"unanswered": ["gap"], "stop": false}"#));
+        assert!(parse_stop_decision("YES — looks complete."));
+        assert!(!parse_stop_decision("NO — missing pricing info."));
     }
 }

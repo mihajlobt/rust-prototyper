@@ -4,7 +4,8 @@ use super::executor::execute_tool;
 use super::research_prompts::{
     build_category_prompt, build_final_report_prompt, build_plan_prompt, build_query_gen_prompt,
     build_stop_prompt, build_synthesize_prompt, is_low_quality, parse_category, parse_plan,
-    parse_queries, parse_search_results, EXPANSION_REQUEST, MIN_FINAL_REPORT_WORDS,
+    parse_queries, parse_search_results, parse_stop_decision, ResearchPlan, EXPANSION_REQUEST,
+    MIN_FINAL_REPORT_WORDS,
 };
 use super::research_report::{format_research_report, Finding, ResearchStats};
 use tokio_util::sync::CancellationToken;
@@ -259,12 +260,13 @@ async fn should_stop(
     model: &str,
     cancel_token: &CancellationToken,
     report: &str,
+    sub_questions: &[String],
     round: u8,
     max_rounds: u8,
 ) -> Result<bool, AppError> {
-    let prompt = build_stop_prompt(report, round, max_rounds);
+    let prompt = build_stop_prompt(report, sub_questions, round, max_rounds);
     let reply = call_llm_once(provider, http_client, host, api_key, model, cancel_token, &prompt).await?;
-    Ok(reply.trim().to_uppercase().starts_with("YES"))
+    Ok(parse_stop_decision(&reply))
 }
 
 /// Writes the polished final report, retrying once with an explicit expansion request
@@ -319,10 +321,10 @@ pub async fn run_research_loop(
     let _ = params.channel.send(CompletionEvent::ResearchPhase {
         phase: "planning".into(), round: 0, max_rounds: config.max_rounds, detail: None, sources: 0,
     });
-    let research_plan = call_llm_once(
+    let plan = call_llm_once(
         params.provider, params.http_client, params.host, params.api_key, params.model,
         params.cancel_token, &build_plan_prompt(&topic),
-    ).await.map(|reply| parse_plan(&reply)).unwrap_or_default();
+    ).await.map(|reply| parse_plan(&reply)).unwrap_or(ResearchPlan { summary: String::new(), sub_questions: Vec::new() });
     let category = call_llm_once(
         params.provider, params.http_client, params.host, params.api_key, params.model,
         params.cancel_token, &build_category_prompt(&topic),
@@ -349,7 +351,7 @@ pub async fn run_research_loop(
             sources,
         });
 
-        let query_gen_prompt = build_query_gen_prompt(&topic, &research_plan, round, config.max_rounds, &report_body);
+        let query_gen_prompt = build_query_gen_prompt(&topic, &plan.summary, round, config.max_rounds, &report_body);
 
         let round_findings = run_search_round(
             &params, &query_gen_prompt, round, config.max_rounds,
@@ -385,7 +387,11 @@ pub async fn run_research_loop(
             &params, &topic, &report_body, &all_findings[window_start..], round, config.max_rounds, sources,
         ).await;
 
-        if round >= config.min_rounds {
+        // Hard floor: don't even ask the model to stop until findings cover the
+        // plan's scope (one finding per sub-question) — otherwise it can stop on
+        // sentiment alone before there's enough evidence to judge coverage.
+        let evidence_floor = plan.sub_questions.is_empty() || all_findings.len() >= plan.sub_questions.len();
+        if round >= config.min_rounds && evidence_floor {
             let _ = params.channel.send(CompletionEvent::ResearchPhase {
                 phase: "deciding".into(),
                 round,
@@ -396,7 +402,7 @@ pub async fn run_research_loop(
 
             if should_stop(
                 params.provider, params.http_client, params.host, params.api_key, params.model,
-                params.cancel_token, &report_body, round, config.max_rounds,
+                params.cancel_token, &report_body, &plan.sub_questions, round, config.max_rounds,
             ).await? {
                 break;
             }
