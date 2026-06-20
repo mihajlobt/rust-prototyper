@@ -245,3 +245,11 @@ ${gitUsageNote(`projects/${projectName}/generated`)}
 When the document is ready, call \`write_file\` exactly once with \`path: projects/${projectName}/plans/${planName}.md\` and the full markdown (frontmatter + body) as \`content\` — no JSON wrapper, no surrounding code fences.`;
 }
 
+/** Pre-research clarification gate: the model's only job this turn is to ask a few
+ * scoping questions via `ask_user_form` before the deep-research loop runs next turn. */
+export function getPlansResearchClarifySystemPrompt(planName: string): string {
+  return `The user wants to research a topic for the document "${planName}". Before research begins, call \`ask_user_form\` exactly once to ask 2-3 brief clarifying questions that will sharpen the research scope — e.g. which angle or aspect matters most, any constraints (budget, timeframe, audience), or what decision this research should support.
+
+Skip the form and reply normally only if the user's request is already specific enough that clarification would be redundant. Do not call any other tool and do not start researching yet — that happens automatically on their next message.`;
+}
+

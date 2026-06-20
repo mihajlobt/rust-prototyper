@@ -6,6 +6,7 @@ import { ChevronDown, Loader2, Search, CheckCircle } from "lucide-react"
 import type { ResearchPhaseEntry } from "@/types/chat"
 
 const PHASE_LABEL: Record<string, string> = {
+  planning: "Planning approach",
   round_start: "Starting round",
   searching: "Searching",
   fetching: "Reading",
@@ -25,12 +26,39 @@ function groupByRound(log: ResearchPhaseEntry[]): { round: number; entries: Rese
   return rounds
 }
 
+/** Renders one phase entry's detail line — fetched URLs become clickable links. */
+function PhaseDetailLine({ entry }: { entry: ResearchPhaseEntry }) {
+  return (
+    <div className="flex items-start gap-1.5 text-muted-foreground pl-2">
+      {entry.phase === "searching" ? <Search className="h-3 w-3 mt-0.5 shrink-0" /> : <span className="shrink-0">↳</span>}
+      {entry.phase === "fetching" && entry.detail ? (
+        <a href={entry.detail} target="_blank" rel="noopener noreferrer" className="truncate text-blue-400 hover:underline">
+          {entry.detail}
+        </a>
+      ) : (
+        <span className="truncate">{entry.detail}</span>
+      )}
+    </div>
+  )
+}
+
 export function ResearchProgressCard({ log, done }: { log: ResearchPhaseEntry[]; done: boolean }) {
   const [isOpen, setIsOpen] = useState(!done)
+  const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set())
   if (log.length === 0) return null
 
   const last = log[log.length - 1]
-  const rounds = groupByRound(log)
+  const planning = log.find((e) => e.phase === "planning")
+  const rounds = groupByRound(log.filter((e) => e.phase !== "planning"))
+
+  const toggleRound = (round: number) => {
+    setExpandedRounds((prev) => {
+      const next = new Set(prev)
+      if (next.has(round)) next.delete(round)
+      else next.add(round)
+      return next
+    })
+  }
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border-border overflow-hidden rounded-lg border">
@@ -50,25 +78,31 @@ export function ResearchProgressCard({ log, done }: { log: ResearchPhaseEntry[];
       </CollapsibleTrigger>
       <CollapsibleContent className="border-border border-t data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden">
         <div className="bg-background p-3 space-y-2 text-xs">
+          {planning && <div className="text-muted-foreground">{PHASE_LABEL.planning}</div>}
           {rounds.map(({ round, entries }, i) => {
             const isLastRound = i === rounds.length - 1
             const sourcesThisRound = entries.filter((e) => e.phase === "fetching" && e.detail).length
+            const queriesThisRound = entries.filter((e) => e.phase === "searching").length
             if (!isLastRound) {
+              const isExpanded = expandedRounds.has(round)
               return (
-                <div key={round} className="text-muted-foreground">
-                  Round {round} — {entries.filter((e) => e.phase === "searching").length} queries, {sourcesThisRound} sources
+                <div key={round} className="space-y-1">
+                  <Button
+                    variant="ghost"
+                    onClick={() => toggleRound(round)}
+                    className="h-auto w-full justify-start gap-1.5 p-0 font-normal text-muted-foreground hover:bg-transparent"
+                  >
+                    <ChevronDown className={cn("h-3 w-3 shrink-0", isExpanded && "rotate-180")} />
+                    <span>Round {round} — {queriesThisRound} queries, {sourcesThisRound} sources</span>
+                  </Button>
+                  {isExpanded && entries.filter((e) => e.detail).map((e, j) => <PhaseDetailLine key={j} entry={e} />)}
                 </div>
               )
             }
             return (
               <div key={round} className="space-y-1">
                 <div className="text-foreground font-medium">Round {round}</div>
-                {entries.filter((e) => e.detail).map((e, j) => (
-                  <div key={j} className="flex items-start gap-1.5 text-muted-foreground pl-2">
-                    {e.phase === "searching" ? <Search className="h-3 w-3 mt-0.5 shrink-0" /> : <span className="shrink-0">↳</span>}
-                    <span className="truncate">{e.detail}</span>
-                  </div>
-                ))}
+                {entries.filter((e) => e.detail).map((e, j) => <PhaseDetailLine key={j} entry={e} />)}
               </div>
             )
           })}

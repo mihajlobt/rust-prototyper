@@ -7,7 +7,7 @@ import { notify } from "@/hooks/useToast";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { useChat } from "@/hooks/useChat";
 import { PLANS_TOOL_FILTER_DEFAULT, PLANS_RESEARCH_TOOL_FILTER_DEFAULT } from "@/lib/agentToolDefaults";
-import { getPlansSystemPrompt, getPlansResearchSystemPrompt } from "@/lib/prompts/plans";
+import { getPlansSystemPrompt, getPlansResearchSystemPrompt, getPlansResearchClarifySystemPrompt } from "@/lib/prompts/plans";
 import { type PlanEditorHandle, type EditorAction, type SelectionInfo } from "./plans/PlanEditor";
 import { SelectionToChat } from "./plans/SelectionToChat";
 import { PlanLayout } from "./plans/PlanLayout";
@@ -129,13 +129,20 @@ export function PlansPanel() {
   // the agent's tool calls — the FE just passes the user input and
   // surfaces the result.
 
+  // ponytail: prior render's message count, read before this render's useChat call decides
+  // whether this is the first research turn — settles within a render or two of history loading.
+  const priorMessageCountRef = useRef(0);
+  const isResearchMode = plansContentType === "research";
+  const isFirstResearchTurn = isResearchMode && priorMessageCountRef.current === 0;
+
   const systemPrompt = useMemo(() => {
     if (!project || !activePlan) return "";
+    if (isFirstResearchTurn) return getPlansResearchClarifySystemPrompt(activePlan);
     const inventory = projectLayoutFromOptions(mentionOptions);
     return plansContentType === "research"
       ? getPlansResearchSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory })
       : getPlansSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory });
-  }, [project, activePlan, mentionOptions, plansContentType]);
+  }, [project, activePlan, mentionOptions, plansContentType, isFirstResearchTurn]);
 
   const chatEntityId = project && activePlan ? `plan:${project}:${activePlan}` : "";
   const chatPath = project && activePlan ? `projects/${project}/plans/${activePlan}.chat.json` : "";
@@ -146,18 +153,20 @@ export function PlansPanel() {
     setSource(content);
   }, []);
 
-  const isResearchMode = plansContentType === "research";
-
   const chat = useChat({
     entityId: chatEntityId,
     chatPath,
     systemPrompt,
     outputPath: planOutputPath || undefined,
     onCodeOutput: handleAgentWrite,
-    panelToolFilter: planToolFilter ?? (isResearchMode ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
+    panelToolFilter: isFirstResearchTurn
+      ? ["ask_user_form"]
+      : planToolFilter ?? (isResearchMode ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
     panelMaxToolCalls: planMaxToolCalls,
-    researchMode: isResearchMode,
+    researchMode: isResearchMode && !isFirstResearchTurn,
   });
+
+  priorMessageCountRef.current = chat.messages.length;
 
   const onResolvePermission = useCallback(
     (requestId: number, decision: ToolPermissionDecision, toolName: string) => {

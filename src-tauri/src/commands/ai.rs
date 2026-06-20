@@ -328,11 +328,16 @@ async fn generate_ollama_completion_stream(
         let params = build_agent_loop_params(request, app_data_dir, path, channel, cancel_token, http_client, app_handle);
         if request.research_mode {
             let config = request.research_config.clone().unwrap_or_default();
-            let system_prompt = request.messages.iter()
-                .find(|m| m.role == "system")
+            // The research topic is the conversation itself (the user's question plus any
+            // ask_user_form clarification answers from the gate turn), not the system prompt —
+            // the latter only carries persona/format instructions for the agent path.
+            let topic = request.messages.iter()
+                .filter(|m| m.role != "system")
                 .map(|m| m.content.clone())
-                .unwrap_or_default();
-            run_research_loop(params, config, system_prompt).await
+                .filter(|c| !c.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            run_research_loop(params, config, topic).await
         } else {
             crate::agent::run_agent_loop(params).await
         }
@@ -486,11 +491,16 @@ async fn generate_claude_completion_stream(
         let params = build_agent_loop_params(request, app_data_dir, path, channel, cancel_token, http_client, app_handle);
         if request.research_mode {
             let config = request.research_config.clone().unwrap_or_default();
-            let system_prompt = request.messages.iter()
-                .find(|m| m.role == "system")
+            // The research topic is the conversation itself (the user's question plus any
+            // ask_user_form clarification answers from the gate turn), not the system prompt —
+            // the latter only carries persona/format instructions for the agent path.
+            let topic = request.messages.iter()
+                .filter(|m| m.role != "system")
                 .map(|m| m.content.clone())
-                .unwrap_or_default();
-            run_research_loop(params, config, system_prompt).await
+                .filter(|c| !c.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            run_research_loop(params, config, topic).await
         } else {
             crate::agent::run_agent_loop(params).await
         }

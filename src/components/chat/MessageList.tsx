@@ -505,7 +505,7 @@ const MessageBubble = memo(function MessageBubble({
                     {content && <MessageContent markdown isStreaming={isStreaming} className="text-sm">{content}</MessageContent>}
                   </>
                 )}
-                {!hasThinking && <MessageContent markdown isStreaming={isStreaming} className="text-sm">{content}</MessageContent>}
+                {!hasThinking && (content || !isStreaming) && <MessageContent markdown isStreaming={isStreaming} className="text-sm">{content}</MessageContent>}
               </>
             )}
 

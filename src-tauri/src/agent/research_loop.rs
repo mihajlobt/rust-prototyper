@@ -1,28 +1,45 @@
 use crate::{AppError, CompletionEvent};
 use super::agent_loop::{project_dir, AgentLoopParams};
 use super::executor::execute_tool;
+use super::research_prompts::{
+    build_category_prompt, build_final_report_prompt, build_plan_prompt, build_query_gen_prompt,
+    build_stop_prompt, build_synthesize_prompt, is_low_quality, parse_category, parse_plan,
+    parse_queries, parse_search_results, EXPANSION_REQUEST, MIN_FINAL_REPORT_WORDS,
+};
+use super::research_report::{format_research_report, Finding, ResearchStats};
 use tokio_util::sync::CancellationToken;
 
-/// Sends one prompt to whichever provider the research session is using and returns
-/// the plain-text reply. Unlike `run_agent_loop`, this never offers tools — it's only
-/// used for the synthesis/decision steps between search rounds.
-async fn call_llm_once(
+/// How many of the most-recent findings are re-fed into synthesis each round —
+/// mirrors Odysseus's `synthesis_window` (older findings still count as sources,
+/// they just drop out of the synthesis prompt).
+const SYNTHESIS_WINDOW: usize = 10;
+
+fn user_msg(content: impl Into<String>) -> crate::commands::ai::Message {
+    crate::commands::ai::Message {
+        role: "user".to_string(), content: content.into(), thinking: None,
+        images: Vec::new(), tool_calls: Vec::new(), tool_name: None,
+    }
+}
+
+fn assistant_msg(content: impl Into<String>) -> crate::commands::ai::Message {
+    crate::commands::ai::Message {
+        role: "assistant".to_string(), content: content.into(), thinking: None,
+        images: Vec::new(), tool_calls: Vec::new(), tool_name: None,
+    }
+}
+
+/// Sends a multi-turn message list to whichever provider the research session is using
+/// and returns the plain-text reply. Unlike `run_agent_loop`, this never offers tools —
+/// it's only used for the planning/synthesis/decision steps between search rounds.
+async fn call_llm_messages(
     provider: &str,
     http_client: &reqwest::Client,
     host: &str,
     api_key: &str,
     model: &str,
     cancel_token: &CancellationToken,
-    prompt: &str,
+    messages: Vec<crate::commands::ai::Message>,
 ) -> Result<String, AppError> {
-    let messages = vec![crate::commands::ai::Message {
-        role: "user".to_string(),
-        content: prompt.to_string(),
-        thinking: None,
-        images: Vec::new(),
-        tool_calls: Vec::new(),
-        tool_name: None,
-    }];
     match provider {
         "openai" => crate::commands::ai_providers::chat_completion_openai(
             http_client, api_key, model, &messages, false, None, cancel_token,
@@ -32,15 +49,30 @@ async fn call_llm_once(
         ).await,
         _ => {
             let ollama = crate::commands::ai_ollama::build_ollama_client(host, api_key)?;
-            let request = ollama_rs::generation::chat::request::ChatMessageRequest::new(
-                model.to_string(),
-                vec![ollama_rs::generation::chat::ChatMessage::user(prompt.to_string())],
-            );
+            let chat_messages: Vec<ollama_rs::generation::chat::ChatMessage> = messages.iter()
+                .map(|m| match m.role.as_str() {
+                    "assistant" => ollama_rs::generation::chat::ChatMessage::assistant(m.content.clone()),
+                    _ => ollama_rs::generation::chat::ChatMessage::user(m.content.clone()),
+                })
+                .collect();
+            let request = ollama_rs::generation::chat::request::ChatMessageRequest::new(model.to_string(), chat_messages);
             let response = ollama.send_chat_messages(request).await
                 .map_err(|e| AppError::Http(e.to_string()))?;
             Ok(response.message.content)
         }
     }
+}
+
+async fn call_llm_once(
+    provider: &str,
+    http_client: &reqwest::Client,
+    host: &str,
+    api_key: &str,
+    model: &str,
+    cancel_token: &CancellationToken,
+    prompt: &str,
+) -> Result<String, AppError> {
+    call_llm_messages(provider, http_client, host, api_key, model, cancel_token, vec![user_msg(prompt)]).await
 }
 
 /// Configuration for one multi-turn research session.
@@ -86,33 +118,6 @@ impl ResearchLoopConfig {
     }
 }
 
-/// Asks the model for 3-4 search queries (plain JSON, no tools) for this round —
-/// mirrors Odysseus's QUERY_GEN_PROMPT step.
-fn build_query_gen_prompt(topic: &str, round: u8, max_rounds: u8, current_report: &str) -> String {
-    if current_report.is_empty() {
-        format!(
-            "Research topic:\n{topic}\n\nThis is round {round} of {max_rounds}. Generate 3-4 \
-            diverse, specific web search queries covering different angles of this topic.\n\n\
-            Reply with ONLY JSON, no commentary: {{\"queries\": [\"...\", \"...\"]}}"
-        )
-    } else {
-        format!(
-            "Research topic:\n{topic}\n\nRound {round} of {max_rounds}. Current report:\n\
-            {current_report}\n\nGenerate 3-4 web search queries that fill gaps in, verify, or \
-            extend the report above.\n\nReply with ONLY JSON, no commentary: \
-            {{\"queries\": [\"...\", \"...\"]}}"
-        )
-    }
-}
-
-fn parse_queries(reply: &str) -> Vec<String> {
-    #[derive(serde::Deserialize)]
-    struct QueryList { queries: Vec<String> }
-
-    let cleaned = reply.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```");
-    serde_json::from_str::<QueryList>(cleaned.trim()).map(|q| q.queries).unwrap_or_default()
-}
-
 /// Raw fetched pages have no size cap (`execute_web_fetch` returns the page as-is) and
 /// can run hundreds of KB — feeding that straight into the report blows the context
 /// window within a couple of rounds. Odysseus's EXTRACT phase exists for exactly this:
@@ -138,25 +143,31 @@ async fn extract_relevant(params: &AgentLoopParams<'_>, query: &str, raw_content
 /// schema resolution) — control flow lives here in Rust, same as Odysseus's Python loop.
 /// Emits a `ResearchPhase` event for every query/fetch so the frontend never sits idle
 /// for the whole round without feedback. `sources` is the running cross-round count.
+/// Findings whose extraction reads as low-quality (boilerplate/empty/irrelevant) are
+/// dropped before they reach the caller, mirroring Odysseus's `is_low_quality` filter.
 async fn run_search_round(
     params: &AgentLoopParams<'_>,
     query_gen_prompt: &str,
     round: u8,
     max_rounds: u8,
     sources: &mut u32,
-) -> Result<String, AppError> {
+    queries_used: &mut u32,
+    analyzed_urls: &mut Vec<(String, String)>,
+    last_search_error: &mut Option<String>,
+) -> Result<Vec<Finding>, AppError> {
     let reply = call_llm_once(
         params.provider, params.http_client, params.host, params.api_key, params.model,
         params.cancel_token, query_gen_prompt,
     ).await?;
     let queries = parse_queries(&reply);
     if queries.is_empty() {
-        return Ok(String::new());
+        return Ok(Vec::new());
     }
 
     let proj_dir = project_dir(params.app_data_dir, params.output_path);
     let mut findings = Vec::new();
     for query in queries.iter().take(4) {
+        *queries_used += 1;
         let _ = params.channel.send(CompletionEvent::ResearchPhase {
             phase: "searching".into(), round, max_rounds,
             detail: Some(query.clone()), sources: *sources,
@@ -168,16 +179,15 @@ async fn run_search_round(
             params.permission_mode, params.http_client, &params.searxng_url, params.app_handle,
         ).await;
         if !search_res.success {
+            *last_search_error = Some(search_res.output.clone());
             continue;
         }
-        let urls: Vec<&str> = search_res.output.lines()
-            .filter_map(|l| l.trim().strip_prefix("URL: "))
-            .take(2)
-            .collect();
-        for url in urls {
+
+        for (title, url) in parse_search_results(&search_res.output).into_iter().take(2) {
+            analyzed_urls.push((url.clone(), title.clone()));
             let _ = params.channel.send(CompletionEvent::ResearchPhase {
                 phase: "fetching".into(), round, max_rounds,
-                detail: Some(url.to_string()), sources: *sources,
+                detail: Some(url.clone()), sources: *sources,
             });
 
             let fetch_args = serde_json::json!({
@@ -188,52 +198,57 @@ async fn run_search_round(
                 "web_fetch", &fetch_args, params.app_data_dir, params.output_path, &proj_dir,
                 params.permission_mode, params.http_client, &params.searxng_url, params.app_handle,
             ).await;
-            if fetch_res.success {
-                if let Ok(notes) = extract_relevant(params, query, &fetch_res.output).await {
+            if !fetch_res.success {
+                *last_search_error = Some(fetch_res.output.clone());
+                continue;
+            }
+
+            if let Ok(notes) = extract_relevant(params, query, &fetch_res.output).await {
+                if !is_low_quality(&notes) {
                     *sources += 1;
-                    findings.push(format!("[{url}]\n{notes}"));
+                    findings.push(Finding { url: url.clone(), title: title.clone(), notes });
                     let _ = params.channel.send(CompletionEvent::ResearchPhase {
                         phase: "fetching".into(), round, max_rounds,
-                        detail: Some(url.to_string()), sources: *sources,
+                        detail: Some(url.clone()), sources: *sources,
                     });
                 }
             }
         }
-        findings.push(search_res.output);
     }
-    Ok(findings.join("\n\n---\n\n"))
+    Ok(findings)
 }
 
+/// Integrates the latest findings into the evolving report. If synthesis itself fails
+/// (timeout, provider error), keeps the previous report rather than losing the round's
+/// work — mirrors Odysseus's `_synthesize` exception handler.
 async fn synthesize_round(
-    provider: &str,
-    http_client: &reqwest::Client,
-    host: &str,
-    api_key: &str,
-    model: &str,
-    cancel_token: &CancellationToken,
+    params: &AgentLoopParams<'_>,
+    topic: &str,
     current_report: &str,
-    new_findings: &str,
+    findings_window: &[Finding],
     round: u8,
-) -> Result<String, AppError> {
-    let prompt = if current_report.is_empty() {
-        format!(
-            "Round {} of the research session. Based on the search/fetch findings below, produce \
-            an initial research report summarizing what you have found so far. Use clear ## \
-            headings, include source citations, and note where sources agree or disagree.\n\n\
-            Findings:\n{}",
-            round, new_findings
-        )
-    } else {
-        format!(
-            "Round {} complete. Update this research report by integrating the new findings \
-            below.\n\nCurrent report:\n{}\n\nNew findings from this round:\n{}\n\n\
-            Produce an updated, well-organized report. Remove redundancy, resolve contradictions, \
-            maintain logical flow. Keep source URLs as inline citations.",
-            round, current_report, new_findings
-        )
-    };
+    max_rounds: u8,
+    sources: u32,
+) -> String {
+    let findings_text = findings_window.iter()
+        .map(|f| format!("[{}]({})\n{}", f.title, f.url, f.notes))
+        .collect::<Vec<_>>()
+        .join("\n\n---\n\n");
+    let prompt = build_synthesize_prompt(topic, current_report, &findings_text);
 
-    call_llm_once(provider, http_client, host, api_key, model, cancel_token, &prompt).await
+    match call_llm_once(
+        params.provider, params.http_client, params.host, params.api_key, params.model,
+        params.cancel_token, &prompt,
+    ).await {
+        Ok(report) => report,
+        Err(_) => {
+            let _ = params.channel.send(CompletionEvent::ResearchPhase {
+                phase: "synthesizing".into(), round, max_rounds,
+                detail: Some("Synthesis failed — keeping previous report".into()), sources,
+            });
+            current_report.to_string()
+        }
+    }
 }
 
 async fn should_stop(
@@ -244,52 +259,47 @@ async fn should_stop(
     model: &str,
     cancel_token: &CancellationToken,
     report: &str,
+    round: u8,
+    max_rounds: u8,
 ) -> Result<bool, AppError> {
-    let mut cut = report.len().min(2000);
-    while !report.is_char_boundary(cut) { cut -= 1; }
-    let prompt = format!(
-        "Based on this research report, should we stop researching? \
-        Reply with ONLY YES or NO followed by a brief one-sentence reason.\n\n{}",
-        &report[..cut]
-    );
-
+    let prompt = build_stop_prompt(report, round, max_rounds);
     let reply = call_llm_once(provider, http_client, host, api_key, model, cancel_token, &prompt).await?;
     Ok(reply.trim().to_uppercase().starts_with("YES"))
 }
 
+/// Writes the polished final report, retrying once with an explicit expansion request
+/// if the model comes back under `MIN_FINAL_REPORT_WORDS` — mirrors Odysseus's `_final_report`.
 async fn write_final_report(
-    provider: &str,
-    http_client: &reqwest::Client,
-    host: &str,
-    api_key: &str,
-    model: &str,
-    cancel_token: &CancellationToken,
+    params: &AgentLoopParams<'_>,
+    topic: &str,
     report: &str,
+    category: Option<&str>,
 ) -> Result<String, AppError> {
-    let prompt = format!(
-        "Write a **long, detailed, comprehensive** research report based on the findings below.\n\n\
-        Requirements:\n\
-        - Write at MINIMUM 1500 words — this should be a thorough, magazine-quality article\n\
-        - Use clear ## headings and ### subheadings to organize into logical sections\n\
-        - Each section should have multiple detailed paragraphs, not just bullet points\n\
-        - Synthesize and analyze the information — explain WHY things matter, draw comparisons, provide context\n\
-        - Include specific data points, numbers, and statistics from the evidence\n\
-        - Include source URLs as inline citations [like this](url)\n\
-        - Note where sources agree and where they disagree\n\
-        - Add a brief executive summary at the top\n\
-        - End with a clear conclusion that directly answers the question\n\
-        - Write in an engaging, informative style — not dry or robotic\n\n\
-        Findings:\n{}",
-        report
-    );
+    let prompt = build_final_report_prompt(topic, report, category);
+    let result = call_llm_once(
+        params.provider, params.http_client, params.host, params.api_key, params.model,
+        params.cancel_token, &prompt,
+    ).await?;
 
-    call_llm_once(provider, http_client, host, api_key, model, cancel_token, &prompt).await
+    if result.split_whitespace().count() < MIN_FINAL_REPORT_WORDS {
+        let messages = vec![user_msg(prompt), assistant_msg(result.clone()), user_msg(EXPANSION_REQUEST)];
+        if let Ok(expanded) = call_llm_messages(
+            params.provider, params.http_client, params.host, params.api_key, params.model,
+            params.cancel_token, messages,
+        ).await {
+            if expanded.split_whitespace().count() > result.split_whitespace().count() {
+                return Ok(expanded);
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 pub async fn run_research_loop(
     params: AgentLoopParams<'_>,
     config: ResearchLoopConfig,
-    initial_system_prompt: String,
+    topic: String,
 ) -> Result<(), AppError> {
     let config = config.clamped();
     let start = std::time::Instant::now();
@@ -297,6 +307,26 @@ pub async fn run_research_loop(
     let mut empty_rounds: u8 = 0;
     let mut report_body = String::new();
     let mut sources: u32 = 0;
+    let mut queries_used: u32 = 0;
+    let mut all_findings: Vec<Finding> = Vec::new();
+    let mut analyzed_urls: Vec<(String, String)> = Vec::new();
+    let mut last_search_error: Option<String> = None;
+    let mut search_unavailable = false;
+
+    // PLAN + category classification — run once, up front, like Odysseus's
+    // `_create_plan`/`_classify_category`. Failures here just fall back to no
+    // plan/no category rather than aborting the whole session.
+    let _ = params.channel.send(CompletionEvent::ResearchPhase {
+        phase: "planning".into(), round: 0, max_rounds: config.max_rounds, detail: None, sources: 0,
+    });
+    let research_plan = call_llm_once(
+        params.provider, params.http_client, params.host, params.api_key, params.model,
+        params.cancel_token, &build_plan_prompt(&topic),
+    ).await.map(|reply| parse_plan(&reply)).unwrap_or_default();
+    let category = call_llm_once(
+        params.provider, params.http_client, params.host, params.api_key, params.model,
+        params.cancel_token, &build_category_prompt(&topic),
+    ).await.ok().and_then(|reply| parse_category(&reply));
 
     loop {
         if params.cancel_token.is_cancelled() {
@@ -319,22 +349,24 @@ pub async fn run_research_loop(
             sources,
         });
 
-        let query_gen_prompt = build_query_gen_prompt(
-            &initial_system_prompt,
-            round,
-            config.max_rounds,
-            &report_body,
-        );
+        let query_gen_prompt = build_query_gen_prompt(&topic, &research_plan, round, config.max_rounds, &report_body);
 
-        let new_findings = run_search_round(&params, &query_gen_prompt, round, config.max_rounds, &mut sources).await?;
+        let round_findings = run_search_round(
+            &params, &query_gen_prompt, round, config.max_rounds,
+            &mut sources, &mut queries_used, &mut analyzed_urls, &mut last_search_error,
+        ).await?;
 
-        if new_findings.trim().is_empty() {
+        if round_findings.is_empty() {
             empty_rounds += 1;
             if empty_rounds >= config.max_empty_rounds {
+                if all_findings.is_empty() {
+                    search_unavailable = true;
+                }
                 break;
             }
         } else {
             empty_rounds = 0;
+            all_findings.extend(round_findings);
         }
 
         let _ = params.channel.send(CompletionEvent::ResearchPhase {
@@ -345,24 +377,13 @@ pub async fn run_research_loop(
             sources,
         });
 
+        // Re-feed only the most recent findings into synthesis, not the whole
+        // history — bounds prompt growth while older findings still count as
+        // sources in the final report. Mirrors Odysseus's `synthesis_window`.
+        let window_start = all_findings.len().saturating_sub(SYNTHESIS_WINDOW);
         report_body = synthesize_round(
-            params.provider,
-            params.http_client,
-            params.host,
-            params.api_key,
-            params.model,
-            params.cancel_token,
-            &report_body,
-            &new_findings,
-            round,
-        ).await?;
-        // Hard ceiling regardless of how well the model followed "remove redundancy" above —
-        // a single oversized round must not be allowed to carry forward into every subsequent prompt.
-        if report_body.len() > 12_000 {
-            let mut cut = 12_000;
-            while !report_body.is_char_boundary(cut) { cut -= 1; }
-            report_body.truncate(cut);
-        }
+            &params, &topic, &report_body, &all_findings[window_start..], round, config.max_rounds, sources,
+        ).await;
 
         if round >= config.min_rounds {
             let _ = params.channel.send(CompletionEvent::ResearchPhase {
@@ -374,17 +395,26 @@ pub async fn run_research_loop(
             });
 
             if should_stop(
-                params.provider,
-                params.http_client,
-                params.host,
-                params.api_key,
-                params.model,
-                params.cancel_token,
-                &report_body,
+                params.provider, params.http_client, params.host, params.api_key, params.model,
+                params.cancel_token, &report_body, round, config.max_rounds,
             ).await? {
                 break;
             }
         }
+    }
+
+    if search_unavailable {
+        let detail = last_search_error.unwrap_or_else(|| "unknown error".into());
+        let message = format!(
+            "**Search unavailable** — Web search failed after {round} round(s). Error: {detail}\n\n\
+            Please check your search provider settings and ensure the service is running."
+        );
+        let _ = params.channel.send(CompletionEvent::Chunk { text: message, thinking: None });
+        let _ = params.channel.send(CompletionEvent::Done {
+            done_reason: Some("search_unavailable".into()),
+            usage: None,
+        });
+        return Ok(());
     }
 
     let _ = params.channel.send(CompletionEvent::ResearchPhase {
@@ -395,18 +425,32 @@ pub async fn run_research_loop(
         sources,
     });
 
-    let final_report = write_final_report(
-        params.provider,
-        params.http_client,
-        params.host,
-        params.api_key,
-        params.model,
-        params.cancel_token,
-        &report_body,
-    ).await?;
+    let final_report = if report_body.is_empty() {
+        if all_findings.is_empty() {
+            "No information could be gathered for this question.".to_string()
+        } else {
+            // Synthesis never produced a report despite findings being gathered (e.g. every
+            // synthesize_round call failed) — fall back to a basic compiled listing instead
+            // of claiming nothing was found.
+            all_findings.iter()
+                .map(|f| format!("## {}\n\n{}\n\nSource: {}", f.title, f.notes, f.url))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        }
+    } else {
+        write_final_report(&params, &topic, &report_body, category.as_deref()).await?
+    };
+
+    let stats = ResearchStats {
+        elapsed_secs: start.elapsed().as_secs_f64(),
+        rounds: round,
+        queries: queries_used,
+        urls_analyzed: analyzed_urls.len(),
+    };
+    let formatted = format_research_report(&topic, &final_report, &stats, &all_findings, &analyzed_urls);
 
     let _ = params.channel.send(CompletionEvent::Chunk {
-        text: final_report,
+        text: formatted,
         thinking: None,
     });
 
