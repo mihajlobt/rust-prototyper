@@ -21,7 +21,7 @@ import remarkGithubAlerts from "remark-github-alerts";
 import rehypeRaw from "rehype-raw";
 import rehypeGroupDetails from "./rehype-group-details";
 import { Allotment } from "allotment";
-import { Eye, EyeOff, List } from "lucide-react";
+import { List } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CodeBlock, CodeBlockCode, CodeBlockHeader } from "@/components/ui/code-block";
@@ -39,26 +39,13 @@ interface PlanPreviewProps {
 }
 
 
-export function PlanPreview({ body, onTaskToggle, reportMode: forcedReportMode }: PlanPreviewProps) {
+export function PlanPreview({ body, onTaskToggle, reportMode }: PlanPreviewProps) {
   const [showOutline, setShowOutline] = useState(false);
-  const [reportModeToggle, setReportModeToggle] = useState(false);
-  const reportMode = forcedReportMode ?? reportModeToggle;
   const components = useMemo(() => buildComponents(onTaskToggle, reportMode), [onTaskToggle, reportMode]);
 
   return (
     <div className="relative h-full min-h-0">
       <div className="absolute top-2 right-2 z-10 flex gap-1.5">
-        {forcedReportMode === undefined && (
-          <Toggle
-            pressed={reportModeToggle}
-            onPressedChange={setReportModeToggle}
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1 text-[10px] bg-background/80 backdrop-blur shadow-sm"
-          >
-            {reportModeToggle ? <Eye size={11} /> : <EyeOff size={11} />} Report
-          </Toggle>
-        )}
         <Toggle
           pressed={showOutline}
           onPressedChange={setShowOutline}
