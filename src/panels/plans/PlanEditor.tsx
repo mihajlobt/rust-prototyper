@@ -25,6 +25,7 @@ export type EditorAction =
   | { type: "setHeading"; level: 1 | 2 | 3 | 4 | 5 | 6 }
   | { type: "wrap"; wrap: string }
   | { type: "insertLink" }
+  | { type: "insertImage" }
   | { type: "prefixLines"; prefix: string }
   | { type: "insertBlock"; text: string }
   | { type: "insertAtCursor"; text: string }
@@ -150,6 +151,8 @@ function runAction(
       return wrapSelection(view, action.wrap, onChange);
     case "insertLink":
       return insertLink(view, onChange);
+    case "insertImage":
+      return insertImage(view, onChange);
     case "prefixLines":
       return prefixLines(view, action.prefix, onChange);
     case "insertBlock":
@@ -217,6 +220,19 @@ function insertLink(view: EditorView, onChange: (v: string) => void): void {
   view.dispatch({
     changes: { from: sel.from, to: sel.to, insert: inserted },
     selection: { anchor: sel.from + label.length + 3, head: sel.from + label.length + 3 + 3 },
+  });
+  onChange(view.state.doc.toString());
+  view.focus();
+}
+
+function insertImage(view: EditorView, onChange: (v: string) => void): void {
+  const sel = view.state.selection.main;
+  const text = view.state.sliceDoc(sel.from, sel.to);
+  const alt = text || "image description";
+  const inserted = `![${alt}](url)`;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: inserted },
+    selection: { anchor: sel.from + alt.length + 4, head: sel.from + alt.length + 4 + 3 },
   });
   onChange(view.state.doc.toString());
   view.focus();

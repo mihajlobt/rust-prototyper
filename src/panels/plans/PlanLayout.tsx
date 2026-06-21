@@ -31,6 +31,7 @@ interface PlanLayoutProps {
   editorHandle: React.RefObject<PlanEditorHandle | null>;
   onTaskToggle: (line: number) => void;
   chatSlot: React.ReactNode;
+  project?: string;
 }
 
 export function PlanLayout({
@@ -45,6 +46,7 @@ export function PlanLayout({
   editorHandle,
   onTaskToggle,
   chatSlot,
+  project,
 }: PlanLayoutProps) {
   if (mode === "focus") {
     return <FocusLayout source={source} onSourceChange={onSourceChange} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} />;
@@ -53,9 +55,9 @@ export function PlanLayout({
     return <ReadLayout source={source} onTaskToggle={onTaskToggle} reportMode={reportMode} chatOpen={chatOpen} chatSlot={chatSlot} />;
   }
   if (mode === "write") {
-    return <WriteLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} chatOpen={chatOpen} chatSlot={chatSlot} />;
+    return <WriteLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} chatOpen={chatOpen} chatSlot={chatSlot} project={project} />;
   }
-  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} reportMode={reportMode} chatOpen={chatOpen} chatSlot={chatSlot} />;
+  return <SplitLayout source={source} onSourceChange={onSourceChange} lineNumbers={lineNumbers} onSelectionChange={onSelectionChange} extraExtensions={extraExtensions} editorHandle={editorHandle} onTaskToggle={onTaskToggle} reportMode={reportMode} chatOpen={chatOpen} chatSlot={chatSlot} project={project} />;
 }
 
 // ─── Mode: focus (no chat) ────────────────────────────────────────────────────
@@ -85,7 +87,7 @@ function FocusLayout({ source, onSourceChange, onSelectionChange, extraExtension
 
 // ─── Mode: write (editor + chat) ─────────────────────────────────────────────
 
-function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, chatOpen, chatSlot }: {
+function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, chatOpen, chatSlot, project }: {
   source: string;
   onSourceChange: (v: string) => void;
   lineNumbers: boolean;
@@ -94,6 +96,7 @@ function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
   editorHandle: React.RefObject<PlanEditorHandle | null>;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
+  project?: string;
 }) {
   const { ref, onDragEnd, defaultSizes } = useAllotmentLayout(
     "plans-write",
@@ -104,7 +107,7 @@ function WriteLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
     <Allotment ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes}>
       <Allotment.Pane>
         <div className="flex h-full flex-col">
-          <FormatToolbar editorHandle={editorHandle} />
+          <FormatToolbar editorHandle={editorHandle} project={project} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <PlanEditor
               ref={editorHandle}
@@ -153,7 +156,7 @@ function ReadLayout({ source, onTaskToggle, reportMode, chatOpen, chatSlot }: {
 
 // ─── Mode: split (editor + preview + chat) ───────────────────────────────────
 
-function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, reportMode, chatOpen, chatSlot }: {
+function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, extraExtensions, editorHandle, onTaskToggle, reportMode, chatOpen, chatSlot, project }: {
   source: string;
   onSourceChange: (v: string) => void;
   lineNumbers: boolean;
@@ -164,6 +167,7 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
   reportMode?: boolean;
   chatOpen: boolean;
   chatSlot: React.ReactNode;
+  project?: string;
 }) {
   const parsed = parseFrontmatter(source);
   const { ref, onDragEnd, defaultSizes } = useAllotmentLayout(
@@ -175,7 +179,7 @@ function SplitLayout({ source, onSourceChange, lineNumbers, onSelectionChange, e
     <Allotment ref={ref} onDragEnd={onDragEnd} defaultSizes={defaultSizes}>
       <Allotment.Pane>
         <div className="flex h-full flex-col">
-          <FormatToolbar editorHandle={editorHandle} />
+          <FormatToolbar editorHandle={editorHandle} project={project} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <PlanEditor
               ref={editorHandle}
