@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useBonsaiStore } from "@/stores/bonsaiStore";
 import { useAppStore } from "@/stores/appStore";
@@ -16,11 +16,9 @@ export function useBonsai() {
   }, [project]);
 
   // Listen for auto-stop timer event from Rust backend.
-  // Guard with ref to prevent double-listening in React 19 Strict Mode (dev double-mount).
-  const stopTimeoutRegisteredRef = useRef(false);
+  // React 19 Strict Mode mounts twice in dev; cleanup unlistens the orphaned first
+  // registration when its .then resolves, so no separate guard ref is needed.
   useEffect(() => {
-    if (stopTimeoutRegisteredRef.current) return;
-    stopTimeoutRegisteredRef.current = true;
     let unlisten: UnlistenFn | null = null;
     listen("bonsai:stop-timeout", () => {
       store.stopServer();
@@ -28,7 +26,6 @@ export function useBonsai() {
     }).then((fn) => { unlisten = fn; });
     return () => {
       unlisten?.();
-      stopTimeoutRegisteredRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- store ref is stable
   }, []);

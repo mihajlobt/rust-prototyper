@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Allotment } from "allotment";
 import {
   Plus, Trash2, RefreshCw, Database, Key, Globe,
@@ -61,18 +61,42 @@ export function APIsPanel() {
   const [oauthLoading, setOauthLoading] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Tracks the project whose apis/envVars/apiKeys have finished loading from disk.
+  // Save effects skip while this differs from settings.project so a project switch
+  // can't write the previous project's data into the new project's files before the
+  // async load resolves.
+  const loadedProjectRef = useRef<string | null>(null);
+
   // Load from FS on project change
   useEffect(() => {
+    loadedProjectRef.current = null;
     let cancelled = false;
-    loadApis(settings.project).then((data) => { if (!cancelled) setApis(data); });
-    loadEnvVars(settings.project).then((data) => { if (!cancelled) setUI({ apisEnvVars: data }); });
-    loadApiKeys(settings.project).then((data) => { if (!cancelled) setApiKeys(data); });
+    Promise.all([
+      loadApis(settings.project),
+      loadEnvVars(settings.project),
+      loadApiKeys(settings.project),
+    ]).then(([apisData, envData, keysData]) => {
+      if (cancelled) return;
+      setApis(apisData);
+      setUI({ apisEnvVars: envData });
+      setApiKeys(keysData);
+      loadedProjectRef.current = settings.project;
+    });
     return () => { cancelled = true; };
   }, [settings.project, setUI]);
 
-  useEffect(() => { saveApis(settings.project, apis); }, [apis, settings.project]);
-  useEffect(() => { saveEnvVars(settings.project, envVars); }, [envVars, settings.project]);
-  useEffect(() => { saveApiKeys(settings.project, apiKeys); }, [apiKeys, settings.project]);
+  useEffect(() => {
+    if (loadedProjectRef.current !== settings.project) return;
+    saveApis(settings.project, apis);
+  }, [apis, settings.project]);
+  useEffect(() => {
+    if (loadedProjectRef.current !== settings.project) return;
+    saveEnvVars(settings.project, envVars);
+  }, [envVars, settings.project]);
+  useEffect(() => {
+    if (loadedProjectRef.current !== settings.project) return;
+    saveApiKeys(settings.project, apiKeys);
+  }, [apiKeys, settings.project]);
 
   const selectApi = useCallback((api: SavedApi) => {
     openApi(api.id);

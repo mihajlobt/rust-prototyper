@@ -49,7 +49,9 @@ export function MentionPicker({ query, projectPath, onSelect, onClose, onChangeT
   }, [query])
 
   useEffect(() => {
-    loadProjectAssets(projectPath).then(setAssets)
+    let cancelled = false
+    loadProjectAssets(projectPath).then((data) => { if (!cancelled) setAssets(data) })
+    return () => { cancelled = true }
   }, [projectPath])
 
   const filtered = assets.filter((a) =>

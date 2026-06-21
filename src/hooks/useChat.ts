@@ -149,24 +149,27 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
     prevCanToolsRef.current = caps.tools
   }, [caps.tools])
 
-  // Track which entityIds we've already loaded from disk
-  const loadedRef = useRef<Set<string>>(new Set())
+  // Track which entityIds we've already loaded from disk — one set per file kind
+  // so a warm messages slot doesn't short-circuit the compaction/session hydrations.
+  const loadedMessagesRef = useRef<Set<string>>(new Set())
+  const loadedCompactionRef = useRef<Set<string>>(new Set())
+  const loadedSessionRef = useRef<Set<string>>(new Set())
 
   const compactionPath = chatPath.replace(/\.json$/, ".compaction.json")
   const sessionPath = chatPath.replace(/\.json$/, ".session.json")
 
   // Cold start: load from disk the first time this entityId is accessed
   useEffect(() => {
-    if (loadedRef.current.has(entityId)) return
+    if (loadedMessagesRef.current.has(entityId)) return
     if (useChatStore.getState().chats[entityId]?.messages.length) {
-      loadedRef.current.add(entityId)
+      loadedMessagesRef.current.add(entityId)
       return
     }
     let cancelled = false
     historyGet(chatPath)
       .then((raw) => {
         if (cancelled) return
-        loadedRef.current.add(entityId)
+        loadedMessagesRef.current.add(entityId)
         if (raw === null) return
         try {
           const messages = JSON.parse(raw) as ChatMessage[]
@@ -178,18 +181,20 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
         }
       })
       .catch(() => {
-        if (!cancelled) loadedRef.current.add(entityId)
+        if (!cancelled) loadedMessagesRef.current.add(entityId)
       })
     return () => { cancelled = true }
   }, [entityId, chatPath])
 
   // Cold start: hydrate the compaction cache from its sibling file
   useEffect(() => {
-    if (loadedRef.current.has(entityId)) return
+    if (loadedCompactionRef.current.has(entityId)) return
+    if (useChatStore.getState().chats[entityId]?.compaction) return
     let cancelled = false
     historyGet(compactionPath)
       .then((raw) => {
         if (cancelled || raw === null) return
+        loadedCompactionRef.current.add(entityId)
         try {
           const compaction = JSON.parse(raw) as Compaction
           if (typeof compaction.boundaryIndex === "number" && typeof compaction.summary === "string") {
@@ -205,12 +210,13 @@ export function useChat({ entityId, chatPath, systemPrompt, outputPath, onOutput
 
   // Cold start: hydrate the per-session usage snapshot
   useEffect(() => {
-    if (loadedRef.current.has(entityId)) return
+    if (loadedSessionRef.current.has(entityId)) return
     if (useChatStore.getState().chats[entityId]?.sessionUsage) return
     let cancelled = false
     historyGet(sessionPath)
       .then((raw) => {
         if (cancelled || raw === null) return
+        loadedSessionRef.current.add(entityId)
         try {
           const snapshot = JSON.parse(raw) as { lastFinalUsage?: TokenUsage; liveEstimate?: number; updatedAt?: number }
           if (typeof snapshot.updatedAt === "number") {
