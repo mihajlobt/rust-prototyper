@@ -144,7 +144,7 @@ export function PlansPanel() {
     return plansContentType === "research"
       ? getPlansResearchSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory })
       : getPlansSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory });
-  }, [project, activePlan, mentionOptions, plansContentType, isFirstResearchTurn]);
+  }, [project, activePlan, mentionOptions, plansContentType, isFirstResearchTurn, chatEntityId]);
 
   const chatPath = project && activePlan ? `projects/${project}/plans/${activePlan}.chat.json` : "";
   const planOutputPath = project && activePlan ? `projects/${project}/plans/${activePlan}.md` : "";
@@ -287,7 +287,6 @@ export function PlansPanel() {
               editorHandle={editorHandle}
               onTaskToggle={handleTaskToggle}
               chatSlot={chatSlot}
-              project={project}
             />
           )}
         </div>
