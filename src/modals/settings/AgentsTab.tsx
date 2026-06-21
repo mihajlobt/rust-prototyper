@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { ChevronDown, Trash2 } from "lucide-react";
 import type { Settings } from "@/hooks/useSettings";
-import type { ToolPermissionMode } from "@/lib/ipc";
+import type { ToolPermissionMode, ResearchLoopConfig } from "@/lib/ipc";
 import {
   WIZARD_TOOL_FILTER_DEFAULT,
   SCREENS_TOOL_FILTER_DEFAULT,
@@ -20,6 +20,13 @@ import {
   PLANS_TOOL_FILTER_DEFAULT,
   PLANS_RESEARCH_TOOL_FILTER_DEFAULT,
 } from "@/lib/agentToolDefaults";
+
+const RESEARCH_CONFIG_DEFAULTS: Required<ResearchLoopConfig> = {
+  max_rounds: 8,
+  max_time_secs: 300,
+  min_rounds: 2,
+  max_empty_rounds: 2,
+};
 
 interface AgentsTabProps {
   settings: Settings;
@@ -77,6 +84,7 @@ function getActivatedTools(settings: Settings, panelKey: PanelKey): string[] {
 export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
   const [toolTableOpen, setToolTableOpen] = useState(false);
   const [safetyLimitsOpen, setSafetyLimitsOpen] = useState(false);
+  const [researchOpen, setResearchOpen] = useState(false);
 
   function toggle(panelKey: PanelKey, toolName: string, checked: boolean) {
     const current = getActivatedTools(settings, panelKey);
@@ -212,6 +220,59 @@ export function AgentsTab({ settings, setSettings }: AgentsTabProps) {
             <p className="text-xs text-muted-foreground">Leave blank to use global default.</p>
           </div>
         </section>
+
+        {/* Research Settings — collapsible */}
+        <Collapsible open={researchOpen} onOpenChange={setResearchOpen}>
+          <section className="space-y-2">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-left group">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Research</p>
+              <ChevronDown
+                size={13}
+                className="text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+              />
+            </CollapsibleTrigger>
+            {!researchOpen && (
+              <p className="text-xs text-muted-foreground">
+                Bounds for the Plans research loop.
+              </p>
+            )}
+            <CollapsibleContent>
+              <div className="space-y-3 pt-1">
+                {([
+                  { key: "max_rounds",        label: "Max rounds",       min: 1,  max: 20,   step: 1,   hint: "Hard cap on research rounds (default 8)" },
+                  { key: "max_time_secs",     label: "Max time (s)",    min: 30, max: 1800, step: 30,  hint: "Wall-clock timeout (default 300s)" },
+                  { key: "min_rounds",        label: "Min rounds",       min: 1,  max: 20,   step: 1,   hint: "Rounds before early-stop is evaluated (default 2)" },
+                  { key: "max_empty_rounds",  label: "Max empty rounds",  min: 1, max: 10,   step: 1,   hint: "Consecutive empty rounds before abort (default 2)" },
+                ] as const).map(({ key, label, min, max, step, hint }) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">{label}</span>
+                    <Input
+                      type="number"
+                      min={min}
+                      max={max}
+                      step={step}
+                      className="w-24 text-xs"
+                      placeholder={String(RESEARCH_CONFIG_DEFAULTS[key])}
+                      value={settings.researchConfig[key] ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const n = parseInt(raw, 10);
+                        const next = raw === "" || isNaN(n)
+                          ? { ...settings.researchConfig, [key]: undefined }
+                          : n >= min && n <= max
+                            ? { ...settings.researchConfig, [key]: n }
+                            : settings.researchConfig;
+                        setSettings({ researchConfig: next });
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">{hint}</span>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">Leave blank to use the backend default.</p>
+              </div>
+            </CollapsibleContent>
+          </section>
+        </Collapsible>
 
         {/* Safety Limits — collapsible */}
         <Collapsible open={safetyLimitsOpen} onOpenChange={setSafetyLimitsOpen}>

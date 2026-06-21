@@ -495,16 +495,6 @@ export function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-// ─── Research Config ───
-
-export async function getResearchConfig(): Promise<ResearchLoopConfig> {
-  return invoke("research_get_config");
-}
-
-export async function saveResearchConfig(config: ResearchLoopConfig): Promise<void> {
-  return invoke("research_save_config", { config });
-}
-
 // ─── Safe IPC Wrappers (with toast notifications) ───
 
 import { safeInvoke, safeInvokeSilent } from "./notifications";

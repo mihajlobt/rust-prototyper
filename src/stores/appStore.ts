@@ -1,5 +1,6 @@
 import { create, type StateCreator } from "zustand";
 import { load } from "@tauri-apps/plugin-store";
+import type { ResearchLoopConfig } from "@/lib/ipc";
 import { useProjectSettingsStore } from "./projectSettingsStore";
 
 const SETTINGS_KEY = "settings.json";
@@ -75,6 +76,8 @@ export interface Settings {
   toolOutputResendLimit: number;
   /** Fraction of the effective context window that triggers an LLM summary of old messages (0 = off). Default: 0.7. */
   compactionThreshold: number;
+  /** Configuration for the Plans research loop. Fields are optional; the backend applies defaults per field. */
+  researchConfig: ResearchLoopConfig;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -110,6 +113,7 @@ const DEFAULT_SETTINGS: Settings = {
   toolOutputHistoryLimit: 15000,
   toolOutputResendLimit: 2000,
   compactionThreshold: 0.7,
+  researchConfig: {},
 };
 
 /** Derive provider from host + API key. Provider is NOT stored — it's computed. */

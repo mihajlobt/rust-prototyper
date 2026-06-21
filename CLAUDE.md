@@ -35,7 +35,7 @@ src/
   modals/          # SettingsModal, ProjectManagerModal, ExportModal, AddLibraryModal, PromptConfigModal, ComponentExportModal, SaveComponentModal (+ StylesEditor.tsx is a tabbed editor in Settings, not a true modal)
   components/ui/   # shadcn/ui primitives
 src-tauri/
-  src/lib.rs       # All Rust commands (48 total)
+  src/lib.rs       # All Rust commands (52 total)
   capabilities/default.json   # Tauri plugin permissions
   tauri.conf.json  # Window config, CSP, devUrl (1420)
 ```
@@ -50,6 +50,7 @@ Commands must be registered in `generate_handler![]` in `lib.rs`. Plugin permiss
 | File System | `read_dir`, `read_file`, `write_file`, `create_dir`, `delete_file`, `delete_dir`, `rename_file`, `create_symlink`, `reveal_in_explorer` |
 | HTTP | `http_request`, `test_searxng_connection`, `setup_searxng_config` |
 | AI | `generate_completion`, `generate_completion_stream`, `stop_generation_stream`, `resolve_tool_permission`, `resolve_ask_user`, `resolve_ask_user_form`, `list_anthropic_models`, `list_ollama_models`, `save_model_presets`, `load_model_presets` |
+| History | `history_get`, `history_set`, `history_delete`, `history_list_keys` |
 | Bonsai | `bonsai_start_server`, `bonsai_stop_server`, `bonsai_server_status`, `bonsai_generate_image`, `bonsai_cancel_generation`, `bonsai_list_assets`, `bonsai_delete_asset`, `bonsai_get_server_config`, `bonsai_save_server_config`, `bonsai_schedule_stop`, `bonsai_cancel_stop` |
 | Export | `export_project`, `export_component` |
 | Workflows | `save_workflow`, `load_workflow`, `list_workflows` |

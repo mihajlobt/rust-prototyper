@@ -8,5 +8,4 @@ mod research_prompts;
 mod research_report;
 
 pub use agent_loop::{run_agent_loop, AgentLoopParams};
-pub use research_loop::ResearchLoopConfig;
 

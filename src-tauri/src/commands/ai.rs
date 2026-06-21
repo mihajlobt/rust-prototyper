@@ -316,6 +316,37 @@ fn build_agent_loop_params<'a>(
     }
 }
 
+/// Routes between the standard agent loop and the research loop based on
+/// `request.research_mode`. Both branches share `build_agent_loop_params` —
+/// the only divergence is the research topic (non-system messages joined) and
+/// the research config pulled from the request.
+async fn run_or_research(
+    request: &CompletionRequest,
+    app_data_dir: &std::path::Path,
+    output_path: &str,
+    channel: &Channel<CompletionEvent>,
+    cancel_token: &CancellationToken,
+    http_client: &reqwest::Client,
+    app_handle: &AppHandle,
+) -> Result<(), AppError> {
+    let params = build_agent_loop_params(request, app_data_dir, output_path, channel, cancel_token, http_client, app_handle);
+    if request.research_mode {
+        let config = request.research_config.clone().unwrap_or_default();
+        // The research topic is the conversation itself (the user's question plus any
+        // ask_user_form clarification answers from the gate turn), not the system prompt —
+        // the latter only carries persona/format instructions for the agent path.
+        let topic = request.messages.iter()
+            .filter(|m| m.role != "system")
+            .map(|m| m.content.clone())
+            .filter(|c| !c.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        run_research_loop(params, config, topic).await
+    } else {
+        crate::agent::run_agent_loop(params).await
+    }
+}
+
 async fn generate_ollama_completion_stream(
     request: &CompletionRequest,
     app_data_dir: &std::path::Path,
@@ -325,22 +356,7 @@ async fn generate_ollama_completion_stream(
     app_handle: &AppHandle,
 ) -> Result<(), AppError> {
     if let Some(path) = request.output_path.as_deref() {
-        let params = build_agent_loop_params(request, app_data_dir, path, channel, cancel_token, http_client, app_handle);
-        if request.research_mode {
-            let config = request.research_config.clone().unwrap_or_default();
-            // The research topic is the conversation itself (the user's question plus any
-            // ask_user_form clarification answers from the gate turn), not the system prompt —
-            // the latter only carries persona/format instructions for the agent path.
-            let topic = request.messages.iter()
-                .filter(|m| m.role != "system")
-                .map(|m| m.content.clone())
-                .filter(|c| !c.is_empty())
-                .collect::<Vec<_>>()
-                .join("\n");
-            run_research_loop(params, config, topic).await
-        } else {
-            crate::agent::run_agent_loop(params).await
-        }
+        run_or_research(request, app_data_dir, path, channel, cancel_token, http_client, app_handle).await
     } else {
         // Direct HTTP path: builds raw JSON messages to support tool_name
         // in tool role messages, which ollama-rs ChatMessage doesn't support.
@@ -488,22 +504,7 @@ async fn generate_claude_completion_stream(
     app_handle: &AppHandle,
 ) -> Result<(), AppError> {
     if let Some(path) = request.output_path.as_deref() {
-        let params = build_agent_loop_params(request, app_data_dir, path, channel, cancel_token, http_client, app_handle);
-        if request.research_mode {
-            let config = request.research_config.clone().unwrap_or_default();
-            // The research topic is the conversation itself (the user's question plus any
-            // ask_user_form clarification answers from the gate turn), not the system prompt —
-            // the latter only carries persona/format instructions for the agent path.
-            let topic = request.messages.iter()
-                .filter(|m| m.role != "system")
-                .map(|m| m.content.clone())
-                .filter(|c| !c.is_empty())
-                .collect::<Vec<_>>()
-                .join("\n");
-            run_research_loop(params, config, topic).await
-        } else {
-            crate::agent::run_agent_loop(params).await
-        }
+        run_or_research(request, app_data_dir, path, channel, cancel_token, http_client, app_handle).await
     } else {
         chat_completion_claude(http_client, &request.api_key, &request.model, &request.messages, true, Some(channel), cancel_token).await.map(|_| ())
     }

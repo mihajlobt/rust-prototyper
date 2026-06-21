@@ -26,16 +26,19 @@ pub fn inject_images(report: &str, images: &[String]) -> String {
     let heading_re = regex::Regex::new(r"(?m)^## .+$").unwrap();
     let mut out = String::with_capacity(report.len());
     let mut last_end = 0;
-    let mut heading_count = 0;
     let mut img_idx = 0;
     for m in heading_re.find_iter(report) {
         out.push_str(&report[last_end..m.end()]);
         last_end = m.end();
-        heading_count += 1;
-        if heading_count > 1 && heading_count % 2 == 1 && img_idx < images.len() {
-            out.push_str(&format!("\n\n![]({})\n", images[img_idx]));
+        if img_idx < images.len() {
+            out.push_str(&format!("\n\n![]({})", images[img_idx]));
             img_idx += 1;
         }
+    }
+    // Append any images that didn't fit under a heading at the end.
+    while img_idx < images.len() {
+        out.push_str(&format!("\n\n![]({})", images[img_idx]));
+        img_idx += 1;
     }
     out.push_str(&report[last_end..]);
     out

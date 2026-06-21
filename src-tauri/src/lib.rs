@@ -12,7 +12,6 @@ use tokio_util::sync::CancellationToken;
 
 use agent::executor::lsp::client::LspClient;
 use commands::bonsai::{BonsaiServer, BonsaiServerConfig};
-use agent::ResearchLoopConfig;
 
 pub struct AppState {
     pub active_processes: Mutex<HashMap<u32, CommandChild>>,
@@ -35,8 +34,6 @@ pub struct AppState {
     /// Long-lived `typescript-language-server` processes, one per project root, spawned
     /// lazily by the `lsp` agent tool and reused across calls within that project.
     pub(crate) lsp_servers: tokio::sync::Mutex<HashMap<PathBuf, Arc<LspClient>>>,
-    /// Configuration for the multi-turn research loop.
-    pub research_config: Mutex<ResearchLoopConfig>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -159,7 +156,6 @@ pub fn run() {
             bonsai_config: Mutex::new(BonsaiServerConfig::default()),
             bonsai_generation_token: Mutex::new(None),
             lsp_servers: tokio::sync::Mutex::new(HashMap::new()),
-            research_config: Mutex::new(ResearchLoopConfig::default()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::process::bun_dev,
@@ -214,8 +210,6 @@ pub fn run() {
             commands::bonsai::assets::bonsai_save_server_config,
             commands::bonsai::server::bonsai_schedule_stop,
             commands::bonsai::server::bonsai_cancel_stop,
-            commands::research::research_get_config,
-            commands::research::research_save_config,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

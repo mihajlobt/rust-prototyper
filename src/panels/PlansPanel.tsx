@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useChatStore } from "@/stores/chatStore";
-import { readFile, writeFile, getErrorMessage, isNotFoundError, getHostForProvider } from "@/lib/ipc";
+import { readFile, writeFile, getErrorMessage, isNotFoundError, getHostForProvider, type ResearchLoopConfig } from "@/lib/ipc";
 import { notify } from "@/hooks/useToast";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { useChat } from "@/hooks/useChat";
@@ -129,11 +129,13 @@ export function PlansPanel() {
   // the agent's tool calls — the FE just passes the user input and
   // surfaces the result.
 
-  // ponytail: prior render's message count, read before this render's useChat call decides
-  // whether this is the first research turn — settles within a render or two of history loading.
-  const priorMessageCountRef = useRef(0);
   const isResearchMode = plansContentType === "research";
-  const isFirstResearchTurn = isResearchMode && priorMessageCountRef.current === 0;
+  // First research turn = no persisted chat yet. Chat history loads async in useChat,
+  // so an empty store entry holds until the first user reply lands — that's exactly
+  // the window where we want the clarification-gate prompt instead of the research loop.
+  const chatEntityId = project && activePlan ? `plan:${project}:${activePlan}` : "";
+  const messageCount = useChatStore((s) => s.chats[chatEntityId]?.messages.length ?? 0);
+  const isFirstResearchTurn = isResearchMode && messageCount === 0;
 
   const systemPrompt = useMemo(() => {
     if (!project || !activePlan) return "";
@@ -142,9 +144,8 @@ export function PlansPanel() {
     return plansContentType === "research"
       ? getPlansResearchSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory })
       : getPlansSystemPrompt({ projectName: project, planName: activePlan, projectLayout: inventory });
-  }, [project, activePlan, mentionOptions, plansContentType, isFirstResearchTurn]);
+  }, [project, activePlan, mentionOptions, plansContentType, isFirstResearchTurn, chatEntityId]);
 
-  const chatEntityId = project && activePlan ? `plan:${project}:${activePlan}` : "";
   const chatPath = project && activePlan ? `projects/${project}/plans/${activePlan}.chat.json` : "";
   const planOutputPath = project && activePlan ? `projects/${project}/plans/${activePlan}.md` : "";
 
@@ -154,6 +155,7 @@ export function PlansPanel() {
   }, []);
 
   const sendMessageRef = useRef<(text?: string) => void>(() => {});
+  const researchConfig: ResearchLoopConfig = useAppStore((s) => s.settings.researchConfig);
   const onDone = useCallback((doneReason?: string) => {
     if (doneReason === "clarification_gate") {
       sendMessageRef.current("Begin the research now based on the answers above.");
@@ -172,10 +174,10 @@ export function PlansPanel() {
       : planToolFilter ?? (isResearchMode ? PLANS_RESEARCH_TOOL_FILTER_DEFAULT : PLANS_TOOL_FILTER_DEFAULT),
     panelMaxToolCalls: planMaxToolCalls,
     researchMode: isResearchMode && !isFirstResearchTurn,
+    researchConfig,
   });
 
-  sendMessageRef.current = chat.sendMessage;
-  priorMessageCountRef.current = chat.messages.length;
+  useEffect(() => { sendMessageRef.current = chat.sendMessage }, [chat.sendMessage]);
 
   const onResolvePermission = useCallback(
     (requestId: number, decision: ToolPermissionDecision, toolName: string) => {
