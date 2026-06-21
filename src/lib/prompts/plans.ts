@@ -78,10 +78,10 @@ Body content — can include lists, code blocks, anything.
 </details>
 \`\`\`
 
-TABS — stack 2+ \<details\> blocks back-to-back (no blank prose between them) and the
+TABS — stack 2+ <details> blocks back-to-back (no blank prose between them) and the
 preview renders them as a tab strip instead of an accordion. Use this when content is
 naturally mutually-exclusive (e.g. "Option A" / "Option B" / "Option C"), not for
-sequential or optional-reading content (use single \<details\> for that).
+sequential or optional-reading content (use single <details> for that).
 \`\`\`
 <details>
 <summary>Option A</summary>

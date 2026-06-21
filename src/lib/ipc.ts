@@ -367,7 +367,7 @@ export async function generateCompletionStream(
       searxngUrl: searxngUrl ?? null,
       writeFileLimit: writeFileLimit ?? null,
       toolOutputHistoryLimit: toolOutputHistoryLimit ?? null,
-      researchMode: researchMode ?? null,
+      researchMode: researchMode ?? false,
       researchConfig: researchConfig ?? null,
     },
     onEvent,
