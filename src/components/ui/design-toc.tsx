@@ -1,4 +1,4 @@
-import { Children, isValidElement, memo, useState, useEffect, type ReactNode } from "react"
+import { Children, isValidElement, memo, useMemo, useState, type ReactNode } from "react"
 import { ChevronRight } from "lucide-react"
 import { marked } from "marked"
 import type { Components } from "react-markdown"
@@ -119,17 +119,9 @@ export const markdownHeadingComponents: Partial<Components> = {
 }
 
 export const DesignToc = memo(function DesignToc({ markdown }: { markdown: string }) {
-  const [headings, setHeadings] = useState<ReturnType<typeof extractHeadings>>([]);
+  const headings = useMemo(() => extractHeadings(markdown), [markdown])
 
-  // ponytail: parse on mount and when markdown changes, but let keystrokes
-  // through without blocking the main thread on every re-parse.
-  useEffect(() => {
-    setHeadings([]); // clear immediately — stale parse from a previous frame doesn't clobber
-    const id = setTimeout(() => setHeadings(extractHeadings(markdown)), 64);
-    return () => clearTimeout(id);
-  }, [markdown]);
-
-  if (headings.length === 0) return null;
+  if (headings.length === 0) return null
 
   return (
     <div className="h-full overflow-auto p-2">
@@ -138,5 +130,5 @@ export const DesignToc = memo(function DesignToc({ markdown }: { markdown: strin
       </div>
       <TocTree headings={headings} />
     </div>
-  );
-});
+  )
+})
