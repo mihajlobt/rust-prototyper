@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use bytes::BytesMut;
 use futures_util::StreamExt;
 use futures::future::join_all;
@@ -15,8 +15,8 @@ use crate::{AppError, CompletionEvent, TokenUsage};
 use super::{executor::{execute_tool, execute_task_list, resolve_tool_search, ToolExecutionResult}, tools::build_tools};
 use super::deferred_tools::{deferred_names_in, deferred_tools_system_message, visible_tools};
 
-pub(super) const MAX_ITERATIONS: u8 = 20;
-pub(super) const MAX_WRITES: u8 = 10;
+pub(super) const MAX_ITERATIONS: u32 = 20;
+pub(super) const MAX_WRITES: u32 = 10;
 pub(super) const MAX_TOOL_OUTPUT_FOR_HISTORY: usize = 15000;
 
 pub(super) fn project_dir(app_data_dir: &Path, output_path: &str) -> PathBuf {
@@ -489,14 +489,14 @@ pub struct AgentLoopParams<'a> {
     pub permission_mode: ToolPermissionMode,
     pub tool_allowlist: HashSet<String>,
     /// Override for MAX_ITERATIONS. None or 0 falls back to the compiled default.
-    pub max_tool_calls: Option<u8>,
+    pub max_tool_calls: Option<u32>,
     /// If non-empty, only tools whose names are in this set are offered to the model.
     /// Empty = all tools available (default).
     pub tool_filter: HashSet<String>,
     /// SearXNG base URL for the web_search tool (e.g. "http://localhost:8080"). Empty = disabled.
     pub searxng_url: String,
     /// Override for MAX_WRITES. None falls back to compiled default.
-    pub write_file_limit: Option<u8>,
+    pub write_file_limit: Option<u32>,
     /// Override for MAX_TOOL_OUTPUT_FOR_HISTORY. None falls back to compiled default.
     pub tool_output_history_limit: Option<usize>,
 }
@@ -546,8 +546,8 @@ pub async fn run_agent_loop(params: AgentLoopParams<'_>) -> Result<(), AppError>
         history.push(msg);
     }
 
-    let mut iteration: u8 = 0;
-    let write_count = Arc::new(AtomicU8::new(0));
+    let mut iteration: u32 = 0;
+    let write_count = Arc::new(AtomicU32::new(0));
     let mut latest_usage = TokenUsage::default();
 
     loop {

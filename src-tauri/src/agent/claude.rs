@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use futures::future::join_all;
 use futures_util::StreamExt;
 use ollama_rs::generation::parameters::ThinkType;
@@ -274,8 +274,8 @@ pub async fn run_agent_loop_claude(params: AgentLoopParams<'_>) -> Result<(), Ap
     let no_deferred_tools: HashSet<String> = HashSet::new();
 
     let (system, mut messages) = extract_claude_messages(&initial_messages_json);
-    let write_count = Arc::new(AtomicU8::new(0));
-    let mut iteration: u8 = 0;
+    let write_count = Arc::new(AtomicU32::new(0));
+    let mut iteration: u32 = 0;
     let mut latest_usage = crate::TokenUsage::default();
 
     loop {

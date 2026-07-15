@@ -176,7 +176,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
     } else if (msg.event === "ResearchPhase") {
       useChatStore.getState().appendResearchPhase(entityId, {
         phase: msg.data.phase, round: msg.data.round, maxRounds: msg.data.max_rounds,
-        detail: msg.data.detail, sources: msg.data.sources,
+        detail: msg.data.detail, sources: msg.data.sources, outcome: msg.data.outcome,
       })
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data

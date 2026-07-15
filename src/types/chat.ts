@@ -24,6 +24,7 @@ export interface ResearchPhaseEntry {
   maxRounds: number
   detail: string | null
   sources: number
+  outcome: string | null
 }
 
 /// Groups thinking/text that arrived between tool invocations

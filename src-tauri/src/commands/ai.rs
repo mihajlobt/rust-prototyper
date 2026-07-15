@@ -63,8 +63,10 @@ pub enum CompletionEvent {
     /// Fires during a research loop to report the current sub-phase, round, and progress.
     /// phase values: "round_start" | "searching" | "fetching" | "synthesizing" | "deciding" | "final_report"
     /// `detail` carries the query/URL currently being worked on; `sources` is the running
-    /// count of pages successfully fetched and extracted so far.
-    ResearchPhase { phase: String, round: u8, max_rounds: u8, detail: Option<String>, sources: u32 },
+    /// count of pages successfully fetched and extracted so far. `outcome` is set only for
+    /// "fetching" events once a URL's fate is known: "accepted" | "rejected_low_quality" |
+    /// "rejected_fetch_failed".
+    ResearchPhase { phase: String, round: u8, max_rounds: u8, detail: Option<String>, sources: u32, outcome: Option<String> },
     Done { done_reason: Option<String>, usage: Option<TokenUsage> },
     Error { message: String },
 }
@@ -172,7 +174,7 @@ pub struct CompletionRequest {
     /// Maximum number of tool-call iterations the agent loop will run.
     /// Defaults to MAX_ITERATIONS in agent_loop.rs when absent or zero.
     #[serde(default)]
-    pub max_tool_calls: Option<u8>,
+    pub max_tool_calls: Option<u32>,
     /// If non-empty, only tools whose names are in this list are offered to the model.
     /// Empty = all tools available (default behavior).
     #[serde(default)]
@@ -183,7 +185,7 @@ pub struct CompletionRequest {
     pub searxng_url: Option<String>,
     /// Maximum write_file calls per session. Defaults to MAX_WRITES when absent or zero.
     #[serde(default)]
-    pub write_file_limit: Option<u8>,
+    pub write_file_limit: Option<u32>,
     /// Maximum characters of tool output appended to history. Defaults to MAX_TOOL_OUTPUT_FOR_HISTORY.
     #[serde(default)]
     pub tool_output_history_limit: Option<usize>,

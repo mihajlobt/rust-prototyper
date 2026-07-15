@@ -260,7 +260,7 @@ export type CompletionEvent =
   | { event: "AskUser"; data: { request_id: number; question: string; question_type: AskUserQuestionType; choices?: string[] } }
   | { event: "AskUserForm"; data: { request_id: number; title: string; fields: FormField[] } }
   | { event: "TodoUpdate"; data: { todos: TodoItem[] } }
-  | { event: "ResearchPhase"; data: { phase: string; round: number; max_rounds: number; detail: string | null; sources: number } }
+  | { event: "ResearchPhase"; data: { phase: string; round: number; max_rounds: number; detail: string | null; sources: number; outcome: string | null } }
   | { event: "Done"; data: { done_reason?: string; usage?: TokenUsage } | null }
   | { event: "Error"; data: { message: string } };
 

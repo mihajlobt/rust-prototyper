@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ChevronDown, Loader2, Search, CheckCircle } from "lucide-react"
+import { ChevronDown, Loader2, Search, CheckCircle, Check, X } from "lucide-react"
 import type { ResearchPhaseEntry } from "@/types/chat"
 
 const PHASE_LABEL: Record<string, string> = {
@@ -26,11 +26,25 @@ function groupByRound(log: ResearchPhaseEntry[]): { round: number; entries: Rese
   return rounds
 }
 
+function FetchOutcomeIcon({ outcome }: { outcome: string | null }) {
+  if (outcome === "accepted") return <Check className="h-3 w-3 mt-0.5 shrink-0 text-green-500" />
+  if (outcome === "rejected_low_quality" || outcome === "rejected_fetch_failed") {
+    return <X className="h-3 w-3 mt-0.5 shrink-0 text-red-400" />
+  }
+  return <span className="shrink-0">↳</span>
+}
+
 /** Renders one phase entry's detail line — fetched URLs become clickable links. */
 function PhaseDetailLine({ entry }: { entry: ResearchPhaseEntry }) {
   return (
     <div className="flex items-start gap-1.5 text-muted-foreground pl-2">
-      {entry.phase === "searching" ? <Search className="h-3 w-3 mt-0.5 shrink-0" /> : <span className="shrink-0">↳</span>}
+      {entry.phase === "fetching" ? (
+        <FetchOutcomeIcon outcome={entry.outcome} />
+      ) : entry.phase === "searching" ? (
+        <Search className="h-3 w-3 mt-0.5 shrink-0" />
+      ) : (
+        <span className="shrink-0">↳</span>
+      )}
       {entry.phase === "fetching" && entry.detail ? (
         <a href={entry.detail} target="_blank" rel="noopener noreferrer" className="truncate text-blue-400 hover:underline">
           {entry.detail}
@@ -38,6 +52,7 @@ function PhaseDetailLine({ entry }: { entry: ResearchPhaseEntry }) {
       ) : (
         <span className="truncate">{entry.detail}</span>
       )}
+      {entry.outcome === "rejected_low_quality" && <span className="shrink-0 text-muted-foreground">(graded low quality)</span>}
     </div>
   )
 }
@@ -47,7 +62,7 @@ export function ResearchProgressCard({ log, done }: { log: ResearchPhaseEntry[];
   const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set())
   if (log.length === 0) return null
 
-  const last = log[log.length - 1]
+  const last = done ? log.reduce((max, e) => (e.round >= max.round ? e : max), log[0]) : log[log.length - 1]
   const planning = log.find((e) => e.phase === "planning")
   const rounds = groupByRound(log.filter((e) => e.phase !== "planning"))
 
@@ -81,7 +96,7 @@ export function ResearchProgressCard({ log, done }: { log: ResearchPhaseEntry[];
           {planning && <div className="text-muted-foreground">{PHASE_LABEL.planning}</div>}
           {rounds.map(({ round, entries }, i) => {
             const isLastRound = i === rounds.length - 1
-            const sourcesThisRound = entries.filter((e) => e.phase === "fetching" && e.detail).length
+            const sourcesThisRound = entries.filter((e) => e.phase === "fetching" && e.outcome === "accepted").length
             const queriesThisRound = entries.filter((e) => e.phase === "searching").length
             if (!isLastRound) {
               const isExpanded = expandedRounds.has(round)

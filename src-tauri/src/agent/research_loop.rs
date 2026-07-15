@@ -1,3 +1,4 @@
+use tauri::ipc::Channel;
 use crate::{AppError, CompletionEvent};
 use super::agent_loop::{project_dir, AgentLoopParams};
 use super::executor::execute_tool;
@@ -14,6 +15,12 @@ use tokio_util::sync::CancellationToken;
 /// mirrors Odysseus's `synthesis_window` (older findings still count as sources,
 /// they just drop out of the synthesis prompt).
 const SYNTHESIS_WINDOW: usize = 10;
+
+fn send_event(channel: &Channel<CompletionEvent>, event: CompletionEvent) {
+    if let Err(e) = channel.send(event) {
+        eprintln!("research_loop: failed to send event over channel: {e}");
+    }
+}
 
 fn split_og_image(output: &str) -> (&str, Option<String>) {
     match output.rsplit_once("\n\n<!-- og-image: ") {
@@ -179,9 +186,9 @@ async fn run_search_round(
     let mut findings = Vec::new();
     for query in queries.iter().take(4) {
         *queries_used += 1;
-        let _ = params.channel.send(CompletionEvent::ResearchPhase {
+        send_event(params.channel, CompletionEvent::ResearchPhase {
             phase: "searching".into(), round, max_rounds,
-            detail: Some(query.clone()), sources: *sources,
+            detail: Some(query.clone()), sources: *sources, outcome: None,
         });
 
         let search_args = serde_json::json!({ "query": query, "num_results": 5 });
@@ -196,10 +203,6 @@ async fn run_search_round(
 
         for (title, url) in parse_search_results(&search_res.output).into_iter().take(2) {
             analyzed_urls.push((url.clone(), title.clone()));
-            let _ = params.channel.send(CompletionEvent::ResearchPhase {
-                phase: "fetching".into(), round, max_rounds,
-                detail: Some(url.clone()), sources: *sources,
-            });
 
             let fetch_args = serde_json::json!({
                 "url": url,
@@ -211,17 +214,37 @@ async fn run_search_round(
             ).await;
             if !fetch_res.success {
                 *last_search_error = Some(fetch_res.output.clone());
+                send_event(params.channel, CompletionEvent::ResearchPhase {
+                    phase: "fetching".into(), round, max_rounds,
+                    detail: Some(url.clone()), sources: *sources,
+                    outcome: Some("rejected_fetch_failed".into()),
+                });
                 continue;
             }
 
             let (fetch_text, image) = split_og_image(&fetch_res.output);
-            if let Ok(notes) = extract_relevant(params, query, fetch_text).await {
-                if !is_low_quality(&notes) {
+            match extract_relevant(params, query, fetch_text).await {
+                Ok(notes) if !is_low_quality(&notes) => {
                     *sources += 1;
                     findings.push(Finding { url: url.clone(), title: title.clone(), notes, image });
-                    let _ = params.channel.send(CompletionEvent::ResearchPhase {
+                    send_event(params.channel, CompletionEvent::ResearchPhase {
                         phase: "fetching".into(), round, max_rounds,
                         detail: Some(url.clone()), sources: *sources,
+                        outcome: Some("accepted".into()),
+                    });
+                }
+                Ok(_) => {
+                    send_event(params.channel, CompletionEvent::ResearchPhase {
+                        phase: "fetching".into(), round, max_rounds,
+                        detail: Some(url.clone()), sources: *sources,
+                        outcome: Some("rejected_low_quality".into()),
+                    });
+                }
+                Err(_) => {
+                    send_event(params.channel, CompletionEvent::ResearchPhase {
+                        phase: "fetching".into(), round, max_rounds,
+                        detail: Some(url.clone()), sources: *sources,
+                        outcome: Some("rejected_fetch_failed".into()),
                     });
                 }
             }
@@ -254,9 +277,9 @@ async fn synthesize_round(
     ).await {
         Ok(report) => report,
         Err(_) => {
-            let _ = params.channel.send(CompletionEvent::ResearchPhase {
+            send_event(params.channel, CompletionEvent::ResearchPhase {
                 phase: "synthesizing".into(), round, max_rounds,
-                detail: Some("Synthesis failed — keeping previous report".into()), sources,
+                detail: Some("Synthesis failed — keeping previous report".into()), sources, outcome: None,
             });
             current_report.to_string()
         }
@@ -329,8 +352,8 @@ pub async fn run_research_loop(
     // PLAN + category classification — run once, up front, like Odysseus's
     // `_create_plan`/`_classify_category`. Failures here just fall back to no
     // plan/no category rather than aborting the whole session.
-    let _ = params.channel.send(CompletionEvent::ResearchPhase {
-        phase: "planning".into(), round: 0, max_rounds: config.max_rounds, detail: None, sources: 0,
+    send_event(params.channel, CompletionEvent::ResearchPhase {
+        phase: "planning".into(), round: 0, max_rounds: config.max_rounds, detail: None, sources: 0, outcome: None,
     });
     let plan = call_llm_once(
         params.provider, params.http_client, params.host, params.api_key, params.model,
@@ -343,7 +366,7 @@ pub async fn run_research_loop(
 
     loop {
         if params.cancel_token.is_cancelled() {
-            let _ = params.channel.send(CompletionEvent::Done { done_reason: None, usage: None });
+            send_event(params.channel, CompletionEvent::Done { done_reason: None, usage: None });
             return Ok(());
         }
         if start.elapsed().as_secs() >= config.max_time_secs {
@@ -354,12 +377,13 @@ pub async fn run_research_loop(
         }
         round += 1;
 
-        let _ = params.channel.send(CompletionEvent::ResearchPhase {
+        send_event(params.channel, CompletionEvent::ResearchPhase {
             phase: "round_start".into(),
             round,
             max_rounds: config.max_rounds,
             detail: None,
             sources,
+            outcome: None,
         });
 
         let query_gen_prompt = build_query_gen_prompt(&topic, &plan.summary, round, config.max_rounds, &report_body);
@@ -382,12 +406,13 @@ pub async fn run_research_loop(
             all_findings.extend(round_findings);
         }
 
-        let _ = params.channel.send(CompletionEvent::ResearchPhase {
+        send_event(params.channel, CompletionEvent::ResearchPhase {
             phase: "synthesizing".into(),
             round,
             max_rounds: config.max_rounds,
             detail: None,
             sources,
+            outcome: None,
         });
 
         // Re-feed only the most recent findings into synthesis, not the whole
@@ -403,12 +428,13 @@ pub async fn run_research_loop(
         // sentiment alone before there's enough evidence to judge coverage.
         let evidence_floor = plan.sub_questions.is_empty() || all_findings.len() >= plan.sub_questions.len();
         if round >= config.min_rounds && evidence_floor {
-            let _ = params.channel.send(CompletionEvent::ResearchPhase {
+            send_event(params.channel, CompletionEvent::ResearchPhase {
                 phase: "deciding".into(),
                 round,
                 max_rounds: config.max_rounds,
                 detail: None,
                 sources,
+                outcome: None,
             });
 
             if should_stop(
@@ -426,20 +452,21 @@ pub async fn run_research_loop(
             "**Search unavailable** — Web search failed after {round} round(s). Error: {detail}\n\n\
             Please check your search provider settings and ensure the service is running."
         );
-        let _ = params.channel.send(CompletionEvent::Chunk { text: message, thinking: None });
-        let _ = params.channel.send(CompletionEvent::Done {
+        send_event(params.channel, CompletionEvent::Chunk { text: message, thinking: None });
+        send_event(params.channel, CompletionEvent::Done {
             done_reason: Some("search_unavailable".into()),
             usage: None,
         });
         return Ok(());
     }
 
-    let _ = params.channel.send(CompletionEvent::ResearchPhase {
+    send_event(params.channel, CompletionEvent::ResearchPhase {
         phase: "final_report".into(),
         round,
         max_rounds: config.max_rounds,
         detail: None,
         sources,
+        outcome: None,
     });
 
     let final_report = if report_body.is_empty() {
@@ -474,7 +501,7 @@ pub async fn run_research_loop(
     let formatted = format_research_report(&topic, &final_report, &stats, &all_findings, &analyzed_urls);
 
     let write_args = serde_json::json!({ "content": formatted });
-    let _ = params.channel.send(CompletionEvent::ToolCall { tool: "write_file".into(), args: write_args.clone() });
+    send_event(params.channel, CompletionEvent::ToolCall { tool: "write_file".into(), args: write_args.clone() });
     let proj_dir = project_dir(params.app_data_dir, params.output_path);
     let write_res = execute_tool(
         "write_file", &write_args, params.app_data_dir, params.output_path, &proj_dir,
@@ -485,7 +512,7 @@ pub async fn run_research_loop(
             .map(|rel| rel.to_string_lossy().to_string())
             .unwrap_or_else(|_| params.output_path.to_string())
     });
-    let _ = params.channel.send(CompletionEvent::ToolResult {
+    send_event(params.channel, CompletionEvent::ToolResult {
         tool: "write_file".into(),
         success: write_res.success,
         output: write_res.output,
@@ -493,7 +520,7 @@ pub async fn run_research_loop(
         content: write_res.written_content,
     });
 
-    let _ = params.channel.send(CompletionEvent::Done {
+    send_event(params.channel, CompletionEvent::Done {
         done_reason: Some("research_complete".into()),
         usage: None,
     });
