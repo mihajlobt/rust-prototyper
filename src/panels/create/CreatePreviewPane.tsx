@@ -128,25 +128,18 @@ export function CreatePreviewPane({
     [previewTabs, activePreviewTabId]
   );
 
-  // Live route posted by the generated app via __route-change postMessage.
-  // Updated independently of the tab data — the iframe navigates internally
-  // and just notifies the parent so the path label stays in sync.
-  const [livePreviewPath, setLivePreviewPath] = useState<string | null>(null);
+  const previewTarget = activePreviewTabId ?? activeIframePath ?? "";
+  const [livePreview, setLivePreview] = useState<{ target: string; path: string } | null>(null);
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const data = event.data as { type?: string; path?: unknown } | null;
       if (data?.type !== "__route-change") return;
-      if (typeof data.path === "string") setLivePreviewPath(data.path);
+      if (typeof data.path === "string") setLivePreview({ target: previewTarget, path: data.path });
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
-
-  // Reset the live path when the active screen tab changes — the new screen
-  // will post a fresh __route-change once it mounts inside the iframe.
-  useEffect(() => {
-    setLivePreviewPath(null);
-  }, [activePreviewTabId, runnerUrl]);
+  }, [previewTarget]);
+  const livePreviewPath = livePreview && livePreview.target === previewTarget ? livePreview.path : null;
 
   // Apply the preview theme CSS to the runner's styles dir on createPreviewTheme
   // change. The runner is responsible for picking up the new file (Vite HMR).

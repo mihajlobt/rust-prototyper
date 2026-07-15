@@ -5,6 +5,7 @@ import {
   writeFile,
   createDir,
   historySet,
+  isNotFoundError,
   type FileEntry,
 } from "@/lib/ipc";
 import { projectKeys } from "@/lib/queryKeys";
@@ -33,7 +34,8 @@ export function useComponentCode(project: string, name: string | null) {
       if (!name) return "";
       try {
         return await readFile(`projects/${project}/generated/src/components/${name}/component.tsx`);
-      } catch {
+      } catch (e) {
+        if (!isNotFoundError(e)) throw e;
         return "";
       }
     },

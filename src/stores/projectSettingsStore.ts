@@ -18,6 +18,7 @@ export interface ProjectSettings {
   activeWorkflow: string | null;
   activeApi: string | null;
   activePlan: string | null;
+  activePreviewTabId: string | null;
 
   /** Sub-mode of the merged Create panel. */
   createMode: CreateMode;
@@ -107,6 +108,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   activeWorkflow: null,
   activeApi: null,
   activePlan: null,
+  activePreviewTabId: null,
 
   darkPreview: false,
 
@@ -274,6 +276,7 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
     if (mode === "components" && itemName) patch.activeComponent = itemName;
     if (mode === "themes" && itemName)     patch.activeTheme     = itemName;
     // Wizard ignores itemName — wizard is project-level, no per-entity selection.
+    if (itemName) patch.activePreviewTabId = null;
     get().setProjectSettings(patch);
   },
 

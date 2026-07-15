@@ -71,7 +71,6 @@ export function ComponentsMode() {
   const [themes, setThemes] = useState<FileEntry[]>([]);
   const [ctxApis, setCtxApis] = useState<CtxApi[]>([]);
   const [activeDesignBrief, setActiveDesignBrief] = useState("");
-  const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null);
 
   const genContext = useUIStore((s) => s.createGenContext[settings.project] ?? EMPTY_GEN_CONTEXT);
   const ctxSelectedApiIds = genContext.apiIds;
@@ -212,7 +211,6 @@ export function ComponentsMode() {
     return () => { cancelled = true; };
   }, [ps.stylePreset, settings.project]);
 
-  // Load selected component code via TanStack Query
   const { data: loadedCode } = useComponentCode(settings.project, selectedComponent);
   useEffect(() => {
     if (loadedCode === undefined) return;
@@ -389,8 +387,8 @@ export function ComponentsMode() {
                 project={settings.project}
                 stylePreset={ps.stylePreset || null}
                 previewTabs={[]}
-                activePreviewTabId={activePreviewTabId}
-                onSelectTab={setActivePreviewTabId}
+                activePreviewTabId={ps.activePreviewTabId}
+                onSelectTab={(id) => setProjectSettings({ activePreviewTabId: id })}
                 activeIframePath={activeIframePath}
                 showZoom
                 showThemePicker

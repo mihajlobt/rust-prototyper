@@ -62,7 +62,6 @@ export function ScreensMode() {
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
   const [activeDesignBrief, setActiveDesignBrief] = useState("");
-  const [activePreviewTabId, setActivePreviewTabId] = useState<string | null>(null);
 
   const genContext = useUIStore((s) => s.createGenContext[settings.project] ?? EMPTY_GEN_CONTEXT);
   const ctxSelectedApiIds = genContext.apiIds;
@@ -345,8 +344,8 @@ export function ScreensMode() {
                 project={settings.project}
                 stylePreset={ps.stylePreset || null}
                 previewTabs={[]}
-                activePreviewTabId={activePreviewTabId}
-                onSelectTab={setActivePreviewTabId}
+                activePreviewTabId={ps.activePreviewTabId}
+                onSelectTab={(id) => setProjectSettings({ activePreviewTabId: id })}
                 activeIframePath={activeIframePath}
                 showZoom
                 showThemePicker
