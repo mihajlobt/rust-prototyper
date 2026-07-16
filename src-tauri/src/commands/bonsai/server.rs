@@ -18,7 +18,7 @@ use crate::{AppError, AppState};
 use super::{
     bonsai_error, BonsaiServer, HEALTH_CHECK_TIMEOUT_SECS, MAX_PORT_OFFSET,
 };
-use super::paths::{default_install_path, find_transformer_dir, validate_install_path};
+use super::paths::{default_install_path, find_transformer_dir, mlx_transformer_present, validate_install_path};
 use super::process::{kill_port_sync, kill_process_group};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -164,42 +164,89 @@ pub async fn bonsai_start_server(
         validate_install_path(&config.install_path)?
     };
 
-    // Replicate env vars from serve.sh (lines 94-180) — only need backend API, not the Next.js frontend
+    // Replicate env vars from serve.sh (lines 79-168) — only need backend API,
+    // not the Next.js frontend. Branches on host OS since macOS runs mflux/MLX
+    // (serve.sh's Darwin branch) while Linux/Windows run gemlite/HQQ on CUDA
+    // (serve.sh's Linux branch / serve.ps1). Getting this wrong is exactly the
+    // bug this branch fixes: it used to always take the gemlite path, which
+    // only ever downloads to `*-gemlite` — nonexistent on a Mac where
+    // download_model.sh defaults to `*-mlx`.
     let variant = &config.variant;
-    let model_dir = install_path.join(format!("models/bonsai-image-4B-{}-gemlite", variant));
+    let is_macos = cfg!(target_os = "macos");
 
-    let transformer_path = find_transformer_dir(&model_dir)
-        .ok_or_else(|| bonsai_error(format!(
-            "No transformer-gemlite-* dir under {}. Run: ./scripts/download_model.sh {}",
-            model_dir.display(), variant
-        )))?;
+    let (model_dir, backend_module, extra_env): (std::path::PathBuf, &str, Vec<(String, String)>) = if is_macos {
+        let ternary_dir = install_path.join("models/bonsai-image-4B-ternary-mlx");
+        let binary_dir = install_path.join("models/bonsai-image-4B-binary-mlx");
+        let model_dir = install_path.join(format!("models/bonsai-image-4B-{}-mlx", variant));
 
-    let text_encoder_path = model_dir.join("text_encoder-hqq-4bit");
-    let vae_path = model_dir.join("vae");
-    let tokenizer_path = model_dir.join("text_encoder-hqq-4bit/tokenizer");
+        if !mlx_transformer_present(&model_dir) {
+            return Err(bonsai_error(format!(
+                "No transformer-packed-mflux dir under {}. Run: ./scripts/download_model.sh {}",
+                model_dir.display(), variant
+            )));
+        }
+
+        // Advertise only the variants actually on disk (mirrors serve.sh's
+        // _supported_families) so the picker can't offer an arm whose weights
+        // aren't downloaded.
+        let mut supported_families = Vec::new();
+        if mlx_transformer_present(&ternary_dir) { supported_families.push("bonsai-ternary"); }
+        if mlx_transformer_present(&binary_dir) { supported_families.push("bonsai-binary"); }
+
+        let env_pairs = vec![
+            ("MFLUX_STUDIO_DEFAULT_BACKEND".to_string(), format!("bonsai-{}-mlx", variant)),
+            ("BONSAI_SUPPORTED_FAMILIES".to_string(), supported_families.join(",")),
+            ("MFLUX_STUDIO_BAKED_MODEL_PATH".to_string(), ternary_dir.to_string_lossy().to_string()),
+            ("MFLUX_STUDIO_BAKED_BINARY_MODEL_PATH".to_string(), binary_dir.to_string_lossy().to_string()),
+            ("MFLUX_STUDIO_TE_4BIT".to_string(), "true".to_string()),
+            ("MFLUX_STUDIO_FORCE_DISABLE_GPU".to_string(), "true".to_string()),
+        ];
+
+        (model_dir, "scripts.local_backend_mac:app", env_pairs)
+    } else {
+        let model_dir = install_path.join(format!("models/bonsai-image-4B-{}-gemlite", variant));
+
+        let transformer_path = find_transformer_dir(&model_dir)
+            .ok_or_else(|| bonsai_error(format!(
+                "No transformer-gemlite-* dir under {}. Run: ./scripts/download_model.sh {}",
+                model_dir.display(), variant
+            )))?;
+
+        let text_encoder_path = model_dir.join("text_encoder-hqq-4bit");
+        let vae_path = model_dir.join("vae");
+        let tokenizer_path = model_dir.join("text_encoder-hqq-4bit/tokenizer");
+
+        let env_pairs = vec![
+            ("MFLUX_STUDIO_GPU_DEFAULT_BACKEND".to_string(), format!("bonsai-{}-gemlite", variant)),
+            ("MFLUX_STUDIO_GPU_TERNARY_TRANSFORMER_PATH".to_string(), transformer_path.to_string_lossy().to_string()),
+            // GpuPipeline requires both; point binary to ternary for single-variant use
+            ("MFLUX_STUDIO_GPU_BINARY_TRANSFORMER_PATH".to_string(), transformer_path.to_string_lossy().to_string()),
+            ("MFLUX_STUDIO_GPU_TEXT_ENCODER_PATH".to_string(), text_encoder_path.to_string_lossy().to_string()),
+            ("MFLUX_STUDIO_GPU_VAE_PATH".to_string(), vae_path.to_string_lossy().to_string()),
+            ("MFLUX_STUDIO_GPU_TOKENIZER_PATH".to_string(), tokenizer_path.to_string_lossy().to_string()),
+        ];
+
+        (model_dir, "scripts.local_backend:app", env_pairs)
+    };
+
     let _ = app.emit("bonsai:log", serde_json::json!({
         "line": format!("Starting Bonsai on port {} ({}); model dir: {}", port, variant, model_dir.display()),
         "source": "system"
     }));
 
     let venv_uvicorn = install_path.join(".venv/bin/uvicorn");
-    let backend_module = "scripts.local_backend:app";
     let mut cmd = tokio::process::Command::new(&venv_uvicorn);
     cmd.arg(backend_module)
         .arg("--port").arg(port.to_string())
         .env("BONSAI_VARIANT", variant)
         .env("BACKEND_PORT", port.to_string())
-        .env("MFLUX_STUDIO_GPU_DEFAULT_BACKEND", format!("bonsai-{}-gemlite", variant))
-        .env("MFLUX_STUDIO_GPU_TERNARY_TRANSFORMER_PATH", transformer_path.to_string_lossy().to_string())
-        // GpuPipeline requires both; point binary to ternary for single-variant use
-        .env("MFLUX_STUDIO_GPU_BINARY_TRANSFORMER_PATH", transformer_path.to_string_lossy().to_string())
-        .env("MFLUX_STUDIO_GPU_TEXT_ENCODER_PATH", text_encoder_path.to_string_lossy().to_string())
-        .env("MFLUX_STUDIO_GPU_VAE_PATH", vae_path.to_string_lossy().to_string())
-        .env("MFLUX_STUDIO_GPU_TOKENIZER_PATH", tokenizer_path.to_string_lossy().to_string())
         .current_dir(&install_path)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
+    for (key, value) in extra_env {
+        cmd.env(key, value);
+    }
 
     // New process group so kill -{pgid} reaches the whole tree including CUDA workers
     #[cfg(unix)]

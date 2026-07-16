@@ -22,6 +22,13 @@ pub(super) fn find_transformer_dir(model_dir: &std::path::Path) -> Option<std::p
     None
 }
 
+/// Whether a macOS/MLX model directory has its packed transformer downloaded.
+/// Mirrors the `[ -d "$dir/transformer-packed-mflux" ]` check in serve.sh's
+/// Darwin branch.
+pub(super) fn mlx_transformer_present(model_dir: &std::path::Path) -> bool {
+    model_dir.join("transformer-packed-mflux").is_dir()
+}
+
 /// Validate and resolve the install path, preventing path traversal attacks.
 /// Returns the resolved absolute path or an error.
 pub(super) fn validate_install_path(raw: &str) -> Result<std::path::PathBuf, AppError> {
