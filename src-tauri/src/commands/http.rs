@@ -1,6 +1,17 @@
 use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hasher};
 use tauri::{AppHandle, Manager};
 use crate::{AppState, AppError, app_data_dir};
+
+/// A process-random hex string for SearXNG's `server.secret_key` — SipHash keyed by
+/// the OS's own CSPRNG seed via std's RandomState, not a cryptographic secret in its
+/// own right, just enough to satisfy SearXNG's "don't ship the default key" check.
+fn random_secret_key() -> String {
+    let a = RandomState::new().build_hasher().finish();
+    let b = RandomState::new().build_hasher().finish();
+    format!("{a:016x}{b:016x}")
+}
 
 fn is_private_url(url: &str) -> bool {
     let lower = url.to_lowercase();
@@ -115,12 +126,18 @@ pub async fn setup_searxng_config(app: AppHandle) -> Result<String, String> {
         .await
         .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
     let path = dir.join("settings.yml");
-    let content = "use_default_settings: true\n\
-                   \n\
-                   search:\n  \
-                   formats:\n    \
-                   - html\n    \
-                   - json\n";
+    let content = format!(
+        "use_default_settings: true\n\
+         \n\
+         server:\n  \
+         secret_key: \"{}\"\n\
+         \n\
+         search:\n  \
+         formats:\n    \
+         - html\n    \
+         - json\n",
+        random_secret_key(),
+    );
     tokio::fs::write(&path, content)
         .await
         .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
