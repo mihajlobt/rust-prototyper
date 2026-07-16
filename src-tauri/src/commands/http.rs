@@ -104,7 +104,9 @@ pub async fn test_searxng_connection(url: String, app: AppHandle) -> Result<bool
 /// keeps it co-located with the app, and lets the UI show the exact path
 /// so the user can mount it into the SearXNG docker container.
 ///
-/// Returns the absolute path to the written file.
+/// Returns the absolute path to the `.searxng` directory (the docker `-v` mount
+/// source, not the settings.yml file inside it — mounting a file where SearXNG
+/// expects a directory at /etc/searxng fails).
 #[tauri::command]
 pub async fn setup_searxng_config(app: AppHandle) -> Result<String, String> {
     let base = app_data_dir(&app).map_err(|e| e.to_string())?;
@@ -122,5 +124,5 @@ pub async fn setup_searxng_config(app: AppHandle) -> Result<String, String> {
     tokio::fs::write(&path, content)
         .await
         .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
-    Ok(path.to_string_lossy().to_string())
+    Ok(dir.to_string_lossy().to_string())
 }

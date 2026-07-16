@@ -144,7 +144,7 @@ export function AITab({ settings, setSettings }: AITabProps) {
                 <p className="text-[11px] text-muted-foreground">docker run:</p>
                 <p className="text-[11px] text-muted-foreground font-mono bg-muted rounded px-2 py-1 select-all whitespace-pre">
 {`docker run -d -p 8080:8080 -e BASE_URL=/ \\
-  -v ${searxngConfigPath}:/etc/searxng:rw \\
+  -v "${searxngConfigPath}:/etc/searxng:rw" \\
   --name searxng --restart=unless-stopped \\
   searxng/searxng`}
                 </p>
