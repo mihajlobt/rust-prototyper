@@ -52,6 +52,7 @@ export {
   WORKFLOW_STRUCTURE_PROMPT_BASE,
   WORKFLOW_STYLE_PROMPT_BASE,
   WORKFLOW_INTERACTION_PROMPT_BASE,
+  WORKFLOW_COMPONENTIZE_PROMPT_BASE,
   WORKFLOW_REFERENCE_PROMPT_BASE,
   WORKFLOW_VALIDATE_PROMPT_BASE,
   WORKFLOW_TRANSFORM_PROMPT_BASE,
@@ -75,6 +76,7 @@ import { WORKFLOW_ARCHITECT_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_STRUCTURE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_STYLE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_INTERACTION_PROMPT_BASE } from "./prompts/workflows";
+import { WORKFLOW_COMPONENTIZE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_REFERENCE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_VALIDATE_PROMPT_BASE } from "./prompts/workflows";
 import { WORKFLOW_TRANSFORM_PROMPT_BASE } from "./prompts/workflows";
@@ -111,6 +113,7 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
   { key: "workflow-structure-system",        label: "Structure — system",              group: "Workflows",  description: "Generates complete, production-quality React component code.",                        getDefault: () => WORKFLOW_STRUCTURE_PROMPT_BASE },
   { key: "workflow-style-system",            label: "Style — system",                  group: "Workflows",  description: "Applies responsive Tailwind CSS and CSS variable colors to components.",             getDefault: () => WORKFLOW_STYLE_PROMPT_BASE },
   { key: "workflow-interaction-system",      label: "Interaction — system",            group: "Workflows",  description: "Adds state management, event handlers, hooks, and form validation.",                getDefault: () => WORKFLOW_INTERACTION_PROMPT_BASE },
+  { key: "workflow-componentize-system",     label: "Componentize — system",           group: "Workflows",  description: "Splits a finished screen into reusable components via write_file, no fence parsing.", getDefault: () => WORKFLOW_COMPONENTIZE_PROMPT_BASE },
   { key: "workflow-reference-system",        label: "Reference — system",              group: "Workflows",  description: "Analyzes components and libraries, producing structured API documentation.",        getDefault: () => WORKFLOW_REFERENCE_PROMPT_BASE },
   { key: "workflow-validate-system",         label: "Validate — system",               group: "Workflows",  description: "Reviews code for TypeScript errors, missing imports, accessibility, and performance.", getDefault: () => WORKFLOW_VALIDATE_PROMPT_BASE },
   { key: "workflow-transform-system",        label: "Transform — system",              group: "Workflows",  description: "Transforms content per instruction — format conversion, refactoring, extraction.",   getDefault: () => WORKFLOW_TRANSFORM_PROMPT_BASE },

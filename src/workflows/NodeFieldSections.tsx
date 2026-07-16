@@ -36,6 +36,14 @@ export function InputNodeFields({ data, set }: FieldProps) {
   );
 }
 
+export function ComponentizeFields({ data, set }: FieldProps) {
+  return (
+    <FieldRow label="Screen path (relative to generated/)">
+      <Input value={data.path || ""} onChange={(e) => set({ path: e.target.value })} className="h-7 text-xs" placeholder="src/pages/overview.tsx" />
+    </FieldRow>
+  );
+}
+
 export function WriteFileFields({ data, set }: FieldProps) {
   return (
     <>
@@ -48,6 +56,17 @@ export function WriteFileFields({ data, set }: FieldProps) {
           <SelectContent position="popper" side="bottom">
             <SelectItem value="overwrite" className="text-xs">Overwrite</SelectItem>
             <SelectItem value="append" className="text-xs">Append</SelectItem>
+          </SelectContent>
+        </Select>
+      </FieldRow>
+      <FieldRow label="After writing">
+        <Select value={String(data.postAction ?? "none")} onValueChange={(v) => set({ postAction: v as WorkflowNodeData["postAction"] })}>
+          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent position="popper" side="bottom">
+            <SelectItem value="none" className="text-xs">None</SelectItem>
+            <SelectItem value="registerScreen" className="text-xs">Register as screen</SelectItem>
+            <SelectItem value="setActiveTheme" className="text-xs">Set as active theme</SelectItem>
+            <SelectItem value="validateDesignJson" className="text-xs">Validate design JSON</SelectItem>
           </SelectContent>
         </Select>
       </FieldRow>

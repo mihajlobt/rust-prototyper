@@ -12,14 +12,14 @@ import type { WorkflowNodeData } from "@/workflows/nodeTypes";
 import {
   InputNodeFields, WriteFileFields, BashFields, FetchFields, FileOpFields,
   AuthFields, TransformFields, DesignSystemFields, BunFields, RunnerFields,
-  ContextOverrideFields, PreviewFields,
+  ContextOverrideFields, PreviewFields, ComponentizeFields,
   ConditionFields, LoopUntilFields, SummarizeFields, DiffFields,
   JsonExtractFields, LinterFields, GitOpFields, MemoryKeyField,
 } from "@/workflows/NodeFieldSections";
 import {
   WORKFLOW_REQUIREMENTS_PROMPT_BASE, WORKFLOW_ARCHITECT_PROMPT_BASE,
   WORKFLOW_STRUCTURE_PROMPT_BASE, WORKFLOW_STYLE_PROMPT_BASE,
-  WORKFLOW_INTERACTION_PROMPT_BASE, WORKFLOW_REFERENCE_PROMPT_BASE,
+  WORKFLOW_INTERACTION_PROMPT_BASE, WORKFLOW_COMPONENTIZE_PROMPT_BASE, WORKFLOW_REFERENCE_PROMPT_BASE,
   WORKFLOW_VALIDATE_PROMPT_BASE, WORKFLOW_TRANSFORM_PROMPT_BASE,
   WORKFLOW_SUMMARIZE_PROMPT_BASE, WORKFLOW_CONDITION_PROMPT_BASE,
   WORKFLOW_LOOP_FIX_PROMPT_BASE,
@@ -31,6 +31,7 @@ const DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   structure:    WORKFLOW_STRUCTURE_PROMPT_BASE,
   style:        WORKFLOW_STYLE_PROMPT_BASE,
   interaction:  WORKFLOW_INTERACTION_PROMPT_BASE,
+  componentize: WORKFLOW_COMPONENTIZE_PROMPT_BASE,
   reference:    WORKFLOW_REFERENCE_PROMPT_BASE,
   validate:     WORKFLOW_VALIDATE_PROMPT_BASE,
   transform:    WORKFLOW_TRANSFORM_PROMPT_BASE,
@@ -40,7 +41,7 @@ const DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
 };
 
 const AI_NODE_TYPES = new Set([
-  "requirements", "architect", "structure", "style", "interaction", "reference",
+  "requirements", "architect", "structure", "style", "interaction", "componentize", "reference",
   "validate", "transform", "custom", "summarize", "condition", "loopuntil",
 ]);
 
@@ -180,6 +181,7 @@ export function NodePropertiesPanel({ nodeId, data, onUpdate, onDuplicate, onDel
           {data.nodeType === "jsonextract" && <JsonExtractFields data={data} set={set} />}
           {data.nodeType === "linter"      && <LinterFields data={data} set={set} />}
           {data.nodeType === "gitop"       && <GitOpFields data={data} set={set} />}
+          {data.nodeType === "componentize"&& <ComponentizeFields data={data} set={set} />}
           {(data.nodeType === "memorystore" || data.nodeType === "memoryload") && <MemoryKeyField data={data} set={set} />}
           {isCustomType && (
             <div className="space-y-1">

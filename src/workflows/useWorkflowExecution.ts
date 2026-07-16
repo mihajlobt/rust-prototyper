@@ -79,6 +79,8 @@ export function useWorkflowExecution({
     const { adj, radj, execOrder, compDeps } = computeDag(currentNodes, currentEdges);
 
     const nodeOutputMap = new Map<string, string>();
+    const branchOf = new Map<string, "pass" | "fail">();
+    const skipped = new Set<string>();
     // Rebuild output map from done/paused nodes (for resume)
     // Branch outputs (:pass/:fail) are persisted as passOutput/failOutput in node data
     // so they survive pause/resume without guessing
@@ -87,6 +89,9 @@ export function useWorkflowExecution({
         nodeOutputMap.set(n.id, n.data.output);
         if (n.data.passOutput !== undefined) nodeOutputMap.set(`${n.id}:pass`, n.data.passOutput);
         if (n.data.failOutput !== undefined) nodeOutputMap.set(`${n.id}:fail`, n.data.failOutput);
+        if (n.data.passOutput) branchOf.set(n.id, "pass");
+        else if (n.data.failOutput) branchOf.set(n.id, "fail");
+        if (n.data.output.startsWith("⏭️ Skipped")) skipped.add(n.id);
       }
     }
 
@@ -116,7 +121,29 @@ export function useWorkflowExecution({
     flushNow();
     for (const n of getNodes()) nodeTypeMap.set(n.id, n.data.nodeType);
 
+    const edgeAlive = (e: Edge): boolean => {
+      if (skipped.has(e.source)) return false;
+      if (!e.sourceHandle) return true;
+      const taken = branchOf.get(e.source);
+      return taken === undefined || taken === e.sourceHandle;
+    };
+    const isNodeDead = (nodeId: string): boolean => {
+      const inc = currentEdges.filter((e) => e.target === nodeId);
+      return inc.length > 0 && !inc.some(edgeAlive);
+    };
+
     const done = new Set<string>();
+    const runOrSkip = async (id: string) => {
+      if (isNodeDead(id)) {
+        skipped.add(id);
+        updateStatus(id, { status: "done", output: "⏭️ Skipped — upstream branch not taken" });
+        done.add(id);
+        return;
+      }
+      const result = await runNode(id, runCtx);
+      done.add(id);
+      if (result.branch) branchOf.set(id, result.branch);
+    };
     const checkComp = async () => {
       for (const [cid, deps] of compDeps) {
         if (!done.has(cid) && [...deps].every((dep) => done.has(dep))) {
@@ -157,17 +184,15 @@ export function useWorkflowExecution({
         if (!deps.every((dep) => done.has(dep))) continue;
       }
       if (nType === "parallel") {
-        await runNode(nodeId, runCtx);
-        done.add(nodeId);
+        await runOrSkip(nodeId);
         await Promise.all(adj.get(nodeId)!.map(async (childId) => {
           for (const bid of findBranch(childId, adj, nodeTypeMap)) {
-            if (!done.has(bid)) { await runNode(bid, runCtx); done.add(bid); }
+            if (!done.has(bid)) { await runOrSkip(bid); }
           }
         }));
         await checkComp();
       } else {
-        await runNode(nodeId, runCtx);
-        done.add(nodeId);
+        await runOrSkip(nodeId);
         await checkComp();
       }
     }

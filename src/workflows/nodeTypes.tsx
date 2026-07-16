@@ -13,7 +13,7 @@ import {
   Terminal, Globe, Lock, Wand2, ShieldCheck, Eye, Package, Play, Sparkles,
   FolderOpen, Settings, GitFork, Repeat2, AlignLeft, Braces, FileDiff,
   FileJson, ScanLine, GitCommit, Database, HardDrive,
-  Copy, Trash2, Unplug,
+  Copy, Trash2, Unplug, Boxes,
 } from "lucide-react";
 import {
   ContextMenu,
@@ -31,6 +31,7 @@ import {
   WORKFLOW_STRUCTURE_PROMPT_BASE,
   WORKFLOW_STYLE_PROMPT_BASE,
   WORKFLOW_INTERACTION_PROMPT_BASE,
+  WORKFLOW_COMPONENTIZE_PROMPT_BASE,
   WORKFLOW_REFERENCE_PROMPT_BASE,
   WORKFLOW_TRANSFORM_PROMPT_BASE,
 } from "@/lib/prompts";
@@ -68,6 +69,7 @@ export const BUILTIN_NODE_TYPES: NodeTypeDef[] = [
   { type: "structure",    label: "Structure",     desc: "Generate HTML/JSX",       tooltip: extractRole(WORKFLOW_STRUCTURE_PROMPT_BASE),      category: "Generation",  color: "var(--node-generation)",  icon: Layout },
   { type: "style",        label: "Style",         desc: "Apply CSS classes",       tooltip: extractRole(WORKFLOW_STYLE_PROMPT_BASE),          category: "Generation",  color: "var(--node-generation)",  icon: Paintbrush },
   { type: "interaction",  label: "Interaction",   desc: "Add state/hooks",         tooltip: extractRole(WORKFLOW_INTERACTION_PROMPT_BASE),    category: "Generation",  color: "var(--node-terminal)",    icon: MousePointerClick },
+  { type: "componentize", label: "Componentize",  desc: "Split into components",   tooltip: extractRole(WORKFLOW_COMPONENTIZE_PROMPT_BASE),   category: "Generation",  color: "var(--node-generation)",  icon: Boxes },
   // Composition
   { type: "parallel",     label: "Parallel",      desc: "Branch execution",        tooltip: "Branch execution into parallel paths",               category: "Composition", color: "var(--node-composition)", icon: GitBranch },
   { type: "composition",  label: "Composition",   desc: "Merge outputs",           tooltip: "Merge outputs from parallel branches",                category: "Composition", color: "var(--node-composition)", icon: Merge },
@@ -122,6 +124,8 @@ export interface WorkflowNodeData {
   authHeaderName?: string;
   mode?: string;
   port?: string;
+  // WriteFile node — optional action after the write succeeds
+  postAction?: "none" | "registerScreen" | "setActiveTheme" | "validateDesignJson";
   // Condition node
   conditionMode?: "expression" | "ai";
   expression?: string;

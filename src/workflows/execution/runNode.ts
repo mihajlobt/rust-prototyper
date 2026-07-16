@@ -12,12 +12,14 @@ import {
   WORKFLOW_STRUCTURE_PROMPT_BASE,
   WORKFLOW_STYLE_PROMPT_BASE,
   WORKFLOW_INTERACTION_PROMPT_BASE,
+  WORKFLOW_COMPONENTIZE_PROMPT_BASE,
   WORKFLOW_REFERENCE_PROMPT_BASE,
   WORKFLOW_VALIDATE_PROMPT_BASE,
   WORKFLOW_TRANSFORM_PROMPT_BASE,
   WORKFLOW_SUMMARIZE_PROMPT_BASE,
   WORKFLOW_CONDITION_PROMPT_BASE,
   WORKFLOW_LOOP_FIX_PROMPT_BASE,
+  outputFilePathSection,
 } from "@/lib/prompts";
 import {
   generateCompletionStream, getApiKeyForProvider, getHostForProvider,
@@ -30,6 +32,9 @@ import { Channel } from "@tauri-apps/api/core";
 import { notify } from "@/hooks/useToast";
 import type { WorkflowNodeData, WorkflowNodeType } from "@/workflows/nodeTypes";
 import { stripCodeFences, traverseJsonPath, computeDiff } from "@/workflows/execution/helpers";
+import { addScreenToNavigation, syncGeneratedRouter } from "@/lib/navigation";
+import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
+import { designLanguageSpecSchema } from "@/lib/design/spec";
 
 export interface RunNodeSettings {
   project: string;
@@ -68,14 +73,19 @@ export interface RunNodeContext {
  * Errors are caught and surfaced as toast notifications so one failing node
  * doesn't abort the whole workflow.
  */
-export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void> {
-  if (ctx.abortRef.current) return;
+export interface RunNodeResult {
+  branch?: "pass" | "fail";
+}
+
+export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<RunNodeResult> {
+  if (ctx.abortRef.current) return {};
   ctx.flushNow();
   const node = ctx.getNodes().find((n) => n.id === nodeId);
-  if (!node) return;
+  if (!node) return {};
   const d = node.data;
   ctx.updateStatus(nodeId, { status: "running", output: undefined });
   const prevOut = d.nodeType === "composition" ? "" : ctx.getPrevOut(nodeId);
+  let branch: "pass" | "fail" | undefined;
 
   try {
     let output = "";
@@ -114,10 +124,44 @@ export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void
     const ai = (globalKey: string, base: string, userMsg: string) =>
       streamAI(resolveSystem(globalKey, base), userMsg);
 
+    const resolveTargetPath = () => d.path
+      ? (d.path.startsWith("projects/") ? d.path : `${ctx.generatedPath}/${d.path}`)
+      : `${ctx.generatedPath}/.workflow-tmp/${nodeId}.tsx`;
+
+    const writeViaTools = async (
+      sysPrompt: string, userMsg: string, targetPath: string, maxToolCalls: number, toolFilter: string[],
+    ): Promise<string> => {
+      const targetDir = targetPath.substring(0, targetPath.lastIndexOf("/"));
+      try { await createDir(targetDir); } catch { /* dir may exist */ }
+      await new Promise<void>((resolve, reject) => {
+        const channel = new Channel<CompletionEvent>();
+        channel.onmessage = (msg) => {
+          if (msg.event === "Done") resolve();
+          if (msg.event === "Error") reject(new Error(msg.data.message));
+        };
+        generateCompletionStream(
+          model,
+          [{ role: "system", content: sysPrompt }, { role: "user", content: userMsg }] satisfies Message[],
+          host, apiKey, channel, undefined, targetPath, ctx.settings.provider as Provider,
+          undefined, "auto_accept_all", undefined, undefined, maxToolCalls, toolFilter,
+        ).catch(reject);
+      });
+      const written = await readFile(targetPath).catch(() => "");
+      if (written.trim().length === 0) {
+        throw new Error(`No content landed at ${targetPath} after generation. The model may have called write_file with a different path, or written nothing.`);
+      }
+      return written;
+    };
+
     const isCustomType = d.nodeType === "custom" || d.nodeType.startsWith("custom_");
 
     if (isCustomType) {
-      output = await streamAI(d.systemPrompt || d.prompt || "Process the input.", prevOut || promptBase);
+      const targetPath = resolveTargetPath();
+      const sysPrompt = (d.systemPrompt || d.prompt || "Process the input.") + outputFilePathSection(targetPath);
+      const userMsg = prevOut
+        ? `Here is the current file content:\n\n${prevOut}\n\nApply the instruction above, then call write_file with the complete updated file at ${targetPath}.`
+        : promptBase;
+      output = await writeViaTools(sysPrompt, userMsg, targetPath, 2, ["write_file", "edit_file"]);
     } else switch (d.nodeType) {
 
       case "input":    output = promptBase; break;
@@ -129,6 +173,35 @@ export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void
         const wfContent = d.mode === "append" ? (await readFile(wfPath).catch(() => "") + "\n" + prevOut) : prevOut;
         await writeFile(wfPath, wfContent);
         output = `Wrote to ${d.path || "output.txt"}`;
+
+        const projectDir = `projects/${ctx.settings.project}`;
+        if (d.postAction === "registerScreen") {
+          const screenId = (d.path || "").replace(/^.*\//, "").replace(/\.tsx?$/, "");
+          if (screenId) {
+            await addScreenToNavigation(projectDir, screenId);
+            await syncGeneratedRouter(projectDir);
+            output += `\nRegistered screen "${screenId}" and updated the router`;
+          } else {
+            output += "\nCould not derive a screen id from the path — skipped registration";
+          }
+        } else if (d.postAction === "setActiveTheme") {
+          const themeMatch = wfPath.match(/\/themes\/([^/]+)\//);
+          if (themeMatch) {
+            useProjectSettingsStore.getState().setProjectSettings({ stylePreset: themeMatch[1] });
+            output += `\nSet "${themeMatch[1]}" as the active theme`;
+          } else {
+            output += "\nCould not derive a theme slug from the path (expected .../themes/{slug}/...) — skipped";
+          }
+        } else if (d.postAction === "validateDesignJson") {
+          try {
+            const parsed = designLanguageSpecSchema.safeParse(JSON.parse(wfContent));
+            output += parsed.success
+              ? "\nDesign JSON valid"
+              : `\nDesign JSON invalid:\n${parsed.error.issues.map((i) => `- ${i.path.join(".")}: ${i.message}`).join("\n")}`;
+          } catch (e) {
+            output += `\nDesign JSON invalid: not valid JSON (${getErrorMessage(e)})`;
+          }
+        }
         break;
       }
 
@@ -137,6 +210,16 @@ export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void
       case "structure":    output = await ai("workflow-structure-system",    WORKFLOW_STRUCTURE_PROMPT_BASE,    prevOut || promptBase); break;
       case "style":        output = await ai("workflow-style-system",        WORKFLOW_STYLE_PROMPT_BASE,        prevOut || promptBase); break;
       case "interaction":  output = await ai("workflow-interaction-system",  WORKFLOW_INTERACTION_PROMPT_BASE,  prevOut || promptBase); break;
+
+      case "componentize": {
+        if (!d.path) throw new Error("Componentize node needs a target 'path' — the screen file to split up.");
+        const targetPath = resolveTargetPath();
+        const sysPrompt = resolveSystem("workflow-componentize-system", WORKFLOW_COMPONENTIZE_PROMPT_BASE) + outputFilePathSection(targetPath);
+        const userMsg = prevOut || promptBase;
+        output = await writeViaTools(sysPrompt, userMsg, targetPath, 20, ["write_file", "edit_file", "read_file"]);
+        break;
+      }
+
       case "reference":    output = await ai("workflow-reference-system",    WORKFLOW_REFERENCE_PROMPT_BASE,    prevOut || promptBase); break;
       case "transform":    output = await ai("workflow-transform-system",    WORKFLOW_TRANSFORM_PROMPT_BASE,    `Instruction: ${promptBase}\n\nContent: ${prevOut}`); break;
 
@@ -153,12 +236,14 @@ export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void
           ctx.nodeOutputMap.set(`${nodeId}:pass`, prevOut);
           ctx.nodeOutputMap.set(`${nodeId}:fail`, "");
           ctx.updateStatus(nodeId, { passOutput: prevOut, failOutput: "" });
+          branch = "pass";
         } else {
           output = `❌ tsc errors:\n${tscOut}\n\nCODE:\n${prevOut}`;
           const failContent = `ERRORS:\n${tscOut}\n\nCODE:\n${prevOut}`;
           ctx.nodeOutputMap.set(`${nodeId}:pass`, "");
           ctx.nodeOutputMap.set(`${nodeId}:fail`, failContent);
           ctx.updateStatus(nodeId, { passOutput: "", failOutput: failContent });
+          branch = "fail";
         }
         break;
       }
@@ -297,6 +382,7 @@ export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void
         ctx.nodeOutputMap.set(`${nodeId}:pass`, passed ? prevOut : "");
         ctx.nodeOutputMap.set(`${nodeId}:fail`, passed ? "" : prevOut);
         ctx.updateStatus(nodeId, { passOutput: passed ? prevOut : "", failOutput: passed ? "" : prevOut });
+        branch = passed ? "pass" : "fail";
         break;
       }
 
@@ -362,9 +448,11 @@ export async function runNode(nodeId: string, ctx: RunNodeContext): Promise<void
 
     ctx.nodeOutputMap.set(nodeId, output);
     ctx.updateStatus(nodeId, { status: "done", output });
+    return { branch };
   } catch (e) {
     const msg = getErrorMessage(e);
     ctx.updateStatus(nodeId, { status: "error", output: msg });
     notify.error(`Workflow node "${d.label}" failed`, msg);
+    return {};
   }
 }
