@@ -501,7 +501,7 @@ export function CreatePreviewPane({
             {base ? (
               <iframe
                 ref={iframeRef}
-                key={`preview-${darkPreview}-${activePreviewTabId ?? "none"}`}
+                key={`preview-${darkPreview}`}
                 src={iframeSrc}
                 className="h-full w-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms"
