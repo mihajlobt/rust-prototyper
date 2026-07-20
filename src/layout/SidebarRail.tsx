@@ -88,12 +88,11 @@ export function SidebarRail() {
     setShowNewDialog(true);
   };
 
-  // Invalidate the tree query for a section. Wrapped so the query key uses
-  // the section's filesystem path (currently all sections live at projects/{id}/{name}).
+  // Notify that a section's tree changed. The SidebarRail listener invalidates
+  // the react-query cache for non-themes sections; the themesStore listener
+  // reloads themes from its Zustand store. One event reaches both stores.
   const invalidateSection = (section: SectionName) => {
-    queryClient.invalidateQueries({
-      queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[section]),
-    });
+    window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section } }));
   };
 
   // Map item type to the section name. All section names match their
