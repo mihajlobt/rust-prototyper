@@ -81,7 +81,6 @@ export function PlansPanel() {
         .then(() => {
           lastWrittenRef.current = toWrite;
           setSavedAt(Date.now());
-          window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "plans" } }));
         })
         .catch((err: unknown) => {
           notify.error("Failed to save plan", getErrorMessage(err));

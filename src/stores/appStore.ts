@@ -2,6 +2,7 @@ import { create, type StateCreator } from "zustand";
 import { load } from "@tauri-apps/plugin-store";
 import type { ResearchLoopConfig } from "@/lib/ipc";
 import { useProjectSettingsStore } from "./projectSettingsStore";
+import { startProjectWatcher } from "@/lib/projectWatcher";
 
 const SETTINGS_KEY = "settings.json";
 
@@ -186,6 +187,8 @@ function ensureInit(set: (fn: (state: SettingsSlice) => Partial<SettingsSlice>) 
     set(() => ({ settings: loaded, loaded: true }));
     // Load per-project settings for the active project
     await useProjectSettingsStore.getState().loadProject(loaded.project);
+    // Start the filesystem watcher for the active project
+    void startProjectWatcher(loaded.project);
   })();
   return initPromise;
 }
@@ -205,6 +208,7 @@ const createSettingsSlice: StateCreator<SettingsSlice> = (set, get) => ({
     // When project switches, load its persisted settings
     if (patch.project && patch.project !== prev.project) {
       await useProjectSettingsStore.getState().loadProject(patch.project);
+      void startProjectWatcher(patch.project);
     }
   },
   setHost: async (host) => {

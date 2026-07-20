@@ -97,7 +97,6 @@ export function ThemesMode() {
       await writeFile(`${base}/theme.css`, content);
       await writeFile(`${base}/prompt.json`, JSON.stringify({ prompt: p, updated: new Date().toISOString() }, null, 2));
       await writeFile(`${generatedDir}/src/styles/preview-theme.css`, content);
-      queryClient.invalidateQueries({ queryKey: projectKeys.themeCss(settings.project, dir) });
     } catch (e) {
       notify.error("Failed to save theme", getErrorMessage(e));
     }
@@ -129,7 +128,6 @@ export function ThemesMode() {
         await writeFile(`${base}/${fileName}`, content);
         if (fileName === "theme.css") {
           await writeFile(`${generatedDir}/src/styles/preview-theme.css`, content);
-          queryClient.invalidateQueries({ queryKey: projectKeys.themeCss(settings.project, themeDir) });
         }
       } catch (e) {
         notify.error(`Failed to save ${fileName}`, getErrorMessage(e));
@@ -214,7 +212,6 @@ export function ThemesMode() {
         readFile(path).then((content) => {
           setDesignJson(content);
           setProjectSettings({ createCodeTab2: "tokens", createCodeOpen: true });
-          window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
           recordThemeMeta(themeDir);
         }).catch(() => {/* ignore */});
       } else if (path === `${base}/DESIGN.md`) {
@@ -257,7 +254,6 @@ export function ThemesMode() {
     await persistTheme(css, "", slug);
     setShowSaveDialog(false);
     setSaveDialogName("");
-    window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
   };
 
   return (
@@ -285,7 +281,6 @@ export function ThemesMode() {
                           } catch (e) {
                             notify.error(`Failed to update "${selectedThemeDir}"`, getErrorMessage(e));
                           }
-                          window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "themes" } }));
                         } else {
                           setSaveDialogName("");
                           setShowSaveDialog(true);

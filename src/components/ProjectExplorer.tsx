@@ -18,9 +18,10 @@ import {
   Plus, Copy, Star, Pencil, Trash2, ExternalLink,
 } from "lucide-react";
 
-/** All sections in order */
-export const SECTION_NAMES = ["screens", "components", "themes", "workflows", "apis", "plans"] as const;
-export type SectionName = typeof SECTION_NAMES[number];
+// Section constants live in @/lib/sections so projectWatcher can import them
+// without pulling in this component (which would create a cycle).
+import { SECTION_NAMES, SECTION_TREE_PATH, type SectionName } from "@/lib/sections";
+export { SECTION_NAMES, type SectionName, SECTION_TREE_PATH } from "@/lib/sections";
 
 /** UI labels for each section */
 export const SECTION_LABELS: Record<SectionName, string> = {
@@ -50,16 +51,6 @@ export const SECTION_NEW_TYPE: Record<SectionName, string> = {
   workflows: "workflow",
   apis: "api",
   plans: "plan",
-};
-
-/** Filesystem path under projects/{id}/ where each section's files live. */
-export const SECTION_TREE_PATH: Record<SectionName, string> = {
-  screens: "screens",
-  components: "components",
-  themes: "themes",
-  workflows: "workflows",
-  apis: "apis",
-  plans: "plans",
 };
 
 /** File extension stripped from leaf display names per section.

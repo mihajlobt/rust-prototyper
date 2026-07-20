@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { readDir, isNotFoundError, getErrorMessage, type FileEntry } from "@/lib/ipc";
-import { useAppStore } from "@/stores/appStore";
 import { notify } from "@/hooks/useToast";
 
 export interface ThemesQuery {
@@ -48,13 +47,4 @@ export const useThemesStore = create<ThemesState>((set) => ({
 
 export function useThemesQuery(projectId: string): ThemesQuery {
   return useThemesStore((s) => s.byProject[projectId] ?? EMPTY_QUERY);
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("prototyper:tree-changed", (event) => {
-    const detail = (event as CustomEvent<{ section?: string }>).detail;
-    if (detail && detail.section !== "themes") return;
-    const project = useAppStore.getState().settings.project;
-    useThemesStore.getState().loadThemes(project);
-  });
 }

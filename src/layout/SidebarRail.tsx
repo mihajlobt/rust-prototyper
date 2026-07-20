@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, RefreshCw, LayoutGrid, FolderOpen, MessagesSquare, GitBranch } from "lucide-react";
 import { SidebarFilesTab } from "@/components/sidebar/SidebarFilesTab";
 import { SidebarChatsTab } from "@/components/sidebar/SidebarChatsTab";
@@ -43,29 +43,6 @@ export function SidebarRail() {
   const base = `projects/${settings.project}`;
   const generatedDir = getGeneratedDirPath(base);
 
-  // Sync the sidebar tree when assets are created/changed outside the sidebar
-  // (e.g. ThemesPanel "Save as", ComponentsPanel save-to-runner). Panels dispatch
-  // `prototyper:tree-changed` with the affected section; invalidate that query so
-  // ProjectExplorer's headless-tree rebuilds. Themes is handled by the Zustand
-  // themesStore listener, so it is skipped here to avoid a redundant react-query
-  // invalidation on a key nothing subscribes to anymore.
-  useEffect(() => {
-    const onTreeChanged = (event: Event) => {
-      const section = (event as CustomEvent<{ section?: SectionName }>).detail?.section;
-      if (section) {
-        if (section === "themes") return;
-        queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[section]) });
-      } else {
-        for (const name of SECTION_NAMES) {
-          if (name === "themes") continue;
-          queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[name]) });
-        }
-      }
-    };
-    window.addEventListener("prototyper:tree-changed", onTreeChanged);
-    return () => window.removeEventListener("prototyper:tree-changed", onTreeChanged);
-  }, [settings.project]);
-
   // --- Navigation ---
   const handleSetDefaultTheme = (name: string) => {
     setProjectSettings({ stylePreset: name });
@@ -88,11 +65,13 @@ export function SidebarRail() {
     setShowNewDialog(true);
   };
 
-  // Notify that a section's tree changed. The SidebarRail listener invalidates
-  // the react-query cache for non-themes sections; the themesStore listener
-  // reloads themes from its Zustand store. One event reaches both stores.
+  // Invalidate the react-query tree cache for a section. Sidebar actions
+  // call this directly for snappy UX; the projectWatcher also fires ~100ms
+  // later and react-query dedupes.
   const invalidateSection = (section: SectionName) => {
-    window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section } }));
+    queryClient.invalidateQueries({
+      queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[section]),
+    });
   };
 
   // Map item type to the section name. All section names match their

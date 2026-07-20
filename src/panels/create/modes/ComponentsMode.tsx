@@ -231,7 +231,6 @@ export function ComponentsMode() {
       await createDir(compDir);
       await writeFile(`${compDir}/component.tsx`, extracted);
       await syncGeneratedRouter(`projects/${settings.project}`);
-      queryClient.invalidateQueries({ queryKey: projectKeys.componentCode(settings.project, selectedComponent) });
       void saveItemMeta(`projects/${settings.project}`, "components", selectedComponent, prompt)
         .then(() => queryClient.invalidateQueries({ queryKey: projectKeys.library(settings.project) }));
     } catch (e) {
@@ -306,7 +305,6 @@ export function ComponentsMode() {
                       messages={chat.messages}
                       onSaved={(id) => {
                         openCreate("components", id);
-                        window.dispatchEvent(new CustomEvent("prototyper:tree-changed", { detail: { section: "components" } }));
                       }}
                       trigger={
                         <Button variant="ghost" size="icon" className="h-6 w-6" title="Save component…" disabled={!hasGeneratedCode}>
