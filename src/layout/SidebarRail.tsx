@@ -46,14 +46,18 @@ export function SidebarRail() {
   // Sync the sidebar tree when assets are created/changed outside the sidebar
   // (e.g. ThemesPanel "Save as", ComponentsPanel save-to-runner). Panels dispatch
   // `prototyper:tree-changed` with the affected section; invalidate that query so
-  // ProjectExplorer's headless-tree rebuilds.
+  // ProjectExplorer's headless-tree rebuilds. Themes is handled by the Zustand
+  // themesStore listener, so it is skipped here to avoid a redundant react-query
+  // invalidation on a key nothing subscribes to anymore.
   useEffect(() => {
     const onTreeChanged = (event: Event) => {
       const section = (event as CustomEvent<{ section?: SectionName }>).detail?.section;
       if (section) {
+        if (section === "themes") return;
         queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[section]) });
       } else {
         for (const name of SECTION_NAMES) {
+          if (name === "themes") continue;
           queryClient.invalidateQueries({ queryKey: projectKeys.tree(settings.project, SECTION_TREE_PATH[name]) });
         }
       }

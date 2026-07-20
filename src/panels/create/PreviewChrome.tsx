@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDevServerStore } from "@/lib/dev-server-manager";
+import { useThemesQuery } from "@/stores/themesStore";
 
 export type PreviewDevice = "desktop" | "tablet" | "mobile";
 export type PreviewViewMode = "preview" | "gallery";
@@ -41,6 +42,7 @@ export interface PreviewThemeEntry {
 export interface PreviewChromeProps {
   // Project + dev server
   generatedDir: string;
+  project: string;
   // Device + dark mode
   device: PreviewDevice;
   onSetDevice: (device: PreviewDevice) => void;
@@ -63,12 +65,12 @@ export interface PreviewChromeProps {
   // top of the runner's design tokens)
   showThemePicker?: boolean;
   previewTheme?: string;
-  themes?: PreviewThemeEntry[];
   onSetPreviewTheme?: (name: string) => void;
 }
 
 export function PreviewChrome({
   generatedDir,
+  project,
   device,
   onSetDevice,
   darkPreview,
@@ -84,10 +86,10 @@ export function PreviewChrome({
   onSetViewMode,
   showThemePicker,
   previewTheme,
-  themes = [],
   onSetPreviewTheme,
 }: PreviewChromeProps) {
   const { runnerStatus, runnerUrl, runnerError, startRunner, stopRunner } = useDevServerStore();
+  const themes = useThemesQuery(project).data;
   // Toggle between the standard preview toolbar and a compact error strip
   // when the runner fails. Keeps the failure state visible without
   // crowding the chrome.
@@ -156,7 +158,7 @@ export function PreviewChrome({
           <SelectContent position="popper" side="bottom">
             {themes.map((t) => (
               <SelectItem key={t.name} value={t.name}>
-                {t.label ?? t.name}
+                {t.name}
               </SelectItem>
             ))}
           </SelectContent>

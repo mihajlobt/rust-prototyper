@@ -128,6 +128,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
       }
     } else if (msg.event === "ToolCall") {
       onToolCallRef?.current?.(msg.data.tool, msg.data.args)
+      liveTokenEstimate += Math.ceil(JSON.stringify(msg.data.args).length / 4)
       useChatStore.getState().attachToolCall(entityId, msg.data.tool, "", msg.data.args)
       useChatStore.getState().addStreamChunk(entityId, {
         index: chunkIndex++,
@@ -180,6 +181,7 @@ export function createStreamHandler(params: StreamHandlerParams) {
       })
     } else if (msg.event === "ToolResult") {
       const { tool, success, output, path, content } = msg.data
+      liveTokenEstimate += Math.ceil((output ?? "").length / 4)
       useChatStore.getState().resolveToolCall(entityId, tool, output, success, path ?? "")
       if ((tool === "write_file" || tool === "edit_file") && success) {
         if (tool === "write_file") {

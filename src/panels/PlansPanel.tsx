@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useThemesQuery } from "@/stores/themesStore";
 import { readFile, writeFile, getErrorMessage, isNotFoundError, getHostForProvider, type ResearchLoopConfig } from "@/lib/ipc";
 import { notify } from "@/hooks/useToast";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
@@ -318,13 +319,12 @@ function useMentionOptions(project: string | undefined): MentionOption[] {
   const components = useFlatProjectTree(project ?? "", SECTION_BY_KIND.component);
   const assets = useFlatProjectTree(project ?? "", SECTION_BY_KIND.asset);
   const plans = useFlatProjectTree(project ?? "", SECTION_BY_KIND.plan);
-  const themes = useFlatProjectTree(project ?? "", SECTION_BY_KIND.theme);
+  const themesData = useThemesQuery(project ?? "").data;
 
   const screensData = screens.data;
   const componentsData = components.data;
   const assetsData = assets.data;
   const plansData = plans.data;
-  const themesData = themes.data;
 
   return useMemo<MentionOption[]>(() => {
     const out: MentionOption[] = [];

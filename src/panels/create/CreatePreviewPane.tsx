@@ -22,7 +22,7 @@ import { useAppStore } from "@/stores/appStore";
 import { writeFile, readFile } from "@/lib/ipc";
 import { ThemeTokenPreview } from "@/panels/theme-preview/ThemeTokenPreview";
 import { AnnotationOverlay, type Annotation, type AnnotationPopupDraft, type AnnotationTextPopup } from "@/components/ui/AnnotationOverlay";
-import { PreviewChrome, type PreviewDevice, type PreviewViewMode, type PreviewThemeEntry } from "./PreviewChrome";
+import { PreviewChrome, type PreviewDevice, type PreviewViewMode } from "./PreviewChrome";
 
 const DEVICE_WIDTHS: Record<PreviewDevice, number | null> = {
   desktop: null,
@@ -67,7 +67,6 @@ export interface CreatePreviewPaneProps {
   showZoom?: boolean;
   showViewMode?: boolean;
   showThemePicker?: boolean;
-  previewThemes?: PreviewThemeEntry[];
   // Optional: the path to the runner's generated dir, used for the
   // createPreviewTheme CSS write effect (only honored when showThemePicker)
   generatedDir?: string;
@@ -97,7 +96,6 @@ export function CreatePreviewPane({
   showZoom,
   showViewMode,
   showThemePicker,
-  previewThemes = [],
   generatedDir,
   renderScreenOverlay,
   onRefresh,
@@ -401,6 +399,7 @@ export function CreatePreviewPane({
     <div className="flex h-full flex-col">
       <PreviewChrome
         generatedDir={generatedDir ?? `projects/${projectDir}/generated`}
+        project={projectDir}
         device={createDevice}
         onSetDevice={(d) => setProjectSettings({ createDevice: d })}
         darkPreview={darkPreview}
@@ -420,7 +419,6 @@ export function CreatePreviewPane({
         }
         showThemePicker={showThemePicker}
         previewTheme={createPreviewTheme}
-        themes={previewThemes}
         onSetPreviewTheme={
           showThemePicker
             ? (name: string) => setProjectSettings({ createPreviewTheme: name })

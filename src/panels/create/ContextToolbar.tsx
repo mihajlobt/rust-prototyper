@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useUIStore, EMPTY_GEN_CONTEXT } from "@/stores/uiStore";
+import { useThemesQuery } from "@/stores/themesStore";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
 import { useFileWatcher } from "./FileWatcher";
 import { DESIGN_BRIEF_TEMPLATES, type DesignBriefTemplate } from "@/lib/prompts";
@@ -36,8 +37,7 @@ export function ContextToolbar({ projectId, showComponents }: ContextToolbarProp
   const genContext = useUIStore((s) => s.createGenContext[projectId] ?? EMPTY_GEN_CONTEXT);
   const setGenContext = useUIStore((s) => s.setCreateGenContext);
 
-  const { data: themeEntries } = useFlatProjectTree(projectId, "themes");
-  const themes = (themeEntries ?? []).filter((t) => t.is_dir);
+  const themes = useThemesQuery(projectId).data;
 
   const { data: componentEntries } = useFlatProjectTree(projectId, "components");
   const ctxComponents = useMemo(

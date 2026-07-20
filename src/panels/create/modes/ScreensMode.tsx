@@ -12,8 +12,8 @@ import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown, Download } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { readDir, readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
-import type { ToolPermissionDecision, FileEntry } from "@/lib/ipc";
+import { readFile, exportProject, getHostForProvider, isNotFoundError, getErrorMessage } from "@/lib/ipc";
+import type { ToolPermissionDecision } from "@/lib/ipc";
 import { useAppStore } from "@/stores/appStore";
 import { useProjectSettingsStore } from "@/stores/projectSettingsStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -57,7 +57,6 @@ export function ScreensMode() {
   const { entityId: screenEntityId } = useCreateMode();
   const screenId = ps.activeScreen;
 
-  const [themes, setThemes] = useState<FileEntry[]>([]);
   const [ctxApis, setCtxApis] = useState<CtxApi[]>([]);
   const [ctxComponentCode, setCtxComponentCode] = useState<Record<string, string>>({});
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
@@ -218,23 +217,6 @@ export function ScreensMode() {
     return () => { cancelled = true; };
   }, [ps.stylePreset, settings.project]);
 
-  // Load the list of available themes (design languages) for the preview theme picker
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const entries = await readDir(`projects/${settings.project}/themes`);
-        if (!cancelled) setThemes(entries.filter((e) => e.is_dir));
-      } catch (e) {
-        if (!cancelled) {
-          setThemes([]);
-          if (!isNotFoundError(e)) notify.error("Failed to load themes", getErrorMessage(e));
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [settings.project]);
-
   // Load the API list for the generation context toolbar
   const { data: apisJson } = useFileWatcher(settings.project, `projects/${settings.project}/apis/apis.json`);
   useEffect(() => {
@@ -283,7 +265,6 @@ export function ScreensMode() {
     }
   }, [isSelectingElement, setIsSelectingElement]);
 
-  const previewThemes = useMemo(() => themes.map((t) => ({ name: t.name })), [themes]);
   const activeIframePath = screenId ? `/${screenId}` : null;
 
   const { ref: outerRef, onDragEnd: outerDragEnd, defaultSizes: outerSizes } = useAllotmentLayout("create-screens", 2);
@@ -349,7 +330,6 @@ export function ScreensMode() {
                 activeIframePath={activeIframePath}
                 showZoom
                 showThemePicker
-                previewThemes={previewThemes}
                 generatedDir={generatedDir}
                 iframeRef={previewIframeRef}
                 renderScreenOverlay={() => ps.createCodeTab === "links" && (

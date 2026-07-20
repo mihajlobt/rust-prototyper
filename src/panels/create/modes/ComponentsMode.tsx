@@ -13,9 +13,9 @@ import { Allotment } from "allotment";
 import { ChevronUp, ChevronDown, Code2, Download, FolderUp, Save } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  writeFile, createDir, readFile, readDir, getHostForProvider, isNotFoundError, getErrorMessage,
+  writeFile, createDir, readFile, getHostForProvider, isNotFoundError, getErrorMessage,
 } from "@/lib/ipc";
-import type { ToolPermissionDecision, FileEntry } from "@/lib/ipc";
+import type { ToolPermissionDecision } from "@/lib/ipc";
 import { saveItemMeta } from "@/lib/item-meta";
 import { projectKeys } from "@/lib/queryKeys";
 import { useAppStore } from "@/stores/appStore";
@@ -68,7 +68,6 @@ export function ComponentsMode() {
   const stoppedManuallyRef = useRef(false);
 
   const [code, setCode] = useState("");
-  const [themes, setThemes] = useState<FileEntry[]>([]);
   const [ctxApis, setCtxApis] = useState<CtxApi[]>([]);
   const [activeDesignBrief, setActiveDesignBrief] = useState("");
 
@@ -171,23 +170,6 @@ export function ComponentsMode() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [code, saveCode]);
-
-  // Load the list of available themes (design languages) for the preview theme picker
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const entries = await readDir(`projects/${settings.project}/themes`);
-        if (!cancelled) setThemes(entries.filter((e) => e.is_dir));
-      } catch (e) {
-        if (!cancelled) {
-          setThemes([]);
-          if (!isNotFoundError(e)) notify.error("Failed to load themes", getErrorMessage(e));
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [settings.project]);
 
   // Load the API list for the generation context toolbar
   const { data: apisJson } = useFileWatcher(settings.project, `projects/${settings.project}/apis/apis.json`);
@@ -392,7 +374,6 @@ export function ComponentsMode() {
                 activeIframePath={activeIframePath}
                 showZoom
                 showThemePicker
-                previewThemes={themes.map((t) => ({ name: t.name }))}
                 generatedDir={generatedDir}
               />
             </Allotment.Pane>

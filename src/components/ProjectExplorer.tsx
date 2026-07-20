@@ -9,7 +9,9 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useAppStore } from "@/stores/appStore";
+import { useThemesQuery } from "@/stores/themesStore";
 import { useFlatProjectTree } from "@/hooks/useProjectFiles";
+import type { FileEntry } from "@/lib/ipc";
 import {
   Folder, FolderOpen, FileCode, File, FileText, ChevronRight, ChevronDown, RefreshCw,
   Workflow, Globe, Palette, Layout, Box,
@@ -149,13 +151,16 @@ export function ProjectExplorer({ onSelectAsset, onRename, onDelete, onDuplicate
 
   const screensTree = useFlatProjectTree(project, SECTION_TREE_PATH.screens);
   const componentsTree = useFlatProjectTree(project, SECTION_TREE_PATH.components);
-  const themesTree = useFlatProjectTree(project, SECTION_TREE_PATH.themes);
+  const themesTree = useThemesQuery(project);
   const workflowsTree = useFlatProjectTree(project, SECTION_TREE_PATH.workflows);
   const apisTree = useFlatProjectTree(project, SECTION_TREE_PATH.apis);
   const plansTree = useFlatProjectTree(project, SECTION_TREE_PATH.plans);
 
-  // Map section name → query result for DRY access
-  const sectionQueries: Record<SectionName, ReturnType<typeof useFlatProjectTree>> = useMemo(() => ({
+  // Map section name → query result for DRY access. `themes` comes from the
+  // Zustand themes store; the others come from `useFlatProjectTree`. Both shapes
+  // carry the fields the tree builder reads.
+  type SectionQuery = { data: FileEntry[] | undefined; isLoading: boolean; dataUpdatedAt: number };
+  const sectionQueries: Record<SectionName, SectionQuery> = useMemo(() => ({
     screens: screensTree,
     components: componentsTree,
     themes: themesTree,

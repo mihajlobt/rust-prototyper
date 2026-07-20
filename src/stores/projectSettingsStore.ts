@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { load } from "@tauri-apps/plugin-store";
 import { MAIN_DIFF_TAB_ID } from "@/lib/git/diffTabs";
+import { useThemesStore } from "@/stores/themesStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -254,6 +255,7 @@ export const useProjectSettingsStore = create<ProjectSettingsStore>()((set, get)
       loaded.activeView = "create";
     }
     set({ projectId, ps: loaded, loaded: true });
+    useThemesStore.getState().loadThemes(projectId);
   },
 
   setProjectSettings: (patch) => {

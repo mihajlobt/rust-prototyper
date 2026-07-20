@@ -93,32 +93,3 @@ export function useSaveComponent() {
     },
   });
 }
-
-export function useSaveTheme() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      project,
-      name,
-      css,
-    }: {
-      project: string;
-      name: string;
-      css: string;
-    }) => {
-      const base = `projects/${project}/themes/${name}`;
-      await createDir(base);
-      await writeFile(`${base}/theme.css`, css);
-      return { name };
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: projectKeys.tree(variables.project, "themes"),
-      });
-      queryClient.invalidateQueries({
-        queryKey: projectKeys.themeCss(variables.project, variables.name),
-      });
-    },
-  });
-}

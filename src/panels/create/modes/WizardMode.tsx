@@ -299,6 +299,7 @@ export function WizardMode() {
                 onAddAnnotation={(annotation) => setAnnotations((prev) => [...prev, { ...annotation, id: makeId() }])}
                 annotationMode={annotationMode}
                 showViewMode
+                showThemePicker
                 generatedDir={`projects/${settings.project}/generated`}
               />
             </Allotment.Pane>
